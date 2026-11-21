@@ -1,0 +1,14 @@
+Mochi Quest の掛け声
+
+「モチコラショッ」「三条通知！」の音声は Open JTalk（pyopenjtalk-plus）で合成しました。
+音声モデルは HTS Voice “Mei” です。話速と声の高さを調整し、無音の除去、
+音量調整、MP3 への変換を行っています。
+
+HTS Voice “Mei”
+Copyright © 2009–2013 Nagoya Institute of Technology, Department of Computer Science.
+Released by the MMDAgent Project Team.
+Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+https://creativecommons.org/licenses/by/3.0/
+
+音声モデルの出典とライセンス表示
+https://github.com/r9y9/pyopenjtalk/tree/master/pyopenjtalk/htsvoice
