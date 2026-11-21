@@ -827,7 +827,8 @@ dialog::backdrop {
     font-size: 10px;
   }
   #toast {
-    top: 36%;
+    top: auto;
+    bottom: max(116px, calc(env(safe-area-inset-bottom) + 108px));
     font-size: 12px;
   }
   #context {
@@ -961,7 +962,12 @@ dialog::backdrop {
     top: 35px;
   }
   #toast {
-    top: 69px;
+    top: auto;
+    bottom: max(84px, calc(env(safe-area-inset-bottom) + 78px));
+    left: auto;
+    right: max(12px, env(safe-area-inset-right));
+    transform: none;
+    max-width: min(29vw, 205px);
   }
   #context {
     bottom: 68px;

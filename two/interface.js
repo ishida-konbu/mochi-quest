@@ -68,21 +68,24 @@ export function drawFace(canvas, mode, mood = 'joy') {
       g.restore();
     }
   }
-  oval(-10, 17, 7, 4, colors[2]);
-  oval(10, 17, 7, 4, colors[2]);
-  oval(0, -1, mode === 'dango' ? 19 : 22, 19, body);
+  oval(-10, 16.4, 6.4, 4.4, body);
+  oval(10, 16.4, 6.4, 4.4, body);
+  g.beginPath();
+  if (mode === 'dango') g.ellipse(0, -1, 18.4, 19, 0, 0, 2 * Math.PI);
+  else {
+    g.moveTo(0, -20.8);
+    g.bezierCurveTo(11.2, -20.8, 20.8, -12, 21.2, 0);
+    g.bezierCurveTo(22, 13.3, 16.7, 17.4, 0, 17.4);
+    g.bezierCurveTo(-16.6, 17.4, -22.3, 13, -21.6, 0.1);
+    g.bezierCurveTo(-21.2, -11.8, -12, -20.5, 0, -20.8);
+  }
+  g.fillStyle = body;
+  g.fill();
   if (mode === 'kusa') {
     g.save();
     g.rotate(-0.4);
     oval(1, -20, 8, 3, '#647e49');
     g.restore();
-  } else if (mode === 'normal') {
-    g.beginPath();
-    g.moveTo(-17, -12);
-    g.quadraticCurveTo(0, -19, 17, -12);
-    g.strokeStyle = '#be594c';
-    g.lineWidth = 2.3;
-    g.stroke();
   }
   for (const side of [-1, 1]) {
     const x = side * 13;

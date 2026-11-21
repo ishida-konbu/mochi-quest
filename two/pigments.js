@@ -1,0 +1,136 @@
+import * as THREE from './vendor/three.module.min.js';
+
+const asset = (name) => new URL('./assets/world/' + name + '.webp', import.meta.url).href;
+const paint = (color) => new THREE.Color(color);
+
+export function loadPigments() {
+  const loader = new THREE.TextureLoader();
+  const read = (name, repeat = true) => {
+    const tex = loader.load(asset(name));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 6;
+    if (repeat) tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+  };
+  return {
+    turf: read('turf'),
+    forest: read('forest-floor'),
+    gravel: read('stream-stones'),
+    trail: read('trail'),
+    bark: read('pine-bark'),
+    rock: read('granite'),
+    cedar: read('cedar'),
+    tile: read('kawara'),
+    herbs: read('wayside-herbs', false),
+  };
+}
+
+export function meadowMaterial(art) {
+  const mat = new THREE.MeshLambertMaterial({ map: art.turf, vertexColors: true });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.woodFloor = { value: art.forest };
+    shader.uniforms.bankStones = { value: art.gravel };
+    shader.vertexShader =
+      'attribute vec2 terrainMix; varying vec2 vTerrainMix;\n' +
+      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvTerrainMix = terrainMix;');
+    shader.fragmentShader =
+      'uniform sampler2D woodFloor, bankStones; varying vec2 vTerrainMix;\n' +
+      shader.fragmentShader.replace(
+        '#include <map_fragment>',
+        `
+        vec2 tileUv = vMapUv;
+        vec3 blades = texture2D(map,tileUv).rgb;
+        vec3 understory = texture2D(woodFloor,vec2(tileUv.y, -tileUv.x) * .78 + vec2(.13,.07)).rgb;
+        vec3 shingle = texture2D(bankStones,tileUv * .89).rgb;
+        // The washes overlap irregularly around trunks and on gravel bars.
+        float woodland = smoothstep(.08,.96,vTerrainMix.x + (blades.g-.21)*.65);
+        vec3 pigment = mix(blades,understory,woodland);
+        pigment = mix(pigment,shingle,smoothstep(.035,.93,vTerrainMix.y+(shingle.r-.28)*.38));
+        float luma=dot(pigment,vec3(.27,.59,.14));
+        pigment=mix(vec3(luma*.93,luma*1.05,luma*1.04),pigment,.65);
+        diffuseColor.rgb *= pigment*vec3(.99,1.10,1.19)+vec3(.020,.029,.031);
+      `,
+      );
+  };
+  return mat;
+}
+
+export function trailMaterial(art) {
+  const mat = new THREE.MeshLambertMaterial({
+    map: art.trail,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    color: 0xffffff,
+  });
+  mat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `
+      vec4 pigment = texture2D(map, vec2(vMapUv.x*1.88,vMapUv.y*1.23));
+      float edge = min(vMapUv.x, 1. - vMapUv.x);
+      float fade = smoothstep(.011,.17,edge+(pigment.g-.3)*.09 + .008*sin(vMapUv.y*31.0+sin(vMapUv.y*9.)));
+      float ochre=dot(pigment.rgb,vec3(.37,.51,.12));
+      diffuseColor.rgb*=mix(pigment.rgb,vec3(ochre*1.11,ochre*1.01,ochre*.88),.38)*vec3(1.,1.035,1.11)+vec3(.049,.043,.035);
+      diffuseColor.a *= fade;
+    `,
+    );
+  };
+  return mat;
+}
+
+// Tinted structural timbers retain the existing joinery palette. The sample
+// supplies relative grain density, with deep pigment in creases and knots.
+export function tintedSurface(texture, colorStrength = 0.32, roughness = 0.86, bump = 0.021) {
+  const mat = new THREE.MeshStandardMaterial({
+    map: texture,
+    bumpMap: texture,
+    bumpScale: bump,
+    roughness,
+    metalness: 0,
+    envMapIntensity: 0.3,
+    side: THREE.DoubleSide,
+  });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.colorStrength = { value: colorStrength };
+    shader.fragmentShader =
+      'uniform float colorStrength;\n' +
+      shader.fragmentShader.replace(
+        '#include <map_fragment>',
+        `
+      vec3 sampleInk=texture2D(map,vMapUv).rgb;
+      float grain=dot(sampleInk,vec3(.27,.58,.15));
+      vec3 tint=mix(vec3(grain),sampleInk,colorStrength);
+      diffuseColor.rgb*=clamp(tint*2.65+.27,.23,1.72);
+    `,
+      );
+  };
+  return mat;
+}
+
+export function roundedStone(seed = 0) {
+  const g = new THREE.SphereGeometry(1, 14, 10);
+  const p = g.attributes.position,
+    colors = [],
+    c = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i),
+      y = p.getY(i),
+      z = p.getZ(i);
+    const a = Math.atan2(z, x),
+      jag = 0.075 * Math.sin(a * 3.0 + seed + 0.75 * y) + 0.045 * Math.cos(a * 7.0 - seed + y * 4.5);
+    const r = 1 + (1 - y * y) * jag + 0.038 * Math.sin(8 * x + 4 * y - 3 * z + seed);
+    const yy = Math.sign(y) * Math.pow(Math.abs(y), 0.77);
+    p.setXYZ(i, x * r + 0.08 * y, yy * (1 + 0.06 * x) + 0.025 * Math.sin(a * 5) * (1 - y * y), z * r);
+    const top = Math.max(0, Math.min(1, (y + 0.1) * 0.88));
+    c.copy(paint('#9ba19a'))
+      .lerp(paint('#d8d7b6'), top)
+      .multiplyScalar(0.89 + 0.12 * top);
+    colors.push(c.r, c.g, c.b);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  g.computeVertexNormals();
+  return g;
+}

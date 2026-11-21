@@ -43,7 +43,7 @@ test('normal, dango and habutae have different jump envelopes and land on render
     assert.equal(p.y,groundHeight(p.x,p.z)); assert.equal(p.h,0);
     assert.ok(game.state.events.some(e=>e.text==='モチコラショッ'));
   }
-  assert.ok(heights[0]>1 && heights[0]<2); assert.ok(heights[1]>4.6); assert.ok(heights[2]>7);
+  assert.ok(heights[0]>3.15 && heights[0]<3.5); assert.ok(heights[1]>6.3 && heights[1]<7); assert.ok(heights[2]>9);
 });
 
 test('a spent flight over deep water returns to the dry shore saved before takeoff',()=>{
@@ -149,21 +149,21 @@ test('bicycles travel between ports and validated version-two saves retain their
   for(const invalid of [bad,{version:1}, {version:2}, 'bad', null]) assert.equal(createGame(invalid).state.player.x,0);
 });
 
-test('a player can walk across the modeled bridge and stretch onto the solid riverbank outcrop',()=>{
+test('a player can walk across the modeled bridge and stretch onto the riverbank shop roof',()=>{
   const game=createGame(); game.act('kusa'); run(game,15,{z:-1});
   assert.ok(game.state.player.z < -30);
   assert.equal(game.state.player.hp,100);
   const landed=[];
   for(const mode of ['normal','dango']) {
     const g=createGame(),p=g.state.player;
-    moveTo(g,-15.55,53); const startingGround=p.y;
+    moveTo(g,-29.25,49); const startingGround=p.y;
     g.act(mode);g.act('jump');
-    for(let f=0;f<160;f++) g.step(1/60,{x:p.x>-18.2?-1:0});
+    for(let f=0;f<160;f++) g.step(1/60,{x:p.x>-33.6?-1:0});
     assert.equal(p.grounded,true);
     landed.push(p.y-startingGround);
   }
   assert.ok(landed[0]<.6);
-  assert.ok(landed[1]>2.1);
+  assert.ok(landed[1]>5.2);
 });
 
 test('the signed-road circuit reaches all six stamps on foot, including the street east of the market',()=>{
@@ -187,4 +187,45 @@ test('the signed-road circuit reaches all six stamps on foot, including the stre
     assert.equal(game.state.player.x,p.x);
   }
   assert.equal(game.state.visited.length,6);
+});
+
+test('a normal hop takes about a second, records touchdown compression, and accepts a late jump tap', () => {
+  const game = createGame();
+  const player = game.state.player;
+  game.act('jump');
+  while (!player.grounded && game.state.time < 2) game.step(1 / 120);
+
+  assert.ok(game.state.time > 1.0 && game.state.time < 1.15);
+  assert.ok(player.landing > .23 && player.impact > .85);
+  run(game, .3);
+  assert.equal(player.landing, 0);
+
+  game.act('jump');
+  while ((player.vy >= 0 || player.h > .55) && game.state.time < 4) game.step(1 / 120);
+  assert.equal(game.act('jump'), false);
+  run(game, .13);
+  assert.ok(!player.grounded && player.vy > 8 && player.h > .25);
+  const jumpLines = game.state.events.filter(event => event.type === 'say' && event.text === 'モチコラショッ');
+  assert.equal(jumpLines.length, 3);
+});
+
+test('a jump just after leaving a rock works, and older saves have optional animation fields', () => {
+  const game = createGame();
+  const player = game.state.player;
+  moveTo(game, -17.05, 53);
+  for (let frame = 0; frame < 90 && player.grounded; frame++) game.step(1 / 120, { x: 1 });
+  assert.equal(player.grounded, false);
+  game.step(1 / 60, { x: 1 });
+  assert.ok(game.act('jump'));
+  assert.ok(player.vy > 10);
+  assert.equal(game.act('jump'), false);
+
+  const legacy = game.save();
+  delete legacy.player.landing;
+  delete legacy.player.impact;
+  const restored = createGame(JSON.parse(JSON.stringify(legacy))).state.player;
+  assert.equal(restored.x, player.x);
+  assert.equal(restored.h, player.h);
+  assert.equal(restored.landing, 0);
+  assert.equal(restored.impact, 0);
 });

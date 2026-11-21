@@ -1,7 +1,13 @@
 import { groundHeight, constrainMove, canLand, REGIONS, regionAt } from './terrain.js';
 
 const MAX_VITAL = 100;
-const GRAVITY = 22;
+const RISE_GRAVITY = 20;
+const FALL_GRAVITY = 27;
+const JUMP_SPEED = 11.7;
+const STRETCH_SPEED = 16.5;
+const FLIGHT_CLIMB = 5.6;
+const JUMP_BUFFER = .12;
+const LEDGE_GRACE = .085;
 const CEILING = 24;
 const SPEED = { foot: 6.4, dango: 11.8, turtle: 21, bike: 15.3 };
 const STAMP_RADIUS = 6;
@@ -41,7 +47,8 @@ function makeWorld() {
       ? [[-10,44], [8,53], [-15,68], [14,37], [-18,49], [12,66]]
       : [[-13,-9], [6,14], [15,-11], [-9,15], [-17,4], [12,5]].map(([dx,dz]) => [x+dx,z+dz]);
     ['onsen','manga','sake','ramen','haramaki','port'].forEach((type, k) => {
-      object(type, places[k][0], places[k][1], (i + k) * .47);
+      // Leave the bather visible through the open side of each noren.
+      object(type, places[k][0], places[k][1], type === 'onsen' ? 0 : (i + k) * .47);
     });
     npc('rabbit', 'porter', x-4, river ? 55 : z+5, i * .8 + .2);
     npc('frog', 'sumo', x+4.1, river ? 52 : z-7, i, 1);
@@ -60,7 +67,7 @@ export function createGame(snapshot = null) {
   const player = {
     x: 0, z: 62, y: groundHeight(0,62), h: 0, vx: 0, vz: 0, vy: 0, speed: 0, heading: 0,
     grounded: true, hp: MAX_VITAL, mp: MAX_VITAL, mode: 'normal', mount: null, activity: null,
-    activityTime: 0, stretch: 0, throwTime: 0, invulnerable: 0,
+    activityTime: 0, stretch: 0, landing: 0, impact: 0, throwTime: 0, invulnerable: 0,
     buffs: { warm: 0, swift: 0, drunk: 0, full: 0, wrap: 0 }
   };
   const region = REGIONS[regionAt(player.x,player.z)];
@@ -69,6 +76,8 @@ export function createGame(snapshot = null) {
     region: region.name, regionId: region.id, visited: [region.id]
   };
   let heldJump = false;
+  let bufferedJump = 0;
+  let ledgeGrace = 0;
   let lastBath = null;
   let shotId = 0;
   let throwCooldown = 0;
@@ -180,12 +189,22 @@ export function createGame(snapshot = null) {
     }
   }
   function jump() {
-    if (player.activity || (!player.grounded && player.mode !== 'habutae')) return false;
-    if (!player.grounded && player.vy > 2) return false;
+    if (player.activity) return false;
+    const footLaunch = player.grounded || ledgeGrace > 0;
+    const flap = !player.mount && player.mode === 'habutae' && player.vy <= 2;
+    if (!footLaunch && !flap) {
+      // A tap just before touchdown feels like one continuous bounce.
+      bufferedJump = JUMP_BUFFER;
+      return false;
+    }
     const stretch = !player.mount && player.mode === 'dango';
-    player.vy = stretch ? 15.1 : player.mode === 'habutae' && !player.mount ? 8.2 : 8.6;
+    const takeoffSpeed = stretch ? STRETCH_SPEED : JUMP_SPEED;
+    if (player.mount) player.vy = 8.6;
+    else player.vy = footLaunch ? takeoffSpeed : 7.5;
     player.grounded = false;
     player.stretch = stretch ? .58 : .20;
+    player.landing = 0;
+    bufferedJump = ledgeGrace = 0;
     say('モチコラショッ');
     sound('jump');
     return true;
@@ -379,14 +398,25 @@ export function createGame(snapshot = null) {
     player.speed = distance(player,at)/dt;
     player.x = at.x; player.z = at.z;
     const floor = groundHeight(at.x,at.z);
+    const wasGrounded = player.grounded;
     if (player.grounded && floor >= player.y-.32 && player.vy<=0) player.y = floor;
     if (player.mode==='habutae' && !player.mount && input.jump && !player.activity) {
-      player.vy = Math.min(5.6,player.vy+25*dt);
-    } else player.vy -= GRAVITY*dt;
+      // Ease out of the stronger takeoff into a steady wing-powered climb.
+      player.vy = player.vy > FLIGHT_CLIMB
+        ? Math.max(FLIGHT_CLIMB,player.vy-RISE_GRAVITY*dt)
+        : Math.min(FLIGHT_CLIMB,player.vy+25*dt);
+    } else {
+      player.vy -= (player.vy > 0 ? RISE_GRAVITY : FALL_GRAVITY)*dt;
+    }
     player.y += player.vy*dt;
     player.h = clamp(player.y-floor,0,CEILING);
     player.grounded = player.y <= floor && player.vy <= 0;
+    if (wasGrounded && !player.grounded && player.vy <= 0) ledgeGrace = LEDGE_GRACE;
     if (player.grounded) {
+      if (!wasGrounded && player.vy < -2) {
+        player.impact = clamp((-player.vy-2)/12,0,1);
+        player.landing = .25;
+      }
       player.vy = 0;
       player.h = 0;
       if (canLand(player.x,player.z)) {
@@ -442,7 +472,10 @@ export function createGame(snapshot = null) {
   function advance(dt, input) {
     state.time += dt;
     for (const name of Object.keys(player.buffs)) player.buffs[name] = Math.max(0, player.buffs[name] - dt);
-    for (const name of ['stretch','throwTime','invulnerable']) player[name] = Math.max(0, player[name] - dt);
+    if (bufferedJump > 0 && player.grounded) jump();
+    bufferedJump = Math.max(0,bufferedJump-dt);
+    ledgeGrace = Math.max(0,ledgeGrace-dt);
+    for (const name of ['stretch','landing','throwTime','invulnerable']) player[name] = Math.max(0, player[name] - dt);
     throwCooldown = Math.max(0, throwCooldown - dt);
     for (const o of objects) {
       if (o.cooldown > 0) {
@@ -514,7 +547,12 @@ export function createGame(snapshot = null) {
         data.bikes.reduce((total,n)=>total+n,p.mount==='bike'?1:0)!==ports.length*2 ||
         !point(t.x,t.z) || !point(t.homeX,t.homeZ) || !finite(t.pause,0,12) ||
         !Number.isInteger(t.leg) || !finite(t.leg,0,3) || !data.shore || !point(data.shore.x,data.shore.z)) return;
-    for (const key of Object.keys(player)) if (key!=='buffs') player[key]=p[key];
+    for (const key of Object.keys(player)) {
+      if (key!=='buffs' && key!=='landing' && key!=='impact') player[key]=p[key];
+    }
+    // These short pose cues were added after the first version-two saves.
+    player.landing = finite(p.landing,0,.25) ? p.landing : 0;
+    player.impact = finite(p.impact,0,1) ? p.impact : 0;
     for (const key of Object.keys(BUFF_TIME)) player.buffs[key]=p.buffs[key];
     player.y = groundHeight(player.x,player.z)+player.h;
     state.score=data.score; state.time=data.time;

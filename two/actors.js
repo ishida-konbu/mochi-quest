@@ -1,4 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
+import { addSpringSurface } from './spring-water.js';
+import { finishResident, residentHead, residentLimb, residentTorso } from './resident-art.js';
+import { makeRiceModel, poseRice } from './mochi-model.js';
 
 const PI = Math.PI,
   TAU = PI * 2;
@@ -36,7 +39,6 @@ function primitive(key, make) {
 }
 const sphere = primitive('sphere', () => new THREE.SphereGeometry(1, 14, 10));
 const smallSphere = primitive('smallSphere', () => new THREE.SphereGeometry(1, 9, 6));
-const fineSphere = primitive('fineSphere', () => new THREE.SphereGeometry(1, 28, 20));
 const cube = primitive('cube', () => new THREE.BoxGeometry(1, 1, 1));
 const cyl = primitive('cyl', () => new THREE.CylinderGeometry(1, 1, 1, 12));
 const unitUp = v(0, 1, 0);
@@ -206,282 +208,11 @@ export function getExpression(p, time = 0) {
   return phase < 6 ? 'joy' : phase < 10 ? 'curious' : 'calm';
 }
 
-const N = 1024,
-  H = 512;
-function skinPaper() {
-  return canvasTexture(N, H, (c, w, h) => {
-    c.fillStyle = '#fffcf7';
-    c.fillRect(0, 0, w, h);
-    let seed = 1173;
-    const rng = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
-    for (let i = 0; i < 19000; i++) {
-      const x = rng() * w,
-        y = rng() * h;
-      c.fillStyle = i % 4 === 0 ? 'rgba(168,126,87,.105)' : 'rgba(255,255,255,.48)';
-      c.fillRect(x, y, 0.5 + rng() * 1.7, 0.45 + rng() * 1.6);
-    }
-    // The headband wraps around the whole model. Two red woven stripes appear from behind.
-    c.fillStyle = '#f6eddf';
-    c.fillRect(0, 116, w, 38);
-    c.fillStyle = '#b2463a';
-    c.fillRect(0, 124, w, 5.5);
-    c.fillRect(0, 140, w, 5.5);
-    c.fillStyle = '#fff8eb';
-    c.fillRect(0, 117, w, 2.1);
-    c.fillRect(0, 150, w, 1.8);
-    const seam = c.createLinearGradient(0, 153, 0, 159);
-    seam.addColorStop(0, 'rgba(120,91,67,.31)');
-    seam.addColorStop(1, 'rgba(120,91,67,0)');
-    c.fillStyle = seam;
-    c.fillRect(0, 153, w, 6);
-    for (let i = 0; i < 1900; i++) {
-      c.fillStyle = i % 2 ? 'rgba(255,255,255,.58)' : 'rgba(128,94,67,.20)';
-      c.fillRect(rng() * w, 118 + rng() * 34, 1 + rng() * 4, 0.75);
-    }
-  }).el;
-}
-function expressionMap() {
-  const paper = skinPaper(),
-    sheet = canvasTexture(N, H);
-  let last = '';
-  return {
-    texture: sheet.texture,
-    paint(mood, blink, talk, look, band = true) {
-      const key = [mood, blink, talk, look, band].join('|');
-      if (key === last) return;
-      last = key;
-      const c = sheet.ctx;
-      c.clearRect(0, 0, N, H);
-      c.drawImage(paper, 0, 0);
-      if (!band) c.drawImage(paper, 0, 166, N, 44, 0, 115, N, 45);
-      const cx = 512,
-        ey = 209,
-        my = 238;
-      // Rosy flour-soft cheeks with three short pencil strokes.
-      for (const side of [-1, 1]) {
-        c.save();
-        c.translate(cx + side * 82, ey + 23);
-        c.scale(1, 0.72);
-        const g = c.createRadialGradient(0, 0, 2, 0, 0, mood === 'blush' ? 49 : 43);
-        g.addColorStop(0, mood === 'blush' ? 'rgba(235,119,117,.96)' : 'rgba(243,145,141,.96)');
-        g.addColorStop(0.65, 'rgba(244,162,151,.53)');
-        g.addColorStop(1, 'rgba(246,167,154,0)');
-        dot(c, 0, 0, 47, 47, g);
-        for (let i = -1; i < 2; i++) line(c, [i * 7 - 3, 2, i * 7 + 1, -6], 'rgba(203,110,102,.66)', 1.25);
-        c.restore();
-      }
-      const dark = '#392a27';
-      for (const s of [-1, 1]) {
-        const x = cx + s * 44 + look * 2;
-        if (mood === 'hurt' || mood === 'determined' || mood === 'calling') {
-          if (mood === 'hurt' || (mood === 'determined' && s < 0)) {
-            line(c, [x + s * 9, ey - 5, x - s * 6, ey + 1], dark, 4.6);
-            line(c, [x - s * 6, ey + 1, x + s * 10, ey + 5], dark, 4);
-          } else {
-            dot(c, x, ey + 2, 7.7, 10, dark, -s * 0.1);
-            dot(c, x - 1.7, ey - 1.2, 1.9, 2.1, '#fff7db');
-          }
-          line(c, [x - s * 6, ey - 13, x + s * 2, ey - 12, x + s * 9, ey - 18], dark, 3.3);
-        } else if (mood === 'sleepy' || mood === 'bath' || mood === 'calm') {
-          line(c, [x - 12, ey - 1, x, ey + 9, x + 12, ey - 1], dark, 4.6);
-        } else if (mood === 'joy' || mood === 'blush' || mood === 'eating' || blink) {
-          line(c, [x - 13, ey + 2, x, ey - (blink ? 1 : 17), x + 13, ey + 2], dark, 5.6);
-        } else {
-          const big = mood === 'surprise';
-          dot(c, x, ey, big ? 8.3 : 6.0, big ? 11.3 : 7.1, dark);
-          dot(c, x - 1.5, ey - 2.6, 1.8, 2.1, '#fff7e5');
-          if (big) {
-            const lift = s > 0 ? -6 : 0;
-            line(c, [x - 8, ey - 16 + lift, x, ey - 25 + lift, x + 8, ey - 17 + lift], dark, 2.9);
-          }
-        }
-      }
-      c.save();
-      c.translate(cx + look * 2, my);
-      if (mood === 'surprise' || mood === 'calling') {
-        // A startled breath opens into a tall O. The delivery call opens wider.
-        const rx = mood === 'calling' ? 20 : 12.5;
-        const ry = (mood === 'calling' ? 19 : 16) + (talk ? 2 : 0);
-        dot(c, 0, 8, rx, ry, '#522d2c', -0.07);
-        c.save();
-        c.clip();
-        dot(c, 2, 8 + ry, rx * 0.92, ry * 0.46, '#e99387');
-        c.restore();
-      } else if (mood === 'determined') {
-        // The reference's gritted teeth and pinched corners read as effort at a distance.
-        c.fillStyle = '#fff7e5';
-        c.strokeStyle = dark;
-        c.lineWidth = 3.3;
-        c.beginPath();
-        c.moveTo(-19, 8);
-        c.quadraticCurveTo(-10, -8, 0, -5);
-        c.quadraticCurveTo(12, -7, 18, 2);
-        c.quadraticCurveTo(23, 14, 15, 14);
-        c.quadraticCurveTo(-2, 7, -17, 14);
-        c.quadraticCurveTo(-22, 14, -19, 8);
-        c.closePath();
-        c.fill();
-        c.stroke();
-        line(c, [-14, 7, -3, 2, 15, 7], '#b48675', 1.35);
-      } else if (['joy', 'blush', 'bath'].includes(mood)) {
-        const width = mood === 'bath' ? 18 : 27;
-        const ht = mood === 'bath' ? 14 : talk ? 32 : 27;
-        c.scale(width / 20, ht / 22);
-        c.fillStyle = '#663630';
-        c.beginPath();
-        c.moveTo(-19, -3);
-        c.quadraticCurveTo(-1, 3, 19, -5);
-        c.bezierCurveTo(18, 6, 10, 23, 0, 22);
-        c.bezierCurveTo(-9, 22, -17, 10, -19, -3);
-        c.fill();
-        c.strokeStyle = '#4c332c';
-        c.lineWidth = 1.8;
-        c.stroke();
-        c.save();
-        c.clip();
-        dot(c, 3, 19, 17, 11, '#ec958b');
-        c.restore();
-      } else if (mood === 'eating') {
-        line(c, [-9, 3, -3, 8, 0, 2], dark, 2.7);
-        line(c, [0, 2, 5, 7, 10, 1], dark, 2.7);
-      } else if (mood === 'hurt') {
-        c.fillStyle = '#f1e0c6';
-        c.beginPath();
-        c.moveTo(-12, 5);
-        c.quadraticCurveTo(-2, -7, 10, -2);
-        c.quadraticCurveTo(14, 4, 10, 8);
-        c.quadraticCurveTo(-3, 2, -12, 9);
-        c.closePath();
-        c.fill();
-        c.lineWidth = 2;
-        c.strokeStyle = dark;
-        c.stroke();
-      } else if (mood === 'sleepy') dot(c, 1, 4, 4.5, 3.5, '#784c3e');
-      else line(c, [-8, 2, 0, 9, 9, 1], dark, 2.8);
-      c.restore();
-      if (mood === 'hurt' || mood === 'determined') {
-        c.save();
-        c.translate(603, ey - 29);
-        c.fillStyle = 'rgba(173,198,199,.75)';
-        c.beginPath();
-        c.moveTo(0, -7);
-        c.bezierCurveTo(2, -2, 8, 8, 2, 9);
-        c.bezierCurveTo(-6, 10, -5, 4, 0, -7);
-        c.fill();
-        dot(c, 0, 4, 1.15, 2.3, '#fff9e8');
-        c.restore();
-      }
-      sheet.texture.needsUpdate = true;
-    },
-  };
-}
-// Custom UV seam sits on the back, so the face follows the round rice surface naturally.
-function mochiGeometry() {
-  const p = [],
-    uv = [],
-    ind = [];
-  const rows = 44,
-    cols = 68;
-  for (let j = 0; j <= rows; j++) {
-    const vv = j / rows,
-      lat = vv * PI,
-      ring = Math.sin(lat),
-      cy = Math.cos(lat);
-    for (let i = 0; i <= cols; i++) {
-      const u = i / cols,
-        lon = (u - 0.5) * TAU;
-      const r = (0.79 - 0.071 * cy) * ring * (1 + 0.012 * Math.cos(lon * 3 + 0.6) * ring);
-      p.push(r * Math.sin(lon), 0.83 + 0.766 * cy, 0.91 * r * Math.cos(lon));
-      uv.push(u, 1 - vv);
-      if (i < cols && j < rows) {
-        const a = j * (cols + 1) + i,
-          b = a + 1,
-          d = a + cols + 1;
-        ind.push(a, d, b, b, d, d + 1);
-      }
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.setIndex(ind);
-  g.computeVertexNormals();
-  return g;
-}
-function hangingCloth(b, x, y, z, s = 1) {
-  b.ball(x, y, z, 0.13 * s, 0.1 * s, 0.12 * s, '#f3e7ce');
-  for (const sign of [-1, 1]) {
-    const end = [x + sign * 0.21 * s, y - 0.18 * s, z - 0.24 * s];
-    b.stroke([[x, y, z], [x + sign * 0.12 * s, y - 0.045 * s, z - 0.13 * s], end], 0.049 * s, '#f2e5d2');
-    b.stroke(
-      [
-        [x + sign * 0.073 * s, y - 0.026 * s, z - 0.082 * s],
-        [x + sign * 0.13 * s, y - 0.071 * s, z - 0.15 * s],
-        [end[0], end[1] + 0.027 * s, end[2]],
-      ],
-      0.011 * s,
-      '#a94d40',
-    );
-  }
-}
 function makeHero() {
   const root = new THREE.Group(),
     pose = group(root, 'mochi'),
     rolling = group(pose, 'roll');
-  const paint = expressionMap();
-  const skin = new THREE.MeshStandardMaterial({
-    map: paint.texture,
-    roughness: 0.91,
-    color: 0xffffff,
-    emissive: '#fff8f0',
-    emissiveMap: paint.texture,
-    emissiveIntensity: 0.19,
-  });
-  skin.shadowSide = THREE.BackSide;
-  const flour = canvasTexture(384, 192, (c, w, h) => {
-    const img = c.createImageData(w, h);
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++) {
-        const i = 4 * (y * w + x),
-          grain =
-            124 +
-            23 * n3(x, y, 5) +
-            13 * Math.sin(x * 0.13 + Math.sin(y * 0.16) * 0.71) * Math.sin(y * 0.11 + x * 0.05);
-        img.data[i] = img.data[i + 1] = img.data[i + 2] = grain;
-        img.data[i + 3] = 255;
-      }
-    c.putImageData(img, 0, 0);
-  }).texture;
-  flour.colorSpace = THREE.NoColorSpace;
-  skin.bumpMap = flour;
-  skin.bumpScale = 0.012;
-  inkRim(skin, 0.38);
-  const body = new THREE.Mesh(mochiGeometry(), skin);
-  body.castShadow = body.receiveShadow = true;
-  rolling.add(body);
-  const limbMat = new THREE.MeshStandardMaterial({
-    color: '#faf2e7',
-    emissive: '#f0e1d9',
-    emissiveIntensity: 0.16,
-    roughness: 0.9,
-  });
-  const parts = {};
-  for (const s of [-1, 1]) {
-    const arm = new THREE.Mesh(fineSphere, limbMat);
-    arm.position.set(s * 0.695, 0.58, 0.24);
-    arm.scale.set(0.174, 0.213, 0.171);
-    arm.rotation.z = -s * 0.27;
-    arm.castShadow = true;
-    rolling.add(arm);
-    parts['arm' + s] = arm;
-    const foot = new THREE.Mesh(fineSphere, limbMat);
-    foot.position.set(s * 0.33, 0.14, 0.1);
-    foot.scale.set(0.201, 0.137, 0.247);
-    foot.castShadow = true;
-    rolling.add(foot);
-    parts['foot' + s] = foot;
-  }
-  const knot = batch(rolling, (b) => hangingCloth(b, 0.22, 1.314, -0.535), 'knot');
+  const rice = makeRiceModel(rolling);
   const leaves = batch(
     rolling,
     (b) => {
@@ -556,29 +287,14 @@ function makeHero() {
     },
     'wrap',
   );
-  const towel = batch(
-    rolling,
-    (b) => {
-      b.box(0, 1.587, 0, 0.36, 0.045, 0.28, '#f4ebd6', [0, -0.26, -0.055]);
-      b.box(0.0, 1.614, 0.02, 0.25, 0.023, 0.18, '#fff3df', [0, -0.26, -0.045]);
-      b.rod([-0.13, 1.606, 0.1], [0.13, 1.614, 0.16], 0.006, '#aabbad');
-    },
-    'towel',
-  );
   return {
     root,
     pose,
     rolling,
-    body,
-    skin,
-    limbMat,
-    paint,
-    parts,
+    rice,
     wingParts,
     wrap,
     leaves,
-    knot,
-    towel,
   };
 }
 
@@ -675,8 +391,8 @@ function frogHead(b) {
   b.ball(0, -0.092, 0.121, 0.325, 0.096, 0.241, frogPale);
   for (const s of [-1, 1]) {
     b.ball(s * 0.222, 0.094, 0.087, 0.113, 0.14, 0.117, frog);
-    b.ball(s * 0.23, 0.135, 0.151, 0.082, 0.081, 0.069, '#d5bd76');
-    b.ball(s * 0.236, 0.14, 0.201, 0.054, 0.035, 0.029, '#393b2e');
+    b.ball(s * 0.23, 0.135, 0.151, 0.082, 0.081, 0.069, '#c6b87f');
+    b.ball(s * 0.236, 0.14, 0.201, 0.064, 0.025, 0.029, '#393b2e');
     b.ball(s * 0.249, 0.152, 0.221, 0.012, 0.012, 0.009, '#f7e9c5');
     b.ball(s * 0.08, 0.018, 0.294, 0.013, 0.011, 0.011, '#645f42');
     for (let i = 0; i < 6; i++) {
@@ -684,17 +400,7 @@ function frogHead(b) {
       b.ball(x, 0.017 + Math.sin(i * 2) * 0.031, 0.18 - (i % 3) * 0.032, 0.023, 0.012, 0.021, '#788451');
     }
   }
-  b.stroke(
-    [
-      [-0.312, -0.048, 0.13],
-      [-0.207, -0.091, 0.27],
-      [0, -0.099, 0.347],
-      [0.206, -0.091, 0.27],
-      [0.312, -0.048, 0.13],
-    ],
-    0.01,
-    '#675e3d',
-  );
+
 }
 function armLimb(parent, s, kind, role) {
   const frogKind = kind === 'frog',
@@ -723,6 +429,7 @@ function armLimb(parent, s, kind, role) {
       b.rod([paw[0] + k * 0.019, paw[1], paw[2] + 0.035], end, frogKind ? 0.015 : 0.023, skin, 0.013);
       if (frogKind) b.ball(...end, 0.025, 0.015, 0.026, frogPale);
     }
+    residentLimb(b, kind, role, 'arm', s, elbow, paw);
   });
 }
 function legLimb(parent, s, kind, role) {
@@ -746,6 +453,7 @@ function legLimb(parent, s, kind, role) {
       b.rod([heel[0] + k * 0.024, heel[1] - 0.011, heel[2] + 0.15], tip, 0.023, skin, 0.013);
       if (frogKind) b.ball(...tip, 0.031, 0.014, 0.032, skin);
     }
+    residentLimb(b, kind, role, 'leg', s, knee, heel);
   });
 }
 function animal(parent, kind, role) {
@@ -844,9 +552,14 @@ function animal(parent, kind, role) {
       );
       b.ball(0.184, 0.805, 0.098, 0.11, 0.12, 0.064, '#6b7d77', [0, -0.3, 0.11]);
     }
+    residentTorso(b, kind, role);
   });
   const head = group(torso, 'head', 0, froggy ? 1.208 : 1.423, 0.072);
-  batch(head, froggy ? frogHead : hareHead);
+  batch(head, b => {
+    if (froggy) frogHead(b);
+    else hareHead(b);
+    residentHead(b, kind);
+  });
   for (const s of [-1, 1]) {
     armLimb(torso, s, kind, role);
     legLimb(parent, s, kind, role);
@@ -866,6 +579,7 @@ function animal(parent, kind, role) {
       }
     });
   }
+  finishResident(parent, kind);
 }
 function shellPoint(a, r) {
   return [
@@ -1129,6 +843,19 @@ function manga(parent) {
     printPlane(p, 'print', mat, 0, 0, 0, 0.327, 0.448, -PI / 2, 0, s < 0 ? 0 : PI);
   }
 }
+function paintSakeCup(b, x, z) {
+  const cup = new THREE.LatheGeometry(
+    [[0.043, 0], [0.065, 0.015], [0.095, 0.108], [0.089, 0.119], [0.079, 0.117], [0.061, 0.063]].map(
+      ([r, y]) => new THREE.Vector2(r, y),
+    ),
+    24,
+  );
+  b.add(cup, '#ede0bc', [x, 0, z]);
+  cup.dispose();
+  b.loop(x, 0.109, z, 0.095, 0.095, 0.04, '#587483');
+  b.loop(x, 0.094, z, 0.090, 0.090, 0.02, '#758d91');
+  b.ball(x, 0.098, z, 0.078, 0.005, 0.078, '#d1b986');
+}
 function sake(parent) {
   batch(parent, (b) => {
     const profile = [
@@ -1169,23 +896,10 @@ function sake(parent) {
         [0, 0, Math.sin(a) * 0.45],
       );
     }
-    const cup = new THREE.LatheGeometry(
-      [
-        [0.043, 0],
-        [0.065, 0.015],
-        [0.095, 0.108],
-        [0.085, 0.119],
-        [0.065, 0.073],
-      ].map((a) => new THREE.Vector2(...a)),
-      18,
-    );
-    b.add(cup, '#ede0bc', [0.178, 0, 0.085]);
-    cup.dispose();
-    b.loop(0.178, 0.11, 0.085, 0.095, 0.095, 0.05, '#637b80');
-    b.ball(0.178, 0.09, 0.085, 0.079, 0.006, 0.079, '#c7ab79');
+    paintSakeCup(b, 0.178, 0.085);
   });
 }
-function ramen(parent) {
+function ramen(parent, restingChopsticks = true) {
   batch(parent, (b) => {
     const g = new THREE.LatheGeometry(
       [
@@ -1243,8 +957,18 @@ function ramen(parent) {
         r = 0.26 * Math.sqrt(i / 24);
       b.ball(Math.sin(a) * r, 0.283, Math.cos(a) * r, 0.01, 0.006, 0.009, i % 3 ? '#ead4a1' : '#79935d');
     }
-    b.rod([-0.331, 0.328, -0.127], [0.332, 0.342, 0.114], 0.009, '#845537');
-    b.rod([-0.339, 0.331, -0.093], [0.321, 0.343, 0.148], 0.009, '#845537');
+    if (restingChopsticks) {
+      b.rod([-0.331, 0.328, -0.127], [0.332, 0.342, 0.114], 0.009, '#845537');
+      b.rod([-0.339, 0.331, -0.093], [0.321, 0.343, 0.148], 0.009, '#845537');
+    }
+  });
+}
+function ramenSpoon(parent) {
+  batch(parent, (b) => {
+    b.ball(0, 0, 0, 0.084, 0.019, 0.053, '#ece4ce');
+    b.ball(-0.012, 0.017, 0, 0.046, 0.018, 0.031, '#c6a074');
+    b.ball(-0.013, 0.03, 0.007, 0.014, 0.006, 0.011, '#e2c79a');
+    b.stroke([[0.052, 0.004, 0], [0.12, 0.018, 0.005], [0.225, 0.077, 0.017], [0.279, 0.089, 0.025]], 0.016, '#ded7c4');
   });
 }
 function cuff(parent) {
@@ -1281,38 +1005,9 @@ function cuff(parent) {
   });
 }
 function onsen(parent) {
+  addSpringSurface(parent);
   batch(parent, (b) => {
     b.ball(0, 0.035, 0, 2.1, 0.1, 1.67, '#a59270');
-    b.ball(0, 0.115, 0, 1.91, 0.075, 1.49, '#86aaa0');
-    for (let i = 0; i < 26; i++) {
-      const a = (i * TAU) / 26,
-        r = 0.21 + 0.12 * n3(i, 9, 5),
-        x = 1.92 * Math.cos(a),
-        z = 1.53 * Math.sin(a);
-      b.ball(
-        x,
-        0.18 + Math.sin(i * 4) * 0.026,
-        z,
-        r * 1.47,
-        r * 0.77,
-        r,
-        ['#a29b83', '#a9a792', '#969782', '#b8ac8e'][i % 4],
-        [0.1, a - 0.7, i * 0.34],
-      );
-    }
-    for (let i = 0; i < 6; i++) {
-      const x = Math.sin(i * 7) * 1.0,
-        z = Math.cos(i * 4) * 0.88;
-      b.stroke(
-        [
-          [x - 0.15, 0.19, z],
-          [x - 0.019, 0.19, z + 0.019],
-          [x + 0.161, 0.19, z - 0.007],
-        ],
-        0.007,
-        '#c8d2af',
-      );
-    }
     for (const x of [-1.98, -0.93]) b.rod([x, 0.12, -1.1], [x, 2.13, -1.1], 0.041, '#896d50');
     b.rod([-2.11, 2.05, -1.1], [-0.8, 2.05, -1.1], 0.054, wood);
     b.rod([1.64, 0.011, -0.6], [1.64, 0.74, -0.6], 0.081, '#a39563');
@@ -1428,12 +1123,23 @@ function particles(type, count) {
     depthWrite: false,
     uniforms: {
       tint: { value: new THREE.Color(colors[type]) },
-      opacity: { value: type === 'steam' ? 0.34 : 0.82 },
-      size: { value: type === 'steam' ? 100 : 30 },
+      opacity: { value: type === 'steam' ? 0.22 : 0.82 },
+      size: { value: type === 'steam' ? 178 : 30 },
     },
     vertexShader:
       'attribute float fade; varying float alpha; uniform float size; void main(){vec4 p=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*p; gl_PointSize=clamp(size/max(1.,-p.z),1.5,43.); alpha=fade;}',
-    fragmentShader:
+    fragmentShader: type === 'steam' ? `
+      uniform vec3 tint; uniform float opacity; varying float alpha;
+      void main() {
+        vec2 q=gl_PointCoord-.5;
+        float curl=.095*sin(q.y*10.+alpha*6.)+.052*sin(q.y*19.-alpha*4.);
+        vec2 strand=vec2((q.x-curl)*6.4,(q.x+curl+.08)*9.);
+        float ribbon=exp(-strand.x*strand.x)+.33*exp(-strand.y*strand.y);
+        float a=opacity*alpha*ribbon*(1.-smoothstep(.20,.50,abs(q.y)));
+        if(a<.006) discard;
+        gl_FragColor=vec4(tint,a);
+        #include <colorspace_fragment>
+      }` :
       'uniform vec3 tint;uniform float opacity;varying float alpha;void main(){float d=length(gl_PointCoord-.5)*2.;float a=(1.-smoothstep(.1,1.,d))*opacity*alpha;if(a<.008)discard;gl_FragColor=vec4(tint,a);\n#include <colorspace_fragment>\n}',
   });
   const g = new THREE.BufferGeometry();
@@ -1502,43 +1208,23 @@ function gaitHero(h, p, t, dt, camera, state) {
     wings = p.mode === 'habutae';
   h.root.position.set(p.x, p.y, p.z);
   h.root.rotation.y = h.angle;
-  const bob =
-    p.grounded && !sit && !riding ? (speed > 0.15 ? 0.055 : 0.012) * Math.abs(Math.sin(h.phase)) : 0;
-  const motion = sit || riding ? 0 : Math.sin(h.phase);
-  h.phase += dt * (speed > 0.15 ? Math.min(14, 5.4 + speed * 1.18) : 2.35);
-  const stretch =
-    p.stretch > 0
-      ? Math.max(0, Math.sin(Math.min(1, p.stretch / (dango ? 0.58 : 0.2)) * PI)) * (dango ? 0.56 : 0.13)
-      : 0;
-  const breath = 0.014 * Math.cos(h.phase * 2),
-    g = giant ? 1.28 : 1;
-  h.pose.scale.set(g * (1 + breath - stretch * 0.26), g * (1 - breath + stretch), g * (1 + breath * 0.55));
-  const mountHeight = p.mount === 'bike' ? 0.9 : p.mount === 'turtle' ? 0.56 : 0;
-  h.pose.position.set(0, bob + mountHeight + (sit === 'bath' ? -0.44 : 0), riding ? -0.14 : 0);
-  h.pose.rotation.set(0, 0, 0);
-  if (sit === 'fall') {
-    h.pose.rotation.z = 0.97 * Math.sin(Math.min(1, (p.activityTime || 0.1) / 0.68) * PI);
-    h.pose.position.y -= 0.08;
+  const response=poseRice(h.rice,p,t,dt,mood);
+  const g=giant?1.28:1;
+  h.pose.scale.set(g*response.width,g*response.stretch,g*response.width);
+  const mountHeight = p.mount === 'bike' ? .90 : p.mount === 'turtle' ? .52 : 0;
+  h.pose.position.set(0,response.bob+mountHeight+(sit==='bath'?-.49+.018*Math.sin(t*2):0),riding?-.14:0);
+  h.pose.rotation.set(response.pitch,0,response.lean);
+  if(sit==='fall'){
+    const fall=Math.sin(Math.min(1,(p.activityTime||.1)/.68)*PI);
+    h.pose.rotation.z+=fall*.93;
+    h.pose.position.set(-.11*fall,h.pose.position.y+.16*fall,0);
   }
-  if (sit === 'sleep') {
-    h.pose.scale.y *= 0.73;
-    h.pose.rotation.z = 0.24;
-    h.pose.position.y = -0.02;
-  }
-  if (p.buffs?.drunk > 0) h.pose.rotation.z += 0.115 * Math.sin(t * 3.7);
-  h.skin.color.set(p.mode === 'kusa' ? '#a2bb78' : p.mode === 'kinako' ? '#e7c07d' : '#fffdf9');
-  h.limbMat.color.set(p.mode === 'kusa' ? '#a7b580' : p.mode === 'kinako' ? '#e5bb77' : '#fff5e8');
-  h.paint.paint(
-    mood,
-    t % 4.2 > 4.01 || t % 9.1 > 8.99,
-    Math.sin(t * (sit === 'eat' ? 9 : 4)) > 0.25,
-    Math.round(Math.sin(t * 1.7) * 1.1),
-    !['bath', 'sleep'].includes(sit),
-  );
-  h.knot.visible = !['bath', 'sleep'].includes(sit);
-  h.towel.visible = sit === 'bath';
+  if(sit==='sleep'){h.pose.scale.y*=.76;h.pose.rotation.z=-.13;h.pose.position.y=.009;}
+  if(sit==='bath'){h.pose.rotation.x=.11;h.pose.scale.set(g*1.08,g*.92,g*1.09);}
+  if(p.buffs?.drunk>0) h.pose.rotation.z+=.115*Math.sin(t*3.7);
   h.leaves.visible = p.mode === 'kusa';
   h.wrap.visible = p.buffs?.wrap > 0;
+  h.wrap.scale.set(1.075,1,1.042);
   if (dango && !riding && !sit) {
     h.spin = (h.spin + (speed * dt) / 0.79) % TAU;
     h.rolling.rotation.x = h.spin;
@@ -1551,38 +1237,7 @@ function gaitHero(h, p, t, dt, camera, state) {
     h.rolling.position.set(0, 0, 0);
   }
   for (let i = 0; i < 2; i++) {
-    const s = i ? 1 : -1,
-      arm = h.parts['arm' + s],
-      foot = h.parts['foot' + s];
-    arm.visible = foot.visible = !dango;
-    arm.position.set(s * 0.695, 0.58, 0.245 + s * motion * 0.086);
-    arm.rotation.set(s * motion * 0.31, 0, -s * 0.27);
-    if (p.emote === 'joy') {
-      arm.position.set(s * 0.73, 0.72 + Math.sin(t * 4 + s) * 0.055, 0.27);
-      arm.rotation.z = -s * 0.8;
-    }
-    if (p.emote === 'surprise') {
-      arm.position.set(s * 0.64, 0.83, 0.39);
-      arm.rotation.z = s * 0.48;
-    }
-    if (p.emote === 'determined' && s > 0) {
-      arm.position.set(0.61, 0.72, 0.46);
-      arm.rotation.x = -0.92;
-    }
-    foot.position.set(
-      s * 0.33,
-      0.14 + Math.max(s * motion, 0) * (speed > 0.15 ? 0.105 : 0.035),
-      0.1 - s * motion * (speed > 0.15 ? 0.117 : 0.035),
-    );
-    if (sit === 'read' || sit === 'drink' || sit === 'eat') {
-      arm.position.set(s * 0.405, 0.56, 0.59);
-      arm.rotation.z = s * 0.93;
-    }
-    if (p.throwTime > 0 && s > 0) {
-      const a = Math.sin(Math.min(1, p.throwTime / 0.28) * PI);
-      arm.position.set(0.655, 0.72, 0.28 + a * 0.46);
-      arm.rotation.x = -a * 0.75;
-    }
+    const s=i?1:-1;
     h.wingParts[i].visible = wings;
     h.wingParts[i].rotation.z = s * (0.24 + Math.sin(t * (p.grounded ? 5 : 13)) * 0.47);
   }
@@ -1591,16 +1246,25 @@ function gaitHero(h, p, t, dt, camera, state) {
     item.visible = sit === key;
     if (item.visible) {
       if (key === 'drink') {
-        item.position.set(0.17, 0.66, 0.7);
-        item.rotation.x = -0.66 + Math.sin(t * 5.5) * 0.15;
+        const sip = 0.5 + 0.5 * Math.sin(t * 4.3);
+        item.position.set(0.203 - 0.068 * sip, 0.733 + 0.095 * sip, 0.879 - 0.035 * sip);
+        item.rotation.set(-0.20 - sip * 0.57, 0, -0.12 - sip * 0.07);
+        item.scale.setScalar(1.24);
       } else if (key === 'read') {
-        item.position.set(0, 0.55, 0.73);
-        item.rotation.x = 0.58 + Math.sin(t * 2) * 0.035;
+        item.position.set(0, 0.54, 0.94);
+        item.scale.setScalar(1.24);
+        item.rotation.x = 0.82 + Math.sin(t * 2) * 0.024;
       } else {
-        item.position.set(0, 0.46, 0.71);
-        item.rotation.x = 0.055;
+        item.position.set(0, 0.45, 1.085);
+        item.rotation.x = 0.12;
       }
     }
+  }
+  h.spoon.visible = sit === 'eat';
+  if (h.spoon.visible) {
+    const bite = 0.5 + 0.5 * Math.sin(t * 4.2);
+    h.spoon.position.set(0.084 - 0.060 * bite, 0.753 + 0.183 * bite, 1.079 - 0.275 * bite);
+    h.spoon.rotation.set(-0.07, 0.16, -0.20 + 0.12 * bite);
   }
   h.bicycle.visible = p.mount === 'bike';
   h.ridingTurtle.visible = p.mount === 'turtle';
@@ -1701,8 +1365,14 @@ export function createActors(scene) {
   const root = group(scene, '旅の仲間');
   const h = makeHero();
   h.spin = 0;
-  h.phase = 0;
-  h.held = { read: accessory('manga'), drink: accessory('sake'), eat: accessory('ramen') };
+  h.held = {
+    read: accessory('manga'),
+    drink: model('sipping-cup', (parent) => batch(parent, (b) => paintSakeCup(b, 0, 0))),
+    eat: model('held-ramen', (parent) => ramen(parent, false)),
+  };
+  h.spoon = model('ramen-spoon', ramenSpoon);
+  h.spoon.visible = false;
+  h.rolling.add(h.spoon);
   for (const item of Object.values(h.held)) {
     item.visible = false;
     h.rolling.add(item);

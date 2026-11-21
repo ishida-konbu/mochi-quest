@@ -16,3 +16,7 @@ M で地図、C でお顔カメラ、Esc で一時停止。お顔カメラでは
 リポジトリの直下で `python3 -m http.server 8080` を実行し、[作品選択ページ](http://localhost:8080/)を開きます。Node.js 22 で `npm test` を実行すると両作品のゲームロジックを検証できます。外部パッケージのインストールは不要です。
 
 GitHub Pages は `main` ブランチのルートを配信します。第二作は WebGL 2 を使用します。Three.js r180 を [MIT ライセンス](two/vendor/THREE-LICENSE.txt) の下で同梱しています。掛け声の音声モデルは [音声クレジット](audio/CREDITS.txt) に記載しています。
+
+第二作の遠景には描き下ろしの山水画を使用しています。お餅や水辺に映る朝の環境光には Greg Zaal の HDRI を軽量化して使用しました。[Spruit Sunrise](https://polyhaven.com/a/spruit_sunrise) ／ [CC0](https://polyhaven.com/license)
+
+桜川の浅瀬と海岸には Kless Gyzen の苔岩6種を配置しています。配信用モデルは元の色と凹凸のテクスチャを活かして約4千ポリゴンに軽量化しました。[Rock Moss Set 01](https://polyhaven.com/a/rock_moss_set_01) ／ [CC0](https://polyhaven.com/license)

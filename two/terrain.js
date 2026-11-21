@@ -31,7 +31,7 @@ const hill = (x, z, cx, cz, rx, rz) => exp(-(((x - cx) / rx) ** 2 + ((z - cz) / 
 export const riverZ = (x) => 18 + 9 * sin(x / 51) + 3.3 * sin(x / 25);
 export const riverHalfWidth = (x) => 8.6 + 1.9 * sin(x / 38 + 0.35) + 0.95 * sin(x / 14);
 export const coastX = (z) => -250 + 64 * exp(-(((z - 112) / 75) ** 2)) + 5.5 * sin(z / 23);
-export function terrainHeight(x, z) {
+function naturalHeight(x, z) {
   const d = abs(z - riverZ(x)) - riverHalfWidth(x);
   const basic =
     3.9 +
@@ -49,6 +49,17 @@ export function terrainHeight(x, z) {
   const land = -1.57 + (nearRiver + 1.57) * smooth(-3.5, 6.6, d);
   const shore = x - coastX(z);
   return -1.8 + (land + 1.8) * smooth(-3.3, 11, shore);
+}
+// This stone bathing pool was cut into the hillside on a level terrace.
+const bathShelf = { x: 143, z: 96, height: naturalHeight(143, 96) };
+export function terrainHeight(x, z) {
+  const dx = x - bathShelf.x,
+    dz = z - bathShelf.z;
+  if (abs(dx) > 8.5 || abs(dz) > 8.5) return naturalHeight(x, z);
+  const distance = hypot(dx, dz);
+  if (distance <= 5) return bathShelf.height;
+  const terrain = naturalHeight(x, z);
+  return bathShelf.height + (terrain - bathShelf.height) * smooth(5, 8.5, distance);
 }
 export const BRIDGES = [-137, 0, 134].map((x) => ({
   x,
@@ -279,14 +290,14 @@ export function seeded(seed) {
 }
 const rng = seeded(821171);
 const trees = [
-  { x: -9.8, z: 50.5, h: 10.2, kind: 'pine', seed: 43 },
+  { x: -11.5, z: 54.8, h: 10.2, kind: 'pine', seed: 43 },
   { x: 11.3, z: 50.1, h: 8.6, kind: 'maple', seed: 31 },
   { x: -16, z: 68.8, h: 8.7, kind: 'maple', seed: 348 },
   { x: 16.6, z: 72.8, h: 10.2, kind: 'pine', seed: 17 },
   { x: -13.5, z: 30, h: 7.3, kind: 'willow', seed: 72 },
-  { x: 13.2, z: 9.2, h: 8, kind: 'pine', seed: 32 },
+  { x: 13.2, z: 3.7, h: 8, kind: 'pine', seed: 32 },
   { x: -14.4, z: 1, h: 8, kind: 'maple', seed: 987 },
-  { x: 23, z: 28, h: 8.8, kind: 'pine', seed: 701 },
+  { x: 26.5, z: 5.5, h: 8.8, kind: 'pine', seed: 701 },
   { x: -22, z: 40, h: 7.5, kind: 'oak', seed: 431 },
   { x: 24, z: 45, h: 7.8, kind: 'maple', seed: 27 },
 ];
@@ -394,7 +405,7 @@ function highest(x, z, pad, supportOnly) {
     for (const item of items) if (!supportOnly || item.support) h = max(h, surfaceHeight(item, x, z, pad));
   return h;
 }
-export const solidHeightAt = (x, z) => highest(x, z, 0, false);
+export const solidHeightAt = (x, z, clearance = 0) => highest(x, z, clearance, false);
 export function groundHeight(x, z) {
   const b = bridgeAt(x, z);
   return max(b ? bridgeHeight(b, z) : terrainHeight(x, z), highest(x, z, 0, true));

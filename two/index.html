@@ -10,7 +10,19 @@
       content="お餅になって、鳥獣戯画の里を歩く。橋や山道がつながる三次元のオープンワールド。"
     />
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css" />
+    <link rel="stylesheet" href="./game.css?v=2.1" />
+    <script type="importmap">
+      {
+        "imports": {
+          "./actors.js": "./actors.js?v=2.1",
+          "./game.js": "./game.js?v=2.1",
+          "./ink.js": "./ink.js?v=2.1",
+          "./interface.js": "./interface.js?v=2.1",
+          "./terrain.js": "./terrain.js?v=2.1",
+          "./world.js": "./world.js?v=2.1"
+        }
+      }
+    </script>
   </head>
   <body>
     <main id="stage">
@@ -118,7 +130,7 @@
         <div id="dialog-content"></div>
       </div>
     </dialog>
-    <script type="module" src="./main.js"></script>
+    <script type="module" src="./main.js?v=2.1"></script>
     <noscript>JavaScript を有効にして遊んでください。</noscript>
   </body>
 </html>

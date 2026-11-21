@@ -1,5 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { createWorld } from './world.js';
+import { setRiverStones } from './scanned-stone.js';
+import { createBathReflection } from './spring-water.js';
 import { createInkPass } from './ink.js';
 import { createActors, getExpression } from './actors.js';
 import { createGame } from './game.js';
@@ -29,6 +31,7 @@ function store(key, value) {
   }
 }
 const clamp = THREE.MathUtils.clamp;
+const restingEyeHeightOffset = { bath: 0.35, sleep: 0.26 };
 const savedSettings = read(settingsKey) || {};
 const game = createGame(read(saveKey)),
   state = game.state,
@@ -37,7 +40,7 @@ const audio = createAudio();
 let audible = savedSettings.sound !== false;
 let yaw = Number.isFinite(savedSettings.yaw) ? savedSettings.yaw : 0;
 let pitch = 0.23,
-  distance = 7.1,
+  distance = 6.55,
   priorCamera = null,
   photoMode = false;
 let goal = REGIONS.some((r) => r.id === savedSettings.goal) ? savedSettings.goal : null;
@@ -54,6 +57,7 @@ let previous = 0,
   renderer,
   world,
   actors,
+  bathReflection,
   ink,
   contextLost = false;
 const keys = new Set(),
@@ -67,7 +71,7 @@ const compassTicks = [];
 const cards = new Map();
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(57, 1, 0.09, 1500);
-const sun = new THREE.DirectionalLight(0xffecd1, 1.92);
+const sun = new THREE.DirectionalLight(0xffe5bd, 2.35);
 const aim = new THREE.Vector3(),
   eye = new THREE.Vector3(),
   focus = new THREE.Vector3(),
@@ -192,7 +196,7 @@ function togglePhoto() {
     photoTime = state.time;
     yaw = actors.hero.rotation.y;
     pitch = 0.105;
-    distance = 3.25;
+    distance = camera.aspect < 0.83 ? 3.48 : 2.95;
     p.emote = null;
     updateEmotes();
   } else {
@@ -215,7 +219,7 @@ $('photo').onclick = togglePhoto;
 $('leave-photo').onclick = togglePhoto;
 $('download').onclick = () => {
   if (!renderer || contextLost) return;
-  ink.draw(scene);
+  drawScene();
   canvas.toBlob((blob) => {
     if (!blob) return;
     const url = URL.createObjectURL(blob),
@@ -377,7 +381,11 @@ window.addEventListener('pagehide', save);
 function updateCamera(dt, snap = false) {
   const full = p.buffs.full > 0 ? 1.26 : 1,
     ride = p.mount === 'bike' ? 0.9 : p.mount === 'turtle' ? 0.48 : 0;
-  heroAt.set(p.x, p.y + ride + 0.9 * full, p.z);
+  // Let the body rise within the frame on takeoff. The camera catches up for
+  // long flights, while a standing jump retains a visible point of departure.
+  const rise = photoMode ? 0 : Math.min(p.h, 3.6) * 0.41;
+  const resting = photoMode ? restingEyeHeightOffset[p.activity] || 0 : 0;
+  heroAt.set(p.x, p.y + ride + 0.9 * full - rise - resting, p.z);
   if (snap) focus.copy(heroAt);
   else focus.lerp(heroAt, 1 - Math.exp(-dt * 13));
   const sx = Math.sin(yaw),
@@ -392,7 +400,7 @@ function updateCamera(dt, snap = false) {
       x = focus.x + dx * t,
       z = focus.z + dz * t,
       y = focus.y + dy * t;
-    if (Math.max(groundHeight(x, z), solidHeightAt(x, z)) + 0.19 > y) {
+    if (Math.max(groundHeight(x, z), solidHeightAt(x, z, 0.42)) + 0.19 > y) {
       fraction = Math.max(0.16, (i - 1) / n);
       break;
     }
@@ -571,20 +579,25 @@ function resize() {
   ink?.resize();
 }
 function settingsForLighting() {
-  scene.add(new THREE.HemisphereLight(0xfff5e4, 0xb6b8b1, 1.63));
-  sun.position.set(26, 50, -50);
+  scene.add(new THREE.HemisphereLight(0xfff5e3, 0x9a8675, 1.02));
+  sun.position.set(35, 38, -51);
   sun.castShadow = true;
   const cam = sun.shadow.camera;
-  cam.left = cam.bottom = -22;
-  cam.right = cam.top = 22;
+  cam.left = cam.bottom = -19;
+  cam.right = cam.top = 19;
   cam.near = 0.5;
   cam.far = 110;
-  sun.shadow.mapSize.set(coarse ? 512 : 1024, coarse ? 512 : 1024);
+  sun.shadow.mapSize.set(coarse ? 1024 : 1536, coarse ? 1024 : 1536);
   sun.shadow.bias = -0.00035;
   sun.shadow.normalBias = 0.026;
-  const bounce = new THREE.DirectionalLight(0xf2f4ff, 0.72);
+  const bounce = new THREE.DirectionalLight(0xe6efff, 0.65);
   bounce.position.set(-28, 20, 25);
   scene.add(bounce, sun, sun.target);
+}
+function drawScene() {
+  bathReflection(p, photoMode ? photoTime : state.time, camera);
+  const focusDistance = photoMode ? Math.max(0.3, camera.position.distanceTo(aim) - 0.55) : 0;
+  ink.draw(scene, focusDistance);
 }
 function frame(now) {
   requestAnimationFrame(frame);
@@ -617,7 +630,7 @@ function frame(now) {
   } else photoTime += delta;
   updateCamera(delta);
   sun.target.position.set(p.x, p.y, p.z);
-  sun.position.set(p.x + 26, p.y + 50, p.z - 50);
+  sun.position.set(p.x + 35, p.y + 38, p.z - 51);
   world.update(photoMode ? photoTime : state.time, p, camera);
   // Keep the photographic pose alive while the travel clock is paused.
   if (photoMode) {
@@ -629,7 +642,7 @@ function frame(now) {
       state.time = playTime;
     }
   } else actors.update(state, delta, camera);
-  ink.draw(scene);
+  drawScene();
   if (now >= nextHUD) {
     updateHUD();
     nextHUD = now + 95;
@@ -676,12 +689,14 @@ function boot() {
     ink = createInkPass(renderer, camera);
     settingsForLighting();
     world = createWorld(scene);
+    setRiverStones(scene, state.objects);
     actors = createActors(scene);
+    bathReflection = createBathReflection(renderer, scene, actors.hero);
     resize();
     updateCamera(1, true);
     actors.update(state, 0, camera);
     world.update(state.time, p, camera);
-    ink.draw(scene);
+    drawScene();
     updateHUD();
     $('loading').hidden = true;
     qualitySince = performance.now();
