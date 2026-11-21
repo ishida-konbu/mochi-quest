@@ -202,6 +202,7 @@ export function getExpression(p, time = 0) {
   if (p.activity === 'drink') return 'blush';
   if (p.activity === 'eat') return 'eating';
   if (p.throwTime > 0) return 'calling';
+  if (p.mount === 'bike' && p.speed > 0.25) return 'joy';
   if (p.mode === 'dango' && p.grounded && p.speed > 0.25) return 'joy';
   if (p.night) return 'sleepy';
   if (p.mode === 'dango' && !p.grounded && p.stretch > 0.04) return 'determined';
@@ -1353,6 +1354,7 @@ function mistAt(m, t, steam = true, spread = 1) {
 }
 function paperNotice() {
   return model('notice', (parent) => {
+    parent.scale.setScalar(1.5);
     batch(parent, (b) => {
       b.box(0, 0, 0, 0.42, 0.018, 0.259, '#f7ead0', [0, 0, 0.016]);
       b.stroke(
@@ -1703,7 +1705,7 @@ export function createActors(scene) {
       if (!active.has(id)) {
         m.visible = false;
         notices.delete(id);
-        if (spares.length < 14) spares.push(m);
+        if (spares.length < 40) spares.push(m);
         else root.remove(m);
       }
   }

@@ -1,11 +1,11 @@
 import * as THREE from './vendor/three.module.min.js';
+import { snowDaruma } from './snow-daruma.js';
 import { terrainHeight as height, seeded, TREES, BUILDINGS, nearRoad } from './terrain.js';
 
 const tau = 2 * Math.PI;
 const { sin, cos } = Math;
 const point = (x, y, z) => new THREE.Vector3(x, y, z);
 const chalk = ['#e6eff3', '#eef2ef', '#d9e4ea'];
-const coals = ['#41414a', '#343d49', '#4c4c54'];
 
 function lathe(profile, sides) {
   return new THREE.LatheGeometry(
@@ -28,141 +28,15 @@ function frame(p, x, z, yaw = 0, base = height(x, z)) {
   };
 }
 
-function snowman(p, x, z, s, heading, hat, shade) {
-  const f = frame(p, x, z, heading);
-  f.part('snowLump', 0, 0.67 * s, 0, 0.79 * s, 0.78 * s, 0.76 * s, chalk[0]);
-  f.part('snowLump', -0.05 * s, 1.62 * s, 0.012 * s, 0.57 * s, 0.56 * s, 0.56 * s, chalk[1]);
-  for (let j = 0; j < 2; j++) {
-    const sign = j * 2 - 1;
-    f.part(
-      'ball',
-      (-0.05 + sign * 0.192) * s,
-      (1.73 + j * 0.018) * s,
-      0.511 * s,
-      0.056 * s,
-      0.065 * s,
-      0.04 * s,
-      coals[j],
-      p.stone,
-    );
-    f.link(
-      [sign * 0.66 * s, 0.88 * s, 0.01 * s],
-      [sign * 1.1 * s, (1.22 + j * 0.09) * s, (-0.03 + j * 0.12) * s],
-      0.035 * s,
-      '#635140',
-    );
-    f.link(
-      [sign * 0.97 * s, 1.13 * s, 0.02 * s],
-      [sign * 1.01 * s, 1.37 * s, 0.07 * s],
-      0.023 * s,
-      '#675745',
-    );
-  }
-  for (let i = -2; i <= 2; i++) {
-    let y = 1.495 + i * i * 0.013;
-    f.part(
-      'rock',
-      (-0.044 + i * 0.076) * s,
-      y * s,
-      (0.541 - i * i * 0.007) * s,
-      0.021 * s,
-      0.026 * s,
-      0.022 * s,
-      coals[(i + 3) % 3],
-      p.stone,
-    );
-  }
-  f.part(
-    'nose',
-    -0.047 * s,
-    1.603 * s,
-    0.53 * s,
-    0.091 * s,
-    0.291 * s,
-    0.088 * s,
-    '#c47a42',
-    p.fine,
-    0,
-    Math.PI / 2 + 0.1,
-    -0.09,
-  );
-  for (let i = 0; i < 2; i++)
-    f.part(
-      'rock',
-      0.052 * s,
-      (0.65 + i * 0.26) * s,
-      (0.75 - i * 0.026) * s,
-      0.054 * s,
-      0.056 * s,
-      0.033 * s,
-      coals[i],
-      p.stone,
-    );
-  f.part('muffler', -0.026 * s, 1.235 * s, 0.01 * s, 0.58 * s, 0.145 * s, 0.565 * s, shade, p.solid);
-  f.part('box', 0.3 * s, 1.018 * s, 0.55 * s, 0.193 * s, 0.49 * s, 0.088 * s, shade, p.solid, 0, -0.28, 0.22);
-  for (let k = 0; k < 5; k++)
-    f.link(
-      [(0.25 + k * 0.034) * s, 0.792 * s, 0.621 * s],
-      [(0.25 + k * 0.034) * s, 0.712 * s, 0.634 * s],
-      0.009 * s,
-      shade,
-      p.fine,
-    );
-  if (hat) {
-    f.part(
-      'bucket',
-      -0.16 * s,
-      2.1 * s,
-      0.015 * s,
-      0.39 * s,
-      0.4 * s,
-      0.39 * s,
-      '#865046',
-      p.solid,
-      0,
-      -0.05,
-      0.14,
-    );
-    f.part(
-      'round',
-      -0.18 * s,
-      2.13 * s,
-      0.015 * s,
-      0.415 * s,
-      0.045 * s,
-      0.415 * s,
-      '#613f38',
-      p.wood,
-      0,
-      -0.05,
-      0.14,
-    );
-    f.part(
-      'snowLump',
-      -0.19 * s,
-      2.481 * s,
-      0.015 * s,
-      0.3 * s,
-      0.068 * s,
-      0.29 * s,
-      chalk[0],
-      p.fine,
-      0,
-      -0.05,
-      0.14,
-    );
-  }
-}
 function snowCapital(p, light) {
-  const rng = seeded(238247);
-  for (const [x, z, s, yaw, hat, scarf] of [
-    [-74, -293, 1.02, -0.48, true, '#a74642'],
-    [-72.6, -293.2, 0.65, -0.7, false, '#526f86'],
-    [-82.3, -277, 0.83, 0.49, true, '#635e90'],
-    [-61, -290, 0.66, 0.91, false, '#a75c43'],
-    [-86, -309, 0.93, 0.54, true, '#557269'],
-  ])
-    snowman(p, x, z, s, yaw, hat, scarf);
+  const rng = seeded(238247), daruma = snowDaruma(p);
+  // A family made by the townspeople lines the approach to the snow pagoda.
+  const family = [
+    [-74, -293, 1.02, -.48, false, false], [-72.6, -293.2, .65, -.7, true, true],
+    [-82.3, -277, .83, .49, false, true], [-61, -290, .66, .91, true, false],
+    [-86, -309, .93, .54, false, false],
+  ];
+  for (const [x, z, scale, yaw, child, indigo] of family) daruma(frame(p,x,z,yaw),scale,child,indigo);
   for (let i = 0; i < 28; i++) {
     const x = -78 + (rng() - 0.5) * 90,
       z = -287 + (rng() - 0.5) * 70;
@@ -190,6 +64,7 @@ function snowCapital(p, light) {
     for (const side of [-1, 1]) {
       const z = -278 - i * 4.9,
         x = -78 + side * (4.2 + 0.27 * cos(i));
+      if (family.some(([dx,dz,scale]) => Math.hypot(x-dx,z-dz) < .98*scale+.61)) continue;
       const f = frame(p, x, z, side * -0.41);
       f.part('snowLump', 0, 0.38, 0, 0.5, 0.51, 0.47, '#d8e1e8');
       f.part('snowLump', 0, 0.49, 0.345, 0.228, 0.303, 0.092, '#7a858b');
@@ -536,7 +411,6 @@ export function dressSeasonalPlaces(p) {
     ],
     22,
   );
-  p.shapes.nose = new THREE.ConeGeometry(1, 1, 14).translate(0, 0.5, 0);
   p.shapes.muffler = lathe(
     [
       [0.87, -0.5],

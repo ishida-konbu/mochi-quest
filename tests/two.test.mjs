@@ -102,6 +102,28 @@ test('zero health sleeps on the spot and recovers while waiting',()=>{
   run(game,3.1);assert.equal(p.hp,100);assert.equal(p.activity,null);
 });
 
+test('one kinako throw sends eight notices radially, with one cooldown and one call',()=>{
+  for (const [mode, full, count] of [['kinako', 0, 8], ['kinako', 10, 8], ['normal', 10, 3], ['normal', 0, 1]]) {
+    const game=createGame(), p=game.state.player;
+    game.act(mode);
+    p.heading=.91;
+    p.buffs.full=full;
+    assert.ok(game.act('throw'));
+    assert.equal(game.act('throw'),false);
+    const {shots,events}=game.state;
+    assert.equal(shots.length,count);
+    assert.equal(new Set(shots.map(s=>s.id)).size,count);
+    assert.equal(events.filter(e=>e.type==='say' && e.text==='三条通知！').length,1);
+    const angles=count===8 ? Array.from({length:8},(_,i)=>i*Math.PI/4) : count===3 ? [-.28,0,.28] : [0];
+    for (const [i,s] of shots.entries()) {
+      assert.equal(s.age,0);
+      assert.equal(s.heading,p.heading+angles[i]);
+      assert.ok(Math.abs(s.x-p.x-.65*Math.sin(s.heading))<1e-10);
+      assert.ok(Math.abs(s.z-p.z-.65*Math.cos(s.heading))<1e-10);
+    }
+  }
+});
+
 test('bath and belly wrap protect both vitals; manga speed and ramen size bonuses apply after the activity',()=>{
   const game=createGame(),p=game.state.player;
   p.hp=9;p.mp=3;collect(game,'onsen');assert.equal(p.activity,'bath');
@@ -112,7 +134,7 @@ test('bath and belly wrap protect both vitals; manga speed and ramen size bonuse
   run(game,2.5);assert.ok(p.buffs.swift>22);moveTo(game,0,62);run(game,.5,{x:-1});assert.ok(p.speed>8);
   p.buffs.swift=0;collect(game,'ramen');assert.equal(p.activity,'eat');run(game,3);assert.ok(p.buffs.full>27);
   p.mp=1;game.act('kinako');run(game,.25);assert.equal(p.mp,1);
-  game.act('throw');assert.deepEqual(game.state.shots.map(s=>s.angle),[-.28,0,.28]);
+  game.act('throw');assert.equal(game.state.shots.length,8);
   moveTo(game,0,62);run(game,.5,{x:-1});assert.ok(p.speed>4.8 && p.speed<5.4);
   const turtle=get(game,'turtle');at(game,turtle);assert.equal(game.act('interact'),false);
   p.buffs.full=0;game.act('normal');
@@ -144,7 +166,7 @@ test('one slow turtle seeks shelter and becomes an agile mount, with a ground di
 test('bicycles travel between ports and validated version-two saves retain their real inventory',()=>{
   const game=createGame(),p=game.state.player;const port=get(game,'port'),target=get(game,'port',1);
   at(game,port);assert.ok(game.act('interact'));assert.equal(port.bikes,1);assert.equal(p.mount,'bike');
-  moveTo(game,0,62);run(game,.45,{x:1});assert.ok(p.speed>14);
+  moveTo(game,0,62);run(game,.45,{x:1});assert.ok(p.speed>6.4 && p.speed<15.3);
   assert.equal(game.act('dismount'),false);
   const other=createGame(JSON.parse(JSON.stringify(game.save())));
   assert.equal(other.state.player.mount,'bike');assert.equal(other.state.player.x,p.x);

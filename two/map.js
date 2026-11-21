@@ -1,4 +1,4 @@
-import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt } from './terrain.js';
+import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt } from './terrain.js';
 const SIZE = 768, SPAN = 2 * BOUND, adj = SIZE / SPAN;
 export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾'];
 const toX = (x) => SIZE / 2 + x * adj;
@@ -7,6 +7,34 @@ const pigments = [
   ['moon', [175, 176, 186]], ['dawn', [232, 200, 163]]
 ];
 let paper;
+export function regionPort(state, id) {
+  return state.objects.find(o => o.type === 'port' && REGIONS[regionAt(o.x, o.z)].id === id);
+}
+
+function drawPort(g, x, y, bikes, large) {
+  const pinX = large ? x + 16 : x, pinY = y - (large ? 19 : 12);
+  const radius = large ? 8 : 9;
+  g.fillStyle = bikes > 0 ? '#295d50' : '#736c60';
+  g.strokeStyle = '#faf0d8';
+  g.lineWidth = 1.8;
+  g.beginPath();
+  g.moveTo(x, y);
+  g.lineTo(pinX - 4, pinY + 3);
+  g.lineTo(pinX + 4, pinY + 3);
+  g.closePath();
+  g.stroke();
+  g.fill();
+  g.beginPath();
+  g.arc(pinX, pinY, radius, 0, Math.PI * 2);
+  g.fill();
+  g.stroke();
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.font = 'bold ' + (large ? 12 : 15) + 'px sans-serif';
+  g.fillStyle = '#fff8e9';
+  g.fillText('P', pinX, pinY + .5);
+}
+
 function baseMap() {
   if (paper) return paper;
   const c = document.createElement('canvas');
@@ -103,6 +131,13 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false) {
       g.strokeText(r.name, x, y + 22);
       g.fillText(r.name, x, y + 22);
     }
+  }
+  const selectedPort = large && regionPort(state, goal);
+  for (const o of state.objects) {
+    if (o.type !== 'port' || (large && o !== selectedPort)) continue;
+    const x = w / 2 + wrapDelta(o.x - midX) * scale;
+    const y = h / 2 + wrapDelta(o.z - midZ) * scale;
+    if (x >= 0 && x <= w && y >= 0 && y <= h) drawPort(g, x, y, o.bikes, large);
   }
   g.save();
   g.translate(sx(p.x), sy(p.z));

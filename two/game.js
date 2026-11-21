@@ -11,14 +11,20 @@ const FLIGHT_CLIMB = 5.6;
 const JUMP_BUFFER = .12;
 const LEDGE_GRACE = .085;
 const CEILING = 24;
-const SPEED = { foot: 6.4, dango: 11.8, turtle: 21, bike: 15.3 };
+const SPEED = { foot: 6.4, dango: 23.6, turtle: 21, bike: 45.9, flight: 32 };
+// Seconds to build from walking pace to cruising speed on open ground.
+const RUN_UP = { dango: 1.8, bike: 3.2, flight: 2.2 };
+const SWIFT_FACTOR = 1.42;
+const MAX_TRAVEL_SPEED = SPEED.bike * SWIFT_FACTOR + .01;
 const STAMP_RADIUS = 6;
 const SEASONAL_STOPS = {
   snow: ['onsen','sake'], autumn: ['manga','haramaki'], moon: ['sake','manga'], dawn: ['ramen','haramaki']
 };
 const MODE_COST = { normal: 0, dango: 7, kusa: 6, kinako: 6, habutae: 10 };
-const MODE_DRAIN = { normal: 0, dango: 4.2, kusa: 3, kinako: 3.5, habutae: 5.5 };
+const MODE_DRAIN = { normal: 0, dango: 2.1, kusa: 1.5, kinako: 1.75, habutae: 2.75 };
 const MODE_NAME = { normal: 'ふつうのお餅', dango: '団子モード', kusa: '草餅', kinako: 'きなこ餅', habutae: '羽二重餅' };
+const NOTICE_FORWARD = [0], NOTICE_FAN = [-.28, 0, .28];
+const KINAKO_RING = Array.from({ length: 8 }, (_, i) => i * Math.PI / 4);
 const BUFF_TIME = { warm: 20, swift: 24, drunk: 18, full: 29, wrap: 24 };
 const PICKUP_ACTION = {
   manga: { activity: 'read', duration: 2.3, label: '漫画を読む' },
@@ -198,7 +204,7 @@ export function createGame(snapshot = null) {
         break;
       case 'eat':
         player.buffs.full = BUFF_TIME.full;
-        message('満腹！ 三条通知が一度に三方向へ飛ぶ。');
+        message(player.mode === 'kinako' ? '満腹！ しばらくMPの消費が止まる。三条通知は八方向へ！' : '満腹！ 三条通知が一度に三方向へ飛ぶ。');
         break;
       case 'sleep':
         player.hp = MAX_VITAL;
@@ -210,15 +216,16 @@ export function createGame(snapshot = null) {
   function jump() {
     if (player.activity) return false;
     const footLaunch = player.grounded || ledgeGrace > 0;
-    const flap = !player.mount && player.mode === 'habutae' && player.vy <= 2;
     if (!footLaunch) {
-      // Each fresh press pulls out more dough. Only the unused extension gives
-      // lift, so ordinary modes still fall after a burst of rapid presses.
+      // Each fresh press pulls out more dough. A wingbeat still lifts the
+      // flying mochi after its body has reached full extension.
       const before = player.airStretch;
       player.airStretch = Math.min(1, before + 0.23);
       player.vy += (player.airStretch - before) * 8;
       player.stretch = .23;
-      if (flap) player.vy = Math.max(player.vy, 7.5);
+      if (!player.mount && player.mode === 'habutae') {
+        player.vy = clamp(player.vy + 3.2, 8.6, 13.5);
+      }
       if (player.vy < 0 && player.h < .55) bufferedJump = JUMP_BUFFER;
       sound('elastic');
       return true;
@@ -289,9 +296,10 @@ export function createGame(snapshot = null) {
     if (player.activity || throwCooldown > 0) return false;
     throwCooldown = .33;
     player.throwTime = .28;
-    for (const angle of player.buffs.full > 0 ? [-.28, 0, .28] : [0]) {
+    const angles = player.mode === 'kinako' ? KINAKO_RING : player.buffs.full > 0 ? NOTICE_FAN : NOTICE_FORWARD;
+    const height = player.mount ? 1.45 : player.buffs.full > 0 ? 1.30 : .93;
+    for (const angle of angles) {
       const heading = player.heading + angle;
-      const height = player.mount ? 1.45 : player.buffs.full > 0 ? 1.30 : .93;
       state.shots.push({
         id: 'shot-' + (++shotId), type: 'notice', angle, heading,
         x: player.x + Math.sin(heading) * .65, z: player.z + Math.cos(heading) * .65,
@@ -437,20 +445,39 @@ export function createGame(snapshot = null) {
       const sway = Math.sin(state.time*5) * Math.hypot(dx,dz)*.22;
       dx += rx*(sway-2*side); dz += rz*(sway-2*side);
     }
-    const amount = Math.max(1,Math.hypot(dx,dz));
+    const stick = Math.hypot(dx,dz);
+    const amount = Math.max(1,stick);
     dx /= amount; dz /= amount;
-    const base = SPEED[player.mount] || (player.mode === 'dango' ? SPEED.dango : SPEED.foot);
+    let pace = player.mount || 'foot';
+    if (!player.mount && player.mode === 'dango') pace = 'dango';
+    if (!player.mount && player.mode === 'habutae' && !player.grounded) pace = 'flight';
     const waterDrag = player.inWater && !player.mount ? .72 : 1;
-    const speed = base * waterDrag * (player.buffs.swift>0 ? 1.42 : 1) * (player.buffs.full>0 ? .81 : 1);
+    const modifier = waterDrag * (player.buffs.swift>0 ? SWIFT_FACTOR : 1) * (player.buffs.full>0 ? .81 : 1);
+    const speed = SPEED[pace] * modifier;
     if (dx || dz) player.heading = Math.atan2(dx,dz);
     const traction = player.activity==='fall' ? 4 : player.mode==='dango' ? 6 : 13;
     const ease = 1 - Math.exp(-dt*traction);
     player.vx += (dx*speed-player.vx)*ease;
     player.vz += (dz*speed-player.vz)*ease;
+    if (RUN_UP[pace] && stick > 0) {
+      // Pick up a walking stride promptly, then gain speed over several
+      // seconds. Actual ground speed also resets the run-up against a wall.
+      const throttle = Math.min(1,stick) * modifier;
+      const startSpeed = SPEED.foot * throttle;
+      const acceleration = (SPEED[pace] - SPEED.foot) * throttle / RUN_UP[pace];
+      const speedLimit = player.speed + Math.max(0,startSpeed-player.speed)*ease + acceleration*dt;
+      const steeringSpeed = Math.hypot(player.vx,player.vz);
+      if (steeringSpeed > speedLimit) {
+        const gain = speedLimit / steeringSpeed;
+        player.vx *= gain; player.vz *= gain;
+      }
+    }
     if (Math.abs(player.vx)<.002) player.vx = 0;
     if (Math.abs(player.vz)<.002) player.vz = 0;
     const at = constrainMove(player.x,player.z,player.x+player.vx*dt,player.z+player.vz*dt,player.h,player.y);
-    player.speed = distance(player,at)/dt;
+    player.vx = wrapDelta(at.x-player.x)/dt;
+    player.vz = wrapDelta(at.z-player.z)/dt;
+    player.speed = Math.hypot(player.vx,player.vz);
     player.x = at.x; player.z = at.z;
     const floor = groundHeight(at.x,at.z,player.y);
     const ceiling = overheadHeight(at.x,at.z,player.y);
@@ -596,8 +623,8 @@ export function createGame(snapshot = null) {
     if (!finite(data.time,0,1e9) || !Number.isSafeInteger(data.score) || data.score<0 ||
         !data.visited.every(id=>REGIONS.some(region=>region.id===id)) ||
         !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,200) ||
-        !finite(p.vx,-35,35) || !finite(p.vz,-35,35) || !finite(p.vy,-80,27) ||
-        !finite(p.speed,0,60) || !finite(p.heading,-Math.PI,Math.PI) || typeof p.grounded!=='boolean' ||
+        !finite(p.vx,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vz,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vy,-80,27) ||
+        !finite(p.speed,0,MAX_TRAVEL_SPEED) || !finite(p.heading,-Math.PI,Math.PI) || typeof p.grounded!=='boolean' ||
         !finite(p.hp,0,100) || !finite(p.mp,0,100) || !Object.hasOwn(MODE_COST,p.mode) ||
         ![null,'turtle','bike'].includes(p.mount) || ![null,'fall','sleep','bath','read','drink','eat'].includes(p.activity) ||
         !finite(p.activityTime,0,6) || !p.buffs || !Object.keys(BUFF_TIME).every(k=>finite(p.buffs[k],0,BUFF_TIME[k])) ||

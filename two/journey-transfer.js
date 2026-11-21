@@ -1,7 +1,7 @@
 // Only Mochi Quest 2's two local keys travel. The fragment never becomes
 // part of the HTTP request, and the destination URL is fixed in this module.
 export const PAGES_ORIGIN = 'https://ishida-konbu.github.io';
-export const PAGES_GUIDE = PAGES_ORIGIN + '/mochi-quest/two/?v=2.3#guide';
+export const PAGES_GUIDE = PAGES_ORIGIN + '/mochi-quest/two/#guide';
 export const WORKER_ORIGIN = 'https://mochi-quest.mochi-quest.workers.dev';
 export const SAVE_KEY = 'mochi-quest.two.journey.v1';
 export const SETTINGS_KEY = 'mochi-quest.two.settings.v1';

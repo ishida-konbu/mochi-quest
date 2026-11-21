@@ -468,7 +468,7 @@ function populateForest() {
     spacing.get(key).push(tree);
   }
   trees.forEach(remember);
-  const target = trees.length*10;
+  const target = LANDMARK_TREES.length * 5;
   for (let tried=0; trees.length<target && tried<250000; tried++) {
     const x=random()*628-253, z=random()*748-374;
     const riverBank=abs(z-riverZ(x))-riverHalfWidth(x);

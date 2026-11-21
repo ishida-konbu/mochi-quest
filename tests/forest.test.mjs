@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { BUILDINGS, LANDMARK_TREES, TREES, nearRoad, riverZ, riverHalfWidth, shoreDistance } from '../two/terrain.js';
 import { TREE_FORM_COUNT } from '../two/forest-forms.js';
 
-test('the tenfold woodland contains all crown forms and leaves room for roads, entrances and swimming ashore', () => {
+test('the thinned woodland preserves every landmark and crown form and leaves room for roads, entrances and swimming ashore', () => {
   assert.equal(LANDMARK_TREES.length, 587);
-  assert.equal(TREES.length, 10*LANDMARK_TREES.length);
+  assert.equal(TREES.length, 2935);
+  assert.deepEqual(TREES.slice(0,LANDMARK_TREES.length), LANDMARK_TREES);
   const groves = TREES.filter(tree => tree.form !== undefined);
   assert.equal(new Set(groves.map(tree => tree.form)).size, TREE_FORM_COUNT);
   for (const tree of groves) {

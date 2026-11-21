@@ -14,7 +14,7 @@ import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
 import { createAudio } from '../sound.js';
 import { MODES, EMOTES, HELP, glyph, paintGlyphs, drawFace } from './interface.js';
-import { drawMap, mapHit, labels } from './map.js';
+import { drawMap, mapHit, labels, regionPort } from './map.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('scene'),
@@ -544,7 +544,7 @@ function openDialog(kind) {
 function mapDialog() {
   const body = $('dialog-content');
   body.innerHTML =
-    '<div class="atlas-layout"><canvas class="map-canvas" id="atlas" width="540" height="540" aria-label="十の名所とお餅の現在地"></canvas><div class="map-caption"><div class="map-places"></div><p class="map-detail"></p><div class="actions"><button class="jump-link" id="set-goal">ここを道しるべにする</button><button class="choice" id="clear-goal">道しるべを外す</button></div></div></div>';
+    '<div class="atlas-layout"><canvas class="map-canvas" id="atlas" width="540" height="540" aria-label="十の名所、お餅の現在地と選んだ名所の自転車ポート"></canvas><div class="map-caption"><div class="map-places"></div><p class="map-detail" aria-live="polite"></p><div class="actions"><button class="jump-link" id="set-goal">ここを道しるべにする</button><button class="choice" id="clear-goal">道しるべを外す</button></div></div></div>';
   for (const [i, r] of REGIONS.entries()) {
     const b = document.createElement('button');
     b.innerHTML = '<em>' + labels[i] + '</em> ' + r.name;
@@ -578,7 +578,8 @@ function selectMap(id) {
   const r = REGIONS.find((r) => r.id === id);
   for (const b of document.querySelectorAll('.map-places button'))
     b.setAttribute('aria-pressed', String(b.dataset.id === id));
-  document.querySelector('.map-detail').textContent =
+  const detail = document.querySelector('.map-detail');
+  detail.textContent =
     r.name +
     '　' +
     Math.round(Math.hypot(wrapDelta(p.x - r.x), wrapDelta(p.z - r.z))) +
@@ -590,7 +591,15 @@ function selectMap(id) {
     moon: '薄の穂越しに北の空を見上げると、十五夜の月。',
     dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。'
   };
-  if (landmarks[id]) document.querySelector('.map-detail').append(document.createElement('br'), landmarks[id]);
+  if (landmarks[id]) detail.append(document.createElement('br'), landmarks[id]);
+  const port = regionPort(state, id);
+  if (port) {
+    const dx = wrapDelta(port.x - p.x), dz = wrapDelta(port.z - p.z);
+    const bearing = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'][(Math.round(Math.atan2(dx, -dz) / (Math.PI / 4)) + 8) % 8];
+    const distance = Math.round(Math.hypot(dx, dz));
+    const location = distance < 3 ? '足元' : '現在地から' + bearing + ' ' + distance + ' m';
+    detail.append(document.createElement('br'), 'Ⓟ 電動自転車ポート　' + port.bikes + '台', document.createElement('br'), location);
+  }
   drawMap($('atlas'), state, yaw, selectedPlace, true);
 }
 function helpDialog(tab) {

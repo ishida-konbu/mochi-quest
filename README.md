@@ -9,15 +9,19 @@
 
 矢印キーか WASD でカメラを基準に前後左右へ移動します。ドラッグまたは Q・R で視点を回転し、Space でジャンプし、空中で押すたびに体が伸びます。Z で三条通知、E で調べる・乗降、0〜4 で餅モードの切り替えができます。スマートフォンでは左スティックで歩き、画面をなぞって周囲を見回します。
 
+団子は転がり続けると加速します。羽二重餅はジャンプの連打か長押しで上昇し、飛びながら前に進むと加速します。きなこ餅の三条通知は周囲八方向に同時発射。電動自転車は全十景のポートで借りたり返したりできます。
+
 M で地図、C でお顔カメラ、Esc で一時停止。お顔カメラでは表情を選び、写真を保存できます。環境音は最初の操作で流れ始め、画面右上のスピーカーで切り替えられます。旅の記録は各作品ごとに同じブラウザに自動保存されます。
 
-GitHub Pages で遊んでいた場合は、同じブラウザで[旧版の手引き](https://ishida-konbu.github.io/mochi-quest/two/?v=2.3#guide)を開き、「Cloudflare版に旅の記録を引き継ぐ」を選んでください。Cloudflare 版に旅の記録がある場合は、二つの記録を見比べてから選択できます。
+GitHub Pages で遊んでいた場合は、同じブラウザで[旧版の手引き](https://ishida-konbu.github.io/mochi-quest/two/#guide)を開き、「Cloudflare版に旅の記録を引き継ぐ」を選んでください。Cloudflare 版に旅の記録がある場合は、二つの記録を見比べてから選択できます。
 
 ## 開発と公開
 
 リポジトリの直下で `python3 -m http.server 8080` を実行し、[作品選択ページ](http://localhost:8080/)を開きます。Node.js 22 で `npm test` を実行すると両作品のゲームロジックを検証できます。外部パッケージのインストールは不要です。
 
-本番は Cloudflare Workers Static Assets の Worker `mochi-quest` です。リポジトリのルートで `npm ci` の後、`npm run dev` で配信構成をローカル確認できます。`npm run deploy` は配信用のファイルを `dist/` に集めて公開します。第二作は WebGL 2 を使用します。Three.js r180 を [MIT ライセンス](two/vendor/THREE-LICENSE.txt) の下で同梱しています。旅の環境音・効果音の出典とライセンス、掛け声の音声モデルは [音声クレジット](audio/CREDITS.txt) に記載しています。
+本番は Cloudflare Workers Static Assets の Worker `mochi-quest` です。Cloudflare Workers Builds が GitHub の `ishida-konbu/mochi-quest` の `main` への push を受け取り、リポジトリ直下で `npm run build` と `npx wrangler deploy` を順に実行します。ビルドでは先に全テストを実行し、失敗した場合は公開を止めます。
+
+リポジトリのルートで `npm ci` の後、`npm run dev` で配信構成をローカル確認できます。`npm run deploy` は配信用のファイルを `dist/` に集めて公開します。第二作は WebGL 2 を使用します。Three.js r180 を [MIT ライセンス](two/vendor/THREE-LICENSE.txt) の下で同梱しています。旅の環境音・効果音の出典とライセンス、掛け声の音声モデルは [音声クレジット](audio/CREDITS.txt) に記載しています。
 
 第二作の遠景には描き下ろしの山水画を使用しています。お餅や水辺に映る朝の環境光には Greg Zaal の HDRI を軽量化して使用しました。[Spruit Sunrise](https://polyhaven.com/a/spruit_sunrise) ／ [CC0](https://polyhaven.com/license)
 

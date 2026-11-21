@@ -47,3 +47,17 @@ test('the moon makes a strolling mochi drowsy and a rolling dango smiles at ever
   Object.assign(player, { night: false, mode: 'normal', inWater: true, stretch: 0 });
   assert.equal(getExpression(player), 'bath');
 });
+
+test('the cyclist smiles through acceleration and coasting, including in the moonlight', () => {
+  const player = createGame().state.player;
+  Object.assign(player, { mount:'bike', night:true });
+  for (const speed of [.5, 15.3, 45.9]) {
+    player.speed = speed;
+    assert.equal(getExpression(player), 'joy');
+  }
+  player.throwTime = .2;
+  assert.equal(getExpression(player), 'calling');
+  player.throwTime = 0;
+  player.speed = 0;
+  assert.equal(getExpression(player), 'sleepy');
+});
