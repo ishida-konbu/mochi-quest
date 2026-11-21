@@ -14,8 +14,10 @@ const PHRASES = {
   dismount: [[0, 523.25], [.1, 392]]
 };
 
-export function createAudio() {
+export function createAudio(makeWorldAudio) {
   let enabled = true;
+  let paused = false;
+  let worldAudio;
   let unlocked = false;
   let context;
   let master;
@@ -47,11 +49,12 @@ export function createAudio() {
       try {
         context = new Audio();
         master = context.createGain();
-        master.gain.value = .72;
+        master.gain.value = paused ? 0 : .72;
         master.connect(context.destination);
         noise = context.createBuffer(1, Math.ceil(context.sampleRate * .2), context.sampleRate);
         const samples = noise.getChannelData(0);
         for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
+        worldAudio = makeWorldAudio?.(context, master);
       } catch { context = null; }
     }
     if (context && context.state !== 'running') context.resume().catch(() => {});
@@ -66,16 +69,32 @@ export function createAudio() {
     globalThis.speechSynthesis?.cancel();
   }
 
-  function setEnabled(value) {
-    enabled = Boolean(value);
-    if (master) master.gain.value = enabled ? .72 : 0;
-    if (enabled) return;
+  function updateOutput() {
+    const audible = enabled && !paused;
+    if (master) master.gain.value = audible ? .72 : 0;
+    if (audible) return;
+    worldAudio?.stop();
     voiceRequest++;
     voiceUntil = 0;
     stopVoice();
     for (const source of playing) {
       try { source.stop(); } catch { /* the envelope already ended */ }
     }
+  }
+
+  function setEnabled(value) {
+    enabled = Boolean(value);
+    updateOutput();
+  }
+
+  function setPaused(value) {
+    if (paused === Boolean(value)) return;
+    paused = Boolean(value);
+    updateOutput();
+  }
+
+  function updateWorld(state, time, yaw, photoMode) {
+    if (enabled && !paused && context?.state === 'running') worldAudio?.update(state, time, yaw, photoMode);
   }
 
   async function speak(text) {
@@ -85,7 +104,7 @@ export function createAudio() {
     voiceUntil = now + 750;
     const request = ++voiceRequest;
     const recorded = context ? await prepareVoice(text) : null;
-    if (!enabled || request !== voiceRequest || performance.now() - now > 1800) return;
+    if (!enabled || paused || request !== voiceRequest || performance.now() - now > 1800) return;
     stopVoice();
     if (recorded && context.state === 'running') {
       const source = context.createBufferSource();
@@ -170,9 +189,9 @@ export function createAudio() {
   }
 
   function handle(event) {
-    if (!enabled || !unlocked) return;
+    if (!enabled || paused || !unlocked) return;
     if (event.type === 'say') void speak(event.text);
     else if (event.type === 'sound') effect(event.name);
   }
-  return { unlock, setEnabled, handle };
+  return { unlock, setEnabled, setPaused, updateWorld, handle };
 }

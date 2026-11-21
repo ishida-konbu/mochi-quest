@@ -1,2 +1,7 @@
 .DS_Store
 node_modules/
+dist/
+.wrangler/
+.worker-build-*/
+.dev.vars*
+.env*

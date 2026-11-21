@@ -1,5 +1,7 @@
 import { groundHeight, constrainMove, overheadHeight, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, WATER_Y, seasonAt } from './terrain.js';
 
+import { procession } from './procession.js';
+
 const MAX_VITAL = 100;
 const RISE_GRAVITY = 20;
 const FALL_GRAVITY = 27;
@@ -70,6 +72,11 @@ function makeWorld() {
     npc('frog', 'porter', x-19, river ? 61 : z+5, i + 2.8);
   });
   npc('turtle', 'wander', -14, 54, 0);
+  for (const visitor of procession(objects,npcs)) {
+    const {type,role,x,z,phase} = visitor;
+    npc(type,role,x,z,phase);
+    Object.assign(npcs.at(-1), visitor, { heading:visitor.facing });
+  }
   return { objects, npcs };
 }
 
@@ -84,7 +91,7 @@ export function createGame(snapshot = null) {
   };
   const region = REGIONS[regionAt(player.x,player.z)];
   const state = {
-    time: 0, player, npcs, objects, shots: [], events: [], score: 0,
+    time: 0, player, npcs, nearbyNpcs: [], objects, shots: [], events: [], score: 0,
     region: region.name, regionId: region.id, visited: [region.id]
   };
   const climate = {};
@@ -339,11 +346,38 @@ export function createGame(snapshot = null) {
     turtle.x = at.x; turtle.z = at.z; turtle.y = groundHeight(at.x,at.z);
     if (turtle.speed < .015) { turtlePause = 5; turtleLeg = (turtleLeg+1) % route.length; }
   }
+  // Home ranges are at most seven metres. Rebuild the active list once per
+  // 32 m cell, retaining a margin for the view distance and wrapped edges.
+  let crowdCellX, crowdCellZ;
+  function refreshCrowd() {
+    const cx=Math.floor(player.x/32), cz=Math.floor(player.z/32);
+    if (cx===crowdCellX && cz===crowdCellZ) return;
+    crowdCellX=cx; crowdCellZ=cz;
+    state.nearbyNpcs=npcs.filter(n=>n===turtle ||
+      (Math.abs(wrapDelta(n.homeX-(cx+.5)*32))<122 && Math.abs(wrapDelta(n.homeZ-(cz+.5)*32))<122));
+  }
   function updateNPCs(dt) {
     moveTurtle(dt);
-    for (const n of npcs) {
+    refreshCrowd();
+    for (const n of state.nearbyNpcs) {
       if (n === turtle) continue;
       n.flash = Math.max(0, n.flash - dt);
+      // Stationary workers face the passers-by. A short sidestep keeps dancers
+      // and field hands within the clear ground sampled for their workstation.
+      if (n.area) {
+        const distance2=wrapDelta(n.x-player.x)**2+wrapDelta(n.z-player.z)**2;
+        if (distance2>25**2 && Math.floor((state.time+n.phase)*4)===Math.floor((state.time+n.phase-dt)*4)) continue;
+        const beat=state.time*.65+n.phase;
+        const sway=n.role==='fan' ? .35 : n.role==='broom'||n.role==='rake' ? .15 : 0;
+        n.heading=n.facing+.17*Math.sin(beat*.5);
+        if (sway) {
+          const d=Math.sin(beat)*sway;
+          n.x=n.homeX+Math.cos(n.facing)*d; n.z=n.homeZ-Math.sin(n.facing)*d;
+          n.y=groundHeight(n.x,n.z);
+          n.speed=Math.abs(Math.cos(beat))*sway;
+        }
+        continue;
+      }
       const t = state.time * (n.role === 'porter' ? .32 : .44) + n.phase;
       let x, z;
       if (n.role === 'sumo') {
@@ -371,7 +405,7 @@ export function createGame(snapshot = null) {
       const length = 18 * dt;
       let hit = null;
       let first = Infinity;
-      for (const n of npcs) {
+      for (const n of state.nearbyNpcs) {
         if (n === turtle || shot.y < n.y-.1 || shot.y > n.y + 2.15) continue;
         const rx = wrapDelta(n.x-shot.x), rz = wrapDelta(n.z-shot.z);
         const along = clamp(rx*dx+rz*dz,0,length);
@@ -462,8 +496,8 @@ export function createGame(snapshot = null) {
       }
     }
     if (player.invulnerable > 0 || player.mode === 'kusa') return;
-    for (const n of npcs) {
-      if (n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
+    for (const n of state.nearbyNpcs) {
+      if (n.area || n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
       player.invulnerable = 2.1;
       if (!protectedVitals()) player.hp = Math.max(0,player.hp-7);
       if (player.hp === 0) {
@@ -591,7 +625,9 @@ export function createGame(snapshot = null) {
     turtlePause=t.pause; turtleLeg=t.leg;
     lastBath=objects.find(o=>o.type==='onsen' && o.id===data.lastBath)??null;
     updateRegion(false);
+    return true;
   }
-  restore(snapshot);
-  return { state, act, step, nearest, save };
+  const restored = restore(snapshot) === true;
+  refreshCrowd();
+  return { state, act, step, nearest, save, restored };
 }

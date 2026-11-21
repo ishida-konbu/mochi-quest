@@ -12,3 +12,50 @@ https://creativecommons.org/licenses/by/3.0/
 
 音声モデルの出典とライセンス表示
 https://github.com/r9y9/pyopenjtalk/tree/master/pyopenjtalk/htsvoice
+
+
+Mochi Quest 2 の環境音と足音
+
+以下の原音は、作者が Creative Commons CC0 1.0 Universal で公開しています。
+https://creativecommons.org/publicdomain/zero/1.0/
+環境音は抜粋・イコライジング・音量調整を行い、継ぎ目を重ねたループに編集しました。
+足音は原音から一歩ずつ切り出し、音量を揃えています。すべてゲームに同梱しています。
+
+bamboo.mp3　竹林の小鳥、竹を渡る風とせせらぎ（鳥取県岩美郡）
+“Birds, wind through bamboo and a little waterstream - Japan - Binaural”
+録音　tomasloos
+https://freesound.org/people/tomasloos/sounds/843520/
+
+shore.mp3　日本の海辺に打ち寄せる波
+“Calm Sea Waves1 - Close - Japan - Binaural”
+録音　tomasloos
+https://freesound.org/people/tomasloos/sounds/842593/
+
+crickets.mp3　真夜中の草むらの虫（千葉県柏市）
+“Japan_Kashiwa_Field_Crickets_Midnight.wav”
+録音　RutgerMuller
+https://freesound.org/people/RutgerMuller/sounds/364860/
+
+river.mp3・wind.mp3　公園の小川と開けた野原を吹く風（オーストラリア・アデレード）
+“Park ambiences” の park_ambience_river.wav と park_ambience_wind.wav
+録音　Thimras
+https://opengameart.org/content/park-ambiences
+
+paddy.mp3　田んぼの蛙と鳥
+“ambience ricefield at night”
+録音　rakun_id123
+https://freesound.org/people/rakun_id123/sounds/770270/
+
+footfalls.mp3　泥、落ち葉、木、砂利、石を踏む足音
+“Different steps on wood, stone, leaves, gravel and mud”
+作者　TinyWorlds
+https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
+
+footfalls.mp3　雪を踏みしめる三歩
+“Snow Footsteps Crunch 1 Mono.wav”
+録音　JRWEntertainment
+https://freesound.org/people/JRWEntertainment/sounds/614137/
+
+杵と臼の打音、湯の泡、水しぶき、社の鈴、市の陶器、衣擦れなどは
+two/soundscape.js の Web Audio 合成です。このモジュールの合成・ミキサーコードは
+CC0 1.0 Universal で提供します。

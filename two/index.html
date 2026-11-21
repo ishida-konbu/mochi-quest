@@ -9,25 +9,50 @@
       name="description"
       content="お餅になって、鳥獣戯画の里を歩く。雪の都から初日の出の浜まで、十の名所がつながる三次元のオープンワールド。"
     />
+    <script>
+      if (location.hash.startsWith('#mochi2=')) {
+        window.pendingMochiJourney = location.hash;
+        history.replaceState(history.state, '', location.pathname + location.search);
+      }
+      // Opening a transfer link while this game is already on screen can be
+      // a same-document navigation. Run the usual validated startup in that case.
+      window.addEventListener('hashchange', () => {
+        if (location.hash.startsWith('#mochi2=')) location.reload();
+      });
+    </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=2.2" />
+    <link rel="stylesheet" href="./game.css?v=2.3" />
     <script type="importmap">
       {
         "imports": {
-          "./map.js": "./map.js?v=2.2",
-          "./mochi-model.js": "./mochi-model.js?v=2.2",
-          "./resident-art.js": "./resident-art.js?v=2.2",
-          "./wilds.js": "./wilds.js?v=2.2",
-          "./atmosphere.js": "./atmosphere.js?v=2.2",
-          "./pigments.js": "./pigments.js?v=2.2",
-          "./spring-water.js": "./spring-water.js?v=2.2",
-          "./places.js": "./places.js?v=2.2",
-          "./actors.js": "./actors.js?v=2.2",
-          "./game.js": "./game.js?v=2.2",
-          "./ink.js": "./ink.js?v=2.2",
-          "./interface.js": "./interface.js?v=2.2",
-          "./terrain.js": "./terrain.js?v=2.2",
-          "./world.js": "./world.js?v=2.2"
+          "../sound.js": "../sound.js?v=2.3",
+          "./soundscape.js": "./soundscape.js?v=2.3",
+          "./festival.js": "./festival.js?v=2.3",
+          "./mochi-pounding.js": "./mochi-pounding.js?v=2.3",
+          "./seasons.js": "./seasons.js?v=2.3",
+          "./meadow-layout.js": "./meadow-layout.js?v=2.3",
+          "./meadow.js": "./meadow.js?v=2.3",
+          "./forest.js": "./forest.js?v=2.3",
+          "./forest-forms.js": "./forest-forms.js?v=2.3",
+          "./forest-mesh.js": "./forest-mesh.js?v=2.3",
+          "./procession-view.js": "./procession-view.js?v=2.3",
+          "./procession.js": "./procession.js?v=2.3",
+          "./trade-tools.js": "./trade-tools.js?v=2.3",
+          "./map.js": "./map.js?v=2.3",
+          "./mochi-model.js": "./mochi-model.js?v=2.3",
+          "./resident-art.js": "./resident-art.js?v=2.3",
+          "./wilds.js": "./wilds.js?v=2.3",
+          "./atmosphere.js": "./atmosphere.js?v=2.3",
+          "./pigments.js": "./pigments.js?v=2.3",
+          "./spring-water.js": "./spring-water.js?v=2.3",
+          "./places.js": "./places.js?v=2.3",
+          "./actors.js": "./actors.js?v=2.3",
+          "./journey-transfer.js": "./journey-transfer.js?v=2.3",
+          "./game.js": "./game.js?v=2.3",
+          "./ink.js": "./ink.js?v=2.3",
+          "./interface.js": "./interface.js?v=2.3",
+          "./terrain.js": "./terrain.js?v=2.3",
+          "./world.js": "./world.js?v=2.3"
         }
       }
     </script>
@@ -138,7 +163,7 @@
         <div id="dialog-content"></div>
       </div>
     </dialog>
-    <script type="module" src="./main.js?v=2.2"></script>
+    <script type="module" src="./main.js?v=2.3"></script>
     <noscript>JavaScript を有効にして遊んでください。</noscript>
   </body>
 </html>

@@ -1,3 +1,4 @@
+import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
 import { roomPlan } from './architecture.js';
 // Coordinates and dimensions are metres. Positive Z is south.
 export const BOUND = 416,
@@ -258,12 +259,26 @@ ROADS.push(
   road(4.6,[[156,105],[202,136],[234,150],[250,176],[276,185],[290,182],[302,175],[311,173]]),
   road(3.3,[[285,-115],[303,-72],[296,-39],[283,0],[280,43],[266,80],[271,132],[290,182]]),
 );
+const roadCells = new Map();
+let widestRoad = 0;
+for (const {width, points} of ROADS) {
+  widestRoad = max(widestRoad, width);
+  for (let i=0; i<points.length; i+=2) {
+    const [x,z] = points[i], key = Math.floor(x/16)*128+Math.floor(z/16);
+    if (!roadCells.has(key)) roadCells.set(key, []);
+    roadCells.get(key).push({x,z,width});
+  }
+}
 export function nearRoad(x, z, extra = 0) {
-  for (const { width, points } of ROADS) {
-    const r2 = (width / 2 + extra) ** 2;
-    for (let i = 0; i < points.length; i += 2) {
-      const p = points[i];
-      if (abs(x - p[0]) < width + extra && (x - p[0]) ** 2 + (z - p[1]) ** 2 < r2) return true;
+  const reach = widestRoad/2 + abs(extra);
+  for (let i=Math.floor((x-reach)/16); i<=Math.floor((x+reach)/16); i++) {
+    for (let j=Math.floor((z-reach)/16); j<=Math.floor((z+reach)/16); j++) {
+      const samples = roadCells.get(i*128+j);
+      if (!samples) continue;
+      for (const p of samples) {
+        const dx = x-p.x;
+        if (abs(dx)<p.width+extra && dx*dx+(z-p.z)**2 < (p.width/2+extra)**2) return true;
+      }
     }
   }
   return false;
@@ -440,6 +455,51 @@ for (let i=0;i<120;i++) {
       trees.some(t=>(x-t.x)**2+(z-t.z)**2<32)) continue;
   trees.push({x,z,h:6.4+fallRng()*4.1,kind:'maple',seed:Math.floor(fallRng()*1e6),autumn:1});
 }
+export const LANDMARK_TREES = trees.slice();
+
+// Plant the woods in drifts. There is always walking room between the trunks.
+// The open approach to each roadside scene continues well beyond its actors.
+function populateForest() {
+  const random = seeded(41985037), spacing = new Map(), season = {};
+  const keyOf = (x,z) => Math.floor(x/6)*256+Math.floor(z/6);
+  function remember(tree) {
+    const key = keyOf(tree.x,tree.z);
+    if (!spacing.has(key)) spacing.set(key,[]);
+    spacing.get(key).push(tree);
+  }
+  trees.forEach(remember);
+  const target = trees.length*10;
+  for (let tried=0; trees.length<target && tried<250000; tried++) {
+    const x=random()*628-253, z=random()*748-374;
+    const riverBank=abs(z-riverZ(x))-riverHalfWidth(x);
+    if (shoreDistance(x,z)<9 || riverBank<10.5 || nearRoad(x,z,2.7)) continue;
+    const region=regionAt(x,z), place=REGIONS[region];
+    if (hypot(x-place.x,z-place.z)<20 || safe(x,z,5.8)) continue;
+    if (BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4)) continue;
+    if (BRIDGES.some(b=>abs(x-b.x)<b.halfWidth+4 && abs(z-b.z)<b.length/2+4)) continue;
+    if (GATES.some(g=>hypot(x-g.x,z-g.z)<g.w*.75)) continue;
+    // Rice plots, bathing pool, the moon-viewing meadow and sunrise festival.
+    if ((x>122 && x<184 && z>79 && z<135) || (x>125 && x<169 && z> -123 && z< -80)) continue;
+    seasonAt(x,z,season);
+    if (season.moon>.4 && x>-78 && z<307 || season.dawn>.48 && x>291 ||
+        season.snow>.45 && abs(x+78)<18 && z< -260) continue;
+    if (terrainHeight(x,z)<1.9) continue;
+    const wave = .5+.24*sin(x*.065+cos(z*.061))+.22*cos(z*.049+sin(x*.039));
+    if (random() > .10+wave*.87) continue;
+    const cx=Math.floor(x/6), cz=Math.floor(z/6), gap=3.8+(1-wave)*1.9;
+    let occupied=false;
+    for (let i=cx-1; i<=cx+1 && !occupied; i++)
+      for (let j=cz-1; j<=cz+1 && !occupied; j++)
+        occupied=spacing.get(i*256+j)?.some(t=>(x-t.x)**2+(z-t.z)**2<gap*gap);
+    if (occupied) continue;
+    const form=forestForm(region,random), family=TREE_FAMILIES[Math.floor(form/TREE_FORMS_PER_FAMILY)];
+    const young = random()<.22, h=(young?3.5:6.0)+random()*(young?2.2:5.4);
+    const tree={x,z,h,kind:family[0],form,seed:Math.floor(random()*1e6)};
+    trees.push(tree);
+    remember(tree);
+  }
+}
+populateForest();
 export const TREES = trees;
 
 const cells = new Map();
@@ -492,8 +552,8 @@ for (const t of TREES)
   putSolid(
     t.x,
     t.z,
-    t.kind === 'bamboo' ? 0.3 : 0.37,
-    t.kind === 'bamboo' ? 0.3 : 0.37,
+    t.form !== undefined ? t.h*.027 : t.kind === 'bamboo' ? 0.3 : 0.37,
+    t.form !== undefined ? t.h*.027 : t.kind === 'bamboo' ? 0.3 : 0.37,
     0,
     terrainHeight(t.x, t.z) + t.h * 0.68,
     'oval',

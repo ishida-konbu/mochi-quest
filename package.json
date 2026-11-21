@@ -3,5 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test tests/*.test.mjs" }
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "build": "node tools/build-worker-assets.mjs",
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "predev": "npm run build",
+    "predeploy": "npm run build"
+  },
+  "devDependencies": {
+    "wrangler": "4.166.0"
+  }
 }

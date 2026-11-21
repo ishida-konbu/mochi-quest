@@ -37,7 +37,7 @@
           <span></span>
         </div>
         <div class="library">
-          <a href="./two/?v=2.2" class="game-card next" aria-label="Mochi Quest 2 を遊ぶ"
+          <a href="./two/?v=2.3" class="game-card next" aria-label="Mochi Quest 2 を遊ぶ"
             ><div class="cover">
               <img
                 src="./assets/covers/two.webp?v=2.2"
@@ -52,7 +52,7 @@
               </div>
               <span class="play"><i></i>遊ぶ</span>
             </div>
-            <p>雪の都から初日の出の浜へ。十の名所で御朱印を集める。お餅の目線で巡る立体の里。</p></a
+            <p>草花の小径でうさぎに出会い、川音をたどって初日の出の浜へ。お餅になって十の名所を巡る。</p></a
           >
           <a href="./one/" class="game-card first" aria-label="Mochi Quest 1 を遊ぶ"
             ><div class="cover">
@@ -77,5 +77,10 @@
         ><span class="line"></span>
       </footer>
     </div>
+    <script>
+      if (location.origin === 'https://ishida-konbu.github.io') {
+        document.querySelector('.game-card.next').href = 'https://mochi-quest.mochi-quest.workers.dev/two/?v=2.3';
+      }
+    </script>
   </body>
 </html>

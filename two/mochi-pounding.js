@@ -1,6 +1,8 @@
 import * as THREE from './vendor/three.module.min.js';
 import { inkVolume } from './scroll-sculpt.js';
 
+import { POUNDING } from './festival.js';
+
 const TAU = 2 * Math.PI;
 const smooth = (a, b, x) => THREE.MathUtils.smoothstep(x, a, b);
 
@@ -405,10 +407,10 @@ export function buildPounding(parent, { animal, batch, group, shadow }) {
   }));
   const target = new THREE.Vector3();
   function update(time) {
-    const beat = (time / 2.83) % 1;
-    const lift = smooth(0.05, 0.43, beat) * (1 - smooth(0.73, 0.895, beat));
+    const beat = (time / POUNDING.period) % 1;
+    const lift = smooth(0.05, 0.43, beat) * (1 - smooth(0.73, POUNDING.strike, beat));
     const turn = smooth(0.22, 0.48, beat) * (1 - smooth(0.625, 0.765, beat));
-    const impact = Math.max(0, 1 - Math.abs(beat - 0.895) / 0.077);
+    const impact = Math.max(0, 1 - Math.abs(beat - POUNDING.strike) / 0.077);
     const recovery = Math.max(0, 1 - Math.abs(beat - 0.961) / 0.037);
     mallet.position.set(0, 1.156 + 0.154 * lift - 0.034 * impact, 0.292 + 0.174 * lift);
     mallet.rotation.x = 0.19 - 1.68 * lift;

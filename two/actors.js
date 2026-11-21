@@ -4,6 +4,9 @@ import { buildPounding } from './mochi-pounding.js';
 import { addSpringSurface } from './spring-water.js';
 import { finishResident, residentLimb, residentTorso } from './resident-art.js';
 import { inkVolume, sculptHead, scrollParasol, scrollShell, sculptTurtleHead } from './scroll-sculpt.js';
+import { DYES } from './procession.js';
+import { distantProcession } from './procession-view.js';
+import { dressArtisan, poseArtisan } from './trade-tools.js';
 import { makeRiceModel, poseRice } from './mochi-model.js';
 
 const PI = Math.PI,
@@ -548,7 +551,8 @@ function armLimb(parent, s, kind, role) {
     pos = [s * (frogKind ? 0.235 : 0.17), frogKind ? 1.0 : 1.21, 0.01];
   const arm = group(parent, 'arm' + s, ...pos);
   const grip = port && (frogKind || s < 0);
-  const open = role === 'wander' && s > 0;
+  const robed = role === 'wander' || role === 'artisan';
+  const open = robed && s > 0;
   const elbow = [
     s * (sumo ? 0.22 : open ? 0.16 : 0.105),
     sumo ? -0.16 : -0.205,
@@ -560,7 +564,7 @@ function armLimb(parent, s, kind, role) {
       ? [s * 0.012, frogKind ? -0.01 : 0.045, 0.25]
       : open
         ? [s * 0.24, -0.105, 0.262]
-        : role === 'wander'
+        : robed
           ? [s * 0.045, -0.15, 0.19]
           : [s * 0.09, -0.38, -0.06];
   batch(arm, (b) => {
@@ -611,8 +615,9 @@ function armLimb(parent, s, kind, role) {
         12,
       );
     }
-    residentLimb(b, kind, role, s, elbow);
+    if (role !== 'artisan') residentLimb(b, kind, role, s, elbow);
   });
+  if (role==='artisan') batch(arm,b=>residentLimb(b,kind,'wander',s,elbow),'haori-sleeve'+s);
 }
 function legLimb(parent, s, kind, role) {
   const frogKind = kind === 'frog',
@@ -792,8 +797,9 @@ function animal(parent, kind, role) {
       );
       b.ball(0.184, 0.805, 0.098, 0.11, 0.12, 0.064, '#6b7d77', [0, -0.3, 0.11]);
     }
-    residentTorso(b, kind, role);
+    if (role !== 'artisan') residentTorso(b, kind, role);
   });
+  if (role==='artisan') batch(torso,b=>residentTorso(b,kind,'wander'),'haori');
   const head = group(torso, 'head', 0, froggy ? 1.208 : 1.423, 0.072);
   batch(head, (b) => muzzleInk(b, froggy));
   for (const s of [-1, 1]) {
@@ -1477,19 +1483,35 @@ function markerStand(parent) {
     b.box(0.24, 0.393, 0, 0.018, 0.006, 0.46, '#9b6950');
   });
 }
-function makeNPC(entity, root) {
+const dyedCloth=new Map();
+export function makeNPC(entity, root) {
   const kind = entity.type;
-  const role = kind === 'turtle' ? 'wander' : entity.role;
+  const role = kind === 'turtle' ? 'wander' : entity.area ? 'artisan' : entity.role;
   const mesh =
     kind === 'turtle' ? model('turtle', turtle) : model(kind + role, (p) => animal(p, kind, role));
   root.add(mesh);
   const limbs = {};
   for (const key of ['torso', 'head', 'leg-1', 'leg1', 'arm-1', 'arm1', '筆穂耳-1', '筆穂耳1'])
     limbs[key] = mesh.getObjectByName(key);
+  if (entity.area) {
+    const key=kind+entity.dye;
+    const coat=mesh.getObjectByName('haori');
+    if (!dyedCloth.has(key)) {
+      const mat=coat.material.clone();
+      mat.onBeforeCompile=coat.material.onBeforeCompile;
+      mat.customProgramCacheKey=coat.material.customProgramCacheKey;
+      mat.color.set(DYES[entity.dye]);
+      dyedCloth.set(key,mat);
+    }
+    for(const part of [coat,mesh.getObjectByName('haori-sleeve-1'),mesh.getObjectByName('haori-sleeve1')])
+      part.material=dyedCloth.get(key);
+    dressArtisan(limbs,entity.role,model,batch);
+    mesh.scale.set(entity.stature*entity.build,entity.stature,entity.stature);
+  }
   const shadowMesh = shadow(mesh, kind === 'turtle' ? 1.19 : 1.2, kind === 'turtle' ? 1.32 : 1.0);
   return { mesh, limbs, shadow: shadowMesh };
 }
-function animateNPC(record, n, t) {
+export function animateNPC(record, n, t) {
   const { mesh, limbs } = record,
     isTurtle = n.type === 'turtle',
     sumo = n.role === 'sumo';
@@ -1528,6 +1550,7 @@ function animateNPC(record, n, t) {
     0.15 * Math.sin(t * 1.3 + (n.phase || 0)),
     0.025 * bend,
   );
+  if (n.area) poseArtisan(limbs,n,t);
   if (n.flash > 0) {
     mesh.position.y += 0.11 * Math.abs(Math.sin(n.flash * 12));
     limbs.head.rotation.z += 0.16;
@@ -1585,23 +1608,56 @@ export function createActors(scene) {
     objects = new Map(),
     notices = new Map(),
     spares = [];
+  let processionView;
+  const viewFrustum=new THREE.Frustum(), viewProjection=new THREE.Matrix4();
+  const actorBounds=new THREE.Sphere(new THREE.Vector3(),1.7), restingNpcs=new Map();
   function update(state, dt, camera) {
     const p = state.player,
       t = state.time;
     gaitHero(h, p, t, dt, camera, state);
-    for (const n of state.npcs) {
-      let rec = npcs.get(n.id);
-      const near = !n.mounted && within(n, p, 68);
-      if (near && !rec) {
-        rec = makeNPC(n, root);
-        npcs.set(n.id, rec);
+    if (!processionView) processionView=distantProcession(root,shadowMap(),state.npcs.length);
+    processionView.begin(p);
+    viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    const visible=[], detailed=new Set();
+    for (const n of state.nearbyNpcs) {
+      if(n.mounted) continue;
+      const distance=wrapDelta(n.x-p.x)**2+wrapDelta(n.z-p.z)**2;
+      if (n.type==='turtle') {
+        if (distance<68**2) detailed.add(n);
+      } else if (distance<95**2) {
+        // A little hysteresis keeps two equally close travellers from
+        // exchanging their representation every time they take a step.
+        actorBounds.center.set(p.x+wrapDelta(n.x-p.x),n.y+1,p.z+wrapDelta(n.z-p.z));
+        const onScreen=viewFrustum.intersectsSphere(actorBounds);
+        visible.push({n,priority:distance*(npcs.has(n.id) ? .88 : 1)*(onScreen ? 1 : 4)});
       }
-      if (!rec) continue;
-      rec.mesh.visible = near;
-      if (!near) continue;
-      animateNPC(rec, n, t);
-      rec.mesh.position.x = p.x + wrapDelta(n.x - p.x);
-      rec.mesh.position.z = p.z + wrapDelta(n.z - p.z);
+    }
+    visible.sort((a,b)=>a.priority-b.priority);
+    for(let i=0;i<visible.length;i++){
+      const {n,priority}=visible[i];
+      if(i<5 && priority<24**2) detailed.add(n);
+      else processionView.add(n,p,camera,t);
+    }
+    processionView.end();
+    for (const [id,rec] of npcs) {
+      if (!detailed.has(rec.entity)) {
+        root.remove(rec.mesh);
+        npcs.delete(id);
+        restingNpcs.set(id,rec);
+        if (restingNpcs.size>12) restingNpcs.delete(restingNpcs.keys().next().value);
+      }
+    }
+    for(const n of detailed) {
+      let rec=npcs.get(n.id);
+      if(!rec) {
+        rec=restingNpcs.get(n.id);
+        if (rec) { restingNpcs.delete(n.id); root.add(rec.mesh); }
+        else { rec=makeNPC(n,root); rec.entity=n; }
+        npcs.set(n.id,rec);
+      }
+      animateNPC(rec,n,t);
+      rec.mesh.position.x=p.x+wrapDelta(n.x-p.x);
+      rec.mesh.position.z=p.z+wrapDelta(n.z-p.z);
     }
     for (const o of state.objects) {
       if (!objectModels[o.type]) continue;

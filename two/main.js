@@ -6,8 +6,12 @@ import { setRiverStones } from './scanned-stone.js';
 import { createBathReflection } from './spring-water.js';
 import { createInkPass } from './ink.js';
 import { createActors, getExpression } from './actors.js';
+import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS_KEY as settingsKey,
+  transferURL, decodeTransfer, storeTransfer } from './journey-transfer.js';
 import { createGame } from './game.js';
 import { REGIONS, groundHeight, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
+import { createMeadow } from './meadow.js';
+import { createSoundscape } from './soundscape.js';
 import { createAudio } from '../sound.js';
 import { MODES, EMOTES, HELP, glyph, paintGlyphs, drawFace } from './interface.js';
 import { drawMap, mapHit, labels } from './map.js';
@@ -16,8 +20,6 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('scene'),
   stage = $('stage'),
   dialog = $('dialog');
-const saveKey = 'mochi-quest.two.journey.v1',
-  settingsKey = 'mochi-quest.two.settings.v1';
 function read(key) {
   try {
     return JSON.parse(localStorage.getItem(key));
@@ -28,17 +30,53 @@ function read(key) {
 function store(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    /* Storage can be unavailable in private browsing. */
+    return false;
   }
 }
 const clamp = THREE.MathUtils.clamp;
 const restingEyeHeightOffset = { bath: 0.35, sleep: 0.26 };
-const savedSettings = read(settingsKey) || {};
-const game = createGame(read(saveKey)),
-  state = game.state,
+function confirmJourney(existing, incoming) {
+  const describe = game => game.state.region + '、御朱印 ' + game.state.visited.length + ' 個、通知点 ' + game.state.score + ' 点';
+  $('dialog-title').textContent = 'Cloudflare版に旅の記録を引き継ぐ';
+  const body = $('dialog-content');
+  body.innerHTML = '<p>このブラウザにあるCloudflare版の記録を、GitHub Pages版の記録で上書きしますか？</p>' +
+    '<dl class="guide-list"><div><dt>現在の記録</dt><dd></dd></div><div><dt>引き継ぐ記録</dt><dd></dd></div></dl>' +
+    '<form method="dialog" class="actions"><button class="choice" value="keep" autofocus>現在の記録を使う</button>' +
+    '<button class="jump-link" value="replace">上書きして引き継ぐ</button></form>';
+  const [current, offered] = body.querySelectorAll('dd');
+  current.textContent = existing.restored ? describe(existing) : '保存済みの記録';
+  offered.textContent = describe(incoming);
+  dialog.returnValue = '';
+  $('dismiss').onclick = () => dialog.close('keep');
+  dialog.showModal();
+  return new Promise(resolve => dialog.addEventListener('close', () => {
+    $('dismiss').onclick = null;
+    resolve(dialog.returnValue === 'replace');
+  }, { once: true }));
+}
+async function startJourney() {
+  const local = { game: createGame(read(saveKey)), settings: read(settingsKey) || {} };
+  const hash = window.pendingMochiJourney;
+  delete window.pendingMochiJourney;
+  if (!hash || location.origin !== WORKER_ORIGIN) return local;
+  const incoming = decodeTransfer(location.origin, hash, createGame, REGIONS);
+  if (!incoming) return { ...local, status: '引き継ぐ記録を読み取れませんでした。' };
+  try {
+    if (localStorage.getItem(saveKey) !== null && !await confirmJourney(local.game, incoming.game))
+      return { ...local, status: 'Cloudflare版の現在の記録から再開しました。' };
+    storeTransfer(localStorage, incoming);
+    return { ...incoming, status: 'GitHub Pages版の旅の記録を引き継ぎました。' };
+  } catch {
+    return { ...local, status: '旅の記録を保存できませんでした。ブラウザの保存設定を確認してください。' };
+  }
+}
+const { game, settings: savedSettings, status: transferStatus } = await startJourney();
+let hasJourney = game.restored;
+const state = game.state,
   p = state.player;
-const audio = createAudio();
+const audio = createAudio(createSoundscape);
 let audible = savedSettings.sound !== false;
 let yaw = Number.isFinite(savedSettings.yaw) ? savedSettings.yaw : 0;
 let pitch = 0.23,
@@ -58,6 +96,7 @@ let speechExpires = 0,
 let previous = 0,
   renderer,
   world,
+  meadow,
   actors,
   bathReflection,
   wake,
@@ -87,12 +126,15 @@ let ratio = Math.min(devicePixelRatio || 1, coarse ? 1.35 : 1.65);
 let frames = 0,
   workTime = 0,
   qualitySince = 0;
+function journeySettings() {
+  return { sound: audible, yaw: photoMode ? priorCamera.yaw : yaw, goal };
+}
 function persistSettings() {
-  store(settingsKey, { sound: audible, yaw: photoMode ? priorCamera.yaw : yaw, goal });
+  store(settingsKey, journeySettings());
 }
 function save() {
   if (active) {
-    store(saveKey, game.save());
+    if (store(saveKey, game.save())) hasJourney = true;
     persistSettings();
   }
 }
@@ -349,7 +391,7 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'Space' && e.target.closest('button,a')) return;
   e.preventDefault();
   if (e.repeat) return;
-  unlock();
+  if (!['KeyM','KeyH','KeyP','Escape'].includes(e.code)) unlock();
   keys.add(e.code);
   if (e.code === 'KeyC') {
     togglePhoto();
@@ -379,11 +421,12 @@ window.addEventListener('blur', () => {
   save();
 });
 document.addEventListener('visibilitychange', () => {
+  audio.setPaused(document.hidden || dialog.open || contextLost);
   clearInput();
   previous = 0;
   save();
 });
-window.addEventListener('pagehide', save);
+window.addEventListener('pagehide', () => { audio.setPaused(true); save(); });
 function updateCamera(dt, snap = false) {
   const full = p.buffs.full > 0 ? 1.26 : 1,
     ride = p.mount === 'bike' ? 0.9 : p.mount === 'turtle' ? 0.48 : 0;
@@ -567,6 +610,22 @@ function helpDialog(tab) {
     row.innerHTML = '<dt>' + k + '</dt><dd>' + v + '</dd>';
     body.querySelector('dl').append(row);
   }
+  if (location.origin === PAGES_ORIGIN && hasJourney) {
+    const transfer = document.createElement('button');
+    transfer.className = 'choice';
+    transfer.textContent = 'Cloudflare版に旅の記録を引き継ぐ';
+    transfer.onclick = () => {
+      const url = transferURL(location.origin, read(saveKey), journeySettings());
+      if (url) location.assign(url);
+      else transfer.textContent = '旅の記録を読み取れませんでした';
+    };
+    body.querySelector('.actions').append(transfer);
+  } else if (location.origin === WORKER_ORIGIN && !hasJourney) {
+    const link = document.createElement('a');
+    link.href = PAGES_GUIDE;
+    link.textContent = '以前の旅を引き継ぐ（GitHub Pages版の手引き）';
+    body.querySelector('.credit').append(document.createElement('br'),link);
+  }
   $('continue').onclick = () => { lastFocus = canvas; dialog.close(); };
 }
 $('map').onclick = $('mini-button').onclick = () => openDialog('map');
@@ -616,7 +675,9 @@ function drawScene() {
 }
 function frame(now) {
   requestAnimationFrame(frame);
-  if (document.hidden || dialog.open || contextLost) {
+  const paused = document.hidden || dialog.open || contextLost;
+  audio.setPaused(paused);
+  if (paused) {
     previous = 0;
     return;
   }
@@ -647,7 +708,10 @@ function frame(now) {
   sun.target.position.set(p.x, p.y, p.z);
   applyClimateLights(hemisphere, sun, bounce, p);
   wake(p, photoMode ? photoTime : state.time);
-  world.update(photoMode ? photoTime : state.time, p, camera);
+  const sceneTime = photoMode ? photoTime : state.time;
+  audio.updateWorld(state, sceneTime, yaw, photoMode);
+  world.update(sceneTime, p, camera);
+  meadow(sceneTime, p, camera);
   // Keep the photographic pose alive while the travel clock is paused.
   if (photoMode) {
     const playTime = state.time;
@@ -705,6 +769,7 @@ function boot() {
     ink = createInkPass(renderer, camera);
     settingsForLighting();
     world = createWorld(scene);
+    meadow = createMeadow(scene, state.objects, coarse);
     wake = createWake(scene);
     sun.target.position.set(p.x,p.y,p.z);
     applyClimateLights(hemisphere, sun, bounce, p);
@@ -716,9 +781,15 @@ function boot() {
     updateCamera(1, true);
     actors.update(state, 0, camera);
     world.update(state.time, p, camera);
+    meadow(state.time, p, camera);
     drawScene();
     updateHUD();
     $('loading').hidden = true;
+    if (transferStatus) message(transferStatus,6);
+    if (location.origin === PAGES_ORIGIN && location.hash === '#guide') {
+      history.replaceState(history.state, '', location.pathname + location.search);
+      openDialog('guide');
+    }
     qualitySince = performance.now();
     new ResizeObserver(resize).observe(canvas);
     canvas.addEventListener('webglcontextlost', (e) => {

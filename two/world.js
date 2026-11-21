@@ -1,6 +1,8 @@
+import { createForest } from './forest.js';
 import { furnishRoom } from './interiors.js';
 import * as THREE from './vendor/three.module.min.js';
 import { dressSeasonalPlaces, seasonalWeather } from './seasons.js';
+import { POUNDING } from './festival.js';
 import { createMochiPounding } from './actors.js';
 import { dressPlaces } from './places.js';
 import { createAtmosphere } from './atmosphere.js';
@@ -14,6 +16,7 @@ import {
   BUILDINGS,
   GATES,
   TREES,
+  LANDMARK_TREES,
   ROCKS,
   REGIONS,
   ROADS,
@@ -741,7 +744,7 @@ class Painter {
 }
 function woodland(p, art) {
   plantInkTrees(p, art);
-  for (const tree of TREES) {
+  for (const tree of LANDMARK_TREES) {
     const { x, z, h: ht, kind } = tree,
       y = h(x, z) - 0.02,
       r = seeded(tree.seed),
@@ -1552,6 +1555,7 @@ export function createWorld(scene) {
   stampStations(painter);
   details(painter);
   woodland(painter, art);
+  const updateForest = createForest(scene, painter.sway);
   plantUnderstory(painter, art);
   dressPlaces(painter);
   dressSeasonalPlaces(painter);
@@ -1566,7 +1570,7 @@ export function createWorld(scene) {
     return {mesh, x:bounds.center.x, z:bounds.center.z, radius:bounds.radius, range:close.has(mesh)?94:(mesh.userData.range||328)};
   });
   const powder = seasonalWeather(scene), festival=createMochiPounding(scene);
-  festival.root.position.set(307,h(307,169.8)+.012,169.8);
+  festival.root.position.set(POUNDING.x,h(POUNDING.x,POUNDING.z)+.012,POUNDING.z);
   festival.root.rotation.y=-.73;
   water.uniforms.climate=atmosphere.climate;
   const birds = birdFlock(scene),
@@ -1577,6 +1581,7 @@ export function createWorld(scene) {
       painter.sway.value = time;
       if (camera) {
         atmosphere.update(time, player, camera);
+        updateForest(camera, player);
         for (const b of batches) {
           const dx=wrapDelta(b.x-camera.position.x), dz=wrapDelta(b.z-camera.position.z);
           b.mesh.position.x=Math.round((camera.position.x+dx-b.x)/(2*BOUND))*2*BOUND;
@@ -1589,7 +1594,7 @@ export function createWorld(scene) {
         }
         powder(time,player,atmosphere.climate.value.x);
       }
-      festival.root.visible=(player.x-307)**2+(player.z-169.8)**2<105**2;
+      festival.root.visible=(player.x-POUNDING.x)**2+(player.z-POUNDING.z)**2<105**2;
       if (festival.root.visible) festival.update(time);
       birds(time);
       leaves(time, player);

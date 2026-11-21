@@ -5,6 +5,7 @@ import {
   REGIONS,
   ROADS,
   TREES,
+  LANDMARK_TREES,
   WATER_Y,
   nearRoad,
   seasonAt,
@@ -282,7 +283,7 @@ function inkTree(brush, p, t) {
 }
 export function plantInkTrees(p, art) {
   const brush = new BarkBrush(p.scene, art);
-  for (const tree of TREES) if (tree.kind !== 'bamboo') inkTree(brush, p, tree);
+  for (const tree of LANDMARK_TREES) if (tree.kind !== 'bamboo') inkTree(brush, p, tree);
   brush.finish();
 }
 
@@ -393,7 +394,7 @@ function scatteredHerbs(p, art) {
   }
   // Woodland edges are irregular beds, with small shaded leaves under a
   // second taller layer. Terrain and road marks remain visible in the gaps.
-  for (const t of TREES) {
+  for (const t of LANDMARK_TREES) {
     if (t.kind === 'bamboo' && t.seed % 3 === 0) continue;
     const count = 3 + (t.seed % 4);
     for (let i = 0; i < count; i++) {
