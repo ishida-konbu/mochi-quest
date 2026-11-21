@@ -267,10 +267,17 @@ export function drawMochiPortrait(ctx,x,y,size,mode='normal') {
 
 function drawNotice(ctx, age, facing=1) {
   ctx.save();ctx.scale(facing,1);
-  ctx.rotate(Math.sin(age*24)*.24 - .14);
+  if (age>0) {
+    ctx.save();ctx.globalAlpha*=.58;
+    brush(ctx,'M-33 0 Q-24 -2 -16 -1 M-26 5 Q-20 4 -13 4',null,'#8a7153',1.1);
+    ctx.restore();
+    ctx.scale(1, .73+.22*Math.cos(age*11));
+  }
+  ctx.rotate(age*18-.14);
   brush(ctx,'M-13 -8 L13 -7 L12 8 L-13 7 Z','#fff8dc','#796748',1.15);
   brush(ctx,'M-10 -5 L1 0 L11 -5 M-12 6 L-4 0 M12 7 L5 1',null,'#ab9b77',.85);
-  brush(ctx,'M6 1 L10 1 L10 5 L6 5 Z','#bc533d');
+  brush(ctx,'M5 .5 L10 .8 L9.7 5.5 L5 5 Z','#b84c37');
+  brush(ctx,'M6.2 2 L8.8 2 M7 2 L7 4 M8 2.9 L8.8 3.8',null,'#eed6ae',.53);
   brush(ctx,'M-10 -4 L-5 -4',null,'#987e5e',.9);
   ctx.restore();
 }
