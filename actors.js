@@ -282,14 +282,6 @@ function drawNotice(ctx, age, facing=1) {
   ctx.restore();
 }
 
-export function drawInventoryIcon(ctx,x,y,size,type) {
-  if (type==='notice') {ctx.save();ctx.translate(x,y);ctx.scale(size/32,size/32);drawNotice(ctx,0);ctx.restore();return;}
-  const img=art.get(type);
-  if(!img) return;
-  const k=size/Math.max(img.width,img.height);
-  ctx.drawImage(img,x-img.width*k/2,y-img.height*k/2,img.width*k,img.height*k);
-}
-
 function npcArt(ctx,n,t) {
   const frog=n.type==='frog';
   const sumo=n.role==='sumo';
