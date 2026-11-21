@@ -193,11 +193,12 @@ export function getExpression(p, time = 0) {
   if (p.activity === 'sleep') return 'sleepy';
   if (p.activity === 'bath') return 'bath';
   if (p.activity === 'read') return 'joy';
-  if (p.activity === 'drink' || p.buffs?.drunk > 0) return 'blush';
+  if (p.activity === 'drink') return 'blush';
   if (p.activity === 'eat') return 'eating';
   if (p.throwTime > 0) return 'calling';
   if (p.mode === 'dango' && p.stretch > 0.04) return 'determined';
   if (p.stretch > 0.025 || (!p.grounded && p.h > 0.25)) return p.mode === 'habutae' ? 'joy' : 'surprise';
+  if (p.buffs?.drunk > 0) return 'blush';
   if (p.buffs?.warm > 0 || p.buffs?.wrap > 0) return 'calm';
   if (p.buffs?.full > 0) return 'eating';
   if (p.speed > 0.55) return p.speed > 8 ? 'determined' : 'joy';
