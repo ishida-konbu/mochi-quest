@@ -72,6 +72,7 @@ async function startJourney() {
     return { ...local, status: '旅の記録を保存できませんでした。ブラウザの保存設定を確認してください。' };
   }
 }
+paintGlyphs();
 const { game, settings: savedSettings, status: transferStatus } = await startJourney();
 let hasJourney = game.restored;
 const state = game.state,
@@ -177,7 +178,6 @@ function action(name) {
   dispatchEvents();
   updateHUD();
 }
-paintGlyphs();
 setAudio(audible);
 $('audio').onclick = () => {
   setAudio(!audible);
