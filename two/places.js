@@ -98,9 +98,10 @@ function createArt(p) {
   const rng = seeded(71361);
   p.shapes.awning = paintedGrid(14, 5, (u, v) => [
     u - 0.5,
-    0.18 - 0.32 * v - 0.16 * sin(u * PI) - 0.055 * sin(v * PI) + 0.017 * cos(u * 8 * PI),
+    0.58 - 0.72 * v - 0.085 * sin(u * PI) - 0.07 * sin(v * PI) + 0.021 * cos(u * 8 * PI),
     v - 0.5,
   ]);
+  p.shapes.dyeCrest = new THREE.RingGeometry(0.35, 0.44, 24);
   p.shapes.basket = new THREE.LatheGeometry(
     [
       [0.26, 0.0],
@@ -472,15 +473,22 @@ function market(p, a) {
       [name, tint] = marketTypes[id],
       rng = seeded(871 + id);
     for (const u of [-1.64, 1.64])
-      for (const s of [-0.79, 1.07]) f.post(u, s, s < 0 ? 2.91 : 2.53, 0.059, '#816649');
-    f.line([-1.72, 2.85, -0.82], [1.72, 2.85, -0.82], 0.06, timber, p.wood);
+      for (const s of [-0.79, 1.07]) f.post(u, s, s < 0 ? 3.28 : 2.53, 0.059, '#816649');
+    f.line([-1.72, 3.23, -0.82], [1.72, 3.23, -0.82], 0.06, timber, p.wood);
     f.line([-1.76, 2.48, 1.05], [1.76, 2.48, 1.05], 0.049, timber, p.wood);
-    for (const u of [-1.64, 0, 1.64]) f.line([u, 2.91, -0.83], [u, 2.48, 1.1], 0.038, '#9a8059', p.wood);
+    for (const u of [-1.64, 0, 1.64]) f.line([u, 3.23, -0.83], [u, 2.48, 1.1], 0.038, '#9a8059', p.wood);
     f.part('awning', 0, 2.65, 0.12, 3.83, 1.1, 2.24, tint, 0, 0, 0, a.awning);
     for (let i = 0; i < 4; i++) {
       const u = (i - 1.5) * 0.82;
       f.part('box', u, 2.3, 1.16, 0.788, 0.36, 0.037, tint, 0, -0.08, Math.sin(i + id) * 0.01, a.awning);
       f.part('box', u, 2.157, 1.18, 0.745, 0.021, 0.021, '#ddd5b5');
+      if (i === 1 || i === 2) {
+        f.part('dyeCrest', u, 2.32, 1.19, .28, .28, 1, linen, 0, -.08, 0, p.fine, false);
+        for (let k=0;k<3;k++){
+          const a=k*TAU/3;
+          f.part('ball',u+.04*sin(a),2.32+.04*cos(a),1.194,.025,.034,.006,linen,0,0,-a,p.fine,false);
+        }
+      }
     }
     f.post(-1.23, 0.42, 0.89, 0.073, timber, p.wood, true);
     f.post(1.23, 0.42, 0.89, 0.073, timber, p.wood, true);
