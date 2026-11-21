@@ -8,11 +8,11 @@ const ease = (lo, hi, x) => {
   return t * t * (3 - 2 * t);
 };
 const V = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z);
-const ivory = new T.Color('#fff6e9');
+const ivory = new T.Color('#fff5e4');
 const matcha = new T.Color('#afc885');
 const kinako = new T.Color('#e3b674');
 const ink = new T.MeshPhysicalMaterial({
-  color: '#2a201e',
+  color: '#382014',
   roughness: 0.25,
   clearcoat: 0.53,
   clearcoatRoughness: 0.18,
@@ -27,7 +27,7 @@ const mouthInk = new T.MeshStandardMaterial({
   envMapIntensity: 0.44,
 });
 const tongueMat = new T.MeshPhysicalMaterial({
-  color: '#d9837f',
+  color: '#ee9193',
   roughness: 0.5,
   clearcoat: 0.13,
   clearcoatRoughness: 0.35,
@@ -48,7 +48,7 @@ let powderTex;
 function riceSurfaceTexture() {
   if (!powderTex) {
     powderTex = new T.TextureLoader().load(
-      new URL('./assets/actors/rice-surface.webp', import.meta.url).href,
+      new URL('./assets/actors/rice-surface.webp?v=2.2', import.meta.url).href,
     );
     powderTex.colorSpace = T.NoColorSpace;
     powderTex.wrapS = powderTex.wrapT = T.RepeatWrapping;
@@ -57,67 +57,133 @@ function riceSurfaceTexture() {
   return powderTex;
 }
 
+// Horizontal sections measured on the supplied rear and right views. The two
+// near-poles use squared radii so the surface has a round tangent at the top.
+const sections = [
+  // Image row, half-width, half-depth, lateral centre, fore/aft centre (pixels).
+  [151, 0, 0, 624, 621],
+  [156, 62, 61, 628, 617],
+  [174, 136, 139, 624, 619],
+  [194, 188, 185, 624, 621],
+  [222, 239, 230, 623, 618],
+  [260, 296, 278, 620, 617],
+  [305, 342, 320, 620, 612],
+  [361, 388, 358, 618, 612],
+  [424, 426, 389, 619, 609],
+  [495, 455, 412, 616, 607],
+  [576, 474, 425, 616, 605],
+  [640, 477, 426, 617, 607],
+  [706, 470, 418, 617, 607],
+  [776, 451, 400, 616, 608],
+  [845, 419, 368, 616, 609],
+  [902, 379, 328, 617, 610],
+  [950, 329, 278, 617, 609],
+  [984, 280, 225, 617, 609],
+  [1007, 215, 172, 618, 609],
+  [1018, 164, 127, 619, 608],
+  [1026, 104, 78, 619, 609],
+  [1031, 0, 0, 619, 610],
+];
+const pixelScale = 0.00176;
+const contour = sections
+  .map(([row, width, depth, cx, cz]) => [
+    (1077 - row) * pixelScale,
+    (width * pixelScale) ** 2,
+    (depth * pixelScale) ** 2,
+    (cx - 617) * pixelScale,
+    (cz - 611) * pixelScale,
+  ])
+  .reverse();
+// Cache a smoothly interpolated contour so the field and its normal are cheap
+// enough to sample while building the unified, skinned surface.
+const profileStep = 0.002;
+const profile = [];
+for (let i = 0, segment = 0; i < 890; i++) {
+  const y = i * profileStep;
+  while (segment < contour.length - 2 && y > contour[segment + 1][0]) segment++;
+  const a = contour[segment],
+    b = contour[segment + 1];
+  const before = contour[Math.max(0, segment - 1)],
+    after = contour[Math.min(contour.length - 1, segment + 2)];
+  const t = (y - a[0]) / (b[0] - a[0]),
+    u = clamp(t, 0, 1);
+  const values = [];
+  for (let col = 1; col <= 4; col++) {
+    const span = b[0] - a[0];
+    const m0 = ((b[col] - before[col]) / (b[0] - before[0])) * span;
+    const m1 = ((after[col] - a[col]) / (after[0] - a[0])) * span;
+    const p =
+      (1 + 2 * u) * (1 - u) ** 2 * a[col] +
+      u * (1 - u) ** 2 * m0 +
+      u * u * (3 - 2 * u) * b[col] +
+      u * u * (u - 1) * m1;
+    values.push(p + (t < 0 ? t * m0 : t > 1 ? (t - 1) * m1 : 0));
+  }
+  profile.push(values);
+}
+for (let i = 0; i < profile.length; i++) {
+  const lo = Math.max(0, i - 1),
+    hi = Math.min(profile.length - 1, i + 1);
+  profile[i][4] = (profile[hi][0] - profile[lo][0]) / ((hi - lo) * profileStep);
+}
 function bodyDistance(x, y, z) {
-  const cy = (y - 0.875) / 0.736;
-  const rx = 0.836 - 0.07 * clamp(cy, -1, 1);
-  const rz = 0.751 - 0.055 * clamp(cy, -1, 1);
-  const horizontal = (x * x) / (rx * rx) + (z * z) / (rz * rz);
-  // A soft shoulder over a broad, yielding base, with a very slight tilt in the crown.
-  const py = cy + 0.015 * x - 0.009 * z;
-  const exponent = py > 0 ? 2.02 : 2.54;
-  let d =
-    (Math.pow(Math.pow(horizontal, exponent / 2) + Math.pow(Math.abs(py), exponent), 1 / exponent) - 1) *
-    0.735;
-  if (z > 0.25 && y > 0.39 && y < 1.34) {
-    const ax = Math.abs(x),
-      front = ease(0.25, 0.58, z);
-    const cheek = Math.exp(-(((ax - 0.385) / 0.151) ** 2 + ((y - 0.926) / 0.127) ** 2));
-    const eye = Math.exp(-(((ax - 0.249) / 0.153) ** 2 + ((y - 1.108) / 0.077) ** 2));
-    const muzzle = Math.exp(-((x / 0.24) ** 2 + ((y - 0.861) / 0.128) ** 2));
-    d += front * (0.014 * eye - 0.033 * cheek - 0.012 * muzzle);
+  const t = clamp(y / profileStep, 0, profile.length - 1.001),
+    i = Math.floor(t),
+    f = t - i;
+  const a = profile[i],
+    b = profile[i + 1];
+  const rx2 = a[0] + (b[0] - a[0]) * f;
+  const rz2 = a[1] + (b[1] - a[1]) * f;
+  const ratio = Math.abs(rz2) > 0.00004 ? clamp(rx2 / rz2, 0.82, 1.85) : 1.16;
+  const px = x - (a[2] + (b[2] - a[2]) * f),
+    pz = z - (a[3] + (b[3] - a[3]) * f);
+  const dy = a[4] + (b[4] - a[4]) * f;
+  let d = (px * px + pz * pz * ratio - rx2) / Math.max(0.25, Math.hypot(2 * px, 2 * pz * ratio, dy));
+  if (z > 0.38 && y > 0.6 && y < 1.25) {
+    const ax = Math.abs(x);
+    const cheek = Math.exp(-(((ax - 0.393) / 0.151) ** 2 + ((y - 0.867) / 0.121) ** 2));
+    const eye = Math.exp(-(((ax - 0.276) / 0.119) ** 2 + ((y - 0.994) / 0.075) ** 2));
+    d += ease(0.37, 0.61, z) * (0.009 * eye - 0.021 * cheek);
   }
   return d;
-}
-function capsule(x, y, z, a, b, r1, r2) {
-  const dx = b[0] - a[0],
-    dy = b[1] - a[1],
-    dz = b[2] - a[2];
-  const t = clamp(
-    ((x - a[0]) * dx + (y - a[1]) * dy + (z - a[2]) * dz) / (dx * dx + dy * dy + dz * dz),
-    0,
-    1,
-  );
-  return Math.hypot(x - a[0] - t * dx, y - a[1] - t * dy, z - a[2] - t * dz) - (r1 + (r2 - r1) * t);
 }
 function smoothUnion(a, b, k) {
   const h = Math.max(k - Math.abs(a - b), 0) / k;
   return Math.min(a, b) - h * h * k * 0.25;
 }
-const shoulder = [0.643, 0.653, 0.2],
-  elbow = [0.778, 0.526, 0.288],
-  palm = [0.745, 0.482, 0.473];
 function armDistance(x, y, z) {
-  return smoothUnion(
-    capsule(x, y, z, shoulder, elbow, 0.131, 0.147),
-    capsule(x, y, z, elbow, palm, 0.147, 0.14),
-    0.052,
-  );
+  // The hand is a small, forward-facing fold of dough. In profile its
+  // rounded palm sits in front of the shoulder; from behind the belly covers it.
+  const t = clamp((z - 0.31) / 0.19, 0, 1);
+  const px = x - (0.648 + 0.057 * t);
+  const py = y - (0.557 - 0.051 * t);
+  const pz = z - 0.433;
+  return (Math.hypot(px / 0.139, py / 0.143, pz / 0.19) - 1) * 0.143;
 }
 function footDistance(x, y, z) {
-  const px = x - 0.405 - 0.059 * (z - 0.16),
-    py = y - 0.147 + 0.026 * (z - 0.16),
-    pz = z - 0.17;
-  const n = Math.sqrt((px / 0.218) ** 2 + (py / 0.148) ** 2 + (pz / 0.278) ** 2);
-  return (n - 1) * 0.172;
+  const px = x - 0.31 - 0.055 * z,
+    py = y - 0.123 + 0.026 * z,
+    pz = z - 0.034;
+  return (
+    (Math.pow((px / 0.166) ** 2 + Math.pow(Math.abs(py / 0.121), 2.68) + (pz / 0.199) ** 2, 0.5) - 1) *
+    0.141
+  );
+}
+function doughDistance(x, y, z) {
+  let d = bodyDistance(x, y, z);
+  const ax = Math.abs(x);
+  if (ax > 0.38 && y < 0.88 && y > 0.23 && z > 0.1) d = smoothUnion(d, armDistance(ax, y, z), 0.038);
+  if (ax > 0.05 && y < 0.39 && z > -0.25) d = smoothUnion(d, footDistance(ax, y, z), 0.028);
+  return d;
 }
 
 // Surface nets resolve the belly, paws and feet as a single continuous skin.
 // The same distance fields supply soft joint weights on either side of each fold.
 function sculpt() {
-  const nx = 75,
-    ny = 65,
-    nz = 63,
-    step = 0.0275,
+  const nx = 91,
+    ny = 83,
+    nz = 81,
+    step = 0.0215,
     ox = (-(nx - 1) * step) / 2,
     oy = -0.06,
     oz = -0.819;
@@ -129,15 +195,7 @@ function sculpt() {
   for (let iz = 0; iz < nz; iz++)
     for (let iy = 0; iy < ny; iy++)
       for (let ix = 0; ix < nx; ix++) {
-        const x = ox + ix * step,
-          y = oy + iy * step,
-          z = oz + iz * step,
-          ax = Math.abs(x);
-        let d = bodyDistance(x, y, z);
-        if (ax > 0.38 && y < 0.91 && y > 0.22 && z > -0.22)
-          d = smoothUnion(d, armDistance(ax, y, z), 0.082);
-        if (ax > 0.1 && y < 0.47 && z > -0.26) d = smoothUnion(d, footDistance(ax, y, z), 0.064);
-        values[ix + iy * nx + iz * slice] = d;
+        values[ix + iy * nx + iz * slice] = doughDistance(ox + ix * step, oy + iy * step, oz + iz * step);
       }
   const pos = [],
     indices = [],
@@ -145,7 +203,9 @@ function sculpt() {
     bones = [],
     press = [],
     sway = [],
-    round = [];
+    round = [],
+    pull = [],
+    normals = [];
   const C = [0, 1, nx, nx + 1, slice, slice + 1, slice + nx, slice + nx + 1];
   const edges = [
     [0, 1],
@@ -185,24 +245,44 @@ function sculpt() {
           az += z0 + (((b >> 2) & 1) - z0) * t;
           count++;
         }
-        const x = ox + (ix + ax / count) * step,
+        let x = ox + (ix + ax / count) * step,
           y = oy + (iy + ay / count) * step,
           z = oz + (iz + az / count) * step;
+        // Snap the surface-net vertex back onto the sculpt; sample its analytic
+        // gradient to keep smooth folds even where the grid changes direction.
+        const e = 0.0018;
+        const gx = doughDistance(x + e, y, z) - doughDistance(x - e, y, z);
+        const gy = doughDistance(x, y + e, z) - doughDistance(x, y - e, z);
+        const gz = doughDistance(x, y, z + e) - doughDistance(x, y, z - e);
+        const mag = Math.hypot(gx, gy, gz) || 1;
+        const error = doughDistance(x, y, z) / mag;
+        x -= gx * error;
+        y -= gy * error;
+        z -= gz * error;
         cellIndices[at] = pos.length / 3;
         pos.push(x, y, z);
+        normals.push(gx / mag, gy / mag, gz / mag);
+        // The hands and head rise together while a waist of soft starch
+        // follows below them. The smile keeps its proportions on a long pull.
         const ab = Math.abs(x),
           base = bodyDistance(x, y, z),
           ad = armDistance(ab, y, z),
           fd = footDistance(ab, y, z);
-        const aw = ease(-0.047, 0.121, base - ad) * ease(0.43, 0.665, ab) * ease(0.21, 0.43, y);
-        const fw = ease(-0.052, 0.091, base - fd) * (1 - ease(0.245, 0.415, y)) * (1 - aw);
+        const aw = ease(-0.047, 0.121, base - ad) * ease(0.43, 0.665, ab) * ease(0.22, 0.38, y);
+        const fw = ease(-0.052, 0.091, base - fd) * (1 - ease(0.19, 0.31, y)) * (1 - aw);
+        const pullAt = ease(0.035, 0.76, y);
+        const palmLift = ease(0.035, 0.76, 0.5);
+        const lift = pullAt + (palmLift - pullAt) * aw * 0.91;
+        const waist = Math.exp(-(((y - 0.395) / 0.255) ** 2)) * (1 - ease(0.54, 0.74, y));
+        const narrow = -0.25 - 0.17 * waist;
+        pull.push(x * narrow, 1.12 * lift, z * narrow);
         bones.push(0, x < 0 ? 1 : 2, x < 0 ? 3 : 4, 0);
         weights.push(1 - aw - fw, aw, fw, 0);
         const faceMask =
           1 -
           ease(0.28, 0.52, z) *
             (1 - ease(0.49, 0.63, ab)) *
-            (ease(0.61, 0.77, y) * (1 - ease(1.22, 1.38, y)));
+            (ease(0.55, 0.69, y) * (1 - ease(1.2, 1.35, y)));
         const lower = Math.exp(-(((y - 0.53) / 0.4) ** 2));
         press.push(
           x * 0.08 * lower * faceMask,
@@ -241,9 +321,31 @@ function sculpt() {
   g.setIndex(indices);
   g.setAttribute('skinIndex', new T.Uint16BufferAttribute(bones, 4));
   g.setAttribute('skinWeight', new T.Float32BufferAttribute(weights, 4));
-  g.computeVertexNormals();
+  g.setAttribute('normal', new T.Float32BufferAttribute(normals, 3));
   g.morphTargetsRelative = true;
-  g.morphAttributes.position = [press, sway, round].map((a) => new T.Float32BufferAttribute(a, 3));
+  g.morphAttributes.position = [press, sway, round, pull].map((a) => new T.Float32BufferAttribute(a, 3));
+  // Interpolated pull normals keep highlights moving with the thinner waist.
+  const pulled = new T.BufferGeometry();
+  pulled.setIndex(g.index);
+  pulled.setAttribute(
+    'position',
+    new T.Float32BufferAttribute(
+      pos.map((v, i) => v + pull[i]),
+      3,
+    ),
+  );
+  pulled.computeVertexNormals();
+  const pulledNormals = pulled.attributes.normal.array;
+  const neutralNormals = new T.Float32BufferAttribute(new Float32Array(normals.length), 3);
+  g.morphAttributes.normal = [
+    neutralNormals,
+    neutralNormals,
+    neutralNormals,
+    new T.Float32BufferAttribute(
+      normals.map((n, i) => pulledNormals[i] - n),
+      3,
+    ),
+  ];
   g.computeBoundingSphere();
   return g;
 }
@@ -278,11 +380,14 @@ function skinMaterial(mouth) {
     riceFlour: { value: riceSurfaceTexture() },
     riceBlush: { value: 1 },
     riceBath: { value: 0 },
+    riceBran: { value: 0 },
+    riceNight: { value: 0 },
+    riceEffort: { value: 0 },
   };
   const mat = new T.MeshPhysicalMaterial({
     color: ivory,
     roughness: 0.5,
-    clearcoat: 0.47,
+    clearcoat: 0.65,
     clearcoatRoughness: 0.21,
     specularIntensity: 0.78,
     sheen: 0.31,
@@ -290,7 +395,7 @@ function skinMaterial(mouth) {
     sheenColor: '#fff7eb',
     envMapIntensity: 0.91,
     emissive: '#ffe7d4',
-    emissiveIntensity: 0.115,
+    emissiveIntensity: 0.052,
   });
   mat.shadowSide = T.BackSide;
   mat.onBeforeCompile = (s) => {
@@ -304,7 +409,7 @@ function skinMaterial(mouth) {
     s.fragmentShader =
       apertureUniforms +
       `
-      varying vec3 riceDirection; uniform sampler2D riceFlour;uniform float riceBlush,riceBath;
+      varying vec3 riceDirection; uniform sampler2D riceFlour;uniform float riceBlush,riceBath,riceBran,riceNight,riceEffort;
       vec3 flourSample(vec3 p,vec3 n){
         vec3 w=pow(abs(n),vec3(4.));w/=max(.0001,w.x+w.y+w.z);
         return texture2D(riceFlour,p.zy+vec2(.17,.07)).rgb*w.x+
@@ -318,35 +423,50 @@ function skinMaterial(mouth) {
       `
       #include <color_fragment>
       ${apertureCode}
-      vec3 grain=flourSample(ricePoint*.94,normalize(riceDirection));
-      vec3 fleck=flourSample(ricePoint*2.41+vec3(.38,.19,.70),normalize(riceDirection));
-      float powder=smoothstep(.27,.72,grain.r*.79+fleck.g*.21);
-      diffuseColor.rgb*=mix(vec3(.990,.980,.975),vec3(1.012),powder);
-      diffuseColor.rgb*=.991+.020*grain.g;
-      float powderGrain=smoothstep(.545,.77,grain.g)*(.62+.38*powder);
-      diffuseColor.rgb+=vec3(.051,.045,.040)*powderGrain;
-      float glazedCrown=smoothstep(.74,1.47,ricePoint.y);
-      vec2 cheekUV=vec2((abs(ricePoint.x)-.402)/.167,(ricePoint.y-.987)/.107);
-      float blush=exp(-dot(cheekUV,cheekUV)*1.33)*smoothstep(.37,.57,ricePoint.z)*riceBlush;
-      diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(1.03,.30,.34),blush*.82);
-      vec2 cheeks=vec2(abs(ricePoint.x)-.399,ricePoint.y-.986);
-      float hatchMask=exp(-pow(abs(cheeks.x/.067),4.)-pow(abs(cheeks.y/.027),4.));
-      float hatch=1.-smoothstep(.024,.119,abs(fract((cheeks.x-cheeks.y*.44)*46.+.5)-.5));
-      diffuseColor.rgb*=1.-vec3(.047,.153,.128)*hatch*hatchMask*blush;
+      vec3 rawNormal=normalize(riceDirection);
+      vec3 grain=flourSample(ricePoint*1.16,rawNormal);
+      vec3 fleck=flourSample(ricePoint*2.73+vec3(.38,.19,.70),rawNormal);
+      float starch=grain.r-.5+(fleck.r-.5)*.19;
+      float powder=smoothstep(.435,.557,grain.g);
+      float glazedCrown=smoothstep(.62,1.47,ricePoint.y);
+      float glaze=clamp(.28+.73*glazedCrown+.34*riceBath-.46*riceBran,0.,1.)*
+        smoothstep(.18,.73,mix(grain.b,fleck.b,.19));
+      // The packed reference grain separates broad translucency, relief and
+      // specular flecks, so sunlight still travels over the body as it turns.
+      diffuseColor.rgb*=1.+starch*vec3(.44,.60,.91);
+      diffuseColor.rgb+=vec3(.027,.024,.017)*powder;
+      diffuseColor.rgb*=mix(vec3(.998,.953,.903),vec3(1.),smoothstep(.12,1.27,ricePoint.y));
+      vec2 cheekUV=vec2((abs(ricePoint.x)-.392)/.193,(ricePoint.y-.867)/.136);
+      float blush=exp(-dot(cheekUV,cheekUV)*1.28)*smoothstep(.38,.57,ricePoint.z)*riceBlush;
+      diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(1.05,.35,.34),clamp(blush*.86,0.,.94));
+      vec2 cheeks=vec2(abs(ricePoint.x)-.395,ricePoint.y-.876);
+      float hatchMask=exp(-pow(abs(cheeks.x/.072),4.)-pow(abs(cheeks.y/.025),4.));
+      float hatch=1.-smoothstep(.019,.115,abs(fract((cheeks.x-cheeks.y*.43)*36.+.5)-.5));
+      diffuseColor.rgb*=1.-vec3(.028,.115,.095)*hatch*hatchMask*blush;
+      float bran=smoothstep(.511,.575,fleck.r)*riceBran;
+      diffuseColor.rgb*=mix(vec3(1.),vec3(.76,.63,.49),bran);
     `,
     );
     s.fragmentShader = s.fragmentShader.replace(
       '#include <roughnessmap_fragment>',
       `
       #include <roughnessmap_fragment>
-      roughnessFactor=mix(.535+grain.b*.034,.240+.130*powder,glazedCrown*.94+riceBath*(1.-glazedCrown)*.79);
+      roughnessFactor=mix(.45,.23,glaze)+.03*(1.-glazedCrown)+.11*riceBran;
     `,
     );
     s.fragmentShader = s.fragmentShader.replace(
       '#include <normal_fragment_maps>',
       `
       #include <normal_fragment_maps>
-      float skinHeight=(grain.g*.00091+fleck.g*.00024)*mix(.65,1.,glazedCrown);
+      float skinHeight=(grain.g*.010+fleck.g*.0009)*mix(.36,1.,.66*glazedCrown+.34*glaze);
+      if (ricePoint.z>.47) {
+        float ux=ricePoint.x/max(.025,mouthSize.x);
+        vec2 dimple=vec2((abs(ricePoint.x)-mouthSize.x-.01)/.029,
+          (ricePoint.y-mouthY-mouthSize.w-mouthSlant*sign(ux))/.034);
+        skinHeight-=.003*exp(-dot(dimple,dimple));
+        vec2 brow=vec2((abs(ricePoint.x)-.158)/.053,(ricePoint.y-1.068-.39*(abs(ricePoint.x)-.158))/.027);
+        skinHeight+=.010*riceEffort*exp(-dot(brow,brow));
+      }
       vec3 pDx=dFdx(-vViewPosition),pDy=dFdy(-vViewPosition);
       vec3 xSurf=cross(pDy,normal),ySurf=cross(normal,pDx);
       float det=dot(pDx,xSurf);
@@ -358,30 +478,36 @@ function skinMaterial(mouth) {
       `
       #include <lights_physical_fragment>
       #ifdef USE_CLEARCOAT
-        material.clearcoat*=.20+.76*glazedCrown+.14*riceBath;
-        material.clearcoatRoughness=clamp(material.clearcoatRoughness+.12*(1.-glazedCrown)+.09*grain.r,.15,.70);
+        material.clearcoat=clamp(.14+.86*glaze+.20*riceBath,0.,1.);
+        material.clearcoatRoughness=mix(.33,.11,glaze);
       #endif
     `,
     );
     s.fragmentShader = s.fragmentShader.replace(
       '#include <opaque_fragment>',
       `
-      float edge=pow(1.-clamp(dot(normal,normalize(vViewPosition)),0.,1.),2.7);
-      float behind=.17;
+      float facing=clamp(dot(normal,normalize(vViewPosition)),0.,1.);
+      float edge=pow(1.-facing,1.9);
+      float daylight=mix(1.,.21,riceNight);
+      // Rice scatters skylight in the starchy interior, with warmer transmitted
+      // light at the thin silhouette and a softer terminator across the cheeks.
+      float back=0.;
       #if NUM_DIR_LIGHTS > 0
-        behind+=.74*max(dot(-normalize(vViewPosition),directionalLights[0].direction),0.);
+        back=max(dot(-normalize(vViewPosition),directionalLights[0].direction),0.);
       #endif
-      outgoingLight+=vec3(.26,.118,.059)*behind*edge*diffuseColor.rgb+vec3(.021,.003,.001)*blush;
-      // A long patch of bright morning sky catches the moist starch. Moving
-      // around the bather moves the highlight across the flour and the cheeks.
+      vec3 milk=mix(vec3(.154,.139,.122),vec3(.240,.213,.151),edge);
+      outgoingLight+=diffuseColor.rgb*daylight*(milk+vec3(.42,.255,.109)*edge*(.38+.62*back));
       vec3 mirrorRay=inverseTransformDirection(reflect(-normalize(vViewPosition),normal),viewMatrix);
-      vec3 skylight=normalize(vec3(.84,.89,.61));
+      vec3 skylight=normalize(vec3(.78,.99,.51));
       vec3 tangent=normalize(cross(skylight,vec3(0.,1.,0.)));
       vec3 bitangent=cross(skylight,tangent);
-      vec2 windowCone=vec2(dot(mirrorRay,tangent)*2.2,dot(mirrorRay,bitangent)*4.8);
-      float reflection=exp(-dot(windowCone,windowCone)*1.45)*smoothstep(.55,.95,dot(mirrorRay,skylight));
-      float dewy=mix(.18,1.,glazedCrown)*(1.-.58*powder)+riceBath*.21;
-      outgoingLight+=vec3(.49,.41,.32)*reflection*dewy*(.46+fleck.g*1.03);
+      vec2 windowCone=vec2(dot(mirrorRay,tangent)*2.5,dot(mirrorRay,bitangent)*3.7);
+      float softbox=exp(-dot(windowCone,windowCone))*smoothstep(.40,.93,dot(mirrorRay,skylight));
+      float skyDome=smoothstep(.12,.96,mirrorRay.y);
+      // Small pools between fused grains catch broken reflections across the
+      // crown and the shoulders. The reflections follow the view and lighting.
+      float wetSpec=softbox*(.21+.98*glaze)+skyDome*(.03+.36*glaze*glaze)*glazedCrown;
+      outgoingLight+=daylight*vec3(.85,.78,.69)*wetSpec*(1.-riceBran*.60);
       #include <opaque_fragment>
     `,
     );
@@ -467,20 +593,40 @@ function stroke(parent, mat = ink) {
 }
 const sin = Math.sin,
   cos = Math.cos;
+// The dark brown eyes in the open-eye reference have amber transmitted light
+// along the lower edge, a deep centre and a small, sharp reflected window.
+const eyeLens = new T.SphereGeometry(1, 32, 24);
+const lensColors = [];
+const darkIris = new T.Color('#2b160d'),
+  amberIris = new T.Color('#995827');
+for (let i = 0; i < eyeLens.attributes.position.count; i++) {
+  const y = eyeLens.attributes.position.getY(i);
+  const edge = ease(0.14, 0.92, -y);
+  const shade = darkIris.clone().lerp(amberIris, edge * 0.85);
+  lensColors.push(shade.r, shade.g, shade.b);
+}
+eyeLens.setAttribute('color', new T.Float32BufferAttribute(lensColors, 3));
+const eyeGlaze = new T.MeshPhysicalMaterial({
+  vertexColors: true,
+  roughness: 0.18,
+  clearcoat: 0.85,
+  clearcoatRoughness: 0.14,
+  envMapIntensity: 0.54,
+});
 function eye(parent, side) {
   return {
     side,
     line: stroke(parent),
     brow: stroke(parent),
     extra: stroke(parent),
-    pupil: ellipse(parent, ink),
+    pupil: mesh(parent, eyeLens, eyeGlaze),
     light: ellipse(parent, glintMat),
   };
 }
 function setEye(e, mood, blink, time, look) {
   const s = e.side,
-    x = s * 0.244 + look * 0.012,
-    y = 1.129 + (s > 0 ? 0.011 : 0);
+    x = s * 0.273 + look * 0.01,
+    y = 0.985 + (s > 0 ? 0.004 : 0);
   const surprised = mood === 'surprise' || mood === 'calling',
     squeeze = mood === 'determined' || mood === 'hurt';
   const doze = ['sleepy', 'bath', 'calm'].includes(mood);
@@ -491,52 +637,59 @@ function setEye(e, mood, blink, time, look) {
   e.light.visible = e.pupil.visible;
   e.line.obj.visible = !e.pupil.visible;
   e.extra.obj.visible = squeeze;
-  e.brow.obj.visible = squeeze || surprised;
+  e.brow.obj.visible = squeeze || surprised || mood === 'sleepy';
   if (e.pupil.visible) {
-    const ry = 0.057 * wide * (1 - 0.91 * blink),
-      rx = 0.039 * wide,
+    const ry = 0.067 * wide * (1 - 0.91 * blink),
+      rx = 0.052 * wide,
       px = x + 0.004 * sin(time * 0.71);
     const z = surface(px, y);
     e.pupil.position.set(px, y, z + 0.009);
-    e.pupil.scale.set(rx, ry, 0.026);
+    e.pupil.scale.set(rx, ry, 0.029);
     e.pupil.rotation.y = s * 0.2;
     e.pupil.rotation.z = -s * 0.045;
-    e.light.position.set(px - rx * 0.3, y + ry * 0.35, z + 0.034);
-    e.light.scale.set(0.01 * wide, 0.012 * wide, 0.0047);
+    e.light.position.set(px + rx * 0.27, y + ry * 0.37, z + 0.037 - s * 0.004);
+    e.light.scale.set(0.01 * wide, 0.011 * wide, 0.005);
   }
   if (e.line.obj.visible) {
     if (squeeze) {
       e.line.set((t) => [x + s * (0.067 - 0.123 * t), y + 0.043 - 0.052 * t, 0.009], 0.015);
       e.extra.set((t) => [x - s * 0.054 + s * 0.12 * t, y - 0.01 - 0.032 * t, 0.01], 0.0144);
     } else {
-      const curve = blinkCurve ? 0.004 : doze ? -0.031 : 0.054;
+      const curve = blinkCurve ? 0.004 : mood === 'sleepy' ? -0.009 : doze ? -0.02 : 0.043;
       e.line.set(
         (t) => [
-          x + (t - 0.5) * (doze ? 0.151 : 0.151),
-          y + curve * Math.sin(PI * t) + (t - 0.5) * s * 0.012,
+          x + (t - 0.5) * (doze ? 0.145 : 0.162),
+          y +
+            (doze ? -0.001 : -0.012) +
+            curve * Math.sin(PI * t) +
+            (t - 0.5) * s * (mood === 'sleepy' ? -0.026 : 0.006),
           0.009,
         ],
-        doze ? 0.013 : 0.0155,
+        doze ? 0.012 : 0.015,
       );
     }
   }
   if (e.brow.obj.visible) {
-    const browY = y + (surprised ? 0.108 : 0.086),
-      tilt = squeeze ? 0.052 : 0.02;
+    const browY = y + (surprised ? 0.108 : mood === 'sleepy' ? 0.077 : 0.086),
+      tilt = squeeze ? 0.052 : mood === 'sleepy' ? -0.047 : 0.02;
     e.brow.set(
-      (t) => [x + (t - 0.5) * 0.131, browY + (t - 0.5) * s * tilt + 0.016 * Math.sin(PI * t), 0.007],
+      (t) => [
+        x + (t - 0.5) * (mood === 'sleepy' ? 0.094 : 0.131),
+        browY + (t - 0.5) * s * tilt + (mood === 'sleepy' ? -0.01 : 0.016) * Math.sin(PI * t),
+        0.007,
+      ],
       squeeze ? 0.012 : 0.009,
     );
   }
 }
 
 const mouths = {
-  joy: [0.169, 0.015, 0.126, 0.03, -0.012],
-  blush: [0.151, 0.019, 0.107, 0.024, 0.013],
+  joy: [0.105, 0.01, 0.108, 0.02, 0.002],
+  blush: [0.106, 0.012, 0.098, 0.024, 0.01],
   calm: [0.094, 0.009, 0.048, 0.018, 0.003],
-  sleepy: [0.039, 0.011, 0.02, -0.002, 0.004],
+  sleepy: [0.03, 0.007, 0.009, -0.006, 0.003],
   bath: [0.108, 0.016, 0.06, 0.024, 0.004],
-  curious: [0.068, 0.004, 0.02, 0.015, 0.005],
+  curious: [0.101, 0.009, 0.102, 0.02, 0.003],
   surprise: [0.086, 0.08, 0.104, 0.001, 0.002],
   calling: [0.118, 0.077, 0.142, -0.004, -0.014],
   determined: [0.13, 0.044, 0.056, -0.024, 0.01],
@@ -596,7 +749,7 @@ function buildMouth(parent) {
     levels = [1.032, 0.972, 0.84, 0.59, 0.3, 0.001],
     ids = [],
     cols = [];
-  const shades = ['#92635b', '#5d3334', '#47252c', '#44232c', '#522c30', '#603638'];
+  const shades = ['#935349', '#74392e', '#662d29', '#5b2221', '#55211f', '#602828'];
   for (let j = 0; j < levels.length; j++)
     for (let k = 0; k < count; k++) {
       const i = j * count + k,
@@ -613,11 +766,15 @@ function buildMouth(parent) {
   return {
     size: new T.Vector4(),
     x: 0.006,
-    y: 0.952,
+    y: 0.88,
     slant: { value: 0 },
     update(mood, breath) {
       let [w, up, down, corners, tilt] = mouths[mood] || mouths.joy;
       if (['joy', 'calling', 'surprise', 'blush'].includes(mood)) down *= 1 + 0.084 * breath;
+      if (mood === 'sleepy') {
+        down += 0.074 * breath;
+        up += 0.021 * breath;
+      }
       if (mood === 'eating') {
         w *= 0.89 + 0.16 * breath;
         down *= 1 + 0.84 * breath;
@@ -664,7 +821,7 @@ function limbRig(body) {
   for (const side of [-1, 1]) {
     const arm = new T.Bone();
     arm.name = 'Soft shoulder ' + side;
-    arm.position.set(side * 0.648, 0.662, 0.171);
+    arm.position.set(side * 0.648, 0.591, 0.298);
     base.add(arm);
     skeleton.push(arm);
     arms.push(arm);
@@ -672,7 +829,7 @@ function limbRig(body) {
   for (const side of [-1, 1]) {
     const foot = new T.Bone();
     foot.name = 'Soft ankle ' + side;
-    foot.position.set(side * 0.381, 0.226, 0.081);
+    foot.position.set(side * 0.31, 0.184, 0.02);
     base.add(foot);
     skeleton.push(foot);
     feet.push(foot);
@@ -702,6 +859,7 @@ export function makeRiceModel(parent) {
     dye,
     mouth,
     eyes,
+    face,
     arms,
     feet,
     drop,
@@ -711,6 +869,8 @@ export function makeRiceModel(parent) {
     lastMouth: '',
     lastMode: '',
     phase: 0,
+    pull: 0,
+    pullSpeed: 0,
   };
 }
 
@@ -719,7 +879,9 @@ export function colorRice(r, mode, activity, mood) {
     r.dye.mat.color.copy(mode === 'kusa' ? matcha : mode === 'kinako' ? kinako : ivory);
     r.lastMode = mode;
   }
+  r.dye.shared.riceBran.value = mode === 'kinako' ? 1 : 0;
   r.dye.shared.riceBath.value = activity === 'bath' ? 1 : 0;
+  r.dye.shared.riceEffort.value = mood === 'hurt' || mood === 'determined' ? 1 : 0;
   r.dye.shared.riceBlush.value = mood === 'blush' ? 1.29 : mood === 'determined' ? 0.83 : 1;
 }
 function faceAt(r, mood, t) {
@@ -732,15 +894,20 @@ function faceAt(r, mood, t) {
     r.lastFace = eyeKey;
   }
   const animated = ['joy', 'calling', 'surprise', 'blush', 'eating'].includes(mood);
-  const breath = animated ? Math.round(sin(t * (mood === 'eating' ? 9.3 : 3.7)) * 3) / 3 : 0;
+  const breath =
+    mood === 'sleepy'
+      ? Math.round(6 * Math.pow(Math.max(0, sin(t * 0.83)), 8)) / 6
+      : animated
+        ? Math.round(sin(t * (mood === 'eating' ? 9.3 : 3.7)) * 3) / 3
+        : 0;
   if (r.lastMouth !== mood + '|' + breath) {
     r.mouth.update(mood, breath);
     r.lastMouth = mood + '|' + breath;
   }
   r.drop.visible = mood === 'determined' || mood === 'hurt';
   if (r.drop.visible) {
-    const x = 0.492,
-      y = 1.22 - 0.011 * sin(t * 2.1);
+    const x = 0.475,
+      y = 1.152 - 0.011 * sin(t * 2.1);
     r.drop.position.set(x, y, surface(x, y) + 0.018);
     r.drop.scale.set(0.02, 0.035, 0.015);
     r.drop.rotation.set(-0.32, 0.44, -0.22);
@@ -753,7 +920,8 @@ export function poseRice(r, p, t, dt, mood) {
   const dango = p.mode === 'dango',
     grounded = p.grounded !== false;
   const walking = grounded && !ride && !activity && !dango;
-  const stride = walking ? Math.min(1, 0.15 + speed * 0.24) : 0;
+  const pullTarget = grounded ? 0 : clamp(p.airStretch || 0, 0, 1);
+  const stride = walking ? ease(0.06, 3.9, speed) : 0;
   r.phase += dt * (walking ? 2.28 + Math.min(8.6, speed * 1.36) : 2.05);
   const step = sin(r.phase),
     plant = cos(r.phase * 2),
@@ -775,16 +943,27 @@ export function poseRice(r, p, t, dt, mood) {
       r.pressV += (target - r.press) * 235 * s;
       r.pressV *= Math.exp(-s * 12.4);
       r.press += r.pressV * s;
+      r.pullSpeed += (pullTarget - r.pull) * 260 * s;
+      r.pullSpeed *= Math.exp(-15.8 * s);
+      r.pull += r.pullSpeed * s;
     }
   }
   const tension =
-    p.stretch > 0 ? sin(clamp(p.stretch / (dango ? 0.58 : 0.2), 0, 1) * PI) * (dango ? 0.66 : 0.097) : 0;
-  const idleRise = !activity && !ride ? 0.011 * sin(t * 2.06) : 0;
-  const stretch = clamp(1 + r.press + tension + idleRise, 0.68, 1.72);
+    p.stretch > 0
+      ? sin(clamp(p.stretch / (dango ? 0.58 : 0.2), 0, 1) * PI) *
+        (dango ? 0.25 : 0.098) *
+        (1 - 0.65 * pullTarget)
+      : 0;
+  const idleRise = !activity && !ride ? 0.009 * sin(t * 2.06) : 0;
+  const pull = clamp(r.pull, 0, 1.025);
+  const stretch = clamp(1 + r.press + tension + idleRise + pull * 0.28, 0.67, 1.62);
   const width = 1 / Math.sqrt(stretch);
+  r.body.morphTargetInfluences[3] = pull;
+  r.face.position.y = pull * 1.12;
+  r.face.scale.set(1 - 0.25 * pull, 1, 1 - 0.25 * pull);
   r.body.morphTargetInfluences[0] = clamp(-r.press * 4.5 + Math.max(0, -plant) * stride * 0.18, 0, 1);
   r.body.morphTargetInfluences[1] = step * stride * 0.7 + (p.buffs?.drunk > 0 ? sin(t * 3.9) * 0.4 : 0);
-  r.body.morphTargetInfluences[2] = dango ? 1 : 0;
+  r.body.morphTargetInfluences[2] = dango ? 1 - pull : 0;
   for (let i = 0; i < 2; i++) {
     const s = i ? 1 : -1,
       a = r.arms[i],
@@ -793,7 +972,7 @@ export function poseRice(r, p, t, dt, mood) {
     const armLift = walking ? phase * stride * 0.2 : 0;
     const tucked = activity === 'read' || activity === 'eat' || activity === 'drink';
     a.scale.set(1, 1, 1);
-    a.position.set(s * 0.648, 0.662 + Math.max(0, armLift) * 0.18, 0.171);
+    a.position.set(s * 0.648, 0.591 + Math.max(0, armLift) * 0.18, 0.298);
     a.rotation.set(phase * stride * 0.39, -s * 0.31, s * (0.01 + armLift));
     if (tucked) {
       a.position.set(s * 0.66, 0.636 + 0.012 * cos(t * 4 + s), 0.34);
@@ -809,7 +988,7 @@ export function poseRice(r, p, t, dt, mood) {
           const bite = 0.5 + 0.5 * sin(t * 4.2);
           a.position.set(0.595, 0.651 + 0.097 * bite, 0.46 - 0.07 * bite);
           a.scale.z = 1.64;
-          a.rotation.set(-0.41 - 0.43 * bite, -0.70, 0.19);
+          a.rotation.set(-0.41 - 0.43 * bite, -0.7, 0.19);
         } else {
           a.position.set(-0.56, 0.596, 0.49);
           a.rotation.set(-0.12, 0.78, -0.16);
@@ -833,13 +1012,19 @@ export function poseRice(r, p, t, dt, mood) {
       a.rotation.set(-0.8 * snap, -0.76 * snap, 0.25 + 0.46 * snap);
       a.position.z += 0.12 * snap;
     }
+    if (pull > 0.015) {
+      // A skinned hand should trail the stretch instead of rotating around
+      // its old, unstretched shoulder.
+      a.rotation.x *= 1 - pull;
+      a.rotation.z *= 1 - pull;
+    }
     if (dango) {
       a.scale.setScalar(1);
       a.rotation.set(0, 0, 0);
-      a.position.set(s * 0.648, 0.662, 0.171);
+      a.position.set(s * 0.648, 0.591, 0.298);
     }
     const lift = Math.max(0, phase) * stride;
-    f.position.set(s * 0.381, 0.226 + lift * 0.088, 0.081 - phase * stride * 0.139);
+    f.position.set(s * 0.31, 0.184 + lift * 0.088, 0.02 - phase * stride * 0.139);
     f.rotation.set(-phase * stride * 0.44, s * 0.055, s * (-0.06 + lift * 0.07));
     f.scale.set(1 + (1 - lift) * stride * 0.08, 1 - lift * 0.065, 1 + lift * 0.105);
     if (ride || tucked) {
@@ -853,9 +1038,10 @@ export function poseRice(r, p, t, dt, mood) {
     if (dango) {
       f.scale.setScalar(1);
       f.rotation.set(0, 0, 0);
-      f.position.set(s * 0.381, 0.226, 0.081);
+      f.position.set(s * 0.31, 0.184, 0.02);
     }
   }
+  r.dye.shared.riceNight.value = p.night ? 1 : 0;
   colorRice(r, p.mode, activity, mood);
   faceAt(r, mood, t);
   return {
@@ -865,5 +1051,7 @@ export function poseRice(r, p, t, dt, mood) {
     lean: walking ? -step * stride * 0.051 : 0,
     pitch: walking ? -0.045 * stride + plant * 0.033 * stride : 0,
     breath: idleRise,
+    extension: pull * 1.12,
+    pull,
   };
 }

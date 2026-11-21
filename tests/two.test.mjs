@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
-import { REGIONS, canLand, groundHeight } from '../two/terrain.js';
+import { REGIONS, canLand, groundHeight, BOUND, WATER_Y, ROADS, riverZ, waterDepth, BUILDINGS, wrapDelta } from '../two/terrain.js';
 
 function run(game, seconds, input = {}) {
   for (let frame=0; frame<Math.ceil(seconds*60); frame++) game.step(1/60,input);
@@ -46,22 +46,27 @@ test('normal, dango and habutae have different jump envelopes and land on render
   assert.ok(heights[0]>3.15 && heights[0]<3.5); assert.ok(heights[1]>6.3 && heights[1]<7); assert.ok(heights[2]>9);
 });
 
-test('a spent flight over deep water returns to the dry shore saved before takeoff',()=>{
-  const game=createGame(),p=game.state.player;
-  run(game,.1);
-  let wet;
-  for(let z=8;z<35 && !wet;z+=.5) for(let x=10;x<35;x+=.5) if(!canLand(x,z)){ wet={x,z};break;}
-  assert.ok(wet,'river has an inaccessible underwater cell off the bridge');
-  game.act('habutae');game.act('jump');
-  Object.assign(p,wet,{h:1.2,y:groundHeight(wet.x,wet.z)+1.2,vy:-2,grounded:false,mp:.01});
-  const resumed=createGame(JSON.parse(JSON.stringify(game.save())));
+test('a spent flight settles on the river at the landing point and can swim ashore', () => {
+  const game = createGame(), p = game.state.player;
+  const x = 46, z = riverZ(x);
+  moveTo(game, x, z);
+  assert.ok(waterDepth(x,z) > 1 && canLand(x,z));
+  game.act('habutae');
+  game.act('jump');
+  Object.assign(p,{h:1.2, y:groundHeight(x,z)+1.2, vy:-2, mp:.01});
+  const resumed = createGame(game.save());
   run(resumed,1);
-  assert.equal(resumed.state.player.mode,'normal');
-  assert.ok(canLand(resumed.state.player.x,resumed.state.player.z));
-  assert.ok(Math.hypot(resumed.state.player.x,resumed.state.player.z-62)<1);
+  const swimmer = resumed.state.player;
+  assert.equal(swimmer.mode,'normal');
+  assert.equal(swimmer.inWater,true);
+  assert.ok(Math.hypot(swimmer.x-x, swimmer.z-z) < .01);
+  assert.ok(swimmer.y < WATER_Y);
+  run(resumed,5,{z:1});
+  assert.equal(swimmer.inWater,false);
+  assert.ok(swimmer.z > z+18);
 });
 
-test('six distinct landmarks give their stamps on arrival, not on district boundary',()=>{
+test('ten distinct landmarks give their stamps on arrival, not on district boundary',()=>{
   const game=createGame();
   assert.deepEqual(game.state.visited,['river']);
   for(const region of REGIONS.slice(1)) {
@@ -71,8 +76,8 @@ test('six distinct landmarks give their stamps on arrival, not on district bound
     assert.ok(game.state.visited.includes(region.id),region.name);
   }
   assert.deepEqual(game.state.visited,REGIONS.map(r=>r.id));
-  assert.equal(game.state.events.filter(e=>e.type==='stamp').length,5);
-  run(game,.2);assert.equal(game.state.events.filter(e=>e.type==='stamp').length,5);
+  assert.equal(game.state.events.filter(e=>e.type==='stamp').length,REGIONS.length-1);
+  run(game,.2);assert.equal(game.state.events.filter(e=>e.type==='stamp').length,REGIONS.length-1);
 });
 
 test('friendly residents patrol in 3D, accept a notice, collide harmlessly and permit camouflage',()=>{
@@ -202,7 +207,8 @@ test('a normal hop takes about a second, records touchdown compression, and acce
 
   game.act('jump');
   while ((player.vy >= 0 || player.h > .55) && game.state.time < 4) game.step(1 / 120);
-  assert.equal(game.act('jump'), false);
+  assert.ok(game.act('jump'));
+  assert.ok(player.airStretch > 0);
   run(game, .13);
   assert.ok(!player.grounded && player.vy > 8 && player.h > .25);
   const jumpLines = game.state.events.filter(event => event.type === 'say' && event.text === 'モチコラショッ');
@@ -218,7 +224,8 @@ test('a jump just after leaving a rock works, and older saves have optional anim
   game.step(1 / 60, { x: 1 });
   assert.ok(game.act('jump'));
   assert.ok(player.vy > 10);
-  assert.equal(game.act('jump'), false);
+  assert.ok(game.act('jump'));
+  assert.ok(player.airStretch > 0);
 
   const legacy = game.save();
   delete legacy.player.landing;
@@ -228,4 +235,98 @@ test('a jump just after leaving a rock works, and older saves have optional anim
   assert.equal(restored.h, player.h);
   assert.equal(restored.landing, 0);
   assert.equal(restored.impact, 0);
+});
+
+
+test('fresh airborne presses accumulate in all five modes while a held key counts once', () => {
+  for (const mode of ['normal','dango','kusa','kinako','habutae']) {
+    const g = createGame(), p = g.state.player;
+    g.act(mode);
+    g.act('jump'); // keydown is dispatched before the next animation frame
+    run(g,.08,{jump:true});
+    assert.equal(p.airStretch,0,mode);
+    for (let i = 0; i < 4; i++) {
+      g.step(1/120,{jump:false});
+      const before = p.airStretch;
+      g.step(1/120,{jump:true});
+      assert.ok(p.airStretch > before, mode);
+      const now = p.airStretch;
+      run(g,.03,{jump:true});
+      assert.equal(p.airStretch,now);
+    }
+    const restored = createGame(g.save());
+    assert.equal(restored.state.player.airStretch,p.airStretch);
+    run(restored,4);
+    assert.equal(restored.state.player.airStretch,0);
+    assert.ok(restored.state.player.grounded);
+  }
+});
+
+test('the ocean connects all four world edges with continuous movement and savable positions', () => {
+  for (const [axis,sign] of [['x',1],['x',-1],['z',1],['z',-1]]) {
+    const g = createGame(), p = g.state.player, edge = sign*(BOUND-.4);
+    moveTo(g, axis === 'x' ? edge : 0, axis === 'z' ? edge : 0);
+    run(g,.8,{[axis]:sign});
+    assert.ok(sign*p[axis] < -BOUND+8);
+    assert.ok(sign*wrapDelta(p[axis]-edge) > 1 && p.speed < 7);
+    assert.equal(p.inWater,true);
+    assert.equal(createGame(g.save()).state.player[axis],p[axis]);
+  }
+});
+
+test('every house admits the player through its rotated doorway, has a floor and blocks its back wall', () => {
+  for (const b of BUILDINGS) {
+    const g = createGame(), p = g.state.player;
+    const approach = b.d/2 + 2.5;
+    moveTo(g,b.x + Math.sin(b.yaw)*approach,b.z + Math.cos(b.yaw)*approach);
+    g.act('kusa');
+    for (const item of g.state.objects) item.active = false;
+    const inward = { x:-Math.sin(b.yaw), z:-Math.cos(b.yaw) };
+    for (let i = 0; i < 180 && Math.hypot(b.x-p.x,b.z-p.z) > .2; i++) g.step(1/60,inward);
+    const desc = b.kind+' at '+[b.x,b.z];
+    assert.ok(Math.hypot(b.x-p.x,b.z-p.z) < .22, desc);
+    assert.ok(Math.abs(p.y-(b.y+.48)) < .02,desc);
+    assert.equal(createGame(g.save()).state.player.y,p.y);
+    g.act('jump');
+    let peak=p.y;
+    for (let i=0;i<90;i++) {g.step(1/60);peak=Math.max(peak,p.y);}
+    assert.ok(peak < b.y+b.wall,desc);
+    run(g,2,inward);
+    const depth = b.kind === 'pagoda' ? .73*b.d : b.d;
+    const v = (p.x-b.x)*Math.sin(b.yaw)+(p.z-b.z)*Math.cos(b.yaw);
+    assert.ok(v > -depth/2 && v < -depth/2+.9, desc);
+    run(g,2.5,{x:-inward.x,z:-inward.z});
+    assert.ok((p.x-b.x)*Math.sin(b.yaw)+(p.z-b.z)*Math.cos(b.yaw)>b.d/2+.9,desc);
+  }
+});
+
+test('version-two saves acquire new ports without losing an existing rental or stamps', () => {
+  const g = createGame(), port = get(g,'port');
+  at(g,port);g.act('interact');
+  const old = g.save();
+  old.version=2; old.items.length=36; old.bikes.length=6;
+  delete old.player.airStretch; delete old.player.night;
+  old.visited=REGIONS.slice(0,6).map(r=>r.id);
+  const resumed=createGame(old);
+  assert.deepEqual(resumed.state.visited,old.visited);
+  assert.equal(resumed.state.player.mount,'bike');
+  assert.equal(resumed.state.player.airStretch,0);
+  assert.deepEqual(resumed.save().bikes,[...old.bikes,2,2,2,2]);
+});
+
+test('the outer roads reach all four seasonal landmarks and the coast from the maple valley', () => {
+  for (const [index, required] of [[8,'snow'],[10,'autumn'],[11,'moon'],[12,'dawn'],[13,'autumn']]) {
+    const game = createGame(), p = game.state.player, points = ROADS[index].points;
+    moveTo(game,...points[0]);game.act('kusa');
+    for (const [x,z] of points) {
+      for (let frame=0;frame<110;frame++) {
+        const dx=x-p.x, dz=z-p.z, length=Math.hypot(dx,dz);
+        if (length<.47) break;
+        p.mp=100; // follow the marked road without NPC knockback affecting the route
+        game.step(1/30,{x:dx/length,z:dz/length});
+      }
+      assert.ok(Math.hypot(x-p.x,z-p.z)<.47, 'Blocked road near '+[x,z]);
+    }
+    assert.ok(game.state.visited.includes(required));
+  }
 });

@@ -1,18 +1,56 @@
 import * as THREE from './vendor/three.module.min.js';
 import { HDRLoader } from './vendor/HDRLoader.js';
+import { seasonAt } from './terrain.js';
 
 const asset = (name) => new URL('./assets/world/' + name, import.meta.url).href;
+const color = (value) => new THREE.Color(value);
+const palette = {
+  sun: color(0xffe5bd),
+  sky: color(0xfff5e3),
+  earth: color(0x9a8675),
+  fill: color(0xe6efff),
+  ice: color('#cedefa'),
+  snow: color('#ecf4ff'),
+  ember: color('#ffba7e'),
+  blue: color('#9fb8e8'),
+  darkEarth: color('#4a566c'),
+  twilight: color('#ffdbb6'),
+  fog: color('#d7d4bf'),
+  winterFog: color('#c3d5e4'),
+  fallFog: color('#d9bc99'),
+  nightFog: color('#273b56'),
+  dawnFog: color('#f5c3a3'),
+};
+const lighting = {};
+export function applyClimateLights(hemisphere, sun, bounce, player) {
+  const { snow, autumn, moon, dawn } = seasonAt(player.x, player.z, lighting);
+  sun.color
+    .copy(palette.sun)
+    .lerp(palette.snow, snow)
+    .lerp(palette.ember, 0.47 * autumn + dawn)
+    .lerp(palette.blue, moon);
+  sun.intensity = 2.35 - 0.65 * snow - 0.22 * autumn - 1.5 * moon - 0.35 * dawn;
+  sun.position.set(player.x + 35 + 30 * dawn - 20 * moon, player.y + 38 - 19 * dawn, player.z - 51 + 29 * dawn);
+  hemisphere.color.copy(palette.sky).lerp(palette.ice, snow).lerp(palette.twilight, dawn).lerp(palette.blue, moon);
+  hemisphere.groundColor
+    .copy(palette.earth)
+    .lerp(palette.snow, 0.35 * snow)
+    .lerp(palette.darkEarth, moon);
+  hemisphere.intensity = 1.02 + 0.14 * snow - 0.5 * moon;
+  bounce.color
+    .copy(palette.fill)
+    .lerp(palette.ice, moon)
+    .lerp(palette.ember, 0.28 * dawn);
+  bounce.intensity = 0.65 - 0.34 * moon;
+}
 
-// Paint on a distant cylinder in world space. Looking across a valley from
-// another bank changes which spurs overlap the traversable hillside.
+// The sky is painted in directions rather than positions so its horizon is
+// continuous across the ocean seam. The real mountains below supply parallax.
 function mountainSky(scene, panorama) {
   const uniforms = {
     ridges: { value: panorama },
-    sunrise: { value: new THREE.Vector3(0.3, 0.235, -0.94).normalize() },
-    parchment: { value: new THREE.Color('#f5e4c4') },
-    skyHigh: { value: new THREE.Color('#9bb9c4') },
-    mist: { value: new THREE.Color('#d6d3bd') },
-    pigment: { value: new THREE.Color('#545e58') },
+    climate: { value: new THREE.Vector4() },
+    clock: { value: 0 },
   };
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
@@ -26,104 +64,83 @@ function mountainSky(scene, panorama) {
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
       }`,
     fragmentShader: `
-      varying vec3 direction;
-      uniform vec3 sunrise, parchment, skyHigh, mist, pigment;
-      uniform sampler2D ridges;
-      void main() {
-        vec3 ray = normalize(direction);
-        vec2 heading = normalize(ray.xz + vec2(.0000001));
-        float along = dot(cameraPosition.xz, heading);
-        float range = -along + sqrt(max(1., along*along + 680.*680. - dot(cameraPosition.xz,cameraPosition.xz)));
-        vec2 place = cameraPosition.xz + range * heading;
-        float angle = atan(place.x, -place.y);
-        float elevation = cameraPosition.y + ray.y * range / max(.03, length(ray.xz));
-        float u = angle / 3.14159265 + .095;
-        float v = .20 + elevation / (215. + 24.*sin(angle*3. + .8));
-        vec3 scan = texture2D(ridges,vec2(u,clamp(v,.006,.995))).rgb;
-        float value = dot(scan,vec3(.28,.56,.16));
-        // The antique silk is a local white reference, so the same printed
-        // line can read russet in sunlight and cool blue in the far haze.
-        float density = clamp(1.-value/.61,0.,1.);
-        float relief = smoothstep(.09,.82,density);
-        float zenith = smoothstep(.10,.92,ray.y);
-        vec3 sky = mix(parchment,skyHigh,zenith);
-        float sunDistance = length(ray-sunrise);
-        sky += vec3(.15,.078,.021)*exp(-sunDistance*3.9);
-        vec3 rangeColor = mix(sky,mix(pigment,scan,.15),relief*.79);
-        rangeColor += (scan-vec3(value))*.090;
-        float paper = (value-.50)*.10;
-        vec3 col = mix(sky,rangeColor + paper,1.-smoothstep(.93,1.10,v));
-        col = mix(mist,col,smoothstep(-60.,10.,elevation));
-        float disc = 1.-smoothstep(.027,.0287,sunDistance);
-        float flecks = dot(texture2D(ridges,vec2(u*3.,.97 + .012*sin(v*8.))).rgb,vec3(.3333));
-        col = mix(col,vec3(1.,.51,.24)*(.96+.08*flecks),disc*(1.-relief));
+      varying vec3 direction; uniform sampler2D ridges; uniform vec4 climate; uniform float clock;
+      float hash(vec2 p) {
+        vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);
+        return fract((p3.x+p3.y)*p3.z);
+      }
+      float noise2(vec2 p) {
+        vec2 i=floor(p), u=fract(p);u=u*u*(3.-2.*u);
+        return mix(mix(hash(i),hash(i+vec2(1,0)),u.x),mix(hash(i+vec2(0,1)),hash(i+1.),u.x),u.y);
+      }
+      float starField(vec2 at,float density) {
+        vec2 cell=floor(at), local=fract(at);
+        vec2 c=.15+.7*vec2(hash(cell),hash(cell+12.4));
+        float brightness=hash(cell+84.3);
+        return smoothstep(density,1.,brightness)*(1.-smoothstep(.012,.073,length(local-c)))*
+          (.82+.18*sin(2.*clock+brightness*81.));
+      }
+      void main(){
+        vec3 ray=normalize(direction);
+        float snow=climate.x, fall=climate.y, night=climate.z, dawn=climate.w;
+        float angle=atan(ray.x,-ray.z);
+        float elevation=ray.y/max(.075,length(ray.xz));
+        float high=smoothstep(.025,.78,ray.y);
+        vec3 low=mix(vec3(.909,.776,.555),vec3(.70,.80,.88),snow);
+        vec3 top=mix(vec3(.327,.486,.550),vec3(.298,.481,.66),snow);
+        low=mix(low,vec3(.89,.62,.386),.43*fall);
+        low=mix(low,vec3(1.,.449,.222),dawn);
+        top=mix(top,vec3(.263,.288,.507),dawn);
+        low=mix(low,vec3(.061,.098,.170),night);
+        top=mix(top,vec3(.003,.008,.038),night);
+        vec3 sky=mix(low,top,high);
+        float cloudU=ray.x*.7+ray.z*.52;
+        vec2 cloud=vec2(cloudU*3.2+clock*.002,ray.y*18.+ray.z*1.2);
+        float vapour=.59*noise2(cloud)+.27*noise2(cloud*2.6)+.14*noise2(cloud*6.1);
+        float silk=smoothstep(.49,.75,vapour)*smoothstep(.018,.14,ray.y)*(1.-smoothstep(.60,.94,ray.y));
+        vec3 lining=mix(vec3(.96,.916,.814),vec3(1.,.71,.51),dawn);
+        lining=mix(lining,vec3(.16,.19,.30),night);
+        sky=mix(sky,lining,silk*(.19+.21*dawn-.05*night));
+        vec3 sun=normalize(mix(vec3(.3,.235,-.94),vec3(.976,.094,-.192),dawn));
+        float sunDist=length(ray-sun), halo=exp(-sunDist*(8.+5.*dawn));
+        sky+=vec3(.19,.10,.033)*halo*(1.-night)*(1.+2.7*dawn);
+        vec3 moon=normalize(vec3(.13,.26,-.96));
+        float moonDist=length(ray-moon), glow=exp(-moonDist*14.);
+        sky+=vec3(.115,.162,.228)*glow*night;
+        vec2 chart=vec2(angle*23.,asin(clamp(ray.y,-1.,1.))*26.);
+        float stars=starField(chart,.70)+starField(chart*2.19+100.,.89)*.46;
+        sky+=vec3(.64,.79,1.)*stars*night*smoothstep(.07,.27,ray.y)*(1.-smoothstep(.052,.14,.15-moonDist))*(1.-silk*.7);
+        float radius=.056;
+        vec3 tangent=normalize(cross(moon,vec3(0,1,0))), up=cross(tangent,moon);
+        vec2 lunar=vec2(dot(ray,tangent),dot(ray,up))/radius;
+        float maria=.60*noise2(lunar*3.9+14.)+.26*noise2(lunar*8.3)+.14*noise2(lunar*21.);
+        float relief=smoothstep(.46,.70,maria);
+        vec3 lunarColor=mix(vec3(1.30,1.20,.9),vec3(.83,.79,.66),relief*.77);
+        sky=mix(sky,lunarColor,(1.-smoothstep(radius-.001,radius+.001,moonDist))*night);
+        sky=mix(sky,mix(vec3(1.12,.60,.30),vec3(1.48,1.15,.69),dawn),
+                    (1.-smoothstep(.028,.030,sunDist))*(1.-night));
+        // Low distant mountains dissolve toward the open east-facing sea.
+        float seaOpening=dawn*smoothstep(.18,.83,ray.x);
+        float v=.20+elevation*(3.30+seaOpening*13.);
+        float u=angle/3.14159265+.095;
+        vec3 scan=texture2D(ridges,vec2(u,clamp(v,.006,.995))).rgb;
+        float value=dot(scan,vec3(.28,.56,.16));
+        float ridge=smoothstep(.08,.87,1.-value/.61)*(1.-smoothstep(.87,1.02,v));
+        ridge*=1.-seaOpening*.90;
+        vec3 ink=mix(vec3(.185,.21,.17),vec3(.27,.38,.49),snow);
+        ink=mix(ink,vec3(.012,.024,.051),night);
+        ink=mix(ink,vec3(.42,.248,.245),dawn);
+        vec3 col=mix(sky,ink,ridge*.75);
+        col=mix(col,low,(1.-smoothstep(-.13,.01,ray.y)));
         gl_FragColor=vec4(col,1.);
         #include <colorspace_fragment>
       }`,
   });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(1050, 56, 28), material);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(1050, 48, 20), material);
   dome.renderOrder = -100;
   dome.frustumCulled = false;
   scene.add(dome);
   return dome;
-}
-
-// A ring of low spurs sits beyond the playable terrain. It has a real near
-// bank, shoulders and saddles: moving sideways separates these ink washes
-// from the higher panoramic ridges behind them.
-function foothills(scene, panorama) {
-  const points = [],
-    uvs = [],
-    tones = [],
-    indices = [];
-  const slices = 400,
-    rows = 18,
-    tint = new THREE.Color();
-  const valley = new THREE.Color('#c0bb9f'),
-    slope = new THREE.Color('#858e78');
-  const tau = Math.PI * 2;
-  for (let j = 0; j <= rows; j++) {
-    const v = j / rows;
-    for (let i = 0; i <= slices; i++) {
-      const a = (i / slices) * tau,
-        dx = Math.sin(a),
-        dz = -Math.cos(a);
-      const w = a + 0.065 * Math.sin(a * 7) + 0.026 * Math.sin(a * 15 + v);
-      const inner = 273 / Math.max(Math.abs(dx), Math.abs(dz));
-      const radius = inner + 148 * v;
-      const band = Math.pow(Math.sin(Math.PI * v), 1.4);
-      const promontory =
-        0.54 + 0.27 * Math.sin(w * 6 + 0.65) + 0.12 * Math.cos(w * 11) + 0.07 * Math.sin(w * 32);
-      const ravine = 3.5 * Math.sin(21 * w + v * 6) + 1.7 * Math.cos(53 * w - v * 9);
-      const height = -10 + band * (13 + 58 * promontory + ravine);
-      points.push(radius * dx, height, radius * dz);
-      uvs.push((a / Math.PI) * 3.0 + 0.16 * v, 0.19 + 0.54 * v + 0.1 * Math.sin(a * 9 + v * 5));
-      tint.copy(valley).lerp(slope, band * (0.5 + promontory * 0.38));
-      tint.toArray(tones, tones.length);
-      if (i < slices && j < rows) {
-        const k = j * (slices + 1) + i,
-          l = k + slices + 1;
-        indices.push(k, k + 1, l, k + 1, l + 1, l);
-      }
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(tones, 3));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-  const ink = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, map: panorama });
-  ink.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <map_fragment>',
-      `
-      float stroke = dot(texture2D(map, vMapUv).rgb, vec3(.27,.57,.16));
-      diffuseColor.rgb *= .74 + .54 * stroke;
-    `,
-    );
-  };
-  scene.add(new THREE.Mesh(geo, ink));
 }
 
 export function createAtmosphere(scene) {
@@ -132,19 +149,30 @@ export function createAtmosphere(scene) {
   panorama.wrapS = THREE.MirroredRepeatWrapping;
   panorama.anisotropy = 4;
   scene.background = new THREE.Color('#eadfc6');
-  scene.fog = new THREE.FogExp2('#d7d4bf', 0.00295);
+  scene.fog = new THREE.FogExp2(palette.fog, 0.0057);
   const dome = mountainSky(scene, panorama);
-  foothills(scene, panorama);
+  const region = {};
   new HDRLoader().load(asset('spruit-dawn.hdr'), (light) => {
     light.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = light;
-    scene.environmentIntensity = 0.67;
     scene.environmentRotation.y = 0.62;
   });
   return {
     panorama,
+    climate: dome.material.uniforms.climate,
     update(time, player, camera) {
-      if (camera) dome.position.copy(camera.position);
+      const s = seasonAt(player.x, player.z, region);
+      dome.position.copy(camera.position);
+      dome.material.uniforms.clock.value = time;
+      dome.material.uniforms.climate.value.set(s.snow, s.autumn, s.moon, s.dawn);
+      scene.fog.color
+        .copy(palette.fog)
+        .lerp(palette.winterFog, s.snow)
+        .lerp(palette.fallFog, s.autumn)
+        .lerp(palette.nightFog, s.moon)
+        .lerp(palette.dawnFog, s.dawn);
+      scene.fog.density = 0.0057 + 0.003 * s.snow - 0.0008 * s.dawn;
+      scene.environmentIntensity = 0.67 - 0.51 * s.moon;
     },
   };
 }

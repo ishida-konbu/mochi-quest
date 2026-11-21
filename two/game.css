@@ -534,8 +534,12 @@ i svg {
   transform: translateX(-50%);
   border-radius: 5px;
   padding: 10px 12px;
+  width: max-content;
   max-width: 96%;
   text-align: center;
+}
+#emotes {
+  flex-wrap: wrap;
 }
 #emotes,
 .photo-actions {

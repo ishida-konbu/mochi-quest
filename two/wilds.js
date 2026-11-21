@@ -7,6 +7,7 @@ import {
   TREES,
   WATER_Y,
   nearRoad,
+  seasonAt,
   riverZ,
   riverHalfWidth,
   terrainHeight,
@@ -37,7 +38,7 @@ class BarkBrush {
       key = Math.floor(root.x / 76) + ',' + Math.floor(root.z / 76);
     let batch = this.buffers.get(key);
     if (!batch) {
-      batch = { p: [], uv: [], ink: [], ix: [] };
+      batch = { p: [], uv: [], ink: [], ix: [], distant: [] };
       this.buffers.set(key, batch);
     }
     const { p, uv, ink, ix } = batch;
@@ -85,6 +86,17 @@ class BarkBrush {
         }
       }
     }
+    // Distant bark uses the same painted vertices, with fewer trunk rings and
+    // a coarser cross-section. Fine twigs disappear under the foliage.
+    if (radii[0] >= .106) {
+      const rings = Math.min(steps, radii[0]>.38 ? 5 : 3), facets = 4;
+      for (let j=0; j<rings; j++) for (let k=0; k<facets; k++) {
+        const a=offset+Math.round(j*steps/rings)*(sides+1);
+        const b=offset+Math.round((j+1)*steps/rings)*(sides+1);
+        const k0=Math.round(k*sides/facets), k1=Math.round((k+1)*sides/facets);
+        batch.distant.push(a+k0,a+k1,b+k0,a+k1,b+k1,b+k0);
+      }
+    }
   }
   finish() {
     for (const b of this.buffers.values()) {
@@ -96,6 +108,12 @@ class BarkBrush {
       geo.computeVertexNormals();
       geo.computeBoundingSphere();
       const tree = new THREE.Mesh(geo, this.wood);
+      const distant=new THREE.BufferGeometry();
+      for (const [name,attribute] of Object.entries(geo.attributes)) distant.setAttribute(name,attribute);
+      distant.setIndex(b.distant);
+      distant.boundingSphere=geo.boundingSphere;
+      tree.userData.nearGeometry=geo;
+      tree.userData.farGeometry=distant;
       tree.castShadow = true;
       tree.receiveShadow = true;
       this.scene.add(tree);
@@ -228,14 +246,19 @@ function inkTree(brush, p, t) {
         );
       }
       const spread = height * (pine ? 0.255 : willow ? 0.205 : 0.248) * (1 - level * 0.24) * (0.83 + r() * 0.37);
-      const autumn = kind === 'maple' && (t === TREES[1] || seed % 4 !== 1);
-      const material = p.sprays[willow ? 'bamboo' : autumn ? 'maple' : pine ? 'pine' : 'oak'];
+      const autumn = kind === 'maple' && (t.autumn>.4 || t === TREES[1] || seed % 4 !== 1);
+      const material = p.sprays[t.snow>.5 && pine ? 'snow' : t.autumn>.45 && autumn ? 'autumn' :
+        willow ? 'bamboo' : autumn ? 'maple' : pine ? 'pine' : 'oak'];
       for (let face = 0; face < (near ? 4 : 3); face++) {
         const dir = yaw + face * 2.2 + (r() - 0.5) * 0.6,
           distance = spread * (0.08 + r() * 0.29);
         let tint;
         if (pine) tint = ['#e0e5cf', '#c7d4bd', '#f1ecd5', '#c1cdb9'][face];
-        else if (autumn) tint = ['#d7b4a0', '#f7d4b2', '#ebbb91', '#d8ba9e'][face];
+        else if(t.autumn>.45 && autumn) {
+          const palettes=[['#de6740','#b84236','#ed8849','#bd492c'],['#e9a441','#f2b451','#c78638','#e6a24c'],
+            ['#b94236','#db5342','#b84331','#da6142'],['#d27334','#d85e2b','#efa447','#cf7235']];
+          tint=palettes[seed%4][face];
+        } else if (autumn) tint = ['#d7b4a0', '#f7d4b2', '#ebbb91', '#d8ba9e'][face];
         else tint = ['#dfe7c1', '#d2ddba', '#f3e4ad', '#bfccac'][face];
         p.part(
           'plane',
@@ -319,7 +342,7 @@ function scatteredHerbs(p, art) {
     d = new THREE.Object3D();
   const plant = (kind, x, z, size, width = 1, dir = rng() * TAU, count = 2, tint = '#f1f0dc') => {
     const y = h(x, z);
-    if (y < WATER_Y - 0.08) return;
+    if (y < WATER_Y - 0.08 || (z < -185 && seasonAt(x,z).snow>.45)) return;
     const cell = HERB[kind],
       key = Math.floor(x / 68) + ',' + Math.floor(z / 68);
     let group = patches.get(key);

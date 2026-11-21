@@ -155,6 +155,9 @@ export function createAudio() {
       rustle(now, 1200, 5100, .15, .34);
     } else if (name === 'jump') {
       tone(now, 190, 430, .13, .10);
+    } else if (name === 'elastic') {
+      tone(now, 270, 585, .105, .085);
+      tone(now + .06, 510, 330, .09, .042);
     } else if (name === 'bump') {
       tone(now, 150, 57, .18, .23, 'triangle');
       rustle(now, 680, 170, .15, .20);

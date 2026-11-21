@@ -1,6 +1,9 @@
+import { roomPlan } from './architecture.js';
 // Coordinates and dimensions are metres. Positive Z is south.
-export const BOUND = 240,
+export const BOUND = 416,
   WATER_Y = 0.38;
+export const wrapCoord = (v) => v >= -BOUND && v < BOUND ? v : ((v + BOUND) % (2 * BOUND) + 2 * BOUND) % (2 * BOUND) - BOUND;
+export const wrapDelta = wrapCoord;
 export const REGIONS = [
   { id: 'river', name: '桜川の渡し', x: 0, z: 59 },
   { id: 'shrine', name: '竹隠れの社', x: -153, z: -85 },
@@ -8,12 +11,16 @@ export const REGIONS = [
   { id: 'spring', name: '湯けむり峠', x: 144, z: -107 },
   { id: 'terraces', name: '月見の棚田', x: 156, z: 105 },
   { id: 'coast', name: '海風の松原', x: -149, z: 111 },
+  { id: 'snow', name: '雪灯りの都', x: -78, z: -290 },
+  { id: 'autumn', name: '錦秋の楓峡', x: 285, z: -115 },
+  { id: 'moon', name: '十五夜の薄野', x: -55, z: 290 },
+  { id: 'dawn', name: '初日の出の浦', x: 302, z: 175 },
 ];
 export const regionAt = (x, z) => {
   let best = 0,
     d = Infinity;
   REGIONS.forEach((r, i) => {
-    const v = (x - r.x) ** 2 + (z - r.z) ** 2;
+    const v = wrapDelta(x - r.x) ** 2 + wrapDelta(z - r.z) ** 2;
     if (v < d) {
       d = v;
       best = i;
@@ -27,10 +34,29 @@ const smooth = (a, b, x) => {
   const t = sat((x - a) / (b - a));
   return t * t * (3 - 2 * t);
 };
+// Regional colour and weather follow a broad transition around each landmark.
+function climate(x, z, cx, cz, rx, rz) {
+  const a = wrapDelta(x - cx) / rx, b = wrapDelta(z - cz) / rz;
+  return 1 - smooth(0.40, 1.02, a*a + b*b);
+}
+export function seasonAt(x, z, out = {}) {
+  out.snow = climate(x,z,-78,-293,174,119);
+  out.autumn = climate(x,z,292,-122,116,139);
+  out.moon = climate(x,z,-55,300,162,116);
+  out.dawn = climate(x,z,305,178,107,129);
+  return out;
+}
 const hill = (x, z, cx, cz, rx, rz) => exp(-(((x - cx) / rx) ** 2 + ((z - cz) / rz) ** 2));
 export const riverZ = (x) => 18 + 9 * sin(x / 51) + 3.3 * sin(x / 25);
 export const riverHalfWidth = (x) => 8.6 + 1.9 * sin(x / 38 + 0.35) + 0.95 * sin(x / 14);
 export const coastX = (z) => -250 + 64 * exp(-(((z - 112) / 75) ** 2)) + 5.5 * sin(z / 23);
+export const eastCoastX = (z) => 374 - 48 * exp(-(((z-176)/99)**2)) + 7 * sin(z/36);
+export function shoreDistance(x, z) {
+  // Four gently curving beaches meet a shared, level seabed before each seam.
+  const ends = 375 + 7*sin(x/41) + 4*cos(x/22);
+  return min(x-coastX(z), eastCoastX(z)-x, ends-abs(z));
+}
+const mapleStreamZ = x => -130 + 3.3*sin((x-292)/15);
 function naturalHeight(x, z) {
   const d = abs(z - riverZ(x)) - riverHalfWidth(x);
   const basic =
@@ -44,15 +70,26 @@ function naturalHeight(x, z) {
     19 * hill(x, z, -71, 200, 64, 46) +
     12 * hill(x, z, 221, 3, 41, 47) +
     8 * hill(x, z, -208, -48, 47, 90) +
-    6 * hill(x, z, -124, 159, 47, 59);
+    6 * hill(x, z, -124, 159, 47, 59) +
+    31 * hill(x, z, -164, -331, 43, 28) + 21 * hill(x,z, 8,-324,60,33) +
+    9 * hill(x,z,-112,-242,66,45) +
+    38 * hill(x,z,272,-189,34,36) + 25 * hill(x,z,335,-151,36,38) +
+    21 * hill(x,z,247,-65,30,31) + 14 * hill(x,z,259,-135,33,32) +
+    17 * hill(x,z,-93,292,52,48) + 10 * hill(x,z,-3,311,40,49);
   const nearRiver = min(basic, 1.28 + max(0, d) * 0.11 + max(0, d) ** 2 * 0.0009);
-  const land = -1.57 + (nearRiver + 1.57) * smooth(-3.5, 6.6, d);
-  const shore = x - coastX(z);
+  let land = -1.57 + (nearRiver + 1.57) * smooth(-3.5, 6.6, d);
+  // Beyond the maple bridge a small ravine opens eastwards into the sea.
+  if (x > 277 && z < -106 && z > -153) {
+    const bed = max(0, abs(z-mapleStreamZ(x))-2.6), opening=smooth(277,288,x);
+    const banks=smooth(.15,10.5,bed);
+    land += (-1.15-land)*(1-banks)*opening;
+  }
+  const shore = shoreDistance(x,z);
   return -1.8 + (land + 1.8) * smooth(-3.3, 11, shore);
 }
 // This stone bathing pool was cut into the hillside on a level terrace.
 const bathShelf = { x: 143, z: 96, height: naturalHeight(143, 96) };
-export function terrainHeight(x, z) {
+function ungradedHeight(x, z) {
   const dx = x - bathShelf.x,
     dz = z - bathShelf.z;
   if (abs(dx) > 8.5 || abs(dz) > 8.5) return naturalHeight(x, z);
@@ -61,12 +98,29 @@ export function terrainHeight(x, z) {
   const terrain = naturalHeight(x, z);
   return bathShelf.height + (terrain - bathShelf.height) * smooth(5, 8.5, distance);
 }
+// A building has a level earthen lot, feathered out into the hillside.
+const lotGrid = new Map();
+export function terrainHeight(x, z) {
+  x = wrapCoord(x); z = wrapCoord(z);
+  const base = ungradedHeight(x,z);
+  const nearby = lotGrid.get(Math.floor(x / 24) * 64 + Math.floor(z / 24));
+  if (!nearby) return base;
+  let weight = 0, graded = base;
+  for (const b of nearby) {
+    const dx = x-b.x, dz = z-b.z, u = dx*b.cos - dz*b.sin, v = dx*b.sin + dz*b.cos;
+    const edge = max(abs(u) - b.w/2 - .9, abs(v-.5) - b.d/2 - 1.5);
+    const blend = 1 - smooth(0, 3.8, edge);
+    if (blend > weight) { weight = blend; graded = base + (b.y-base)*blend; }
+  }
+  return graded;
+}
 export const BRIDGES = [-137, 0, 134].map((x) => ({
   x,
   z: riverZ(x),
   length: (riverHalfWidth(x) + 9) * 2,
   halfWidth: x === 0 ? 3.45 : 2.6,
 }));
+BRIDGES.push({x:292,z:mapleStreamZ(292),length:24.8,halfWidth:2.1,maple:true});
 export function bridgeHeight(bridge, z) {
   const t = sat((z - bridge.z) / bridge.length + 0.5);
   const { x, length } = bridge,
@@ -196,6 +250,14 @@ export const ROADS = [
     [177, -135],
   ]),
 ];
+ROADS.push(
+  road(5.4,[[-21,-107],[-36,-104],[-39,-119],[-37,-135],[-58,-150],[-74,-194],[-107,-222],[-97,-249],[-79,-269],[-78,-290],[-78,-317]]),
+  road(4.3,[[-125,-289],[-103,-289],[-78,-290],[-55,-289],[-40,-282]]),
+  road(4.4,[[144,-107],[178,-136],[204,-148],[229,-131],[253,-115],[273,-109],[285,-115],[291.7,-117.2],[292,-125],[292,-135],[292.2,-144],[308,-151],[331,-154]]),
+  road(4.2,[[7,213],[-4,233],[-31,255],[-57,270],[-55,290],[-70,305],[-89,313]]),
+  road(4.6,[[156,105],[202,136],[234,150],[250,176],[276,185],[290,182],[302,175],[311,173]]),
+  road(3.3,[[285,-115],[303,-72],[296,-39],[283,0],[280,43],[266,80],[271,132],[290,182]]),
+);
 export function nearRoad(x, z, extra = 0) {
   for (const { width, points } of ROADS) {
     const r2 = (width / 2 + extra) ** 2;
@@ -209,7 +271,15 @@ export function nearRoad(x, z, extra = 0) {
 
 const structures = [];
 function house(x, z, w, d, wall, roof, yaw = 0, kind = 'cottage') {
-  structures.push({ x, z, w, d, wall, roof, yaw, kind, y: terrainHeight(x, z) });
+  const b = { x, z, w, d, wall, roof, yaw, kind, y: ungradedHeight(x, z), cos: cos(yaw), sin: sin(yaw), snow: z < -240 };
+  structures.push(b);
+  const extent = hypot(w/2+5,d/2+6);
+  for (let i = Math.floor((x-extent)/24); i <= Math.floor((x+extent)/24); i++)
+    for (let j = Math.floor((z-extent)/24); j <= Math.floor((z+extent)/24); j++) {
+      const key = i*64+j;
+      if (!lotGrid.has(key)) lotGrid.set(key,[]);
+      lotGrid.get(key).push(b);
+    }
 }
 // The inhabited squares remain open around each region's center.
 house(-15, -15, 9, 7, 3.2, 2.8, 0.15);
@@ -232,6 +302,18 @@ house(-179, 139, 8, 6.8, 3, 2.6, 0.3);
 house(-120, 124, 7, 6, 3.2, 2.6, 0.09);
 house(-34, 49, 6.8, 6, 3.1, 2.5, 0.2, 'shop');
 house(35, 61, 8, 6.4, 3, 2.7, -0.3);
+// The snow capital has a processional avenue, a side market and a pagoda at its head.
+house(-80,-323,13,12,4.4,14.5,.06,'pagoda');
+house(-93,-306,10,8,3.9,3.6,.15,'temple');
+house(-63,-305,9,8,3.6,3.1,-.12,'shop');
+house(-99,-281,9.5,7,3.4,3.3,.14,'inn');
+house(-59,-277,9,7.6,3.5,3.3,-.28,'shop');
+house(-96,-264,7.6,7,3.2,3.2,.27);
+house(-69,-258,8.8,7.5,3.4,3.3,-.24,'shop');
+house(-114,-303,8.8,7.5,3.4,3.1,.1);
+house(274,-127,8.6,6.6,3.3,2.8,.29,'shop');
+house(-69,282,7.8,6.6,3.2,2.6,-.34,'temple');
+house(288,160,8.6,6.6,3.3,2.7,.3,'inn');
 export const BUILDINGS = structures;
 export const MARKET_STALLS = [
   [5.8, -44.5, 1.73],
@@ -246,6 +328,8 @@ export const GATES = [
   { x: -151, z: -67, w: 7.6, h: 5.8, yaw: 0.24 },
   { x: -161, z: -99, w: 6.3, h: 5.2, yaw: 0.25 },
   { x: -20, z: -103, w: 7.4, h: 5.6, yaw: -0.18 },
+  { x: -79, z: -273, w: 8.6, h: 6.3, yaw: .12 },
+  { x: 258, z: -114, w: 6.4, h: 4.7, yaw: 1.3 },
 ];
 export const ROCKS = [
   { x: -18.3, z: 53, rx: 1.65, rz: 1.35, h: 2.4 },
@@ -332,6 +416,30 @@ for (let n = 0; n < 1600; n++) {
                 : 'willow';
   trees.push({ x, z, h: 5.1 + 5.8 * rng(), kind, seed: Math.floor(rng() * 1e6) });
 }
+// Compose the new groves around paths, keeping the festival shore and moonrise sightline open.
+const outerRandom = seeded(532151);
+for (let i=0; i<980; i++) {
+  const x = outerRandom()*738-369, z = outerRandom()*748-374;
+  if (abs(x)<225 && abs(z)<224 || terrainHeight(x,z)<2.2 || nearRoad(x,z,2.65)) continue;
+  if (safe(x,z,6) || BUILDINGS.some(b => hypot(x-b.x,z-b.z) < max(b.w,b.d)*.76+3)) continue;
+  const {snow,autumn,moon,dawn} = seasonAt(x,z);
+  if (moon>.4 && z<302 && x> -77 || dawn>.5 && x>298 || snow>.45 && abs(x+78)<19 && z < -260) continue;
+  const density = .14 + .44*autumn+.19*snow+.015*moon+.12*dawn;
+  if (outerRandom()>density || trees.some(t => (t.x-x)**2+(t.z-z)**2<33)) continue;
+  const kind = snow>.35 ? 'pine' : autumn>.2 ? 'maple' : outerRandom()<.6?'pine':'oak';
+  trees.push({x,z,h:6.3+outerRandom()*5.3,kind,seed:Math.floor(outerRandom()*1e6), snow, autumn});
+}
+for (const [x,z,hue] of [[271,-102,0],[279,-120,1],[289,-105,2],[283,-137,1],[300,-118,2],[278,-94,0],[268,-116,1],[286,-145,2],[305,-141,1]]) {
+  trees.push({x,z,h:9.3+hue*.9,kind:'maple',seed:1061+Math.floor(x*z+90213),autumn:1});
+}
+const fallRng = seeded(35444);
+for (let i=0;i<120;i++) {
+  const x=284+(fallRng()-.5)*121, z=-116+(fallRng()-.5)*108;
+  if (terrainHeight(x,z)<2.1 || nearRoad(x,z,2.65) || safe(x,z,4.2) || hypot(x-285,z+115)<8 ||
+      BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<max(b.w,b.d)*.8+3) ||
+      trees.some(t=>(x-t.x)**2+(z-t.z)**2<32)) continue;
+  trees.push({x,z,h:6.4+fallRng()*4.1,kind:'maple',seed:Math.floor(fallRng()*1e6),autumn:1});
+}
 export const TREES = trees;
 
 const cells = new Map();
@@ -349,17 +457,30 @@ function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0) {
     }
 }
 for (const b of BUILDINGS) {
+  const plan = roomPlan(b);
+  function localSolid(u, v, width, depth, height, kind, support) {
+    const x = b.x + u * cos(b.yaw) + v * sin(b.yaw);
+    const z = b.z - u * sin(b.yaw) + v * cos(b.yaw);
+    putSolid(x, z, width / 2, depth / 2, b.yaw, b.y + height, kind, support);
+  }
+  localSolid(0, 0, b.w + 1.1, b.d + 1.08, 0.42, 'floor', true);
+  localSolid(0, 0, plan.width, plan.depth, plan.floor, 'floor', true);
+  for (let j = 0; j < 3; j++)
+    localSolid(0, b.d / 2 + 0.48 + j * 0.39, b.w * 0.48, 0.46, 0.32 - j * 0.19, 'floor', true);
+  for (const wall of plan.walls)
+    localSolid(wall.u, wall.v, wall.width, wall.depth, plan.ceiling, 'wall', false);
+  localSolid(0, 0, b.w * 1.08, b.d * 1.08, plan.ceiling, 'ceiling', false);
+  // Roofs have an underside. A walker can pass beneath an eave while a
+  // falling or flying visitor can land on the same surface from above.
   if (b.kind === 'pagoda') {
     let level = 0.36;
     for (let j = 0; j < 4; j++) {
-      const k = 1 - j * 0.16,
-        tier = 2.15 * k + 0.64,
-        roof = 2.1 * k + 0.3;
-      putSolid(b.x, b.z, b.w * k * 0.65, b.d * k * 0.65, b.yaw, b.y + level + tier, 'roof', true, roof);
+      const k = 1 - j * 0.16, tier = 2.15 * k + 0.64, roof = 2.1 * k + 0.3;
+      putSolid(b.x, b.z, b.w * k * 0.70, b.d * k * 0.70, b.yaw, b.y + level + tier, 'roof', true, roof);
       level += tier + roof - 0.5;
     }
   } else {
-    putSolid(b.x, b.z, b.w * 0.55, b.d * 0.55, b.yaw, b.y + b.wall + 0.29, 'roof', true, b.roof);
+    putSolid(b.x, b.z, b.w * 0.61, b.d * 0.63, b.yaw, b.y + b.wall + 0.29, 'roof', true, b.roof);
   }
 }
 for (const [x, z, yaw] of MARKET_STALLS) {
@@ -398,41 +519,58 @@ function surfaceHeight(s, x, z, pad) {
   }
   return s.top;
 }
-function highest(x, z, pad, supportOnly) {
+// feet limits which storey can support an actor. Without a height hint,
+// terrain queries (objects, spawn points and the atlas) use the lower storey.
+function highest(x, z, pad, feet, supportOnly) {
+  let height = -Infinity;
   const items = cells.get(cell(x, z));
-  let h = -Infinity;
-  if (items)
-    for (const item of items) if (!supportOnly || item.support) h = max(h, surfaceHeight(item, x, z, pad));
-  return h;
-}
-export const solidHeightAt = (x, z, clearance = 0) => highest(x, z, clearance, false);
-export function groundHeight(x, z) {
-  const b = bridgeAt(x, z);
-  return max(b ? bridgeHeight(b, z) : terrainHeight(x, z), highest(x, z, 0, true));
-}
-export function canLand(x, z) {
-  if (abs(x) > BOUND || abs(z) > BOUND || (!bridgeAt(x, z) && terrainHeight(x, z) < WATER_Y + 0.12)) return false;
-  return highest(x, z, 0.18, false) <= groundHeight(x, z) + 0.3;
-}
-export function constrainMove(fromX, fromZ, toX, toZ, aboveGround = 0) {
-  const dx = toX - fromX,
-    dz = toZ - fromZ;
-  let x = fromX,
-    z = fromZ;
-  const steps = Math.max(1, Math.ceil(hypot(dx, dz) / 0.8));
-  for (let i = 0; i < steps; i++) {
-    const feet = groundHeight(x, z) + aboveGround;
-    function free(nx, nz) {
-      if (abs(nx) > BOUND - 0.45 || abs(nz) > BOUND - 0.45) return false;
-      if (highest(nx, nz, 0.33, false) > feet + 0.34) return false;
-      return aboveGround > 0.52 || !!bridgeAt(nx, nz) || terrainHeight(nx, nz) >= WATER_Y + 0.12;
+  if (items) for (const item of items) {
+    if (item.kind === 'ceiling' || (supportOnly && !item.support)) continue;
+    if (item.kind === 'roof') {
+      if (feet < item.top - 0.22) continue;
+      if (supportOnly && surfaceHeight(item,x,z,pad) > feet + .34) continue;
     }
-    const nx = x + dx / steps,
-      nz = z + dz / steps;
-    if (free(nx, nz)) {
-      x = nx;
-      z = nz;
-    } else if (free(nx, z)) x = nx;
+    height = max(height, surfaceHeight(item, x, z, pad));
+  }
+  return height;
+}
+export const solidHeightAt = (x, z, clearance = 0, y = Infinity) => highest(x, z, clearance, y, false);
+const waterFloor = WATER_Y - 0.57;
+export function groundHeight(x, z, feet = -Infinity) {
+  const b = bridgeAt(x, z);
+  const deck = b ? bridgeHeight(b, z) : -Infinity;
+  const onBridge = b && (feet === -Infinity || feet >= deck - .36);
+  return max(onBridge ? deck : -Infinity, waterFloor, terrainHeight(x, z), highest(x, z, 0, feet, true));
+}
+export function waterDepth(x, z) {
+  return max(0, WATER_Y - terrainHeight(x, z));
+}
+export function overheadHeight(x, z, feet) {
+  const bridge = bridgeAt(x, z);
+  const deck = bridge ? bridgeHeight(bridge,z) : -Infinity;
+  let ceiling = feet < deck - .36 ? deck - .17 : Infinity;
+  const items = cells.get(cell(x, z));
+  if (items) for (const item of items) {
+    if (item.kind === 'ceiling' && feet < item.top - 0.15 && surfaceHeight(item,x,z,0) > -Infinity)
+      ceiling = min(ceiling, item.top);
+  }
+  return ceiling;
+}
+export function canLand(x, z, feet) {
+  const floor = groundHeight(x, z, feet);
+  return highest(x, z, 0.12, feet ?? floor, false) <= floor + 0.33;
+}
+export function constrainMove(fromX, fromZ, toX, toZ, aboveGround = 0, feetY = groundHeight(fromX, fromZ) + aboveGround) {
+  const dx = wrapDelta(toX - fromX), dz = wrapDelta(toZ - fromZ);
+  const steps = max(1, Math.ceil(hypot(dx, dz) / 0.55));
+  let x = fromX, z = fromZ;
+  for (let i = 0; i < steps; i++) {
+    const feet = max(feetY, groundHeight(x, z, feetY));
+    const free = (nx, nz) => highest(nx, nz, 0.24, feet, false) <= feet + 0.34 &&
+      overheadHeight(nx, nz, feet) >= feet + 1.42;
+    const nx = wrapCoord(x + dx / steps), nz = wrapCoord(z + dz / steps);
+    if (free(nx, nz)) { x = nx; z = nz; }
+    else if (free(nx, z)) x = nx;
     else if (free(x, nz)) z = nz;
   }
   return { x, z };

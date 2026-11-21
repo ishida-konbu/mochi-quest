@@ -33,3 +33,17 @@ test('jumping, stretching and flying have distinct faces, and a camera pose is t
   delete player.emote;
   assert.equal(getExpression(player), 'joy');
 });
+
+test('the moon makes a strolling mochi drowsy and a rolling dango smiles at every speed', () => {
+  const player = createGame().state.player;
+  Object.assign(player, { night: true, grounded: true, speed: 2 });
+  assert.equal(getExpression(player), 'sleepy');
+  Object.assign(player, { mode: 'dango', speed: 9, stretch: .15 });
+  assert.equal(getExpression(player), 'joy');
+  player.speed = 1;
+  assert.equal(getExpression(player), 'joy');
+  player.speed = 0;
+  assert.equal(getExpression(player), 'sleepy');
+  Object.assign(player, { night: false, mode: 'normal', inWater: true, stretch: 0 });
+  assert.equal(getExpression(player), 'bath');
+});

@@ -31,10 +31,10 @@ export function meadowMaterial(art) {
     shader.uniforms.woodFloor = { value: art.forest };
     shader.uniforms.bankStones = { value: art.gravel };
     shader.vertexShader =
-      'attribute vec2 terrainMix; varying vec2 vTerrainMix;\n' +
-      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvTerrainMix = terrainMix;');
+      'attribute vec2 terrainMix; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
+      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvTerrainMix = terrainMix; vSeasons = seasons; incline=1.-abs(normal.y);');
     shader.fragmentShader =
-      'uniform sampler2D woodFloor, bankStones; varying vec2 vTerrainMix;\n' +
+      'uniform sampler2D woodFloor, bankStones; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
       shader.fragmentShader.replace(
         '#include <map_fragment>',
         `
@@ -48,7 +48,18 @@ export function meadowMaterial(art) {
         pigment = mix(pigment,shingle,smoothstep(.035,.93,vTerrainMix.y+(shingle.r-.28)*.38));
         float luma=dot(pigment,vec3(.27,.59,.14));
         pigment=mix(vec3(luma*.93,luma*1.05,luma*1.04),pigment,.65);
-        diffuseColor.rgb *= pigment*vec3(.99,1.10,1.19)+vec3(.020,.029,.031);
+        vec3 ground=pigment*vec3(.99,1.10,1.19)+vec3(.020,.029,.031);
+        vec3 loam=mix(vec3(.20,.096,.048),vec3(.48,.28,.107),clamp(luma*2.4,0.,1.));
+        float litter=smoothstep(.14,.45,luma+.13*sin(tileUv.x*.41+1.7*sin(tileUv.y*.26)));
+        ground=mix(ground,loam,vSeasons.y*(.36+.54*litter));
+        vec3 scree=texture2D(bankStones,tileUv*.57).rgb*.8+vec3(.055,.053,.045);
+        ground=mix(ground,scree,vSeasons.y*smoothstep(.12,.52,incline)*.92);
+        ground=mix(ground,vec3(.52,.40,.25)*( .81+.54*shingle.r),vSeasons.w);
+        ground=mix(ground,vec3(.25,.27,.148)*(.56+1.7*luma),vSeasons.z*.65);
+        float snowCover=smoothstep(.035,.96,vSeasons.x+(luma-.24)*.20);
+        float drift=.5+.5*sin(tileUv.y*.49+1.5*sin(tileUv.x*.13)+tileUv.x*.27);
+        vec3 snow=mix(vec3(.65,.77,.85),vec3(.94,.96,.98),drift*.40+clamp(luma,0.,.60));
+        diffuseColor.rgb *= mix(ground,snow,snowCover);
       `,
       );
   };
@@ -66,7 +77,9 @@ export function trailMaterial(art) {
     color: 0xffffff,
   });
   mat.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(
+    shader.vertexShader='attribute float snowAmount; varying float snowCover;\n'+shader.vertexShader.replace(
+      '#include <begin_vertex>', '#include <begin_vertex>\nsnowCover=snowAmount;');
+    shader.fragmentShader = 'varying float snowCover;\n'+shader.fragmentShader.replace(
       '#include <map_fragment>',
       `
       vec4 pigment = texture2D(map, vec2(vMapUv.x*1.88,vMapUv.y*1.23));
@@ -74,6 +87,8 @@ export function trailMaterial(art) {
       float fade = smoothstep(.011,.17,edge+(pigment.g-.3)*.09 + .008*sin(vMapUv.y*31.0+sin(vMapUv.y*9.)));
       float ochre=dot(pigment.rgb,vec3(.37,.51,.12));
       diffuseColor.rgb*=mix(pigment.rgb,vec3(ochre*1.11,ochre*1.01,ochre*.88),.38)*vec3(1.,1.035,1.11)+vec3(.049,.043,.035);
+      vec3 snowPath=mix(vec3(.48,.56,.61),vec3(.77,.84,.88),smoothstep(.03,.48,ochre));
+      diffuseColor.rgb=mix(diffuseColor.rgb,snowPath,snowCover*.94);
       diffuseColor.a *= fade;
     `,
     );

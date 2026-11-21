@@ -1,16 +1,15 @@
 import * as THREE from './vendor/three.module.min.js';
+import { inkVolume } from './scroll-sculpt.js';
 
 const TAU = Math.PI * 2;
-const ink = '#574c3c';
-const flax = '#ccbb93';
 const indigo = '#5c7377';
 const washMaterials = new Map();
 
 // These samples come from unoutlined areas of the original scroll animals.
 // Mirroring each quadrant gives the brush wash a seamless repeat in three dimensions.
 const swatches = {
-  rabbit: ['rabbit-porter', 266, 193, 29, 44],
-  frog: ['frog-sumo', 145, 106, 48, 38],
+  rabbit: [811, 258, 28, 40],
+  frog: [743, 250, 36, 36],
 };
 
 function scrollWash(kind) {
@@ -22,7 +21,7 @@ function scrollWash(kind) {
   const texture = new THREE.CanvasTexture(paper);
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.anisotropy = 2;
-  const [imageName, x, y, w, h] = swatches[kind];
+  const [x, y, w, h] = swatches[kind];
   const image = new Image();
   image.onload = () => {
     for (let q = 0; q < 4; q++) {
@@ -49,7 +48,7 @@ function scrollWash(kind) {
     paint.putImageData(pixels, 0, 0);
     texture.needsUpdate = true;
   };
-  image.src = new URL('../assets/actors/' + imageName + '.webp', import.meta.url).href;
+  image.src = new URL('./assets/residents/scroll-pigments.webp', import.meta.url).href;
   return texture;
 }
 
@@ -144,270 +143,173 @@ function addSurface(b, positions, indices, shade) {
   geometry.dispose();
 }
 
-function ellipsoidPoint(center, radii, angle, elevation) {
-  const level = Math.cos(elevation);
-  return [
-    center[0] + radii[0] * Math.sin(angle) * level,
-    center[1] + radii[1] * Math.sin(elevation),
-    center[2] + radii[2] * Math.cos(angle) * level,
-  ];
-}
-
-export function residentHead(b, kind) {
-  if (kind === 'frog') {
-    const mouth = [];
-    for (let k = -10; k <= 10; k++) {
-      const x = k * 0.032,
-        y = -0.05 + 0.046 * (k / 10) ** 2;
-      const upper = 0.03 + 0.272 * Math.sqrt(Math.max(0, 1 - (x / 0.365) ** 2 - (y / 0.195) ** 2));
-      const lower = 0.121 + 0.241 * Math.sqrt(Math.max(0, 1 - (x / 0.325) ** 2 - ((y + 0.092) / 0.096) ** 2));
-      mouth.push([x, y, Math.max(upper, lower) + 0.004]);
-    }
-    ribbon(b, mouth, 0.008, '#665640');
-  }
-  for (const s of [-1, 1]) {
-    if (kind === 'rabbit') {
-      // Sumi tips and feathered nape strokes echo the river porter's long ears.
-      const ear = new THREE.Euler(-0.27, 0, -s * 0.19);
-      const point = (x, y, z) =>
-        new THREE.Vector3(x * s, y, z)
-          .applyEuler(ear)
-          .add(new THREE.Vector3(s * 0.102, 0.377, -0.067))
-          .toArray();
-      for (const side of [-1, 1]) {
-        const shade = side < 0 ? '#82715a' : '#594d3d';
-        ribbon(
-          b,
-          [
-            point(side * 0.035, 0.143, 0.067),
-            point(side * 0.036, 0.219, 0.051),
-            point(side * 0.02, 0.278, 0.036),
-            point(0.002, 0.306, 0),
-          ],
-          0.01,
-          shade,
-        );
-        ribbon(
-          b,
-          [point(side * 0.025, 0.166, -0.066), point(side * 0.02, 0.254, -0.047), point(0, 0.305, -0.012)],
-          0.008,
-          shade,
-          [0, 0, -1],
-        );
-      }
-      const center = [0, 0.023, 0.035],
-        radii = [0.249, 0.295, 0.251];
-      for (let i = 0; i < 7; i++) {
-        const angle = s * (1.1 + i * 0.19),
-          elev = 0.06 + Math.sin(i * 2.1) * 0.2;
-        const pts = [
-          [angle, elev],
-          [angle + s * 0.12, elev - 0.1],
-          [angle + s * 0.2, elev - 0.19],
-        ];
-        ribbon(
-          b,
-          pts.map(([a, e]) => ellipsoidPoint(center, radii, a, e)),
-          i % 3 === 0 ? 0.006 : 0.0035,
-          i % 3 === 0 ? '#89765b' : '#b39e80',
-          [s, 0, 0],
-        );
-      }
-      ribbon(
-        b,
-        [
-          [s * 0.131, 0.102, 0.22],
-          [s * 0.163, 0.119, 0.208],
-          [s * 0.191, 0.095, 0.18],
-        ],
-        0.009,
-        ink,
-        [s * 0.6, 0.1, 0.8],
-      );
-      for (let i = 0; i < 3; i++)
-        b.ball(s * (0.053 + 0.031 * i), -0.05 - i * 0.007, 0.402 - 0.009 * i, 0.007, 0.005, 0.005, '#8b7966');
-    } else {
-      // Warm golden iris, heavy lid and a thin tympanic ring are characteristic of the frog in the emaki.
-      ribbon(
-        b,
-        [
-          [s * 0.16, 0.141, 0.179],
-          [s * 0.196, 0.207, 0.151],
-          [s * 0.25, 0.208, 0.153],
-          [s * 0.302, 0.145, 0.136],
-        ],
-        0.014,
-        '#655e43',
-        [s * 0.45, 0.1, 0.9],
-      );
-      ribbon(
-        b,
-        [
-          [s * 0.08, -0.137, 0.305],
-          [s * 0.14, -0.145, 0.276],
-          [s * 0.205, -0.127, 0.233],
-        ],
-        0.005,
-        '#9e916e',
-      );
-      const eardrum = [];
-      for (let i = 0; i < 9; i++) {
-        const a = (i / 8) * TAU;
-        eardrum.push([
-          s * (0.34 + 0.012 * Math.cos(a)),
-          0.002 + 0.045 * Math.sin(a),
-          0.05 + 0.048 * Math.cos(a),
-        ]);
-      }
-      ribbon(b, eardrum, 0.007, '#756f4e', [s, 0, 0.14]);
-    }
-  }
-}
-
-function robeShape(b, kind) {
-  const frog = kind === 'frog';
-  const levels = frog
-    ? [
-        [0.59, 0.34, 0.26],
-        [0.72, 0.345, 0.29],
-        [0.86, 0.322, 0.263],
-        [1.0, 0.282, 0.22],
-        [1.11, 0.224, 0.173],
-      ]
-    : [
-        [0.57, 0.29, 0.255],
-        [0.78, 0.267, 0.259],
-        [0.98, 0.254, 0.244],
-        [1.14, 0.233, 0.206],
-        [1.29, 0.18, 0.152],
-      ];
-  function location(angle, row, puff = 0) {
-    const [y, rx, rz] = levels[row];
-    const hem = row === 0 ? 0.043 * Math.sin(angle * 3.0 - 0.4) : 0;
-    const neck = row === levels.length - 1 ? -Math.pow(Math.max(0, Math.cos(angle - 0.1)), 4) * 0.16 : 0;
+function robeShape(b, kind, working = false) {
+  const frog = kind === 'frog',
+    width = frog ? [0.37, 0.368, 0.34, 0.33, 0.275, 0.207] : [0.3, 0.285, 0.273, 0.26, 0.215, 0.16];
+  const depth = frog
+    ? [0.31, 0.345, 0.328, 0.294, 0.224, 0.163]
+    : [0.276, 0.282, 0.277, 0.256, 0.206, 0.143];
+  const dye = working ? (frog ? '#aaa998' : '#829098') : frog ? '#c4b59c' : '#dec7ac';
+  const thread = working ? '#c2ba9e' : '#a28b65';
+  function cloth(a, t, offset = 0) {
+    const i = Math.min(4, Math.floor(t * 5)),
+      f = t * 5 - i;
+    const r = THREE.MathUtils.lerp(width[i], width[i + 1], f),
+      d = THREE.MathUtils.lerp(depth[i], depth[i + 1], f);
+    const fold =
+      (0.012 + 0.012 * (1 - t)) * (0.7 * Math.cos(7 * a + 2.2 * t) + 0.4 * Math.sin(11 * a - 0.8 * t));
+    const hem = (1 - t) ** 3 * (0.045 * Math.sin(3 * a - 0.4) + 0.034 * Math.sin(5 * a + 0.2));
+    const neck = t ** 3 * Math.max(0, Math.cos(a + 0.06)) ** 7 * (frog ? 0.085 : 0.125);
     return [
-      Math.sin(angle) * (rx + puff),
-      y + hem + neck,
-      Math.cos(angle) * (rz + puff) + (frog ? 0.015 : 0.024),
+      Math.sin(a) * (r + fold + offset),
+      (frog ? 0.532 : 0.557) + (frog ? 0.659 : 0.82) * t + hem - neck,
+      (frog ? 0.036 : 0.012) + 0.075 * t + Math.cos(a) * (d + fold + offset),
     ];
   }
-  const points = [],
-    indices = [],
-    sections = 32;
-  for (let row = 0; row < levels.length; row++)
-    for (let i = 0; i <= sections; i++) {
-      points.push(...location((i / sections) * TAU, row));
-      if (!i || !row) continue;
-      const h = row * (sections + 1) + i;
-      indices.push(h - sections - 2, h - sections - 1, h, h - sections - 2, h, h - 1);
+  function panel(where, low, high, shade, count = 48) {
+    const pts = [],
+      ix = [];
+    for (let i = 0; i <= count; i++) {
+      const t = i / count;
+      pts.push(...where(t, low), ...where(t, high));
+      if (i) {
+        const k = i * 2;
+        ix.push(k - 2, k, k + 1, k - 2, k + 1, k - 1);
+      }
     }
-  addSurface(b, points, indices, frog ? '#a7987e' : '#ccb895');
-  // Neck facing, hem, two front panels and the ties of a kosode.
-  const rim = [];
-  for (let i = 0; i <= 32; i++) rim.push(location((i * TAU) / 32, 0, 0.003));
-  b.stroke(rim, 0.006, '#80715c');
-  const top = levels.length - 1;
-  const front = [
-    location(-0.94, top, 0.007),
-    location(-0.25, top, 0.012),
-    location(0.3, 3, 0.009),
-    location(0.63, 2, 0.006),
-    location(0.94, 1, 0.008),
-  ];
-  ribbon(b, front, 0.027, '#8d7b60');
-  ribbon(
-    b,
-    front.map(([x, y, z]) => [x - 0.004, y, z + 0.004]),
-    0.017,
-    frog ? '#d8c6a3' : '#ead7ae',
-  );
-  ribbon(
-    b,
-    front.map(([x, y, z]) => [x + 0.009, y, z + 0.005]),
-    0.007,
-    ink,
-  );
-  b.stroke([location(0.89, top, 0.005), location(0.56, top, 0.009), location(0.23, 3, 0.008)], 0.016, flax);
-  const waist = levels[1];
-  const beltPoints = [],
-    beltIndex = [];
-  for (let j = 0; j <= 32; j++) {
-    const a = (j * TAU) / 32;
-    const x = Math.sin(a) * (waist[1] + 0.012),
-      z = Math.cos(a) * (waist[2] + 0.014) + (frog ? 0.015 : 0.024);
-    const y = waist[0] + 0.01 * Math.sin(a + 0.2);
-    beltPoints.push(x, y - 0.025, z, x, y + 0.025, z);
-    if (j) beltIndex.push(2 * j - 2, 2 * j, 2 * j + 1, 2 * j - 2, 2 * j + 1, 2 * j - 1);
+    addSurface(b, pts, ix, shade);
   }
-  addSurface(b, beltPoints, beltIndex, '#ac813e');
-  b.ball(0.073, waist[0], waist[2] + 0.012, 0.04, 0.033, 0.027, '#86653a');
-  for (const s of [-1, 1]) {
-    const x = 0.073;
-    b.stroke(
-      [
-        [x, waist[0], waist[2] + 0.027],
-        [x + s * 0.047, waist[0] - 0.039, waist[2] + 0.016],
-        [x + s * 0.079, waist[0] - 0.103, waist[2] + 0.006],
-      ],
-      0.013,
-      '#b98e50',
-    );
+  const pts = [],
+    ix = [],
+    rows = 20,
+    count = 64;
+  for (let j = 0; j <= rows; j++)
+    for (let i = 0; i <= count; i++) {
+      pts.push(...cloth((i * TAU) / count, j / rows));
+      if (j && i) {
+        const k = j * (count + 1) + i;
+        ix.push(k - count - 2, k - count - 1, k, k - count - 2, k, k - 1);
+      }
+    }
+  addSurface(b, pts, ix, dye);
+  const band = (t, v) => cloth(t * TAU, v, 0.004);
+  panel(band, 0.009, 0.022, working ? '#b2ab95' : '#947e66', 64);
+  panel(band, 0.027, 0.033, thread, 64);
+  panel(
+    (a, t) => cloth(a * TAU, t + 0.014 * Math.sin(a * TAU + 0.2), 0.007),
+    0.306,
+    0.382,
+    working ? '#b49769' : '#aa8354',
+    64,
+  );
+  panel((a, t) => cloth(a * TAU, t + 0.014 * Math.sin(a * TAU + 0.2), 0.01), 0.364, 0.372, '#d4b58a', 64);
+  // Continuous overlapping lapels follow the same draped surface as the folds.
+  for (const side of [-1, 1]) {
+    const end = side < 0 ? 0.393 : 0.72;
+    const where = (u, w) => cloth(side * (1.03 - 1.76 * u) + w, 1 - u * (1 - end), 0.008);
+    panel(where, -0.14, 0.14, working ? '#b9bdb0' : '#c2a98b', 32);
+    panel(where, 0.095, 0.125, '#8d7c68', 32);
   }
-  // Tiny brush-painted sprigs or wave arcs follow the hem around the three-dimensional garment.
-  for (let i = 0; i < 11; i++) {
-    const a = (i * TAU) / 11 + 0.24;
-    const c = location(a, 0, 0.008),
-      tangent = [Math.cos(a), 0, -Math.sin(a)];
-    const pos = (x, y) => [c[0] + tangent[0] * x, c[1] + y, c[2] + tangent[2] * x];
+  panel(band, 0.969, 1, working ? '#abb0a6' : '#b6a388', 64);
+  for (let k = 0; k < 15; k++) {
+    const a = (k * TAU) / 15 + 0.22,
+      h = 0.012 * Math.sin(a * 3);
     const outward = [Math.sin(a), 0, Math.cos(a)];
+    const line = (samples, weight, shade) =>
+      ribbon(
+        b,
+        samples.map(([x, t]) => cloth(a + x, t + h, 0.006)),
+        weight,
+        shade,
+        outward,
+      );
     if (frog) {
-      for (let j = 0; j < 2; j++) {
-        const r = 0.033 + j * 0.016;
-        ribbon(
-          b,
-          [-1, -0.5, 0, 0.5, 1].map((u) => pos(u * r, 0.038 + Math.sqrt(1 - u * u) * r)),
-          0.004,
-          '#827e68',
-          outward,
+      for (let n = 0; n < 2; n++) {
+        const r = 0.08 + 0.046 * n;
+        line(
+          [-1, -0.66, 0, 0.66, 1].map((u) => [r * u, 0.1 + 0.071 * Math.sqrt(1 - u * u) + n * 0.015]),
+          0.0033,
+          thread,
         );
       }
     } else {
-      ribbon(b, [pos(-0.032, 0.021), pos(-0.009, 0.051), pos(0.028, 0.097)], 0.004, '#98845f', outward);
-      ribbon(b, [pos(-0.011, 0.047), pos(-0.032, 0.054), pos(-0.039, 0.07)], 0.008, '#ae9267', outward);
-      ribbon(b, [pos(0.005, 0.067), pos(0.032, 0.071), pos(0.043, 0.084)], 0.007, '#a88f62', outward);
+      line(
+        [
+          [-0.101, 0.057],
+          [-0.024, 0.11],
+          [0.092, 0.19],
+        ],
+        0.0038,
+        thread,
+      );
+      line(
+        [
+          [-0.028, 0.107],
+          [-0.086, 0.122],
+          [-0.116, 0.15],
+        ],
+        0.0086,
+        thread,
+      );
+      line(
+        [
+          [0.012, 0.132],
+          [0.069, 0.139],
+          [0.095, 0.154],
+        ],
+        0.0067,
+        thread,
+      );
     }
   }
-  if (!frog) {
-    b.ball(0.21, 0.78, 0.13, 0.123, 0.126, 0.081, indigo, [0, -0.3, 0.11]);
-    const tilt = new THREE.Euler(0, -0.3, 0.11);
-    const satchel = (a, e) =>
-      new THREE.Vector3(...ellipsoidPoint([0, 0, 0], [0.125, 0.128, 0.084], a, e))
-        .applyEuler(tilt)
-        .add(new THREE.Vector3(0.21, 0.78, 0.13))
-        .toArray();
-    for (let i = 0; i < 10; i++) {
-      const a = (i * TAU) / 10;
-      b.stroke(
-        Array.from({ length: 7 }, (_, n) => satchel(a, -1 + n / 3)),
-        0.0027,
-        '#c5bda3',
-      );
+  const knot = cloth(0.44, 0.34, 0.03);
+  for (const s of [-1, 1]) {
+    const [x, y, z] = knot;
+    b.stroke(
+      [knot, [x + 0.05 * s, y - 0.03, z + 0.026], [x + 0.087 * s, y - 0.12, z + 0.012]],
+      0.014,
+      '#b18b57',
+    );
+  }
+  b.ball(...knot, 0.042, 0.033, 0.026, '#957550');
+  if (!frog && !working) {
+    const x = 0.28,
+      y = 0.776,
+      z = 0.147;
+    b.ball(x, y, z, 0.124, 0.143, 0.093, indigo, [0, -0.22, 0.12]);
+    for (let k = -3; k <= 3; k++) {
+      const n = k * 0.23,
+        span = Math.sqrt(1 - n * n);
+      const line = (cross) =>
+        Array.from({ length: 13 }, (_, i) => {
+          const v = span * (i / 6 - 1),
+            u = cross ? n : v,
+            w = cross ? v : n;
+          return [x + u * 0.128, y + w * 0.145, z + Math.sqrt(Math.max(0.003, 1 - u * u - w * w)) * 0.1];
+        });
+      b.stroke(line(false), 0.0028, '#d0c4a9');
+      b.stroke(line(true), 0.0028, '#aea990');
     }
-    for (let j = -2; j <= 2; j++) {
-      const e = j * 0.32;
-      b.stroke(
-        Array.from({ length: 21 }, (_, n) => satchel((n * TAU) / 20, e)),
-        0.0027,
-        '#b5baa6',
-      );
-    }
+    b.stroke(
+      [
+        [x, y + 0.08, z],
+        [0.23, 0.997, 0.217],
+        [0.184, 1.233, 0.193],
+        [0.135, 1.296, 0.064],
+        [0.161, 1.184, -0.08],
+        [0.25, 0.93, -0.073],
+        [x, y + 0.04, z],
+      ],
+      0.019,
+      '#68737a',
+    );
   }
 }
 
 export function residentTorso(b, kind, role) {
   const frog = kind === 'frog';
-  if (role === 'wander') {
-    robeShape(b, kind);
+  if (['wander', 'pounder', 'turner'].includes(role)) {
+    robeShape(b, kind, role !== 'wander');
     return;
   }
   if (role === 'sumo') {
@@ -464,83 +366,42 @@ export function residentTorso(b, kind, role) {
       '#c6c3a8',
     );
   }
-  if (!frog) {
-    for (const s of [-1, 1])
-      for (let i = 0; i < 4; i++) {
-        const a = s * (1.32 + i * 0.28),
-          e = 0.29 + (i % 2) * 0.13;
-        const pts = [
-          [a, e],
-          [a + s * 0.09, e - 0.07],
-          [a + s * 0.11, e - 0.16],
-        ];
-        ribbon(
-          b,
-          pts.map(([a, e]) => ellipsoidPoint([0, 0.958, -0.012], [0.242, 0.431, 0.218], a, e)),
-          0.005,
-          '#9b886c',
-          [s, 0, -0.15],
-        );
-      }
-  }
 }
 
-export function residentLimb(b, kind, role, part, side, joint, tip) {
+export function residentLimb(b, kind, role, side, joint) {
   const frog = kind === 'frog',
     s = side;
-  if (role === 'wander' && part === 'arm') {
+  if (role === 'wander') {
     const sleeve = frog ? '#a99b80' : '#cbb897';
     const edge = [joint[0] * 0.76, joint[1] * 0.76 - 0.036, joint[2] * 0.76];
-    b.rod([0, 0.019, 0], edge, 0.096, sleeve, 0.135);
-    b.ball(...edge, 0.139, 0.052, 0.129, sleeve, [0.28, 0, s * 0.15]);
-    b.loop(edge[0], edge[1] - 0.023, edge[2], 0.125, 0.115, 0.036, '#89775d');
-  }
-  const [x, y, z] = joint;
-  if (part === 'leg') {
-    ribbon(
+    inkVolume(
       b,
       [
-        [x + s * 0.036, y + 0.066, z + 0.105],
-        [x + s * 0.071, y + 0.021, z + 0.098],
-        [x + s * 0.065, y - 0.038, z + 0.076],
+        [0, 0.042, 0, 0.052, 0.055],
+        [0, 0.003, 0, 0.102, 0.094],
+        [joint[0] * 0.42, joint[1] * 0.36, joint[2] * 0.36, 0.104, 0.108],
+        [edge[0], edge[1] + 0.044, edge[2], 0.124, 0.125],
+        [...edge, 0.135, 0.134],
+        [edge[0], edge[1] - 0.014, edge[2], 0.113, 0.108],
       ],
-      0.006,
-      frog ? '#77764e' : '#99876b',
-      [s * 0.65, 0, 0.78],
+      sleeve,
+      25,
     );
-    if (frog) {
-      for (let i = 0; i < 3; i++)
-        b.ball(
-          s * (0.09 + 0.014 * i),
-          -0.115 - i * 0.048,
-          0.116 - i * 0.017,
-          0.023,
-          0.018,
-          0.009,
-          '#85845b',
-          [0, s * 0.72, -s * 0.24],
-        );
+    const facing = [s, 0, 0.25];
+    for (let i = 0; i < 3; i++) {
+      const ox = s * (0.091 + i * 0.006);
+      ribbon(
+        b,
+        [
+          [ox, 0, -0.016],
+          [ox + s * 0.034, joint[1] * 0.39, 0.01 - i * 0.018],
+          [edge[0] + s * 0.121, edge[1] + 0.023, edge[2] + 0.025 - i * 0.024],
+        ],
+        0.006,
+        '#95816c',
+        facing,
+      );
     }
-  } else if (role !== 'wander') {
-    const line = [
-      [x + s * 0.045, y + 0.023, z + 0.033],
-      [x + s * 0.059, y - 0.006, z + 0.034],
-      [x + s * 0.048, y - 0.027, z + 0.027],
-    ];
-    ribbon(b, line, 0.005, frog ? '#74764e' : '#9b8565', [s * 0.8, 0, 0.5]);
-  }
-  if (frog && part === 'arm') {
-    const [tx, ty, tz] = tip;
-    ribbon(
-      b,
-      [
-        [tx - 0.052 * s, ty + 0.026, tz + 0.024],
-        [tx, ty + 0.046, tz + 0.049],
-        [tx + 0.034 * s, ty + 0.035, tz + 0.038],
-      ],
-      0.0044,
-      '#777650',
-      [0, 1, 0.3],
-    );
+    b.loop(edge[0], edge[1] - 0.008, edge[2], 0.128, 0.128, 0.036, '#7b6957');
   }
 }

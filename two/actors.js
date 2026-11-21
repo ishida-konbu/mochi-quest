@@ -1,13 +1,14 @@
+import { wrapDelta } from './terrain.js';
 import * as THREE from './vendor/three.module.min.js';
+import { buildPounding } from './mochi-pounding.js';
 import { addSpringSurface } from './spring-water.js';
-import { finishResident, residentHead, residentLimb, residentTorso } from './resident-art.js';
+import { finishResident, residentLimb, residentTorso } from './resident-art.js';
+import { inkVolume, sculptHead, scrollParasol, scrollShell, sculptTurtleHead } from './scroll-sculpt.js';
 import { makeRiceModel, poseRice } from './mochi-model.js';
 
 const PI = Math.PI,
   TAU = PI * 2;
-const ink = '#493b32',
-  bone = '#f4e7cd',
-  straw = '#bb9465',
+const straw = '#bb9465',
   wood = '#835d41';
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 const transform = new THREE.Object3D();
@@ -114,9 +115,9 @@ class Brush {
       new THREE.Quaternion().setFromUnitVectors(unitUp, delta.normalize()),
     );
   }
-  stroke(points, r, col) {
+  stroke(points, r, col, segments = Math.max(5, points.length * 3), sides = 5) {
     const path = new THREE.CatmullRomCurve3(points.map((p) => v(...p)));
-    const geo = new THREE.TubeGeometry(path, Math.max(5, points.length * 3), r, 5, false);
+    const geo = new THREE.TubeGeometry(path, segments, r, sides, false);
     this.add(geo, col);
     geo.dispose();
   }
@@ -198,14 +199,128 @@ export function getExpression(p, time = 0) {
   if (p.activity === 'drink') return 'blush';
   if (p.activity === 'eat') return 'eating';
   if (p.throwTime > 0) return 'calling';
-  if (p.mode === 'dango' && p.stretch > 0.04) return 'determined';
+  if (p.mode === 'dango' && p.grounded && p.speed > 0.25) return 'joy';
+  if (p.night) return 'sleepy';
+  if (p.mode === 'dango' && !p.grounded && p.stretch > 0.04) return 'determined';
   if (p.stretch > 0.025 || (!p.grounded && p.h > 0.25)) return p.mode === 'habutae' ? 'joy' : 'surprise';
+  if (p.inWater) return 'bath';
   if (p.buffs?.drunk > 0) return 'blush';
   if (p.buffs?.warm > 0 || p.buffs?.wrap > 0) return 'calm';
   if (p.buffs?.full > 0) return 'eating';
   if (p.speed > 0.55) return p.speed > 8 ? 'determined' : 'joy';
-  const phase = time % 13;
-  return phase < 6 ? 'joy' : phase < 10 ? 'curious' : 'calm';
+  const phase = time % 15;
+  return phase < 6 ? 'curious' : phase < 12 ? 'joy' : 'calm';
+}
+
+// A folded two-sided blade with a raised midrib. The paper feathers and
+// deeply lobed mugwort share this topology but keep their own silhouettes.
+function sculptBlade(brush, spine, halfWidth, tint, depth, leaf = false) {
+  const count = leaf ? 44 : 26;
+  const across = [-1, -0.48, 0, 0.48, 1];
+  const vertices = [],
+    indices = [];
+  const positions = [],
+    crossAxes = [];
+  for (let row = 0; row <= count; row++) {
+    const u = row / count;
+    const point = spine(u);
+    const before = spine(Math.max(0, u - 0.003)),
+      after = spine(Math.min(1, u + 0.003));
+    const tangent = after.sub(before).normalize();
+    const cross = new THREE.Vector3(-tangent.y, tangent.x, 0).normalize();
+    const width = halfWidth(u);
+    positions.push(point);
+    crossAxes.push(cross);
+    for (let col = 0; col < across.length; col++) {
+      const v = across[col];
+      const spot = point.clone().addScaledVector(cross, v * width);
+      spot.z += depth * (1 - v * v) * Math.sin(PI * u) + width * v * 0.17;
+      vertices.push(spot.x, spot.y, spot.z);
+      if (row < count && col < across.length - 1) {
+        const at = row * across.length + col,
+          next = at + across.length;
+        indices.push(at, next, at + 1, at + 1, next, next + 1);
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  brush.add(geometry, tint);
+  geometry.dispose();
+  const rib = [];
+  for (let j = 1; j < count; j += 4) {
+    const u = j / count,
+      point = positions[j].clone();
+    point.z += depth * Math.sin(PI * u) + 0.0025;
+    rib.push(point.toArray());
+  }
+  brush.stroke(rib, leaf ? 0.0028 : 0.0032, leaf ? '#c8c990' : '#cab89c');
+  if (leaf) {
+    for (const side of [-1, 1])
+      for (const u of [0.24, 0.41, 0.59, 0.73]) {
+        const a = spine(u - 0.07),
+          b = spine(u + 0.035),
+          c = spine(u + 0.1);
+        const axis = crossAxes[Math.round(u * count)],
+          width = halfWidth(u);
+        a.z += depth * Math.sin(PI * (u - 0.07)) + 0.003;
+        b.addScaledVector(axis, side * 0.43 * width);
+        b.z += depth * 0.81 + 0.0015;
+        c.addScaledVector(axis, side * 0.82 * width);
+        c.z += depth * 0.24 + 0.003;
+        brush.stroke([a.toArray(), b.toArray(), c.toArray()], 0.00165, '#bbc283');
+      }
+  }
+}
+function mugwortSprig(b) {
+  const stem = [-0.14, 1.6, 0.012];
+  b.rod([-0.092, 1.53, -0.012], stem, 0.01, '#85874b', 0.007);
+  for (const [dx, dy, dz, w, tint] of [
+    [-0.32, 0.17, 0.049, 0.071, '#718b45'],
+    [0.16, 0.225, -0.019, 0.057, '#91a85b'],
+    [-0.12, 0.22, -0.09, 0.042, '#7d9550'],
+  ]) {
+    const spine = (u) =>
+      v(
+        stem[0] + dx * u,
+        stem[1] + dy * u + 0.031 * Math.sin(PI * u),
+        stem[2] + dz * u + 0.016 * Math.sin(PI * u),
+      );
+    const width = (u) =>
+      w *
+      Math.pow(Math.sin(PI * u), 0.72) *
+      (1 - 0.49 * Math.pow(0.5 + 0.5 * Math.cos(u * PI * 9.6 + 0.55), 2.7));
+    sculptBlade(b, spine, width, tint, 0.013, true);
+  }
+}
+function habutaeWing(b, side) {
+  // Primary and covert rows overlap like folded strips of silk. Roots
+  // lie inside the shoulder and each tip curls out of the plane.
+  for (let row = 0; row < 2; row++) {
+    const count = row ? 4 : 5;
+    for (let i = 0; i < count; i++) {
+      const t = i / (count - 1),
+        length = row ? 0.48 - 0.115 * t : 0.73 - 0.16 * t;
+      const slope = row ? 0.42 - 0.51 * t : 0.72 - 0.91 * t;
+      const startY = row ? 0.025 : 0.038 + 0.011 * t;
+      const spine = (u) =>
+        v(
+          side * (0.03 + length * u),
+          startY + length * slope * u + (0.04 + 0.017 * t) * Math.sin(u * PI),
+          0.016 + row * 0.036 + t * 0.01 + 0.047 * Math.sin(PI * u) - 0.043 * u * u,
+        );
+      const width = (u) => (row ? 0.057 : 0.079) * Math.pow(Math.sin(PI * u), 0.7) * (0.77 + 0.26 * u);
+      sculptBlade(
+        b,
+        spine,
+        width,
+        (row ? ['#f8e9d5', '#fff4e0'] : ['#e0cdb1', '#f6e7d1', '#fff3df'])[i % (row ? 2 : 3)],
+        0.012,
+      );
+    }
+  }
 }
 
 function makeHero() {
@@ -213,42 +328,11 @@ function makeHero() {
     pose = group(root, 'mochi'),
     rolling = group(pose, 'roll');
   const rice = makeRiceModel(rolling);
-  const leaves = batch(
-    rolling,
-    (b) => {
-      b.rod([-0.1, 1.51, 0], [-0.25, 1.7, 0], 0.017, '#607d42', 0.009);
-      b.ball(-0.3, 1.68, 0.015, 0.165, 0.039, 0.089, '#789653', [0, -0.2, 0.55]);
-      b.ball(-0.13, 1.7, 0, 0.12, 0.039, 0.065, '#92a85c', [0, 0.14, -0.85]);
-    },
-    'leaves',
-  );
+  const leaves = batch(rolling, mugwortSprig, 'leaves');
   const wingParts = [];
   for (const s of [-1, 1]) {
     const wing = group(rolling, 'wing', s * 0.65, 0.66, -0.01);
-    batch(wing, (b) => {
-      b.ball(s * 0.225, 0.078, -0.01, 0.32, 0.13, 0.075, '#eadbc0', [0, 0, s * 0.4]);
-      for (let i = 0; i < 4; i++) {
-        b.ball(
-          s * (0.25 + i * 0.1),
-          0.1 + i * 0.068,
-          -0.003 + i * 0.012,
-          0.2 - i * 0.018,
-          0.061,
-          0.065,
-          '#fff3dc',
-          [0, 0, s * (0.1 + i * 0.21)],
-        );
-      }
-      b.stroke(
-        [
-          [s * 0.07, 0.0, 0.074],
-          [s * 0.26, 0.08, 0.09],
-          [s * 0.44, 0.21, 0.085],
-        ],
-        0.008,
-        '#a99c82',
-      );
-    });
+    batch(wing, (b) => habutaeWing(b, s));
     wingParts.push(wing);
   }
   const wrap = batch(
@@ -298,109 +382,163 @@ function makeHero() {
   };
 }
 
-const hare = '#d8ccb0',
-  frog = '#9ca36c',
-  frogPale = '#d3c9a0';
-function basket(b, x, y, z, s = 1) {
-  const profile = [
-    new THREE.Vector2(0.12 * s, 0),
-    new THREE.Vector2(0.19 * s, 0.05 * s),
-    new THREE.Vector2(0.25 * s, 0.29 * s),
-    new THREE.Vector2(0.235 * s, 0.31 * s),
+const hare = '#e2d0b8',
+  frog = '#b5a579',
+  frogPale = '#dcc7a5';
+function basket(b, x, y, z, size = 1) {
+  const radius = (t) => 0.137 + 0.107 * Math.sin(t * 1.42);
+  const at = (a, t, relief = 0) => [
+    x + size * (radius(t) + relief) * Math.sin(a),
+    y + size * (0.021 + 0.297 * t),
+    z + size * (radius(t) + relief) * Math.cos(a),
   ];
-  const g = new THREE.LatheGeometry(profile, 14);
-  b.add(g, '#b99562', [x, y, z]);
-  g.dispose();
-  for (let i = 0; i < 4; i++)
-    b.loop(
-      x,
-      y + (0.04 + i * 0.081) * s,
-      z,
-      (0.16 + i * 0.031) * s,
-      (0.16 + i * 0.031) * s,
-      0.027,
-      '#826449',
-    );
-  for (let i = 0; i < 11; i++) {
-    const a = (i * TAU) / 11;
-    b.rod(
-      [x + 0.15 * s * Math.cos(a), y + 0.035 * s, z + 0.15 * s * Math.sin(a)],
-      [x + 0.244 * s * Math.cos(a + 0.14), y + 0.28 * s, z + 0.244 * s * Math.sin(a + 0.14)],
-      0.008 * s,
-      '#dec28a',
-    );
-  }
-  for (let i = 0; i < 3; i++) {
-    const xx = x + (i - 1) * 0.085 * s,
-      zz = z + Math.sin(i * 3) * 0.08 * s;
-    b.ball(xx, y + 0.3 * s, zz, 0.065 * s, 0.105 * s, 0.055 * s, '#e9dfb8', [0.5, 0, (i - 1) * 0.41]);
-    b.ball(xx + 0.008 * s, y + 0.38 * s, zz, 0.031 * s, 0.107 * s, 0.04 * s, '#7e8c51', [0, 0, i - 1]);
-  }
-}
-function hareHead(b) {
-  b.ball(0, 0.02, 0.035, 0.245, 0.297, 0.247, hare, [-0.12, 0, 0]);
-  b.ball(0, -0.048, 0.2, 0.213, 0.168, 0.218, '#e5d6b8');
-  b.ball(0, -0.037, 0.382, 0.063, 0.043, 0.042, '#7d6152');
-  for (const s of [-1, 1]) {
-    const a = -s * 0.19;
-    b.ball(s * 0.102, 0.377, -0.067, 0.068, 0.306, 0.092, hare, [-0.27, 0, a]);
-    b.ball(s * 0.108, 0.384, 0.007, 0.034, 0.236, 0.027, '#b69b87', [-0.27, 0, a]);
-    b.ball(s * 0.167, 0.065, 0.205, 0.042, 0.057, 0.034, ink, [0, s * 0.65, 0]);
-    b.ball(s * 0.172, 0.077, 0.224, 0.014, 0.019, 0.015, '#f5e8cd');
-    b.stroke(
-      [
-        [s * 0.126, 0.122, 0.2],
-        [s * 0.16, 0.145, 0.181],
-        [s * 0.191, 0.112, 0.175],
-      ],
-      0.009,
-      '#736651',
-    );
-    b.stroke(
-      [
-        [s * 0.025, -0.078, 0.4],
-        [s * 0.049, -0.105, 0.385],
-        [s * 0.102, -0.109, 0.36],
-      ],
-      0.009,
-      '#675444',
-    );
-    for (let k = 0; k < 3; k++)
-      b.stroke(
-        [
-          [s * 0.121, -0.065 + k * 0.015, 0.352],
-          [s * 0.225, -0.059 + k * 0.033, 0.37],
-          [s * (0.3 + k * 0.014), -0.055 + k * 0.047, 0.371],
-        ],
-        0.0045,
-        '#776b56',
+  const form = new THREE.LatheGeometry(
+    Array.from(
+      { length: 13 },
+      (_, i) => new THREE.Vector2(size * (radius(i / 12) - 0.004), size * (0.021 + (0.297 * i) / 12)),
+    ),
+    32,
+  );
+  b.add(form, '#927450', [x, y, z]);
+  form.dispose();
+  for (let h = 0; h <= 9; h++) {
+    const t = 0.039 + 0.099 * h;
+    const braid = Array.from({ length: 49 }, (_, i) => {
+      const a = (i * TAU) / 48;
+      return at(
+        a,
+        t + 0.009 * Math.sin(12 * a + h * Math.PI),
+        0.003 + 0.0025 * Math.cos(12 * a + h * Math.PI),
       );
+    });
+    b.stroke(braid, (h === 0 || h === 9 ? 0.008 : 0.006) * size, h % 3 ? '#c3a171' : '#b49161', 48, 3);
+  }
+  for (let j = 0; j < 24; j++) {
+    const a = (j * TAU) / 24;
     b.stroke(
-      [
-        [s * 0.19, -0.09, 0.17],
-        [s * 0.209, -0.063, 0.16],
-        [s * 0.213, -0.041, 0.137],
-      ],
-      0.006,
-      '#ae9c7e',
+      Array.from({ length: 11 }, (_, i) =>
+        at(a + (0.022 * i) / 10, i / 10, 0.003 * Math.cos(Math.PI * (i + j))),
+      ),
+      0.0051 * size,
+      j % 3 ? '#c3a578' : '#a2825b', 12, 3,
     );
   }
-}
-function frogHead(b) {
-  b.ball(0, 0.0, 0.03, 0.365, 0.195, 0.272, frog);
-  b.ball(0, -0.092, 0.121, 0.325, 0.096, 0.241, frogPale);
-  for (const s of [-1, 1]) {
-    b.ball(s * 0.222, 0.094, 0.087, 0.113, 0.14, 0.117, frog);
-    b.ball(s * 0.23, 0.135, 0.151, 0.082, 0.081, 0.069, '#c6b87f');
-    b.ball(s * 0.236, 0.14, 0.201, 0.064, 0.025, 0.029, '#393b2e');
-    b.ball(s * 0.249, 0.152, 0.221, 0.012, 0.012, 0.009, '#f7e9c5');
-    b.ball(s * 0.08, 0.018, 0.294, 0.013, 0.011, 0.011, '#645f42');
-    for (let i = 0; i < 6; i++) {
-      let x = s * (0.16 + (i % 3) * 0.053);
-      b.ball(x, 0.017 + Math.sin(i * 2) * 0.031, 0.18 - (i % 3) * 0.032, 0.023, 0.012, 0.021, '#788451');
+  b.stroke(
+    Array.from({ length: 41 }, (_, i) => at((i * TAU) / 40, 1)),
+    0.012 * size,
+    '#bd9868', 40, 4,
+  );
+  for (let k = 0; k < 3; k++) {
+    const a = (k * TAU) / 3 + 0.4,
+      dx = x + size * 0.096 * Math.sin(a),
+      dz = z + size * 0.091 * Math.cos(a),
+      h = y + size * (0.287 + 0.014 * k);
+    const point = (u, v, w, ra, rb) => [dx + u * size, h + v * size, dz + w * size, ra * size, rb * size];
+    inkVolume(
+      b,
+      [
+        point(-0.033, -0.124, -0.017, 0.003, 0.003),
+        point(-0.022, -0.058, -0.008, 0.045, 0.04),
+        point(0, 0.006, 0, 0.072, 0.069),
+        point(0.012, 0.054, 0.005, 0.058, 0.054),
+        point(0.014, 0.075, 0.008, 0.03, 0.024),
+      ],
+      '#ead9b1',
+      18,
+    );
+    for (let n = 0; n < 4; n++) {
+      const theta = a + n * 2.18,
+        len = 0.109 + 0.048 * ((k + n) % 3),
+        rise = 0.058 + 0.052 * ((k + 2 * n) % 3);
+      const leaf = [],
+        ind = [],
+        mid = [];
+      for (let j = 0; j <= 10; j++) {
+        const t = j / 10,
+          l = t * len,
+          px = dx + size * (0.014 + l * Math.sin(theta)),
+          py = h + size * (0.061 + rise * (1 - (1 - t) ** 2) - 0.036 * t * t),
+          pz = dz + size * (0.008 + l * Math.cos(theta));
+        const w = size * 0.032 * Math.sin(Math.PI * t) ** 0.75 * (j % 2 ? 0.67 : 1.13);
+        leaf.push(
+          px - w * Math.cos(theta),
+          py - 0.01 * size,
+          pz + w * Math.sin(theta),
+          px,
+          py,
+          pz,
+          px + w * Math.cos(theta),
+          py - 0.009 * size,
+          pz - w * Math.sin(theta),
+        );
+        mid.push([px, py + 0.002 * size, pz]);
+        if (j) {
+          const p = j * 3;
+          ind.push(p - 3, p - 2, p, p - 2, p + 1, p, p - 2, p - 1, p + 1, p - 1, p + 2, p + 1);
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(leaf, 3));
+      g.setIndex(ind);
+      g.computeVertexNormals();
+      b.add(g, n % 2 ? '#899357' : '#6f844b');
+      g.dispose();
+      b.stroke(mid, 0.0025 * size, '#abb274', 10, 3);
     }
   }
-
+}
+function muzzleInk(b, frogKind) {
+  for (const s of [-1, 1]) {
+    if (frogKind) {
+      b.ball(s * 0.047, 0.105, 0.363, 0.012, 0.007, 0.011, '#625640');
+    } else {
+      for (let i = 0; i < 3; i++) {
+        const base = [s * (0.089 - i * 0.004), -0.008 + i * 0.013, 0.344];
+        b.stroke(
+          [
+            base,
+            [s * (0.173 + i * 0.009), 0.005 + i * 0.028, 0.371],
+            [s * (0.31 + i * 0.012), 0.003 + i * 0.055, 0.38 - i * 0.005],
+          ],
+          0.0031,
+          '#705e4e',
+        );
+      }
+      b.stroke(
+        [
+          [0, 0.002, 0.429],
+          [s * 0.013, -0.023, 0.417],
+          [s * 0.05, -0.041, 0.386],
+        ],
+        0.006,
+        '#675143',
+      );
+    }
+  }
+  if (frogKind) {
+    inkVolume(
+      b,
+      [
+        [0, -0.021, 0.015, 0.091, 0.049],
+        [0, 0.005, 0.099, 0.144, 0.103],
+        [0, 0.02, 0.182, 0.134, 0.075],
+        [0, 0.016, 0.229, 0.091, 0.039],
+        [0, -0.012, 0.257, 0.048, 0.015],
+      ],
+      '#815e48',
+    );
+    inkVolume(
+      b,
+      [
+        [0, -0.048, 0.114, 0.08, 0.027],
+        [0, -0.034, 0.184, 0.13, 0.026],
+        [0, -0.03, 0.259, 0.11, 0.017],
+        [0, -0.033, 0.303, 0.053, 0.009],
+        [0, -0.037, 0.329, 0.002, 0.001],
+      ],
+      '#b18869',
+    );
+  } else b.ball(0, 0.014, 0.424, 0.026, 0.02, 0.017, '#574338');
 }
 function armLimb(parent, s, kind, role) {
   const frogKind = kind === 'frog',
@@ -409,27 +547,71 @@ function armLimb(parent, s, kind, role) {
   const skin = frogKind ? frog : hare,
     pos = [s * (frogKind ? 0.235 : 0.17), frogKind ? 1.0 : 1.21, 0.01];
   const arm = group(parent, 'arm' + s, ...pos);
-  const elbow = [s * (sumo ? 0.19 : 0.1), sumo ? -0.16 : -0.23, sumo ? 0.11 : port ? 0.06 : -0.045];
-  const paw = [
-    s * (sumo ? 0.095 : 0.065),
-    sumo ? -0.07 : port ? 0.025 : -0.37,
-    sumo ? 0.52 : port ? 0.19 : 0.085,
+  const grip = port && (frogKind || s < 0);
+  const open = role === 'wander' && s > 0;
+  const elbow = [
+    s * (sumo ? 0.22 : open ? 0.16 : 0.105),
+    sumo ? -0.16 : -0.205,
+    sumo ? 0.14 : grip ? 0.08 : -0.03,
   ];
+  const paw = sumo
+    ? [s * 0.105, -0.065, 0.5]
+    : grip
+      ? [s * 0.012, frogKind ? -0.01 : 0.045, 0.25]
+      : open
+        ? [s * 0.24, -0.105, 0.262]
+        : role === 'wander'
+          ? [s * 0.045, -0.15, 0.19]
+          : [s * 0.09, -0.38, -0.06];
   batch(arm, (b) => {
-    b.rod([0, 0, 0], elbow, frogKind ? 0.075 : 0.083, skin, 0.056);
-    b.ball(...elbow, 0.072, 0.067, 0.064, skin);
-    b.rod(elbow, paw, 0.059, skin, 0.044);
-    b.ball(...paw, frogKind ? 0.085 : 0.064, 0.049, 0.083, skin);
+    inkVolume(
+      b,
+      [
+        [0, 0.047, -0.015, 0.016, 0.023],
+        [0, 0, 0, 0.082, 0.089],
+        [elbow[0] * 0.6, elbow[1] * 0.56, elbow[2] * 0.54, 0.091, 0.076],
+        [...elbow, 0.062, 0.058],
+        [
+          elbow[0] * 0.59 + paw[0] * 0.41,
+          elbow[1] * 0.59 + paw[1] * 0.41,
+          elbow[2] * 0.59 + paw[2] * 0.41,
+          0.064,
+          0.058,
+        ],
+        [paw[0], paw[1], paw[2] - 0.049, 0.041, 0.035],
+        [...paw, 0.06, 0.038],
+        [paw[0], paw[1], paw[2] + 0.045, 0.05, 0.022],
+      ],
+      skin,
+      30,
+      kind,
+    );
     for (let k = -1; k <= 1; k++) {
+      const start = [paw[0] + k * 0.023, paw[1], paw[2] + 0.025];
       const end = [
-        paw[0] + k * (frogKind ? 0.058 : 0.021),
-        paw[1] + (sumo ? 0.026 : -0.025),
-        paw[2] + (frogKind ? 0.163 : 0.097) - Math.abs(k) * 0.031,
+        paw[0] + k * (frogKind ? 0.085 : 0.029),
+        paw[1] + (grip ? 0.044 : open ? 0.026 : -0.012),
+        paw[2] + (grip ? 0.085 : frogKind ? 0.184 : 0.12) - Math.abs(k) * 0.027,
       ];
-      b.rod([paw[0] + k * 0.019, paw[1], paw[2] + 0.035], end, frogKind ? 0.015 : 0.023, skin, 0.013);
-      if (frogKind) b.ball(...end, 0.025, 0.015, 0.026, frogPale);
+      inkVolume(
+        b,
+        [
+          [...start, 0.018, 0.017],
+          [
+            (start[0] + end[0]) * 0.5,
+            (start[1] + end[1]) * 0.5 + (grip ? 0.032 : 0.005),
+            (start[2] + end[2]) * 0.5,
+            0.017,
+            0.014,
+          ],
+          [...end, frogKind ? 0.021 : 0.012, 0.013],
+          [end[0] + k * 0.009, end[1] - 0.008, end[2] + 0.016, 0.001, 0.001],
+        ],
+        skin,
+        12,
+      );
     }
-    residentLimb(b, kind, role, 'arm', s, elbow, paw);
+    residentLimb(b, kind, role, s, elbow);
   });
 }
 function legLimb(parent, s, kind, role) {
@@ -440,82 +622,140 @@ function legLimb(parent, s, kind, role) {
   const knee = [s * (sumo ? 0.1 : 0.04), -0.23, frogKind ? 0.13 : 0.081];
   const heel = [s * (sumo ? 0.18 : 0.04), frogKind ? -0.47 : -0.6, -0.11];
   batch(leg, (b) => {
-    b.ball(s * 0.034, -0.145, 0.014, frogKind ? 0.151 : 0.122, 0.211, 0.145, skin, [0.15, 0, s * 0.1]);
-    b.rod(knee, heel, frogKind ? 0.095 : 0.073, skin, 0.049);
-    b.ball(...heel, 0.071, 0.064, 0.073, skin);
-    b.ball(heel[0], heel[1] - 0.015, heel[2] + 0.107, frogKind ? 0.068 : 0.087, 0.052, 0.181, skin);
+    inkVolume(
+      b,
+      [
+        [0, 0.059, 0, 0.04, 0.044],
+        [s * 0.018, -0.044, -0.017, 0.116, 0.119],
+        [s * 0.038, -0.16, 0.039, frogKind ? 0.144 : 0.128, 0.106],
+        [...knee, 0.096, 0.097],
+        [
+          knee[0] * 0.6 + heel[0] * 0.4,
+          knee[1] * 0.6 + heel[1] * 0.4,
+          knee[2] * 0.6 + heel[2] * 0.4,
+          0.068,
+          0.076,
+        ],
+        [heel[0], heel[1] + 0.034, heel[2], 0.043, 0.057],
+        [...heel, 0.055, 0.052],
+        [heel[0], heel[1] - 0.018, heel[2] + 0.12, 0.059, 0.035],
+        [heel[0], heel[1] - 0.014, heel[2] + 0.184, 0.051, 0.025],
+      ],
+      skin,
+      34,
+      kind,
+    );
     for (let k = -1; k <= 1; k++) {
-      const tip = [
-        heel[0] + k * (frogKind ? 0.087 : 0.039),
-        heel[1] - 0.017,
-        heel[2] + 0.275 - Math.abs(k) * 0.032,
-      ];
-      b.rod([heel[0] + k * 0.024, heel[1] - 0.011, heel[2] + 0.15], tip, 0.023, skin, 0.013);
-      if (frogKind) b.ball(...tip, 0.031, 0.014, 0.032, skin);
+      const x = heel[0] + k * 0.019,
+        y = heel[1] - 0.015,
+        z = heel[2] + 0.15;
+      const spread = k * (frogKind ? 0.093 : 0.04),
+        tip = heel[2] + (frogKind ? 0.326 : 0.281) - Math.abs(k) * 0.033;
+      inkVolume(
+        b,
+        [
+          [x, y, z, 0.024, 0.022],
+          [x + 0.44 * spread, y + 0.008, z * 0.5 + tip * 0.5, 0.022, 0.019],
+          [heel[0] + spread, y, tip - 0.019, 0.022, 0.016],
+          [heel[0] + spread * 1.02, y - 0.009, tip, 0.003, 0.003],
+        ],
+        skin,
+        12,
+      );
     }
-    residentLimb(b, kind, role, 'leg', s, knee, heel);
   });
 }
 function animal(parent, kind, role) {
-  const froggy = kind === 'frog',
-    sumo = role === 'sumo';
+  const froggy = kind === 'frog';
   const torso = group(parent, 'torso');
   batch(torso, (b) => {
     if (froggy) {
-      b.ball(0, 0.793, -0.021, 0.315, 0.368, 0.249, frog, [-0.17, 0, 0]);
-      b.ball(0, 0.737, 0.12, 0.259, 0.283, 0.153, frogPale, [-0.16, 0, 0]);
-      for (let k = 0; k < 16; k++) {
-        const a = k * 2.4;
-        b.ball(
-          0.265 * Math.cos(a),
-          0.77 + 0.176 * Math.sin(k * 9),
-          -0.12 + 0.116 * Math.sin(a),
-          0.034,
-          0.023,
-          0.027,
-          '#7c8957',
-        );
-      }
+      inkVolume(
+        b,
+        [
+          [0, 0.422, -0.085, 0.086, 0.089],
+          [0, 0.51, -0.082, 0.205, 0.18],
+          [0, 0.677, -0.051, 0.299, 0.234],
+          [0, 0.82, -0.006, 0.321, 0.229],
+          [0, 0.976, 0.051, 0.262, 0.19],
+          [0, 1.083, 0.101, 0.193, 0.149],
+          [0, 1.23, 0.132, 0.139, 0.097],
+        ],
+        frog,
+        32,
+        kind,
+      );
+      inkVolume(
+        b,
+        [
+          [0, 0.508, -0.066, 0.091, 0.08],
+          [0, 0.623, 0.085, 0.21, 0.159],
+          [0, 0.828, 0.104, 0.264, 0.183],
+          [0, 0.983, 0.124, 0.2, 0.137],
+          [0, 1.19, 0.141, 0.119, 0.079],
+        ],
+        frogPale,
+      );
     } else {
-      b.ball(0, 0.958, -0.012, 0.237, 0.43, 0.216, hare, [-0.15, 0, 0]);
-      b.ball(0, 0.87, 0.105, 0.188, 0.285, 0.144, '#e7d9bd', [-0.14, 0, 0]);
-      b.ball(0, 0.767, -0.229, 0.104, 0.105, 0.096, '#f1e7cf');
-      for (let k = 0; k < 7; k++) {
-        const y = 0.83 + k * 0.035;
-        b.stroke(
-          [
-            [0.137, y, 0.148],
-            [0.15, y + 0.017, 0.142],
-            [0.157, y + 0.038, 0.12],
-          ],
-          0.0045,
-          '#b1a287',
-        );
-      }
+      inkVolume(
+        b,
+        [
+          [0, 0.504, -0.059, 0.078, 0.09],
+          [0, 0.646, -0.065, 0.199, 0.18],
+          [0, 0.788, -0.039, 0.225, 0.193],
+          [0, 0.988, 0, 0.207, 0.181],
+          [0, 1.166, 0.037, 0.187, 0.158],
+          [0, 1.28, 0.064, 0.14, 0.13],
+          [0, 1.444, 0.066, 0.112, 0.092],
+        ],
+        hare,
+        36,
+        kind,
+      );
+      inkVolume(
+        b,
+        [
+          [0, 0.698, -0.158, 0.055, 0.045],
+          [0, 0.715, -0.226, 0.085, 0.071],
+          [0, 0.773, -0.282, 0.1, 0.083],
+          [0, 0.827, -0.318, 0.078, 0.06],
+          [0, 0.85, -0.371, 0.023, 0.022],
+          [0, 0.863, -0.399, 0.002, 0.002],
+        ],
+        '#efe0c9',
+        20,
+        'rabbit',
+      );
     }
-    if (sumo) {
-      const y = froggy ? 0.668 : 0.799,
-        rx = froggy ? 0.309 : 0.236;
-      b.ball(0, y, 0, rx, 0.104, rx * 0.82, '#667774');
-      b.box(0, y - 0.078, rx * 0.72, 0.115, 0.167, 0.065, '#5e716e', [0.14, 0, 0]);
-      b.loop(0, y + 0.048, 0, rx, rx * 0.82, 0.025, '#d3c39c');
-      b.ball(0, y, -rx * 0.83, 0.075, 0.059, 0.062, '#657775');
-    } else if (role === 'porter') {
+    if (role === 'porter') {
       if (!froggy) {
-        const py = 1.274;
+        const py = 1.293,
+          px = -0.18;
         b.stroke(
           [
-            [-0.8, py - 0.061, -0.076],
-            [0, py, -0.081],
-            [0.8, py - 0.061, -0.076],
+            [px + 0.06, py - 0.105, -0.93],
+            [px, py, 0.035],
+            [px - 0.052, py - 0.094, 0.92],
           ],
-          0.027,
-          '#90724e',
+          0.022,
+          '#906c45',
         );
-        for (const s of [-1, 1]) {
-          b.rod([s * 0.71, py - 0.04, -0.075], [s * 0.83, 0.86, -0.075], 0.009, '#81694b');
-          b.rod([s * 0.71, py - 0.04, -0.075], [s * 0.58, 0.86, -0.075], 0.009, '#81694b');
-          basket(b, s * 0.7, 0.6, -0.075, 0.92);
+        for (const sign of [-1, 1]) {
+          const x = px - sign * 0.045,
+            z = sign * 0.73;
+          for (const join of [-1, 1]) {
+            b.stroke(
+              [
+                [x, py - 0.057, z],
+                [x + join * 0.158, 1.035, z],
+                [x + join * 0.198, 0.854, z],
+              ],
+              0.009,
+              '#8d775a',
+            );
+            b.loop(x, py - 0.05, z, 0.029, 0.031, 0.12, '#b69870');
+          }
+          basket(b, x, 0.573, z, 0.93);
         }
       } else {
         for (let j = 0; j < 7; j++) {
@@ -540,7 +780,7 @@ function animal(parent, kind, role) {
           '#b49a6d',
         );
       }
-    } else if (!froggy) {
+    } else if (!froggy && role === 'wander') {
       b.stroke(
         [
           [-0.17, 1.21, 0.009],
@@ -555,126 +795,63 @@ function animal(parent, kind, role) {
     residentTorso(b, kind, role);
   });
   const head = group(torso, 'head', 0, froggy ? 1.208 : 1.423, 0.072);
-  batch(head, b => {
-    if (froggy) frogHead(b);
-    else hareHead(b);
-    residentHead(b, kind);
-  });
+  batch(head, (b) => muzzleInk(b, froggy));
   for (const s of [-1, 1]) {
-    armLimb(torso, s, kind, role);
+    if (role !== 'pounder' && role !== 'turner') armLimb(torso, s, kind, role);
     legLimb(parent, s, kind, role);
   }
   if (froggy && role === 'wander') {
-    batch(torso, (b) => {
-      b.rod([-0.16, 0.84, 0.15], [-0.41, 1.96, -0.03], 0.017, '#83905c');
-      b.ball(-0.41, 1.94, -0.03, 0.323, 0.067, 0.312, '#84945e', [0, 0.1, 0.16]);
-      for (let i = 0; i < 7; i++) {
-        const a = (i * TAU) / 7;
-        b.rod(
-          [-0.41, 2.002, -0.03],
-          [-0.41 + 0.28 * Math.sin(a), 1.958, -0.03 + 0.28 * Math.cos(a)],
-          0.006,
-          '#626f4e',
-        );
-      }
-    });
-  }
-  finishResident(parent, kind);
-}
-function shellPoint(a, r) {
-  return [
-    0.397 * Math.sin(a) * r,
-    0.235 + 0.332 * Math.sqrt(Math.max(0, 1 - r * r)),
-    0.506 * Math.cos(a) * r - 0.041,
-  ];
-}
-function turtle(parent) {
-  batch(parent, (b) => {
-    b.ball(0, 0.222, -0.031, 0.404, 0.15, 0.516, '#a48a54');
-    const points = [],
-      norms = [],
-      ind = [];
-    for (let j = 0; j <= 13; j++)
-      for (let i = 0; i <= 30; i++) {
-        const a = (i * TAU) / 30,
-          r = j / 13;
-        points.push(...shellPoint(a, r));
-        const n = v(Math.sin(a) * r, 0.58 * Math.sqrt(1 - r * r), Math.cos(a) * r).normalize();
-        norms.push(...n.toArray());
-        if (j < 13 && i < 30) {
-          const k = j * 31 + i;
-          ind.push(k, k + 31, k + 1, k + 1, k + 31, k + 32);
-        }
-      }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(norms, 3));
-    g.setIndex(ind);
-    b.add(g, '#7d7145');
-    g.dispose();
-    for (const r of [0.45, 0.78, 0.99]) {
-      const pts = [];
-      for (let i = 0; i <= 24; i++)
-        pts.push(shellPoint((i * TAU) / 24, r + 0.018 * Math.sin((i * PI) / 2)));
-      b.stroke(pts, 0.011, r > 0.9 ? '#a3824c' : '#554e35');
-    }
-    for (let i = 0; i < 11; i++) {
-      const a = (i * TAU) / 11;
+    batch(torso, (b) =>
       b.stroke(
         [
-          shellPoint(a - 0.11, 0.45),
-          shellPoint(a + 0.04, 0.65),
-          shellPoint(a, 0.78),
-          shellPoint(a + 0.11, 0.98),
+          [-0.17, 0.84, 0.19],
+          [-0.23, 1.11, 0.13],
+          [-0.45, 1.932, -0.055],
         ],
-        0.008,
-        '#594f36',
-      );
-      b.stroke(
-        [shellPoint(a + 0.125, 0.51), shellPoint(a + 0.165, 0.61), shellPoint(a + 0.2, 0.7)],
-        0.008,
-        '#a88c51',
-      );
-    }
-    b.ball(0, 0.245, 0.402, 0.115, 0.119, 0.181, '#8b8451', [0.21, 0, 0]);
-    b.ball(0, 0.285, 0.555, 0.153, 0.128, 0.166, '#9b8d54');
-    b.ball(0, 0.253, 0.648, 0.112, 0.072, 0.108, '#ba9a64');
-    for (const s of [-1, 1]) {
-      b.ball(s * 0.113, 0.31, 0.618, 0.028, 0.029, 0.025, ink);
-      b.ball(s * 0.123, 0.317, 0.631, 0.009, 0.009, 0.008, '#f4dfb7');
-      for (let k = 0; k < 5; k++)
-        b.ball(
-          s * (0.072 + (k % 2) * 0.033),
-          0.268 + Math.sin(k * 2) * 0.027,
-          0.635 - (k % 3) * 0.026,
-          0.016,
-          0.013,
-          0.016,
-          '#ce9c58',
-        );
-      for (const z of [-0.25, 0.25]) {
-        b.ball(s * 0.333, 0.139, z, 0.102, 0.103, 0.1, '#8a8051');
-        b.ball(s * 0.389, 0.083, z + 0.042, 0.095, 0.077, 0.105, '#a39058');
-        for (let i = -1; i <= 1; i++)
-          b.rod(
-            [s * 0.405 + i * 0.023, 0.054, z + 0.09],
-            [s * 0.43 + i * 0.03, 0.037, z + 0.15],
-            0.012,
-            '#c4aa78',
-            0.006,
-          );
-      }
-    }
-    b.stroke(
-      [
-        [-0.099, 0.239, 0.67],
-        [0, 0.223, 0.729],
-        [0.092, 0.239, 0.677],
-      ],
-      0.006,
-      '#776741',
+        0.015,
+        '#8c794e',
+      ),
     );
-  });
+  }
+  finishResident(parent, kind);
+  sculptHead(head, kind, role);
+  if (froggy && role === 'wander') scrollParasol(torso);
+}
+export function createMochiPounding(parent) {
+  return buildPounding(parent, { animal, batch, group, shadow });
+}
+function turtle(parent) {
+  scrollShell(parent);
+  batch(parent, b=>b.ball(0,.175,-.027,.345,.087,.449,'#ae8757'));
+  for (const side of [-1,1]) for(const front of [-1,1]) {
+    const joint=group(parent,'turtleFoot'+side+','+front,side*.235,.178,front*.226);
+    joint.userData.stride=side*front;
+    batch(joint, b=>{
+      inkVolume(b,[[0,0,0,.08,.072],[side*.078,-.027,-.031,.087,.072],
+        [side*.133,-.081,-.019,.071,.073],[side*.157,-.105,.043,.071,.051],
+        [side*.191,-.13,.085,.054,.034]],'#ac8b5d',22,'frog');
+      for(let i=-1;i<=1;i++)
+        inkVolume(b,[[side*.166+i*.021,-.121,.055,.024,.022],
+          [side*.194+i*.026,-.134,.109,.018,.019],[side*.213+i*.031,-.154,.148,.004,.006]],
+          '#bfa477',12);
+    });
+  }
+  const head=group(parent,'turtleNeck');
+  sculptTurtleHead(head);
+}
+function turtleGait(mesh, time, movement, resting) {
+  const phase=time*(movement>1?6.4:3.8);
+  for(const part of mesh.children) {
+    const diagonal=part.userData.stride;
+    if(diagonal) {
+      const swing=diagonal*Math.sin(phase)*Math.min(1,movement);
+      part.rotation.y=swing*.27;
+      part.position.y=.178+.031*Math.max(0,swing);
+    } else if(part.name==='turtleNeck'){
+      part.rotation.x=.025*Math.sin(phase)*(resting?.22:1);
+      part.position.z=(resting?-.065:0)+.018*Math.cos(phase)*Math.min(1,movement);
+    }
+  }
 }
 function bike(parent) {
   batch(parent, (b) => {
@@ -1223,10 +1400,16 @@ function gaitHero(h, p, t, dt, camera, state) {
   if(sit==='bath'){h.pose.rotation.x=.11;h.pose.scale.set(g*1.08,g*.92,g*1.09);}
   if(p.buffs?.drunk>0) h.pose.rotation.z+=.115*Math.sin(t*3.7);
   h.leaves.visible = p.mode === 'kusa';
+  h.leaves.position.y = response.extension;
   h.wrap.visible = p.buffs?.wrap > 0;
-  h.wrap.scale.set(1.075,1,1.042);
+  const pull = response.pull;
+  h.leaves.scale.set(1-.25*pull,1,1-.25*pull);
+  h.wrap.position.y = response.extension * .51;
+  h.wrap.scale.set(1.075-pull*.40,1+pull*.50,1.042-pull*.40);
   if (dango && !riding && !sit) {
-    h.spin = (h.spin + (speed * dt) / 0.79) % TAU;
+    if ((!p.grounded && p.airStretch > 0) || speed < .22)
+      h.spin += shortest(h.spin,0) * (1-Math.exp(-dt*14));
+    else h.spin = (h.spin + (speed * dt) / 0.79) % TAU;
     h.rolling.rotation.x = h.spin;
     // Rotate about the centre of the ball while keeping its feet on the ground.
     h.rolling.position.set(0, 0.82 - 0.82 * Math.cos(h.spin), -0.82 * Math.sin(h.spin));
@@ -1239,6 +1422,7 @@ function gaitHero(h, p, t, dt, camera, state) {
   for (let i = 0; i < 2; i++) {
     const s=i?1:-1;
     h.wingParts[i].visible = wings;
+    h.wingParts[i].position.set(s*(.65-.15*pull),.66+response.extension*.93,-.01);
     h.wingParts[i].rotation.z = s * (0.24 + Math.sin(t * (p.grounded ? 5 : 13)) * 0.47);
   }
   for (const key of ['read', 'drink', 'eat']) {
@@ -1268,6 +1452,7 @@ function gaitHero(h, p, t, dt, camera, state) {
   }
   h.bicycle.visible = p.mount === 'bike';
   h.ridingTurtle.visible = p.mount === 'turtle';
+  if(h.ridingTurtle.visible) turtleGait(h.ridingTurtle,t,speed,false);
   const shadowScale = Math.max(0.25, 1 - (p.h || 0) * 0.1);
   h.shadow.scale.set(1.91 * shadowScale * g, 1.6 * shadowScale * g, 1);
   h.shadow.position.y = 0.036 - (p.h || 0);
@@ -1299,7 +1484,7 @@ function makeNPC(entity, root) {
     kind === 'turtle' ? model('turtle', turtle) : model(kind + role, (p) => animal(p, kind, role));
   root.add(mesh);
   const limbs = {};
-  for (const key of ['torso', 'head', 'leg-1', 'leg1', 'arm-1', 'arm1'])
+  for (const key of ['torso', 'head', 'leg-1', 'leg1', 'arm-1', 'arm1', '筆穂耳-1', '筆穂耳1'])
     limbs[key] = mesh.getObjectByName(key);
   const shadowMesh = shadow(mesh, kind === 'turtle' ? 1.19 : 1.2, kind === 'turtle' ? 1.32 : 1.0);
   return { mesh, limbs, shadow: shadowMesh };
@@ -1313,6 +1498,7 @@ function animateNPC(record, n, t) {
   if (isTurtle) {
     const rest = n.role === 'rest',
       step = rest ? 0 : Math.sin(t * 3.8);
+    turtleGait(mesh,t,rest ? 0 : (n.speed || 0)*2,rest);
     mesh.rotation.z = step * 0.027;
     mesh.position.y += Math.abs(step) * 0.014;
     return;
@@ -1323,7 +1509,15 @@ function animateNPC(record, n, t) {
   for (const s of [-1, 1]) {
     limbs['leg' + s].rotation.x = bend * s * (sumo ? 0.08 : 0.38);
     limbs['leg' + s].rotation.z = sumo ? -s * (0.14 + 0.065 * Math.cos(phase)) : 0.025 * s;
-    limbs['arm' + s].rotation.x = -bend * s * (sumo ? 0.078 : n.role === 'porter' ? 0.055 : 0.26);
+    const arm=limbs['arm'+s];
+    const holdsYoke=n.type==='rabbit' && n.role==='porter' && s<0;
+    const holdsLeaf=n.type==='frog' && n.role==='wander' && s<0;
+    arm.rotation.x = holdsYoke || holdsLeaf ? 0 : -bend*s*(sumo ? .12 : n.role==='porter' ? .18 : .28);
+    arm.rotation.z = sumo ? -.07*s*(1+Math.cos(phase)) : .03*s*Math.sin(phase);
+    if(n.type==='rabbit'){
+      const ear=limbs['筆穂耳'+s];
+      ear.rotation.z=s*(.028*Math.sin(phase-.37)+.019*Math.sin(phase*2-.67));
+    }
   }
   const body = limbs.torso;
   body.position.y = (sumo ? -0.109 : 0.02 * Math.abs(bend)) + 0.016 * Math.sin(phase * 2);
@@ -1358,7 +1552,7 @@ function makeObject(o, parent) {
   return { mesh, feature, steam };
 }
 function within(entity, player, limit) {
-  return (entity.x - player.x) ** 2 + (entity.z - player.z) ** 2 < limit * limit;
+  return wrapDelta(entity.x - player.x) ** 2 + wrapDelta(entity.z - player.z) ** 2 < limit * limit;
 }
 
 export function createActors(scene) {
@@ -1406,6 +1600,8 @@ export function createActors(scene) {
       rec.mesh.visible = near;
       if (!near) continue;
       animateNPC(rec, n, t);
+      rec.mesh.position.x = p.x + wrapDelta(n.x - p.x);
+      rec.mesh.position.z = p.z + wrapDelta(n.z - p.z);
     }
     for (const o of state.objects) {
       if (!objectModels[o.type]) continue;
@@ -1418,7 +1614,7 @@ export function createActors(scene) {
       if (!rec) continue;
       rec.mesh.visible = near;
       if (!near) continue;
-      rec.mesh.position.set(o.x, o.y, o.z);
+      rec.mesh.position.set(p.x + wrapDelta(o.x - p.x), o.y, p.z + wrapDelta(o.z - p.z));
       rec.mesh.rotation.y = o.heading || 0;
       if (rec.feature) {
         rec.feature.position.y = 0.395 + 0.011 * Math.sin(t * 2 + o.x);
@@ -1440,7 +1636,7 @@ export function createActors(scene) {
         notices.set(s.id, mesh);
       }
       mesh.visible = true;
-      mesh.position.set(s.x, s.y, s.z);
+      mesh.position.set(p.x + wrapDelta(s.x - p.x), s.y, p.z + wrapDelta(s.z - p.z));
       mesh.rotation.set(
         0.24 + Math.sin(s.age * 21) * 0.34,
         s.heading + s.age * 19,

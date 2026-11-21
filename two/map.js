@@ -1,52 +1,38 @@
-import { REGIONS, terrainHeight, coastX, riverZ, riverHalfWidth, BRIDGES, ROADS } from './terrain.js';
-const SIZE = 560,
-  SPAN = 500,
-  adj = SIZE / SPAN;
-const labels = ['壱', '弐', '参', '肆', '伍', '陸'];
+import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt } from './terrain.js';
+const SIZE = 768, SPAN = 2 * BOUND, adj = SIZE / SPAN;
+export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾'];
 const toX = (x) => SIZE / 2 + x * adj;
+const pigments = [
+  ['snow', [226, 231, 229]], ['autumn', [213, 177, 133]],
+  ['moon', [175, 176, 186]], ['dawn', [232, 200, 163]]
+];
 let paper;
 function baseMap() {
   if (paper) return paper;
   const c = document.createElement('canvas');
   c.width = c.height = SIZE;
-  const g = c.getContext('2d');
-  g.fillStyle = '#eae4cd';
-  g.fillRect(0, 0, SIZE, SIZE);
-  const step = 5;
-  for (let z = -250; z < 250; z += step)
-    for (let x = -250; x < 250; x += step) {
-      const a = terrainHeight(x, z),
-        b = terrainHeight(x + step, z + step),
-        val = Math.min(1, Math.max(0, (a + 2) / 25));
-      g.fillStyle = 'rgba(111,133,100,' + (val * 0.28 + Math.min(0.19, Math.max(0, b - a) * 0.04)) + ')';
-      g.fillRect(toX(x), toX(z), step * adj + 1, step * adj + 1);
-      if (Math.floor(a / 3) !== Math.floor(b / 3)) {
-        g.fillStyle = '#909c792d';
-        g.fillRect(toX(x), toX(z), step * adj, 1);
+  const g = c.getContext('2d'), step = 4;
+  // Sample the same shores and ground as the playable world, including the outer sea.
+  for (let z = -BOUND; z < BOUND; z += step) for (let x = -BOUND; x < BOUND; x += step) {
+    const a = terrainHeight(x, z), b = terrainHeight(x + step, z + step);
+    if (a < WATER_Y) {
+      g.fillStyle = a < -1.1 ? '#97b7b6' : '#b0c7ba';
+    } else {
+      let r = 228, g1 = 222, blue = 191;
+      const weights = seasonAt(x, z);
+      for (const [key, rgb] of pigments) {
+        const k = weights[key];
+        r += (rgb[0] - r) * k; g1 += (rgb[1] - g1) * k; blue += (rgb[2] - blue) * k;
       }
+      const relief = Math.min(26, a * .48) + Math.max(-10, Math.min(10, (b-a)*2));
+      g.fillStyle = 'rgb(' + [r-relief,g1-relief*.85,blue-relief*.62].map(Math.round).join(',') + ')';
     }
-  g.beginPath();
-  for (let x = -250; x <= 250; x += 2) {
-    const y = toX(riverZ(x) - riverHalfWidth(x));
-    if (x === -250) g.moveTo(0, y);
-    else g.lineTo(toX(x), y);
+    g.fillRect(toX(x), toX(z), step * adj + 1, step * adj + 1);
+    if (a > 1 && Math.floor(a / 4) !== Math.floor(b / 4)) {
+      g.fillStyle = '#78775b38';
+      g.fillRect(toX(x), toX(z), step * adj, 1);
+    }
   }
-  for (let x = 250; x >= -250; x -= 2) g.lineTo(toX(x), toX(riverZ(x) + riverHalfWidth(x)));
-  g.closePath();
-  g.fillStyle = '#9bb7aa';
-  g.fill();
-  g.lineWidth = 1;
-  g.strokeStyle = '#7d9a8c';
-  g.stroke();
-  g.beginPath();
-  g.moveTo(0, 0);
-  for (let z = -250; z <= 250; z += 2) g.lineTo(toX(coastX(z)), toX(z));
-  g.lineTo(0, SIZE);
-  g.closePath();
-  g.fillStyle = '#a6bdb1';
-  g.fill();
-  g.strokeStyle = '#7e9e91';
-  g.stroke();
   for (const road of ROADS) {
     g.beginPath();
     road.points.forEach(([x, z], i) => (i ? g.lineTo(toX(x), toX(z)) : g.moveTo(toX(x), toX(z))));
@@ -71,17 +57,23 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false) {
     p = state.player,
     midX = large ? 0 : p.x,
     midZ = large ? 0 : p.z;
-  const span = large ? 500 : 118,
+  const span = large ? SPAN : 118,
     scale = large ? Math.min(w, h) / span : w / span;
   const sx = (x) => w / 2 + (x - midX) * scale,
     sy = (z) => h / 2 + (z - midZ) * scale;
   g.clearRect(0, 0, w, h);
   g.fillStyle = '#ece7d1';
   g.fillRect(0, 0, w, h);
-  g.drawImage(baseMap(), sx(-250), sy(-250), 500 * scale, 500 * scale);
+  const map = baseMap();
+  for (let u = -1; u <= 1; u++) for (let v = -1; v <= 1; v++) {
+    const left = sx(u * SPAN - BOUND), top = sy(v * SPAN - BOUND);
+    const side = SPAN * scale;
+    if (left < w && top < h && left + side > 0 && top + side > 0)
+      g.drawImage(map, left, top, side, side);
+  }
   for (const [i, r] of REGIONS.entries()) {
-    const x = sx(r.x),
-      y = sy(r.z),
+    const x = w / 2 + wrapDelta(r.x - midX) * scale,
+      y = h / 2 + wrapDelta(r.z - midZ) * scale,
       on = state.visited.includes(r.id),
       rad = large ? 11 : 6;
     if (goal === r.id) {
@@ -137,7 +129,7 @@ export function mapHit(canvas, e) {
   const b = canvas.getBoundingClientRect(),
     x = ((e.clientX - b.left) / b.width) * canvas.width,
     z = ((e.clientY - b.top) / b.height) * canvas.height;
-  const scale = Math.min(canvas.width, canvas.height) / 500;
+  const scale = Math.min(canvas.width, canvas.height) / SPAN;
   return REGIONS.find(
     (r) => Math.hypot(canvas.width / 2 + r.x * scale - x, canvas.height / 2 + r.z * scale - z) < 25,
   );

@@ -1,4 +1,4 @@
-import { groundHeight, constrainMove, canLand, REGIONS, regionAt } from './terrain.js';
+import { groundHeight, constrainMove, overheadHeight, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, WATER_Y, seasonAt } from './terrain.js';
 
 const MAX_VITAL = 100;
 const RISE_GRAVITY = 20;
@@ -11,6 +11,9 @@ const LEDGE_GRACE = .085;
 const CEILING = 24;
 const SPEED = { foot: 6.4, dango: 11.8, turtle: 21, bike: 15.3 };
 const STAMP_RADIUS = 6;
+const SEASONAL_STOPS = {
+  snow: ['onsen','sake'], autumn: ['manga','haramaki'], moon: ['sake','manga'], dawn: ['ramen','haramaki']
+};
 const MODE_COST = { normal: 0, dango: 7, kusa: 6, kinako: 6, habutae: 10 };
 const MODE_DRAIN = { normal: 0, dango: 4.2, kusa: 3, kinako: 3.5, habutae: 5.5 };
 const MODE_NAME = { normal: 'ふつうのお餅', dango: '団子モード', kusa: '草餅', kinako: 'きなこ餅', habutae: '羽二重餅' };
@@ -24,7 +27,7 @@ const PICKUP_ACTION = {
 };
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const distance = (a, b) => Math.hypot(wrapDelta(a.x - b.x), wrapDelta(a.z - b.z));
 
 function makeWorld() {
   const objects = [];
@@ -42,6 +45,15 @@ function makeWorld() {
     });
   }
   REGIONS.forEach(({ id, x, z }, i) => {
+    if (SEASONAL_STOPS[id]) {
+      const [first, second] = SEASONAL_STOPS[id];
+      object(first, x - 13, z - 9);
+      object(second, x + 6, z + 14);
+      object('port', x + 12, z + 5);
+      npc('rabbit', 'wander', x - 7, z - 12, i + 1.4);
+      npc('frog', 'porter', x - 19, z + 5, i + 2.8);
+      return;
+    }
     const river = id === 'river';
     const places = river
       ? [[-10,44], [8,53], [-15,68], [14,37], [-18,49], [12,66]]
@@ -67,7 +79,7 @@ export function createGame(snapshot = null) {
   const player = {
     x: 0, z: 62, y: groundHeight(0,62), h: 0, vx: 0, vz: 0, vy: 0, speed: 0, heading: 0,
     grounded: true, hp: MAX_VITAL, mp: MAX_VITAL, mode: 'normal', mount: null, activity: null,
-    activityTime: 0, stretch: 0, landing: 0, impact: 0, throwTime: 0, invulnerable: 0,
+    activityTime: 0, airStretch: 0, inWater: false, night: false, stretch: 0, landing: 0, impact: 0, throwTime: 0, invulnerable: 0,
     buffs: { warm: 0, swift: 0, drunk: 0, full: 0, wrap: 0 }
   };
   const region = REGIONS[regionAt(player.x,player.z)];
@@ -75,6 +87,7 @@ export function createGame(snapshot = null) {
     time: 0, player, npcs, objects, shots: [], events: [], score: 0,
     region: region.name, regionId: region.id, visited: [region.id]
   };
+  const climate = {};
   let heldJump = false;
   let bufferedJump = 0;
   let ledgeGrace = 0;
@@ -83,7 +96,6 @@ export function createGame(snapshot = null) {
   let throwCooldown = 0;
   let turtlePause = 0;
   let turtleLeg = 0;
-  let shore = { x: player.x, z: player.z };
 
   function emit(type, data) {
     if (state.events.length >= 160) state.events.shift();
@@ -192,15 +204,23 @@ export function createGame(snapshot = null) {
     if (player.activity) return false;
     const footLaunch = player.grounded || ledgeGrace > 0;
     const flap = !player.mount && player.mode === 'habutae' && player.vy <= 2;
-    if (!footLaunch && !flap) {
-      // A tap just before touchdown feels like one continuous bounce.
-      bufferedJump = JUMP_BUFFER;
-      return false;
+    if (!footLaunch) {
+      // Each fresh press pulls out more dough. Only the unused extension gives
+      // lift, so ordinary modes still fall after a burst of rapid presses.
+      const before = player.airStretch;
+      player.airStretch = Math.min(1, before + 0.23);
+      player.vy += (player.airStretch - before) * 8;
+      player.stretch = .23;
+      if (flap) player.vy = Math.max(player.vy, 7.5);
+      if (player.vy < 0 && player.h < .55) bufferedJump = JUMP_BUFFER;
+      sound('elastic');
+      return true;
     }
+    player.airStretch = 0;
     const stretch = !player.mount && player.mode === 'dango';
     const takeoffSpeed = stretch ? STRETCH_SPEED : JUMP_SPEED;
     if (player.mount) player.vy = 8.6;
-    else player.vy = footLaunch ? takeoffSpeed : 7.5;
+    else player.vy = takeoffSpeed;
     player.grounded = false;
     player.stretch = stretch ? .58 : .20;
     player.landing = 0;
@@ -220,7 +240,7 @@ export function createGame(snapshot = null) {
       message('電動自転車を返した。');
     } else {
       turtle.mounted = false;
-      const position = constrainMove(player.x, player.z, player.x - Math.sin(player.heading), player.z - Math.cos(player.heading), 0);
+      const position = constrainMove(player.x, player.z, player.x - Math.sin(player.heading), player.z - Math.cos(player.heading), 0, player.y);
       turtle.x = turtle.homeX = position.x;
       turtle.z = turtle.homeZ = position.z;
       turtle.y = groundHeight(turtle.x,turtle.z);
@@ -275,7 +295,7 @@ export function createGame(snapshot = null) {
     return true;
   }
   function act(action) {
-    if (action === 'jump') return jump();
+    if (action === 'jump') { heldJump = true; return jump(); }
     if (action === 'throw') return throwNotice();
     if (action === 'dismount') return dismount();
     if (action === 'interact') return interact();
@@ -304,7 +324,7 @@ export function createGame(snapshot = null) {
     // Its first stop is the sheltered nook between the two riverbank rocks.
     const route = [[-5,-4],[-3,-7],[2,-4],[0,0]];
     const [dx,dz] = route[turtleLeg];
-    const tx = turtle.homeX + dx - turtle.x, tz = turtle.homeZ + dz - turtle.z;
+    const tx = wrapDelta(turtle.homeX + dx - turtle.x), tz = wrapDelta(turtle.homeZ + dz - turtle.z);
     const length = Math.hypot(tx,tz);
     turtle.role = 'wander';
     if (length < .16) {
@@ -353,13 +373,13 @@ export function createGame(snapshot = null) {
       let first = Infinity;
       for (const n of npcs) {
         if (n === turtle || shot.y < n.y-.1 || shot.y > n.y + 2.15) continue;
-        const rx = n.x-shot.x, rz = n.z-shot.z;
+        const rx = wrapDelta(n.x-shot.x), rz = wrapDelta(n.z-shot.z);
         const along = clamp(rx*dx+rz*dz,0,length);
         if (along < first && Math.hypot(rx-along*dx,rz-along*dz) < .8) {
           first = along; hit = n;
         }
       }
-      shot.x += dx*length; shot.z += dz*length;
+      shot.x = wrapCoord(shot.x + dx*length); shot.z = wrapCoord(shot.z + dz*length);
       shot.age += dt; shot.life -= dt;
       if (hit) {
         hit.flash = .58; state.score += 10;
@@ -386,7 +406,8 @@ export function createGame(snapshot = null) {
     const amount = Math.max(1,Math.hypot(dx,dz));
     dx /= amount; dz /= amount;
     const base = SPEED[player.mount] || (player.mode === 'dango' ? SPEED.dango : SPEED.foot);
-    const speed = base * (player.buffs.swift>0 ? 1.42 : 1) * (player.buffs.full>0 ? .81 : 1);
+    const waterDrag = player.inWater && !player.mount ? .72 : 1;
+    const speed = base * waterDrag * (player.buffs.swift>0 ? 1.42 : 1) * (player.buffs.full>0 ? .81 : 1);
     if (dx || dz) player.heading = Math.atan2(dx,dz);
     const traction = player.activity==='fall' ? 4 : player.mode==='dango' ? 6 : 13;
     const ease = 1 - Math.exp(-dt*traction);
@@ -394,10 +415,11 @@ export function createGame(snapshot = null) {
     player.vz += (dz*speed-player.vz)*ease;
     if (Math.abs(player.vx)<.002) player.vx = 0;
     if (Math.abs(player.vz)<.002) player.vz = 0;
-    const at = constrainMove(player.x,player.z,player.x+player.vx*dt,player.z+player.vz*dt,player.h);
+    const at = constrainMove(player.x,player.z,player.x+player.vx*dt,player.z+player.vz*dt,player.h,player.y);
     player.speed = distance(player,at)/dt;
     player.x = at.x; player.z = at.z;
-    const floor = groundHeight(at.x,at.z);
+    const floor = groundHeight(at.x,at.z,player.y);
+    const ceiling = overheadHeight(at.x,at.z,player.y);
     const wasGrounded = player.grounded;
     if (player.grounded && floor >= player.y-.32 && player.vy<=0) player.y = floor;
     if (player.mode==='habutae' && !player.mount && input.jump && !player.activity) {
@@ -409,6 +431,11 @@ export function createGame(snapshot = null) {
       player.vy -= (player.vy > 0 ? RISE_GRAVITY : FALL_GRAVITY)*dt;
     }
     player.y += player.vy*dt;
+    const headroom = Math.max(floor, ceiling - (player.mount ? 2.15 : 1.58) - player.airStretch * .68);
+    if (player.y > headroom && player.vy > 0) {
+      player.y = headroom;
+      player.vy = 0;
+    }
     player.h = clamp(player.y-floor,0,CEILING);
     player.grounded = player.y <= floor && player.vy <= 0;
     if (wasGrounded && !player.grounded && player.vy <= 0) ledgeGrace = LEDGE_GRACE;
@@ -419,15 +446,8 @@ export function createGame(snapshot = null) {
       }
       player.vy = 0;
       player.h = 0;
-      if (canLand(player.x,player.z)) {
-        player.y = floor;
-        shore.x = player.x; shore.z = player.z;
-      } else {
-        player.x = shore.x; player.z = shore.z;
-        player.y = groundHeight(shore.x,shore.z);
-        player.speed = player.vx = player.vz = 0;
-        message('ふわりと、足のつく岸辺に着地した。');
-      }
+      player.y = floor;
+      player.airStretch = 0;
     } else if (player.h >= CEILING) {
       player.y = floor + CEILING; player.vy = Math.min(0,player.vy);
     }
@@ -448,7 +468,7 @@ export function createGame(snapshot = null) {
       if (!protectedVitals()) player.hp = Math.max(0,player.hp-7);
       if (player.hp === 0) {
         player.mode = 'normal'; player.grounded = true; player.h = player.vy = 0;
-        player.y = groundHeight(player.x,player.z);
+        player.y = groundHeight(player.x,player.z,player.y);
         beginActivity('sleep',5);
         message('お餅はその場で、すやすや眠った。'); sound('sleep');
       } else {
@@ -464,9 +484,11 @@ export function createGame(snapshot = null) {
   function updateRegion(collectStamp) {
     const region = REGIONS[regionAt(player.x,player.z)];
     state.region = region.name; state.regionId = region.id;
+    player.night = seasonAt(player.x,player.z,climate).moon > .48;
+    player.inWater = player.grounded && waterDepth(player.x,player.z) > .14 && player.y < WATER_Y - .08;
     if (!collectStamp || state.visited.includes(region.id) || distance(player,region)>STAMP_RADIUS || player.h>3) return;
     state.visited.push(region.id);
-    const text = state.visited.length === REGIONS.length ? '六景踏破！ 旅の印がすべて揃った。' : region.name+'の旅の印をもらった。';
+    const text = state.visited.length === REGIONS.length ? '十景踏破！ 旅の印がすべて揃った。' : region.name+'の旅の印をもらった。';
     emit('stamp',{ id:region.id, text }); message(text); sound('pickup');
   }
   function advance(dt, input) {
@@ -518,49 +540,55 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 2, time: state.time, score: state.score, visited: [...state.visited],
+      version: 3, time: state.time, score: state.score, visited: [...state.visited],
       player: { ...player, buffs: { ...player.buffs } },
       items: objects.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
       turtle: { x:turtle.x, z:turtle.z, homeX:turtle.homeX, homeZ:turtle.homeZ, pause:turtlePause, leg:turtleLeg },
-      lastBath: lastBath?.id ?? null, shore: { ...shore }
+      lastBath: lastBath?.id ?? null
     };
   }
   function restore(data) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
-    const point = (x,z) => finite(x,-240,240) && finite(z,-240,240);
-    if (!data || data.version !== 2 || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
+    if (!data || ![2,3].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
     const p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
+    // The original six districts occupy the prefix of the inventory. New
+    // stops start stocked even when an old journey resumes on a borrowed bike.
+    const old = data.version === 2;
+    const savedPorts = old ? 6 : ports.length;
+    const savedItems = old ? 36 : objects.length;
     if (!finite(data.time,0,1e9) || !Number.isSafeInteger(data.score) || data.score<0 ||
         !data.visited.every(id=>REGIONS.some(region=>region.id===id)) ||
         !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,200) ||
-        !finite(p.vx,-35,35) || !finite(p.vz,-35,35) || !finite(p.vy,-80,19) ||
+        !finite(p.vx,-35,35) || !finite(p.vz,-35,35) || !finite(p.vy,-80,27) ||
         !finite(p.speed,0,60) || !finite(p.heading,-Math.PI,Math.PI) || typeof p.grounded!=='boolean' ||
         !finite(p.hp,0,100) || !finite(p.mp,0,100) || !Object.hasOwn(MODE_COST,p.mode) ||
         ![null,'turtle','bike'].includes(p.mount) || ![null,'fall','sleep','bath','read','drink','eat'].includes(p.activity) ||
         !finite(p.activityTime,0,6) || !p.buffs || !Object.keys(BUFF_TIME).every(k=>finite(p.buffs[k],0,BUFF_TIME[k])) ||
         ![p.stretch,p.invulnerable,p.throwTime].every(n=>finite(n,0,3)) ||
-        !Array.isArray(data.items) || data.items.length!==objects.length || !data.items.every(n=>finite(n,0,65)) ||
-        !Array.isArray(data.bikes) || data.bikes.length!==ports.length ||
-        !data.bikes.every(n=>Number.isInteger(n)&&finite(n,0,ports.length*2)) ||
-        data.bikes.reduce((total,n)=>total+n,p.mount==='bike'?1:0)!==ports.length*2 ||
+        !Array.isArray(data.items) || data.items.length!==savedItems || !data.items.every(n=>finite(n,0,65)) ||
+        !Array.isArray(data.bikes) || data.bikes.length!==savedPorts ||
+        !data.bikes.every(n=>Number.isInteger(n)&&finite(n,0,savedPorts*2)) ||
+        data.bikes.reduce((total,n)=>total+n,p.mount==='bike'?1:0)!==savedPorts*2 ||
         !point(t.x,t.z) || !point(t.homeX,t.homeZ) || !finite(t.pause,0,12) ||
-        !Number.isInteger(t.leg) || !finite(t.leg,0,3) || !data.shore || !point(data.shore.x,data.shore.z)) return;
+        !Number.isInteger(t.leg) || !finite(t.leg,0,3)) return;
     for (const key of Object.keys(player)) {
-      if (key!=='buffs' && key!=='landing' && key!=='impact') player[key]=p[key];
+      if (!['buffs','landing','impact','airStretch','night','inWater'].includes(key)) player[key]=p[key];
     }
     // These short pose cues were added after the first version-two saves.
+    player.airStretch = !player.grounded && finite(p.airStretch,0,1) ? p.airStretch : 0;
     player.landing = finite(p.landing,0,.25) ? p.landing : 0;
     player.impact = finite(p.impact,0,1) ? p.impact : 0;
     for (const key of Object.keys(BUFF_TIME)) player.buffs[key]=p.buffs[key];
-    player.y = groundHeight(player.x,player.z)+player.h;
+    player.y = groundHeight(player.x,player.z,p.y - p.h)+player.h;
     state.score=data.score; state.time=data.time;
     state.visited=[...new Set(data.visited)];
-    objects.forEach((o,i)=>{o.cooldown=data.items[i]; o.active=o.cooldown===0;});
-    ports.forEach((o,i)=>{o.bikes=data.bikes[i];});
+    objects.forEach((o,i)=>{o.cooldown=data.items[i] ?? 0; o.active=o.cooldown===0;});
+    ports.forEach((o,i)=>{o.bikes=data.bikes[i] ?? 2;});
     Object.assign(turtle, {x:t.x,z:t.z,homeX:t.homeX,homeZ:t.homeZ,y:groundHeight(t.x,t.z),mounted:p.mount==='turtle'});
-    turtlePause=t.pause; turtleLeg=t.leg; shore={...data.shore};
+    turtlePause=t.pause; turtleLeg=t.leg;
     lastBath=objects.find(o=>o.type==='onsen' && o.id===data.lastBath)??null;
     updateRegion(false);
   }

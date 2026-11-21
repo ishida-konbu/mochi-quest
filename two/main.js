@@ -1,14 +1,16 @@
 import * as THREE from './vendor/three.module.min.js';
+import { applyClimateLights } from './atmosphere.js';
+import { createWake } from './wake.js';
 import { createWorld } from './world.js';
 import { setRiverStones } from './scanned-stone.js';
 import { createBathReflection } from './spring-water.js';
 import { createInkPass } from './ink.js';
 import { createActors, getExpression } from './actors.js';
 import { createGame } from './game.js';
-import { REGIONS, groundHeight, solidHeightAt } from './terrain.js';
+import { REGIONS, groundHeight, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
 import { createAudio } from '../sound.js';
 import { MODES, EMOTES, HELP, glyph, paintGlyphs, drawFace } from './interface.js';
-import { drawMap, mapHit } from './map.js';
+import { drawMap, mapHit, labels } from './map.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('scene'),
@@ -58,6 +60,7 @@ let previous = 0,
   world,
   actors,
   bathReflection,
+  wake,
   ink,
   contextLost = false;
 const keys = new Set(),
@@ -71,6 +74,8 @@ const compassTicks = [];
 const cards = new Map();
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(57, 1, 0.09, 1500);
+const hemisphere = new THREE.HemisphereLight(0xfff5e3, 0x9a8675, 1.02);
+const bounce = new THREE.DirectionalLight(0xe6efff, 0.65);
 const sun = new THREE.DirectionalLight(0xffe5bd, 2.35);
 const aim = new THREE.Vector3(),
   eye = new THREE.Vector3(),
@@ -196,7 +201,7 @@ function togglePhoto() {
     photoTime = state.time;
     yaw = actors.hero.rotation.y;
     pitch = 0.105;
-    distance = camera.aspect < 0.83 ? 3.48 : 2.95;
+    distance = (camera.aspect < 0.83 ? 3.48 : 2.95) * (1 + .94 * p.airStretch);
     p.emote = null;
     updateEmotes();
   } else {
@@ -207,6 +212,7 @@ function togglePhoto() {
     priorCamera = null;
   }
   stage.classList.toggle('photo-mode', photoMode);
+  resize();
   $('photo-dock').hidden = !photoMode;
   $('photo').setAttribute('aria-pressed', String(photoMode));
   $('photo').ariaLabel = photoMode ? 'お顔カメラを閉じる' : 'お顔カメラ';
@@ -385,8 +391,8 @@ function updateCamera(dt, snap = false) {
   // long flights, while a standing jump retains a visible point of departure.
   const rise = photoMode ? 0 : Math.min(p.h, 3.6) * 0.41;
   const resting = photoMode ? restingEyeHeightOffset[p.activity] || 0 : 0;
-  heroAt.set(p.x, p.y + ride + 0.9 * full - rise - resting, p.z);
-  if (snap) focus.copy(heroAt);
+  heroAt.set(p.x, p.y + ride + 0.9 * full + p.airStretch * (photoMode ? .97 : .65) - rise - resting, p.z);
+  if (snap || Math.abs(heroAt.x - focus.x) > BOUND || Math.abs(heroAt.z - focus.z) > BOUND) focus.copy(heroAt);
   else focus.lerp(heroAt, 1 - Math.exp(-dt * 13));
   const sx = Math.sin(yaw),
     sz = Math.cos(yaw),
@@ -400,7 +406,7 @@ function updateCamera(dt, snap = false) {
       x = focus.x + dx * t,
       z = focus.z + dz * t,
       y = focus.y + dy * t;
-    if (Math.max(groundHeight(x, z), solidHeightAt(x, z, 0.42)) + 0.19 > y) {
+    if (Math.max(groundHeight(x, z, y), solidHeightAt(x, z, 0.2, y)) + 0.19 > y) {
       fraction = Math.max(0.16, (i - 1) / n);
       break;
     }
@@ -409,21 +415,21 @@ function updateCamera(dt, snap = false) {
   eye.x += dx * fraction;
   eye.y += dy * fraction;
   eye.z += dz * fraction;
-  eye.y = Math.max(eye.y, groundHeight(eye.x, eye.z) + 0.2);
+  eye.y = Math.max(eye.y, groundHeight(eye.x, eye.z, eye.y) + 0.2);
   camera.position.copy(eye);
   aim.copy(focus);
   if (!photoMode) {
     aim.x -= sx * 1.65;
     aim.z -= sz * 1.65;
     aim.y += 0.53;
-  } else aim.y += 0.1;
+  } else aim.y -= .13;
   camera.lookAt(aim);
   camera.updateMatrixWorld();
 }
 function updateHUD() {
   $('region').textContent = state.region;
   $('score').textContent = state.score;
-  $('visits').textContent = state.visited.length + '/6';
+  $('visits').textContent = state.visited.length + '/' + REGIONS.length;
   for (const k of ['hp', 'mp']) {
     $(k).textContent = Math.ceil(p[k]);
     $(k + '-bar').style.width = p[k] + '%';
@@ -469,8 +475,8 @@ function updateHUD() {
   const dest = REGIONS.find((r) => r.id === goal);
   $('target').hidden = !dest;
   if (dest) {
-    const dx = dest.x - p.x,
-      dz = dest.z - p.z,
+    const dx = wrapDelta(dest.x - p.x),
+      dz = wrapDelta(dest.z - p.z),
       heading = Math.atan2(dx, -dz) + yaw;
     const pointer = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][
       ((Math.round(heading / (Math.PI / 4)) % 8) + 8) % 8
@@ -485,7 +491,7 @@ function openDialog(kind) {
   save();
   lastFocus = document.activeElement;
   dialogKind = kind;
-  $('dialog-title').textContent = kind === 'map' ? '六景の地図' : '旅の手引き';
+  $('dialog-title').textContent = kind === 'map' ? '十景の地図' : '旅の手引き';
   dialog.showModal();
   if (kind === 'map') {
     selectedPlace = goal || state.regionId;
@@ -495,10 +501,10 @@ function openDialog(kind) {
 function mapDialog() {
   const body = $('dialog-content');
   body.innerHTML =
-    '<div class="atlas-layout"><canvas class="map-canvas" id="atlas" width="540" height="540" aria-label="六つの名所とお餅の現在地"></canvas><div class="map-caption"><div class="map-places"></div><p class="map-detail"></p><div class="actions"><button class="jump-link" id="set-goal">ここを道しるべにする</button><button class="choice" id="clear-goal">道しるべを外す</button></div></div></div>';
+    '<div class="atlas-layout"><canvas class="map-canvas" id="atlas" width="540" height="540" aria-label="十の名所とお餅の現在地"></canvas><div class="map-caption"><div class="map-places"></div><p class="map-detail"></p><div class="actions"><button class="jump-link" id="set-goal">ここを道しるべにする</button><button class="choice" id="clear-goal">道しるべを外す</button></div></div></div>';
   for (const [i, r] of REGIONS.entries()) {
     const b = document.createElement('button');
-    b.innerHTML = '<em>' + ['壱', '弐', '参', '肆', '伍', '陸'][i] + '</em> ' + r.name;
+    b.innerHTML = '<em>' + labels[i] + '</em> ' + r.name;
     b.dataset.id = r.id;
     b.onclick = () => selectMap(r.id);
     body.querySelector('.map-places').append(b);
@@ -509,6 +515,7 @@ function mapDialog() {
   };
   $('set-goal').onclick = () => {
     goal = selectedPlace;
+    lastFocus = canvas;
     persistSettings();
     dialog.close();
     updateHUD();
@@ -516,6 +523,7 @@ function mapDialog() {
   $('clear-goal').hidden = !goal;
   $('clear-goal').onclick = () => {
     goal = null;
+    lastFocus = canvas;
     persistSettings();
     dialog.close();
     updateHUD();
@@ -530,9 +538,16 @@ function selectMap(id) {
   document.querySelector('.map-detail').textContent =
     r.name +
     '　' +
-    Math.round(Math.hypot(p.x - r.x, p.z - r.z)) +
+    Math.round(Math.hypot(wrapDelta(p.x - r.x), wrapDelta(p.z - r.z))) +
     ' m　 ·　 ' +
     (state.visited.includes(id) ? '御朱印を獲得済み' : '未訪問の名所');
+  const landmarks = {
+    snow: '雪灯籠の灯る都。軒先に雪だるまが並ぶ。',
+    autumn: '楓の枝が重なる谷道。紅葉をくぐって峡へ。',
+    moon: '薄の穂越しに北の空を見上げると、十五夜の月。',
+    dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。'
+  };
+  if (landmarks[id]) document.querySelector('.map-detail').append(document.createElement('br'), landmarks[id]);
   drawMap($('atlas'), state, yaw, selectedPlace, true);
 }
 function helpDialog(tab) {
@@ -552,7 +567,7 @@ function helpDialog(tab) {
     row.innerHTML = '<dt>' + k + '</dt><dd>' + v + '</dd>';
     body.querySelector('dl').append(row);
   }
-  $('continue').onclick = () => dialog.close();
+  $('continue').onclick = () => { lastFocus = canvas; dialog.close(); };
 }
 $('map').onclick = $('mini-button').onclick = () => openDialog('map');
 $('guide').onclick = () => openDialog('guide');
@@ -571,7 +586,8 @@ function resize() {
   const w = canvas.clientWidth,
     h = canvas.clientHeight;
   if (!w || !h) return;
-  renderer.setPixelRatio(ratio);
+  const photoRatio = Math.min(coarse ? 1.65 : 2, Math.max(1.6, devicePixelRatio || 1), Math.sqrt(4200000/(w*h)));
+  renderer.setPixelRatio(photoMode ? photoRatio : ratio);
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.fov = w < h ? 65 : 57;
@@ -579,7 +595,7 @@ function resize() {
   ink?.resize();
 }
 function settingsForLighting() {
-  scene.add(new THREE.HemisphereLight(0xfff5e3, 0x9a8675, 1.02));
+  scene.add(hemisphere);
   sun.position.set(35, 38, -51);
   sun.castShadow = true;
   const cam = sun.shadow.camera;
@@ -590,7 +606,6 @@ function settingsForLighting() {
   sun.shadow.mapSize.set(coarse ? 1024 : 1536, coarse ? 1024 : 1536);
   sun.shadow.bias = -0.00035;
   sun.shadow.normalBias = 0.026;
-  const bounce = new THREE.DirectionalLight(0xe6efff, 0.65);
   bounce.position.set(-28, 20, 25);
   scene.add(bounce, sun, sun.target);
 }
@@ -630,7 +645,8 @@ function frame(now) {
   } else photoTime += delta;
   updateCamera(delta);
   sun.target.position.set(p.x, p.y, p.z);
-  sun.position.set(p.x + 35, p.y + 38, p.z - 51);
+  applyClimateLights(hemisphere, sun, bounce, p);
+  wake(p, photoMode ? photoTime : state.time);
   world.update(photoMode ? photoTime : state.time, p, camera);
   // Keep the photographic pose alive while the travel clock is paused.
   if (photoMode) {
@@ -661,7 +677,7 @@ function frame(now) {
     lastSave = state.time;
   }
   // Drop a resolution step only after sustained slow frames, avoiding startup shader compilation.
-  if (now > qualitySince + 3000) {
+  if (!photoMode && now > qualitySince + 3000) {
     frames++;
     workTime += delta;
     if (frames >= 70) {
@@ -689,6 +705,10 @@ function boot() {
     ink = createInkPass(renderer, camera);
     settingsForLighting();
     world = createWorld(scene);
+    wake = createWake(scene);
+    sun.target.position.set(p.x,p.y,p.z);
+    applyClimateLights(hemisphere, sun, bounce, p);
+    wake(p, state.time);
     setRiverStones(scene, state.objects);
     actors = createActors(scene);
     bathReflection = createBathReflection(renderer, scene, actors.hero);

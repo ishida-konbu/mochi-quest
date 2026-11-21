@@ -1,9 +1,16 @@
+import { furnishRoom } from './interiors.js';
 import * as THREE from './vendor/three.module.min.js';
+import { dressSeasonalPlaces, seasonalWeather } from './seasons.js';
+import { createMochiPounding } from './actors.js';
 import { dressPlaces } from './places.js';
 import { createAtmosphere } from './atmosphere.js';
 import { loadPigments, meadowMaterial, trailMaterial, tintedSurface, roundedStone } from './pigments.js';
 import { plantInkTrees, plantUnderstory } from './wilds.js';
 import {
+  BOUND,
+  wrapDelta,
+  seasonAt,
+  shoreDistance,
   BUILDINGS,
   GATES,
   TREES,
@@ -81,100 +88,78 @@ function grain() {
 }
 function landscape(scene, art) {
   const mat = meadowMaterial(art);
-  const surfaceMix = [];
-  const p = [],
-    uv = [],
-    ix = [],
-    col = [],
-    grid = 190,
-    world = 540;
-  const colors = ['#f2f0dc', '#e3edce', '#ebe8d7', '#e6e2cc', '#ede5ca', '#e1e6d6'].map(css);
-  const soil = css('#efeadc'),
-    stone = css('#d5d4c6'),
-    c = new THREE.Color();
-  for (let j = 0; j <= grid; j++)
-    for (let i = 0; i <= grid; i++) {
-      const x = (i / grid - 0.5) * world,
-        z = (j / grid - 0.5) * world,
-        y = h(x, z);
-      p.push(x, y, z);
-      uv.push(x * 0.205 + 0.045 * sin(z * 0.12), z * 0.205 + 0.037 * sin(x * 0.19));
-      const r = regionAt(x, z),
-        d = abs(z - riverZ(x)) - riverHalfWidth(x);
-      let next = r,
-        second = Infinity;
-      for (let a = 0; a < REGIONS.length; a++)
-        if (a !== r) {
-          const dist = (x - REGIONS[a].x) ** 2 + (z - REGIONS[a].z) ** 2;
-          if (dist < second) {
-            second = dist;
-            next = a;
-          }
-        }
-      const separation = sqrt(second) - Math.hypot(x - REGIONS[r].x, z - REGIONS[r].z);
-      c.copy(colors[r]).lerp(colors[next], max(0, 0.5 - separation / 58));
-      c.lerp(soil, max(0, 1 - abs(d - 2) / 7) * 0.79);
-      c.lerp(soil, max(0, min(1, (16 - x + coastX(z)) / 20)));
-      c.lerp(stone, max(0, min(1, (y - 15) / 30)) * 0.68);
-      c.multiplyScalar(0.92 + 0.058 * cos(x * 0.076 + sin(z * 0.044)) + 0.065 * sin(z * 0.115 + sin(x * 0.093)));
-      let canopy = 0;
-      for (const tree of TREES) {
-        const dx = x - tree.x,
-          dz = z - tree.z,
-          radius = tree.h * 0.67 + 2.3;
-        if (abs(dx) > radius || abs(dz) > radius) continue;
-        canopy = max(canopy, 1 - (dx * dx + dz * dz) / (radius * radius));
+  const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
+    '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd'].map(css);
+  const soil = css('#efeadc'), stone = css('#d5d4c6'), c = new THREE.Color(), season = {};
+  const bins = new Map();
+  for (const tree of TREES) {
+    const rad = tree.h*.67+2.3;
+    for (let i=Math.floor((tree.x-rad)/18); i<=Math.floor((tree.x+rad)/18); i++)
+      for (let j=Math.floor((tree.z-rad)/18); j<=Math.floor((tree.z+rad)/18); j++) {
+        const key=i*100+j;
+        if (!bins.has(key)) bins.set(key,[]);
+        bins.get(key).push(tree);
       }
-      const bank = max(max(0, 1 - abs(d - 0.2) / 7.3), max(0, min(1, (7.6 - x + coastX(z)) / 8.2)));
-      surfaceMix.push(canopy, bank);
-      c.multiplyScalar(1 - canopy * 0.12);
-      col.push(c.r, c.g, c.b);
-      if (i < grid && j < grid) {
-        const k = j * (grid + 1) + i,
-          l = k + grid + 1;
-        ix.push(k, l, k + 1, k + 1, l, l + 1);
+  }
+  const grid=40, tiles=8, span=2*BOUND/tiles;
+  for (let row=0; row<tiles; row++) for (let column=0; column<tiles; column++) {
+    const p=[], ix=[], uv=[], col=[], surface=[], seasons=[];
+    for (let j=0; j<=grid; j++) for (let i=0; i<=grid; i++) {
+      const x=(column+i/grid)*span-BOUND, z=(row+j/grid)*span-BOUND, y=h(x,z);
+      p.push(x,y,z);
+      uv.push(x*.205+.045*sin(z*.12), z*.205+.037*sin(x*.19));
+      const r=regionAt(x,z), river=abs(z-riverZ(x))-riverHalfWidth(x), coast=shoreDistance(x,z);
+      c.copy(colors[r]).lerp(soil, max(0,1-abs(river-2)/7)*.72);
+      c.lerp(stone, max(0,min(1,(y-15)/30))*.68);
+      c.multiplyScalar(.96+.042*cos(x*.076+sin(z*.044))+.039*sin(z*.115+sin(x*.093)));
+      let canopy=0;
+      for (const tree of bins.get(Math.floor(x/18)*100+Math.floor(z/18)) || []) {
+        const radius=tree.h*.67+2.3;
+        canopy=max(canopy,1-((x-tree.x)**2+(z-tree.z)**2)/(radius*radius));
+      }
+      surface.push(canopy,max(max(0,1-abs(river-.2)/7.3),max(0,min(1,(7.6-coast)/8.2))));
+      seasonAt(x,z,season);
+      seasons.push(season.snow,season.autumn,season.moon, season.dawn*max(0,min(1,(30-coast)/23)));
+      col.push(c.r,c.g,c.b);
+      if (i<grid && j<grid) {
+        const k=j*(grid+1)+i,l=k+grid+1;
+        ix.push(k,l,k+1,k+1,l,l+1);
       }
     }
-  const ground = geometry(p, ix, uv, col);
-  ground.setAttribute('terrainMix', new THREE.Float32BufferAttribute(surfaceMix, 2));
-  const land = new THREE.Mesh(ground, mat);
-  land.receiveShadow = true;
-  scene.add(land);
+    const ground=geometry(p,ix,uv,col);
+    ground.setAttribute('terrainMix',new THREE.Float32BufferAttribute(surface,2));
+    ground.setAttribute('seasons',new THREE.Float32BufferAttribute(seasons,4));
+    const land=new THREE.Mesh(ground,mat);
+    land.receiveShadow=true;
+    scene.add(land);
+  }
 }
 function buildRoads(scene, art) {
-  const p = [],
-    uv = [],
-    ix = [];
-  const material = trailMaterial(art);
+  const material = trailMaterial(art), climate={};
   for (const road of ROADS) {
-    let travel = 0;
-    const start = p.length / 3;
-    for (let i = 0; i < road.points.length; i++) {
-      const [x, z] = road.points[i],
-        prev = road.points[max(0, i - 1)],
-        next = road.points[min(i + 1, road.points.length - 1)];
-      const dx = next[0] - prev[0],
-        dz = next[1] - prev[1],
-        l = Math.hypot(dx, dz) || 1;
-      travel += Math.hypot(x - prev[0], z - prev[1]);
-      const width = road.width * (1 + 0.045 * sin(x * 1.2 + z * 0.7) + 0.035 * sin(z * 1.8));
-      for (let j = 0; j <= 4; j++) {
-        const across = (j / 4 - 0.5) * width,
-          xx = x + (dz / l) * across,
-          zz = z - (dx / l) * across;
-        p.push(xx, h(xx, zz) + 0.08, zz);
-        uv.push(j / 4, travel / 4.8);
-        if (i < road.points.length - 1 && j < 4) {
-          const k = start + i * 5 + j;
-          ix.push(k, k + 1, k + 5, k + 1, k + 6, k + 5);
+    const p=[], uv=[], ix=[], snow=[];
+    let travel=0;
+    for (let i=0; i<road.points.length; i++) {
+      const [x,z]=road.points[i], prev=road.points[max(0,i-1)], next=road.points[min(i+1,road.points.length-1)];
+      const dx=next[0]-prev[0], dz=next[1]-prev[1], l=Math.hypot(dx,dz)||1;
+      travel+=Math.hypot(x-prev[0],z-prev[1]);
+      const width=road.width*(1+.045*sin(x*1.2+z*.7)+.035*sin(z*1.8));
+      const snowAmount=seasonAt(x,z,climate).snow;
+      const underDeck=BRIDGES.some(b=>abs(x-b.x)<b.halfWidth+.5 && abs(z-b.z)<b.length*.5-.4);
+      for(let j=0;j<=4;j++) {
+        const across=(j/4-.5)*width, xx=x+(dz/l)*across, zz=z-(dx/l)*across;
+        p.push(xx,h(xx,zz)+.08,zz); uv.push(j/4,travel/4.8); snow.push(snowAmount);
+        if(!underDeck && i<road.points.length-1 && j<4) {
+          const k=i*5+j;
+          ix.push(k,k+1,k+5,k+1,k+6,k+5);
         }
       }
     }
+    const geo=geometry(p,ix,uv);
+    geo.setAttribute('snowAmount',new THREE.Float32BufferAttribute(snow,1));
+    const mesh=new THREE.Mesh(geo,material);
+    mesh.receiveShadow=true;mesh.renderOrder=1;scene.add(mesh);
   }
-  const mesh = new THREE.Mesh(geometry(p, ix, uv), material);
-  mesh.receiveShadow = true;
-  mesh.renderOrder = 1;
-  scene.add(mesh);
 }
 function makeWater(scene, art, panorama) {
   const mat = new THREE.ShaderMaterial({
@@ -184,8 +169,9 @@ function makeWater(scene, art, panorama) {
       THREE.UniformsLib.fog,
       {
         clock: { value: 0 },
-        pebble: { value: art.gravel },
-        horizon: { value: panorama || art.gravel },
+        climate: {value:new THREE.Vector4()},
+        pebble: { value: null },
+        horizon: { value: null },
         deep: { value: css('#65898a') },
         jade: { value: css('#b6c9b7') },
         foam: { value: css('#ede9ce') },
@@ -197,7 +183,7 @@ function makeWater(scene, art, panorama) {
         vec4 mvPosition=viewMatrix*wp;gl_Position=projectionMatrix*mvPosition;
         #include <fog_vertex>
       }`,
-    fragmentShader: `uniform float clock;uniform sampler2D pebble,horizon;uniform vec3 deep,jade,foam;
+    fragmentShader: `uniform float clock;uniform vec4 climate;uniform sampler2D pebble,horizon;uniform vec3 deep,jade,foam;
       varying vec3 vWorld;
       #include <fog_pars_fragment>
       float hash(vec2 v){return fract(sin(dot(v,vec2(41.23,73.11)))*21314.5);}
@@ -214,11 +200,14 @@ function makeWater(scene, art, panorama) {
         return line*smoothstep(.31,.78,hash(cell+2.03));
       }
       void main(){
-        vec2 p=vWorld.xz;float t=clock;
+        vec2 p=mod(vWorld.xz+416.,832.)-416.;float t=clock;
         float river=18.+9.*sin(p.x/51.)+3.3*sin(p.x/25.);
         float halfBank=8.6+1.9*sin(p.x/38.+.35)+.95*sin(p.x/14.);
         float coastBand=(p.y-112.)/75.;float shoreX=-250.+64.*exp(-coastBand*coastBand)+5.5*sin(p.y/23.);
-        float inside=max(halfBank-abs(p.y-river), shoreX-p.x);
+        float eastBand=(p.y-176.)/99.;float eastX=374.-48.*exp(-eastBand*eastBand)+7.*sin(p.y/36.);
+        float end=375.+7.*sin(p.x/41.)+4.*cos(p.x/22.);
+        float inside=max(max(halfBank-abs(p.y-river), shoreX-p.x),max(p.x-eastX,abs(p.y)-end));
+        if (p.x>278. && p.y < -104. && p.y > -152.) inside=max(inside,3.1-abs(p.y+130.-3.3*sin((p.x-292.)/15.)));
         float depth=smoothstep(-1.8,6.8,inside);
         vec2 along=normalize(vec2(1.,(9./51.)*cos(p.x/51.)+(3.3/25.)*cos(p.x/25.)));
         vec2 uv=vec2(dot(p,along),p.y-river);
@@ -248,16 +237,27 @@ function makeWater(scene, art, panorama) {
         col=mix(col,foam,glint*.46+hair*.20+shore*.40);
         float under=(1.-smoothstep(3.5,5.1,abs(p.x+.4*sidle)))*smoothstep(-.4,2.,inside);
         col*=1.-under*.19;
+        vec3 nightWater=mix(vec3(.015,.035,.075),vec3(.080,.12,.19),fresnel+glint*.17);
+        col=mix(col,nightWater,climate.z);
+        vec3 dawnWater=mix(vec3(.075,.183,.221),vec3(.52,.355,.32),fresnel*1.18);
+        float choppy=.5+.5*sin(p.y*1.6+.57*sin(p.x*.74-t*.38)+sin(p.y*.27+p.x*.27)-t*.62);
+        dawnWater+=vec3(.055,.051,.050)*(glint*.68+hair*.48+choppy*.14);
+        dawnWater=mix(dawnWater,vec3(.76,.66,.51),shore*.29);
+        col=mix(col,dawnWater,climate.w*.9);
+        vec3 sunDir=normalize(vec3(.976,.094,-.192)),moonDir=normalize(vec3(.13,.26,-.96));
+        float spark=.12+.65*smoothstep(.35,.90,choppy)+.51*glint+.23*hair;
+        col+=vec3(1.55,.82,.33)*exp(-26.*length((reflection-sunDir)*vec3(1.,.63,1.)))*spark*climate.w;
+        col+=vec3(.54,.69,.92)*exp(-24.*length((reflection-moonDir)*vec3(1.,.63,1.)))*spark*climate.z;
         gl_FragColor=vec4(col,1.);
         #include <fog_fragment>
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
   });
-  // UniformsUtils clones texture uniforms; keep the live asynchronously loaded sources.
+  // Keep the live asynchronously loaded sources in the merged fog/water uniforms.
   mat.uniforms.pebble.value = art.gravel;
   mat.uniforms.horizon.value = panorama || art.gravel;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), mat);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(3600, 3600), mat);
   m.rotation.x = -PI / 2;
   m.position.y = WATER_Y;
   scene.add(m);
@@ -578,11 +578,14 @@ class Painter {
     this.fine = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
     this.stems = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, vertexColors: true });
     this.wood = tintedSurface(art.cedar, 0.29);
-    const deckGrain = art.cedar.clone();
-    deckGrain.center.set(0.5, 0.5);
-    deckGrain.rotation = Math.PI * 0.5;
-    deckGrain.needsUpdate = true;
-    this.deck = tintedSurface(deckGrain, 0.3);
+    this.deck = tintedSurface(art.cedar, 0.3);
+    const tintDeck = this.deck.onBeforeCompile;
+    this.deck.onBeforeCompile = shader => {
+      tintDeck(shader);
+      shader.vertexShader = shader.vertexShader.replace('#include <uv_vertex>', `#include <uv_vertex>
+        vMapUv=vec2(vMapUv.y,1.-vMapUv.x);
+        vBumpMapUv=vec2(vBumpMapUv.y,1.-vBumpMapUv.x);`);
+    };
     this.bronze = new THREE.MeshStandardMaterial({ color: '#a69b73', roughness: 0.72, metalness: 0.34 });
     this.masonry = new THREE.MeshLambertMaterial({
       map: repeat(
@@ -637,6 +640,27 @@ class Painter {
       };
       this.sprays[name] = mat;
     }
+    // Keep the silhouette and vein detail of the leaf sprays. Autumn washes
+    // use the original luminance, while hoarfrost settles on the pine tips.
+    const seasonalSpray = (source, winter) => {
+      const mat = source.clone();
+      mat.emissiveIntensity = winter ? .10 : .17;
+      mat.onBeforeCompile = shader => {
+        source.onBeforeCompile(shader);
+        shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
+          vec4 sampleLeaf=texture2D(map,vMapUv);
+          float grain=dot(sampleLeaf.rgb,vec3(.31,.53,.16));
+          ${winter ?
+            'float cover=smoothstep(.040,.43,grain); diffuseColor.rgb*=mix(vec3(.15,.205,.18),vec3(.87,.94,.98),cover);'
+            : 'diffuseColor.rgb*=.51+.85*smoothstep(.024,.52,grain);'}
+          diffuseColor.a*=sampleLeaf.a;
+        `);
+      };
+      mat.customProgramCacheKey=()=>winter?'snowy-needles':'autumn-maples';
+      return mat;
+    };
+    this.sprays.snow = seasonalSpray(this.sprays.pine,true);
+    this.sprays.autumn = seasonalSpray(this.sprays.maple,false);
     this.signs = {};
     for (const glyph of Object.keys(labels))
       this.signs[glyph] = new THREE.MeshLambertMaterial({ map: calligraphy(glyph), side: THREE.DoubleSide });
@@ -648,13 +672,13 @@ class Painter {
       '|' +
       mat.id +
       '|' +
-      Number(shadow) +
-      (chunk ? '|' + Math.floor(x / 104) + ',' + Math.floor(z / 104) : '');
+      Number(shadow) + '|' + Math.floor(x / (chunk ? 104 : 144)) + ',' + Math.floor(z / (chunk ? 104 : 144));
     let b = this.groups.get(key);
     if (!b) {
-      b = { shape, geo: this.shapes[shape], mat, matrices: [], colors: [], shadow };
+      b = { shape, geo: this.shapes[shape], mat, matrices: [], colors: [], shadow, extent: 0 };
       this.groups.set(key, b);
     }
+    b.extent = Math.max(b.extent, matrix.getMaxScaleOnAxis());
     b.matrices.push(matrix.clone());
     b.colors.push(this.color.set(color).clone());
   }
@@ -693,12 +717,19 @@ class Painter {
     this.record(square ? 'box' : 'pole', mat, color, d.matrix, d.position.x, d.position.z, shadow, chunk);
   }
   finish() {
-    for (const { shape, geo, mat, matrices, colors, shadow } of this.groups.values()) {
+    const sprays=new Set(Object.values(this.sprays));
+    for (const { shape, geo, mat, matrices, colors, shadow, extent } of this.groups.values()) {
       const m = new THREE.InstancedMesh(geo, mat, matrices.length);
-      for (let i = 0; i < matrices.length; i++) {
-        m.setMatrixAt(i, matrices[i]);
-        m.setColorAt(i, colors[i]);
+      let index=0;
+      // Interleave sprays so a distant batch can draw two in every five
+      // without dropping the last trees in its grove.
+      const stride=sprays.has(mat)?5:1;
+      for(let pass=0;pass<stride;pass++) for(let i=pass;i<matrices.length;i+=stride) {
+        m.setMatrixAt(index, matrices[i]);
+        m.setColorAt(index++, colors[i]);
       }
+      if(stride>1) m.userData.foliageCount=matrices.length;
+      m.userData.range=Math.min(300,72+extent*24);
       m.computeBoundingSphere();
       m.castShadow = shadow;
       m.receiveShadow = true;
@@ -907,7 +938,7 @@ function lantern(p, x, z, s = 1) {
 function bridge(p, b) {
   const { x, z, length, halfWidth: w } = b,
     n = Math.ceil(length / 0.32),
-    paint = x === 0 ? '#9b4936' : '#795d42';
+    paint = b.maple ? '#b14b38' : x === 0 ? '#9b4936' : '#795d42';
   for (let i = 0; i < n; i++) {
     const zz = z - length * 0.5 + ((i + 0.5) / n) * length,
       y = bridgeHeight(b, zz);
@@ -1005,8 +1036,7 @@ function bridge(p, b) {
 function building(p, b, index) {
   const { x, z, w, d, wall, roof, yaw, kind, y } = b,
     wood = '#69513b',
-    deep = '#554b3e',
-    plaster = '#ded0a3';
+    deep = '#554b3e';
   const local = (u, v, s) => V(x + u * cos(yaw) + s * sin(yaw), y + v, z - u * sin(yaw) + s * cos(yaw));
   const part = (shape, u, v, s, sx, sy, sz, color, mat = p.solid, rot = 0) => {
     const v3 = local(u, v, s);
@@ -1022,6 +1052,7 @@ function building(p, b, index) {
   part('box', 0, 0.42 - stoneHeight / 2, 0, w + 1.1, stoneHeight, d + 1.08, '#969484', p.masonry);
   for (let j = 0; j < 3; j++)
     part('box', 0, 0.18 - j * 0.19, d / 2 + 0.48 + j * 0.39, w * 0.48, 0.28, 0.46, '#a4a28a');
+  furnishRoom(p, b, index, part, local);
   if (kind === 'pagoda') {
     let level = 0.36;
     for (let j = 0; j < 4; j++) {
@@ -1030,17 +1061,18 @@ function building(p, b, index) {
         dd = d * scale,
         tier = 2.15 * scale + 0.64,
         top = 2.1 * scale + 0.3;
-      part('box', 0, level + tier * 0.5, 0, ww * 0.69, tier, dd * 0.69, '#d4c597');
-      part('box', 0, level + 0.06, 0, ww * 0.98, 0.21, dd * 0.98, deep);
-      for (const u of [-1, 0, 1])
+      if (j) part('box', 0, level + tier * 0.5, 0, ww * 0.69, tier, dd * 0.69, '#d4c597');
+      part('box', 0, level + (j ? 0.06 : 0), 0, ww * 0.98, 0.21, dd * 0.98, deep);
+      for (const u of (j ? [-1, 0, 1] : [-1, 1]))
         for (const s of [-1, 1])
           part('box', u * ww * 0.4, level + tier * 0.48, s * dd * 0.4, 0.24, tier, 0.24, '#914a33');
       for (const s of [-1, 1]) {
+        if (!j && s > 0) continue;
         part('box', 0, level + 0.63, s * dd * 0.46, ww * 0.95, 0.105, 0.12, '#99553c');
         for (let k = -3; k <= 3; k++)
           part('box', k * ww * 0.13, level + 0.39, s * dd * 0.46, 0.074, 0.61, 0.074, '#89513a');
       }
-      part('pagodaRoof', 0, level + tier, 0, ww * 1.42, top, dd * 1.42, '#939a90', p.roofs);
+      part('pagodaRoof', 0, level + tier, 0, ww * 1.42, top, dd * 1.42, b.snow ? '#edf3f9' : '#939a90', b.snow ? p.solid : p.roofs);
       for (const side of [-1, 1])
         for (const corner of [-1, 1]) {
           const q = local(side * ww * 0.69, level + tier + top * 0.16, corner * dd * 0.69);
@@ -1056,16 +1088,6 @@ function building(p, b, index) {
     return;
   }
   const tiled = kind !== 'cottage' && kind !== 'inn';
-  part('box', 0, wall * 0.5 + 0.25, 0, w, wall, d, plaster);
-  part('box', 0, 0.58, 0, w * 1.008, 0.68, d * 1.01, '#a18a69', p.boarding);
-  for (const s of [-1, 1]) {
-    part('box', 0, wall * 0.77, s * d * 0.505, w, 0.14, 0.15, wood);
-    part('box', 0, 0.97, s * d * 0.507, w, 0.11, 0.15, wood);
-    for (let j = 0; j < 5; j++) {
-      const u = (j / 4 - 0.5) * w * 0.99;
-      part('box', u, wall * 0.51 + 0.22, s * d * 0.504, 0.16, wall, 0.19, wood);
-    }
-  }
   part('box', 0, wall + 0.23, 0, w * 1.08, 0.26, d * 1.08, deep);
   part(
     'roof',
@@ -1075,10 +1097,19 @@ function building(p, b, index) {
     w * 1.24,
     roof,
     d * 1.28,
-    tiled ? '#89918c' : '#bda57a',
-    tiled ? p.roofs : p.thatch,
+    b.snow ? '#e5eef4' : tiled ? '#89918c' : '#bda57a',
+    b.snow ? p.solid : tiled ? p.roofs : p.thatch,
   );
   part('box', 0, wall + roof + 0.35, 0, w * 1.05, 0.23, 0.28, tiled ? '#59645d' : '#8a7251', p.wood);
+  if (b.snow) {
+    part('box', 0, wall + roof + 0.51, 0, w * 1.075, 0.16, 0.35, '#eff5fc');
+    for (const side of [-1, 1])
+      for (let j = -5; j <= 5; j++) {
+        const u = j * w * 0.111;
+        part('ball', u, wall + 0.31 + 0.17 * (j / 5) ** 4, side * d * 0.62,
+          w * 0.078, 0.13 + 0.05 * cos(j * 4), 0.17, '#e1edf6');
+      }
+  }
   // Timber trusses remain visible under the deep eaves. Tile drip-ends and
   // straw lashings follow the actual pitch of each roof.
   for (const side of [-1, 1]) {
@@ -1147,7 +1178,7 @@ function building(p, b, index) {
       part('box', mid + j * w * 0.042, wall * 0.52 + 0.25, zw + 0.065, 0.065, wall * 0.48, 0.08, deep);
     part('box', mid, wall * 0.52 + 0.25, zw + 0.071, w * 0.205, 0.079, 0.09, wood);
   }
-  part('box', 0, wall * 0.39 + 0.19, d * 0.516, w * 0.19, wall * 0.69, 0.13, '#6f634a');
+
   if (kind === 'shop' || kind === 'inn' || kind === 'temple') {
     // The raised engawa has individual cedar boards and an open fascia.
     const deckWidth = w * 0.78,
@@ -1372,9 +1403,9 @@ function stampStations(p) {
   const mat = new THREE.MeshLambertMaterial({ map: plaque, side: THREE.DoubleSide });
   REGIONS.forEach((r, i) => {
     const x = r.x - (i === 0 ? 4.15 : 3.65),
-      z = r.z + (i === 0 ? -0.3 : 1),
+      z = r.z + (r.id === 'dawn' ? 7 : i === 0 ? -0.3 : 1),
       y = h(x, z),
-      yaw = i === 0 ? 0.2 : 0;
+      yaw = r.id === 'dawn' ? -2.1 : i === 0 ? 0.2 : 0;
     const local = (u, v, s) => V(x + u * cos(yaw) + s * sin(yaw), y + v, z - u * sin(yaw) + s * cos(yaw));
     const part = (shape, u, v, s, sx, sy, sz, color, m = p.wood, rot = 0) => {
       const a = local(u, v, s);
@@ -1507,10 +1538,12 @@ export function createWorld(scene) {
   const atmosphere = createAtmosphere(scene);
   const paper = grain(),
     art = loadPigments();
-  landscape(scene, art);
-  buildRoads(scene, art);
+  const landGroup = new THREE.Group();
+  scene.add(landGroup);
+  landscape(landGroup, art);
+  buildRoads(landGroup, art);
   const water = makeWater(scene, art, atmosphere.panorama);
-  const painter = new Painter(scene, paper, art);
+  const painter = new Painter(landGroup, paper, art);
   for (const [i, g] of GATES.entries()) gate(painter, g, i);
   for (const b of BRIDGES) bridge(painter, b);
   BUILDINGS.forEach((b, i) => building(painter, b, i));
@@ -1521,7 +1554,21 @@ export function createWorld(scene) {
   woodland(painter, art);
   plantUnderstory(painter, art);
   dressPlaces(painter);
+  dressSeasonalPlaces(painter);
   painter.finish();
+  // Each spatial batch lives in its nearest image of the repeating island.
+  // Perspective and populated shorelines are preserved on crossing the ocean.
+  const close = new Set(painter.closeDetails);
+  const batches = landGroup.children.map(mesh => {
+    if (mesh.isInstancedMesh) mesh.computeBoundingSphere();
+    else if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const bounds = mesh.isInstancedMesh ? mesh.boundingSphere : mesh.geometry.boundingSphere;
+    return {mesh, x:bounds.center.x, z:bounds.center.z, radius:bounds.radius, range:close.has(mesh)?94:(mesh.userData.range||328)};
+  });
+  const powder = seasonalWeather(scene), festival=createMochiPounding(scene);
+  festival.root.position.set(307,h(307,169.8)+.012,169.8);
+  festival.root.rotation.y=-.73;
+  water.uniforms.climate=atmosphere.climate;
   const birds = birdFlock(scene),
     leaves = driftingLeaves(scene);
   return {
@@ -1530,12 +1577,20 @@ export function createWorld(scene) {
       painter.sway.value = time;
       if (camera) {
         atmosphere.update(time, player, camera);
-        for (const mesh of painter.closeDetails) {
-          const { center, radius } = mesh.boundingSphere;
-          mesh.visible =
-            (center.x - camera.position.x) ** 2 + (center.z - camera.position.z) ** 2 < (radius + 104) ** 2;
+        for (const b of batches) {
+          const dx=wrapDelta(b.x-camera.position.x), dz=wrapDelta(b.z-camera.position.z);
+          b.mesh.position.x=Math.round((camera.position.x+dx-b.x)/(2*BOUND))*2*BOUND;
+          b.mesh.position.z=Math.round((camera.position.z+dz-b.z)/(2*BOUND))*2*BOUND;
+          const squared=dx*dx+dz*dz;
+          b.mesh.visible=squared<(b.range+b.radius)**2;
+          const data=b.mesh.userData;
+          if(data.farGeometry) b.mesh.geometry=squared>(73+b.radius)**2?data.farGeometry:data.nearGeometry;
+          if(data.foliageCount) b.mesh.count=squared>(105+b.radius)**2?Math.ceil(data.foliageCount*.40):data.foliageCount;
         }
+        powder(time,player,atmosphere.climate.value.x);
       }
+      festival.root.visible=(player.x-307)**2+(player.z-169.8)**2<105**2;
+      if (festival.root.visible) festival.update(time);
       birds(time);
       leaves(time, player);
     },
