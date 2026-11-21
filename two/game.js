@@ -1,0 +1,531 @@
+import { groundHeight, constrainMove, canLand, REGIONS, regionAt } from './terrain.js';
+
+const MAX_VITAL = 100;
+const GRAVITY = 22;
+const CEILING = 24;
+const SPEED = { foot: 6.4, dango: 11.8, turtle: 21, bike: 15.3 };
+const STAMP_RADIUS = 6;
+const MODE_COST = { normal: 0, dango: 7, kusa: 6, kinako: 6, habutae: 10 };
+const MODE_DRAIN = { normal: 0, dango: 4.2, kusa: 3, kinako: 3.5, habutae: 5.5 };
+const MODE_NAME = { normal: 'ふつうのお餅', dango: '団子モード', kusa: '草餅', kinako: 'きなこ餅', habutae: '羽二重餅' };
+const BUFF_TIME = { warm: 20, swift: 24, drunk: 18, full: 29, wrap: 24 };
+const PICKUP_ACTION = {
+  manga: { activity: 'read', duration: 2.3, label: '漫画を読む' },
+  sake: { activity: 'drink', duration: 2.2, label: '日本酒を飲む' },
+  ramen: { activity: 'eat', duration: 2.8, label: '背脂ラーメンを食べる' },
+  onsen: { activity: 'bath', duration: 3.5, label: '温泉に入る' },
+  haramaki: { label: '腹巻きを巻く' }
+};
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+
+function makeWorld() {
+  const objects = [];
+  const npcs = [];
+  function object(type, x, z, heading = 0) {
+    const landmark = { id: type + '-' + objects.length, type, x, z, y: groundHeight(x, z), heading, active: true, cooldown: 0 };
+    if (type === 'port') landmark.bikes = 2;
+    objects.push(landmark);
+  }
+  function npc(type, role, x, z, phase, side = 1) {
+    const heading = role === 'sumo' ? side * Math.PI / 2 : phase;
+    npcs.push({
+      id: type + '-' + npcs.length, type, role, x, z, y: groundHeight(x, z), homeX: x, homeZ: z,
+      phase, side, heading, speed: 0, flash: 0, mounted: false
+    });
+  }
+  REGIONS.forEach(({ id, x, z }, i) => {
+    const river = id === 'river';
+    const places = river
+      ? [[-10,44], [8,53], [-15,68], [14,37], [-18,49], [12,66]]
+      : [[-13,-9], [6,14], [15,-11], [-9,15], [-17,4], [12,5]].map(([dx,dz]) => [x+dx,z+dz]);
+    ['onsen','manga','sake','ramen','haramaki','port'].forEach((type, k) => {
+      object(type, places[k][0], places[k][1], (i + k) * .47);
+    });
+    npc('rabbit', 'porter', x-4, river ? 55 : z+5, i * .8 + .2);
+    npc('frog', 'sumo', x+4.1, river ? 52 : z-7, i, 1);
+    npc(i % 2 ? 'rabbit' : 'frog', 'sumo', x+5.9, river ? 52 : z-7, i, -1);
+    npc('rabbit', 'wander', x-7, river ? 44 : z-12, i + 1.4);
+    npc('frog', 'wander', x+10, river ? 40 : z-15, i + .8);
+    npc('frog', 'porter', x-19, river ? 61 : z+5, i + 2.8);
+  });
+  npc('turtle', 'wander', -14, 54, 0);
+  return { objects, npcs };
+}
+
+export function createGame(snapshot = null) {
+  const { objects, npcs } = makeWorld();
+  const turtle = npcs.find(n => n.type === 'turtle');
+  const player = {
+    x: 0, z: 62, y: groundHeight(0,62), h: 0, vx: 0, vz: 0, vy: 0, speed: 0, heading: 0,
+    grounded: true, hp: MAX_VITAL, mp: MAX_VITAL, mode: 'normal', mount: null, activity: null,
+    activityTime: 0, stretch: 0, throwTime: 0, invulnerable: 0,
+    buffs: { warm: 0, swift: 0, drunk: 0, full: 0, wrap: 0 }
+  };
+  const region = REGIONS[regionAt(player.x,player.z)];
+  const state = {
+    time: 0, player, npcs, objects, shots: [], events: [], score: 0,
+    region: region.name, regionId: region.id, visited: [region.id]
+  };
+  let heldJump = false;
+  let lastBath = null;
+  let shotId = 0;
+  let throwCooldown = 0;
+  let turtlePause = 0;
+  let turtleLeg = 0;
+  let shore = { x: player.x, z: player.z };
+
+  function emit(type, data) {
+    if (state.events.length >= 160) state.events.shift();
+    state.events.push({ type, x: player.x, y: player.y, z: player.z, h: player.h, ...data });
+  }
+  function say(text) { emit('say', { text }); }
+  function message(text) { emit('message', { text }); }
+  function sound(name) { emit('sound', { name }); }
+  function protectedVitals() { return player.buffs.warm > 0 || player.buffs.wrap > 0; }
+  function spendMP(cost) {
+    if (player.buffs.full > 0 || protectedVitals()) return true;
+    if (player.mp < cost) return false;
+    player.mp -= cost;
+    return true;
+  }
+  function gap(target) { return distance(player, target); }
+  function nearest() {
+    if (player.activity || !player.grounded) return null;
+    if (player.mount === 'turtle') return { target: turtle, label: 'カメから降りる', action: 'dismount', distance: 0 };
+    let best = null;
+    for (const target of [...objects, turtle]) {
+      if (!target.active && target !== turtle) continue;
+      const distance = gap(target);
+      if (Math.abs(target.y-player.y)>2.2) continue;
+      let label;
+      let radius;
+      if (target.type === 'port') {
+        label = player.mount === 'bike' ? 'ポートに返す' : '電動自転車に乗る';
+        if (!target.bikes && !player.mount) continue;
+        radius = 3.1;
+      } else if (player.mount) {
+        continue;
+      } else if (target.type === 'turtle') {
+        label = 'カメに乗る'; radius = 2.45;
+      } else if (PICKUP_ACTION[target.type] && target !== lastBath) {
+        label = PICKUP_ACTION[target.type].label;
+        radius = target.type === 'onsen' ? 3.1 : 2.2;
+      } else {
+        continue;
+      }
+      if (distance <= radius && (!best || distance < best.distance)) {
+        best = { target, label, action: player.mount ? 'dismount' : 'interact', distance };
+      }
+    }
+    return best;
+  }
+  function beginActivity(activity, duration) {
+    player.activity = activity;
+    player.activityTime = duration;
+    if (activity !== 'fall') player.vx = player.vz = player.speed = 0;
+  }
+  function collect(target) {
+    if (target.type === 'onsen') {
+      lastBath = target;
+      player.x = target.x;
+      player.z = target.z;
+      player.y = target.y;
+      player.h = player.vy = 0;
+      player.grounded = true;
+      sound('bath');
+    } else {
+      target.active = false;
+      target.cooldown = 65;
+      sound('pickup');
+    }
+    const pickup = PICKUP_ACTION[target.type];
+    if (target.type === 'haramaki') {
+      player.buffs.wrap = BUFF_TIME.wrap;
+      message('腹巻きでぽかぽか。体力とモッチポイントを守る！');
+    } else {
+      beginActivity(pickup.activity, pickup.duration);
+      const lines = { bath: 'ほかほかの湯に、ひと休み。', read: '夢中で漫画を読んでいる。', drink: '日本酒をごくごく。', eat: '背脂ラーメンをもぐもぐ。' };
+      message(lines[pickup.activity]);
+    }
+  }
+  function finishActivity() {
+    const activity = player.activity;
+    player.activity = null;
+    player.activityTime = 0;
+    switch (activity) {
+      case 'bath':
+        player.hp = player.mp = MAX_VITAL;
+        player.buffs.warm = BUFF_TIME.warm;
+        message('湯上がりほかほか。体力・モッチポイント全回復！');
+        break;
+      case 'read':
+        player.buffs.swift = BUFF_TIME.swift;
+        message('続きが楽しみ！ 足どりが軽くなった。');
+        break;
+      case 'drink':
+        player.buffs.drunk = BUFF_TIME.drunk;
+        message('ほろ酔い千鳥足。左右の操作が逆になった！');
+        break;
+      case 'eat':
+        player.buffs.full = BUFF_TIME.full;
+        message('満腹！ 三条通知が一度に三方向へ飛ぶ。');
+        break;
+      case 'sleep':
+        player.hp = MAX_VITAL;
+        player.invulnerable = 2;
+        message('ぐっすり眠って、元気いっぱい！');
+        break;
+    }
+  }
+  function jump() {
+    if (player.activity || (!player.grounded && player.mode !== 'habutae')) return false;
+    if (!player.grounded && player.vy > 2) return false;
+    const stretch = !player.mount && player.mode === 'dango';
+    player.vy = stretch ? 15.1 : player.mode === 'habutae' && !player.mount ? 8.2 : 8.6;
+    player.grounded = false;
+    player.stretch = stretch ? .58 : .20;
+    say('モチコラショッ');
+    sound('jump');
+    return true;
+  }
+  function dismount() {
+    if (player.activity || !player.mount || !player.grounded) return false;
+    if (player.mount === 'bike') {
+      const port = nearest();
+      if (!port || port.target.type !== 'port') {
+        message('電動自転車はポートで返そう。'); return false;
+      }
+      port.target.bikes++;
+      message('電動自転車を返した。');
+    } else {
+      turtle.mounted = false;
+      const position = constrainMove(player.x, player.z, player.x - Math.sin(player.heading), player.z - Math.cos(player.heading), 0);
+      turtle.x = turtle.homeX = position.x;
+      turtle.z = turtle.homeZ = position.z;
+      turtle.y = groundHeight(turtle.x,turtle.z);
+      turtleLeg = 0;
+      turtlePause = 1.5;
+      message('カメからそっと降りた。');
+    }
+    player.mount = null;
+    player.speed = player.vx = player.vz = 0;
+    sound('dismount');
+    return true;
+  }
+  function interact() {
+    if (player.mount) return dismount();
+    const found = nearest();
+    if (!found) return false;
+    const target = found.target;
+    if (target === turtle) {
+      if (player.buffs.full > 0) {
+        message('カメが首を引っ込めた。満腹のお餅はちょっと重い。'); return false;
+      }
+      player.mount = 'turtle';
+      turtle.mounted = true;
+      message('ミツユビハコガメに乗った！');
+    } else if (target.type === 'port') {
+      if (target.bikes < 1) return false;
+      target.bikes--;
+      player.mount = 'bike';
+      message('電動自転車で出発。次のポートで返せる。');
+    } else {
+      collect(target);
+      return true;
+    }
+    player.mode = 'normal';
+    sound('mount');
+    return true;
+  }
+  function throwNotice() {
+    if (player.activity || throwCooldown > 0) return false;
+    throwCooldown = .33;
+    player.throwTime = .28;
+    for (const angle of player.buffs.full > 0 ? [-.28, 0, .28] : [0]) {
+      const heading = player.heading + angle;
+      const height = player.mount ? 1.45 : player.buffs.full > 0 ? 1.30 : .93;
+      state.shots.push({
+        id: 'shot-' + (++shotId), type: 'notice', angle, heading,
+        x: player.x + Math.sin(heading) * .65, z: player.z + Math.cos(heading) * .65,
+        y: player.y + height, life: 1.65, age: 0
+      });
+    }
+    say('三条通知！'); sound('throw');
+    return true;
+  }
+  function act(action) {
+    if (action === 'jump') return jump();
+    if (action === 'throw') return throwNotice();
+    if (action === 'dismount') return dismount();
+    if (action === 'interact') return interact();
+    if (!Object.hasOwn(MODE_COST, action) || player.activity) return false;
+    if (player.mount) { message('変身するときは、乗り物から降りよう。'); return false; }
+    if (action === player.mode) return true;
+    if (!spendMP(MODE_COST[action])) {
+      message('モッチポイントが回復するまで、ちょっとひと休み。'); return false;
+    }
+    player.mode = action;
+    message(MODE_NAME[action] + 'になった。'); sound('mode');
+    return true;
+  }
+
+  function moveTurtle(dt) {
+    if (turtle.mounted) {
+      turtle.x = player.x; turtle.z = player.z; turtle.y = player.y;
+      turtle.heading = player.heading; turtle.speed = player.speed;
+      return;
+    }
+    if (turtlePause > 0) {
+      turtlePause = Math.max(0, turtlePause - dt);
+      turtle.role = 'rest'; turtle.speed = 0;
+      return;
+    }
+    // Its first stop is the sheltered nook between the two riverbank rocks.
+    const route = [[-5,-4],[-3,-7],[2,-4],[0,0]];
+    const [dx,dz] = route[turtleLeg];
+    const tx = turtle.homeX + dx - turtle.x, tz = turtle.homeZ + dz - turtle.z;
+    const length = Math.hypot(tx,tz);
+    turtle.role = 'wander';
+    if (length < .16) {
+      turtlePause = turtleLeg === 0 ? 11 : 2.5;
+      turtleLeg = (turtleLeg + 1) % route.length;
+      return;
+    }
+    turtle.heading = Math.atan2(tx,tz);
+    const step = Math.min(length, .46 * dt);
+    const at = constrainMove(turtle.x,turtle.z,turtle.x+tx/length*step,turtle.z+tz/length*step,0);
+    turtle.speed = distance(turtle,at) / dt;
+    turtle.x = at.x; turtle.z = at.z; turtle.y = groundHeight(at.x,at.z);
+    if (turtle.speed < .015) { turtlePause = 5; turtleLeg = (turtleLeg+1) % route.length; }
+  }
+  function updateNPCs(dt) {
+    moveTurtle(dt);
+    for (const n of npcs) {
+      if (n === turtle) continue;
+      n.flash = Math.max(0, n.flash - dt);
+      const t = state.time * (n.role === 'porter' ? .32 : .44) + n.phase;
+      let x, z;
+      if (n.role === 'sumo') {
+        const sway = state.time * 1.55 + n.phase;
+        x = n.homeX + Math.sin(sway) * .19 + n.side * (.07 + Math.sin(sway * 2) * .08);
+        z = n.homeZ + Math.cos(sway) * .14;
+        n.heading = n.side * Math.PI / 2;
+      } else {
+        const a = n.role === 'porter' ? 2.5 : 3.4;
+        x = n.homeX + (Math.sin(t) - Math.sin(n.phase)) * a;
+        z = n.homeZ + (Math.sin(t*.71) - Math.sin(n.phase*.71)) * 1.8;
+        n.heading = Math.atan2(Math.cos(t)*a, Math.cos(t*.71)*1.278);
+      }
+      // Faraway routines still follow their paths; static terrain sampling is amortized.
+      if (Math.abs(n.x-player.x)+Math.abs(n.z-player.z) > 85 && Math.floor(state.time*3) === Math.floor((state.time-dt)*3)) continue;
+      const at = constrainMove(n.x,n.z,x,z,0);
+      n.speed = Math.min(2.3, distance(n,at)/dt);
+      n.x = at.x; n.z = at.z; n.y = groundHeight(n.x,n.z);
+    }
+  }
+  function updateShots(dt) {
+    for (let i=state.shots.length-1;i>=0;i--) {
+      const shot = state.shots[i];
+      const dx = Math.sin(shot.heading), dz = Math.cos(shot.heading);
+      const length = 18 * dt;
+      let hit = null;
+      let first = Infinity;
+      for (const n of npcs) {
+        if (n === turtle || shot.y < n.y-.1 || shot.y > n.y + 2.15) continue;
+        const rx = n.x-shot.x, rz = n.z-shot.z;
+        const along = clamp(rx*dx+rz*dz,0,length);
+        if (along < first && Math.hypot(rx-along*dx,rz-along*dz) < .8) {
+          first = along; hit = n;
+        }
+      }
+      shot.x += dx*length; shot.z += dz*length;
+      shot.age += dt; shot.life -= dt;
+      if (hit) {
+        hit.flash = .58; state.score += 10;
+        emit('score', { value: 10, text: '+10', x: hit.x, z: hit.z, y: hit.y+2.1 });
+        sound('score');
+      }
+      if (hit || shot.life <= 0 || shot.y < groundHeight(shot.x,shot.z)-.15) state.shots.splice(i,1);
+    }
+  }
+  function updateMotion(dt, input) {
+    if (player.activity && player.activity !== 'fall') return;
+    const moving = player.activity === 'fall' ? 0 : 1;
+    let dx = clamp(Number(input.x) || 0,-1,1) * moving;
+    let dz = clamp(Number(input.z) || 0,-1,1) * moving;
+    if (player.buffs.drunk > 0) {
+      const rightX = Number.isFinite(input.rightX) ? input.rightX : 1;
+      const rightZ = Number.isFinite(input.rightZ) ? input.rightZ : 0;
+      const len = Math.hypot(rightX,rightZ) || 1;
+      const rx = rightX/len, rz = rightZ/len;
+      const side = dx*rx + dz*rz;
+      const sway = Math.sin(state.time*5) * Math.hypot(dx,dz)*.22;
+      dx += rx*(sway-2*side); dz += rz*(sway-2*side);
+    }
+    const amount = Math.max(1,Math.hypot(dx,dz));
+    dx /= amount; dz /= amount;
+    const base = SPEED[player.mount] || (player.mode === 'dango' ? SPEED.dango : SPEED.foot);
+    const speed = base * (player.buffs.swift>0 ? 1.42 : 1) * (player.buffs.full>0 ? .81 : 1);
+    if (dx || dz) player.heading = Math.atan2(dx,dz);
+    const traction = player.activity==='fall' ? 4 : player.mode==='dango' ? 6 : 13;
+    const ease = 1 - Math.exp(-dt*traction);
+    player.vx += (dx*speed-player.vx)*ease;
+    player.vz += (dz*speed-player.vz)*ease;
+    if (Math.abs(player.vx)<.002) player.vx = 0;
+    if (Math.abs(player.vz)<.002) player.vz = 0;
+    const at = constrainMove(player.x,player.z,player.x+player.vx*dt,player.z+player.vz*dt,player.h);
+    player.speed = distance(player,at)/dt;
+    player.x = at.x; player.z = at.z;
+    const floor = groundHeight(at.x,at.z);
+    if (player.grounded && floor >= player.y-.32 && player.vy<=0) player.y = floor;
+    if (player.mode==='habutae' && !player.mount && input.jump && !player.activity) {
+      player.vy = Math.min(5.6,player.vy+25*dt);
+    } else player.vy -= GRAVITY*dt;
+    player.y += player.vy*dt;
+    player.h = clamp(player.y-floor,0,CEILING);
+    player.grounded = player.y <= floor && player.vy <= 0;
+    if (player.grounded) {
+      player.vy = 0;
+      player.h = 0;
+      if (canLand(player.x,player.z)) {
+        player.y = floor;
+        shore.x = player.x; shore.z = player.z;
+      } else {
+        player.x = shore.x; player.z = shore.z;
+        player.y = groundHeight(shore.x,shore.z);
+        player.speed = player.vx = player.vz = 0;
+        message('ふわりと、足のつく岸辺に着地した。');
+      }
+    } else if (player.h >= CEILING) {
+      player.y = floor + CEILING; player.vy = Math.min(0,player.vy);
+    }
+  }
+  function checkContact() {
+    if (player.activity || player.h > 1.15) return;
+    if (!player.mount && player.grounded) {
+      if (lastBath && gap(lastBath) > 3.35) lastBath = null;
+      for (const o of objects) {
+        if (o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
+            gap(o) <= (o.type === 'onsen' ? 1.55 : .83)) { collect(o); return; }
+      }
+    }
+    if (player.invulnerable > 0 || player.mode === 'kusa') return;
+    for (const n of npcs) {
+      if (n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
+      player.invulnerable = 2.1;
+      if (!protectedVitals()) player.hp = Math.max(0,player.hp-7);
+      if (player.hp === 0) {
+        player.mode = 'normal'; player.grounded = true; player.h = player.vy = 0;
+        player.y = groundHeight(player.x,player.z);
+        beginActivity('sleep',5);
+        message('お餅はその場で、すやすや眠った。'); sound('sleep');
+      } else {
+        const dx = player.x-n.x, dz = player.z-n.z;
+        const length = Math.hypot(dx,dz);
+        player.vx = (length ? dx/length : -Math.sin(player.heading))*3.6;
+        player.vz = (length ? dz/length : -Math.cos(player.heading))*3.6;
+        beginActivity('fall',.68); sound('bump');
+      }
+      break;
+    }
+  }
+  function updateRegion(collectStamp) {
+    const region = REGIONS[regionAt(player.x,player.z)];
+    state.region = region.name; state.regionId = region.id;
+    if (!collectStamp || state.visited.includes(region.id) || distance(player,region)>STAMP_RADIUS || player.h>3) return;
+    state.visited.push(region.id);
+    const text = state.visited.length === REGIONS.length ? '六景踏破！ 旅の印がすべて揃った。' : region.name+'の旅の印をもらった。';
+    emit('stamp',{ id:region.id, text }); message(text); sound('pickup');
+  }
+  function advance(dt, input) {
+    state.time += dt;
+    for (const name of Object.keys(player.buffs)) player.buffs[name] = Math.max(0, player.buffs[name] - dt);
+    for (const name of ['stretch','throwTime','invulnerable']) player[name] = Math.max(0, player[name] - dt);
+    throwCooldown = Math.max(0, throwCooldown - dt);
+    for (const o of objects) {
+      if (o.cooldown > 0) {
+        o.cooldown = Math.max(0, o.cooldown - dt);
+        if (o.cooldown === 0) o.active = true;
+      }
+    }
+    if (player.mode === 'normal' || player.activity) player.mp = Math.min(MAX_VITAL, player.mp + dt * 5.2);
+    else if (!spendMP(MODE_DRAIN[player.mode] * dt)) {
+      player.mode = 'normal'; player.mp = 0;
+      message('モッチポイントを使い切って、ふつうのお餅に戻った。');
+    }
+    if (player.activity) {
+      player.activityTime -= dt;
+      if (player.activity === 'sleep') player.hp = Math.min(MAX_VITAL, player.hp + dt * 20);
+      if (player.activity === 'bath') {
+        player.hp = Math.min(MAX_VITAL, player.hp + dt * 26);
+        player.mp = Math.min(MAX_VITAL, player.mp + dt * 26);
+      }
+      if (player.activityTime <= 0) finishActivity();
+    }
+    updateMotion(dt, input);
+    updateNPCs(dt);
+    updateShots(dt);
+    checkContact();
+    updateRegion(true);
+  }
+  function step(elapsed, input = {}) {
+    if (!Number.isFinite(elapsed) || elapsed <= 0) return;
+    if (input.jump && !heldJump) jump();
+    heldJump = !!input.jump;
+    // Bounded substeps preserve contacts, landings and projectiles on a slow frame.
+    let remaining = Math.min(.1, elapsed);
+    while (remaining > .000001) {
+      const dt = Math.min(1 / 60, remaining);
+      advance(dt, input);
+      remaining -= dt;
+    }
+  }
+
+  function save() {
+    return {
+      version: 2, time: state.time, score: state.score, visited: [...state.visited],
+      player: { ...player, buffs: { ...player.buffs } },
+      items: objects.map(o => o.cooldown),
+      bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
+      turtle: { x:turtle.x, z:turtle.z, homeX:turtle.homeX, homeZ:turtle.homeZ, pause:turtlePause, leg:turtleLeg },
+      lastBath: lastBath?.id ?? null, shore: { ...shore }
+    };
+  }
+  function restore(data) {
+    const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
+    const point = (x,z) => finite(x,-240,240) && finite(z,-240,240);
+    if (!data || data.version !== 2 || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    const p = data.player, t = data.turtle;
+    const ports = objects.filter(o=>o.type==='port');
+    if (!finite(data.time,0,1e9) || !Number.isSafeInteger(data.score) || data.score<0 ||
+        !data.visited.every(id=>REGIONS.some(region=>region.id===id)) ||
+        !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,200) ||
+        !finite(p.vx,-35,35) || !finite(p.vz,-35,35) || !finite(p.vy,-80,19) ||
+        !finite(p.speed,0,60) || !finite(p.heading,-Math.PI,Math.PI) || typeof p.grounded!=='boolean' ||
+        !finite(p.hp,0,100) || !finite(p.mp,0,100) || !Object.hasOwn(MODE_COST,p.mode) ||
+        ![null,'turtle','bike'].includes(p.mount) || ![null,'fall','sleep','bath','read','drink','eat'].includes(p.activity) ||
+        !finite(p.activityTime,0,6) || !p.buffs || !Object.keys(BUFF_TIME).every(k=>finite(p.buffs[k],0,BUFF_TIME[k])) ||
+        ![p.stretch,p.invulnerable,p.throwTime].every(n=>finite(n,0,3)) ||
+        !Array.isArray(data.items) || data.items.length!==objects.length || !data.items.every(n=>finite(n,0,65)) ||
+        !Array.isArray(data.bikes) || data.bikes.length!==ports.length ||
+        !data.bikes.every(n=>Number.isInteger(n)&&finite(n,0,ports.length*2)) ||
+        data.bikes.reduce((total,n)=>total+n,p.mount==='bike'?1:0)!==ports.length*2 ||
+        !point(t.x,t.z) || !point(t.homeX,t.homeZ) || !finite(t.pause,0,12) ||
+        !Number.isInteger(t.leg) || !finite(t.leg,0,3) || !data.shore || !point(data.shore.x,data.shore.z)) return;
+    for (const key of Object.keys(player)) if (key!=='buffs') player[key]=p[key];
+    for (const key of Object.keys(BUFF_TIME)) player.buffs[key]=p.buffs[key];
+    player.y = groundHeight(player.x,player.z)+player.h;
+    state.score=data.score; state.time=data.time;
+    state.visited=[...new Set(data.visited)];
+    objects.forEach((o,i)=>{o.cooldown=data.items[i]; o.active=o.cooldown===0;});
+    ports.forEach((o,i)=>{o.bikes=data.bikes[i];});
+    Object.assign(turtle, {x:t.x,z:t.z,homeX:t.homeX,homeZ:t.homeZ,y:groundHeight(t.x,t.z),mounted:p.mount==='turtle'});
+    turtlePause=t.pause; turtleLeg=t.leg; shore={...data.shore};
+    lastBath=objects.find(o=>o.type==='onsen' && o.id===data.lastBath)??null;
+    updateRegion(false);
+  }
+  restore(snapshot);
+  return { state, act, step, nearest, save };
+}

@@ -252,7 +252,7 @@ function openPanel(type) {
 }
 function showGuide(tab) {
   const body=$('panel-body');
-  body.innerHTML='<div class="help-tabs"></div><div class="help-rows"></div><p class="credit"><a href="./audio/CREDITS.txt" target="_blank" rel="noopener">掛け声の音声クレジット</a></p>';
+  body.innerHTML='<div class="help-tabs"></div><div class="help-rows"></div><p class="credit"><a href="../audio/CREDITS.txt" target="_blank" rel="noopener">掛け声の音声クレジット</a></p>';
   for (const name of Object.keys(guide)) {
     const b=document.createElement('button');
     b.className=name===tab?'active':'';

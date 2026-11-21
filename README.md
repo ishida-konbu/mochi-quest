@@ -1,23 +1,18 @@
 # Mochi Quest
 
-**[ブラウザで遊ぶ](https://ishida-konbu.github.io/mochi-quest/)**
+**[作品選択](https://ishida-konbu.github.io/mochi-quest/)**
 
-お餅になって鳥獣戯画の絵巻を巡るブラウザゲーム。桜川の渡しから海風の松原まで、六つの景色がひと続きになっています。
+- [Mochi Quest 2　六景巡り](https://ishida-konbu.github.io/mochi-quest/two/) は、鳥獣戯画の里を歩く三人称の3Dオープンワールド。道路や橋をたどって六つの名所を巡り、御朱印を集められます。
+- [Mochi Quest 1　絵巻道中](https://ishida-konbu.github.io/mochi-quest/one/) は、墨絵の世界を横に旅する第一作です。
 
-矢印キーで移動、Space でジャンプ、Z で三条通知、E で乗り降り。0〜4 で餅モードを選べます。スマートフォンでは画面のスティックとボタンを使います。旅の記録はブラウザに自動保存されます。
+## Mochi Quest 2 の操作
 
-## ローカルで遊ぶ
+矢印キーか WASD でカメラを基準に前後左右へ移動します。ドラッグまたは Q・R で視点を回転し、Space でジャンプ、Z で三条通知、E で調べる・乗降、0〜4 で餅モードの切り替えができます。スマートフォンでは左スティックで歩き、画面をなぞって周囲を見回します。
 
-リポジトリの直下で次のコマンドを実行し、[ローカルのゲーム画面](http://localhost:8080/)を開きます。
+M で地図、C でお顔カメラ、Esc で一時停止。お顔カメラでは表情を選び、写真を保存できます。旅の記録は各作品ごとに同じブラウザに自動保存されます。
 
-```sh
-python3 -m http.server 8080
-```
+## 開発と公開
 
-ゲームロジックのテストは Node.js 22 で `npm test` を実行します。外部パッケージのインストールは不要です。
+リポジトリの直下で `python3 -m http.server 8080` を実行し、[作品選択ページ](http://localhost:8080/)を開きます。Node.js 22 で `npm test` を実行すると両作品のゲームロジックを検証できます。外部パッケージのインストールは不要です。
 
-## 公開
-
-GitHub Pages は `main` ブランチのルートを配信します。背景は WebGL で描画し、WebGL を利用できない端末では Canvas 2D に切り替わります。
-
-掛け声に使用した音声モデルの出典とライセンスは [音声クレジット](audio/CREDITS.txt) に記載しています。
+GitHub Pages は `main` ブランチのルートを配信します。第二作は WebGL 2 を使用します。Three.js r180 を [MIT ライセンス](two/vendor/THREE-LICENSE.txt) の下で同梱しています。掛け声の音声モデルは [音声クレジット](audio/CREDITS.txt) に記載しています。
