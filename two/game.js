@@ -33,7 +33,7 @@ const FLIGHT_CLIMB = 5.6;
 const KAGAMI_BEAT_DURATION = .36;
 const JUMP_BUFFER = .12;
 const LEDGE_GRACE = .085;
-const CEILING = 120;
+const CEILING = 180; // Metres above the local floor, including mountain summits.
 const SPEED = { foot: 6.4, dango: 23.6, turtle: 105, bike: 45.9, flight: 32, kagami: 19.2 };
 // Seconds to build from walking pace to cruising speed on open ground.
 const RUN_UP = { dango: 1.8, bike: 3.2, flight: 2.2, turtle: 3.4 };

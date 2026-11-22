@@ -5,7 +5,7 @@ import { SPECIES, recipientContact } from '../two/bestiary.js';
 import { BUILDINGS, GATES, nearRoad, groundHeight } from '../two/terrain.js';
 import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { Euler, Vector3 } from '../two/vendor/three.module.min.js';
-import { dragonPitch, dragonWave } from '../two/animal-motion.js';
+import { dragonLengthScale, dragonPitch, dragonWave } from '../two/animal-motion.js';
 
 test('the expanded recipient ledger preserves the original 691 entries and the two legends’ hundredfold score',()=>{
   const {state}=createGame();
@@ -32,7 +32,8 @@ test('notices intersect the actual airborne volume, and unique recipients and ol
     assert.equal(recipientContact(n,{x:n.x,y:wrongHeight,z:n.z-1},0,1,2),Infinity);
     const savedTime=game.state.time;
     function throwAtAltitude(side=1,missBy=0){
-      const dragon=type==='dragon', range=dragon?3.5:2, heading=dragon?n.heading+side*Math.PI/2:0;
+      const dragon=type==='dragon', range=dragon?3.5:2;
+      const bearing=dragon?n.heading+side*Math.PI/2:0, heading=Math.atan2(Math.sin(bearing),Math.cos(bearing));
       const flightTime=dragon?(range-.65)/18:0;
       const x=n.x+Math.sin(n.heading)*n.speed*flightTime-range*Math.sin(heading);
       const z=n.z+Math.cos(n.heading)*n.speed*flightTime-range*Math.cos(heading);
@@ -138,13 +139,15 @@ test('the ten tigers and two shishi patrol clear wild ranges away from roads, ho
 });
 
 test('a letter crosses the tilted dragon tail at its drawn height during a climb and a dive', () => {
-  const n = { type:'dragon', x:415.2, y:38, z:91, heading:.97, stature:2.1, speed:5, wavePhase:1.7 };
+  const n = { type:'dragon', x:415.2, y:38, z:91, heading:.97, stature:SPECIES.dragon.stature, speed:5, wavePhase:1.7 };
   const sway = dragonWave(-2.86, n.wavePhase, {});
   for (const rise of [-4, 4]) {
     n.verticalSpeed = rise;
     const pitch = dragonPitch(n);
     assert.ok(pitch * rise < 0);
-    const tail = new Vector3(-.59+sway.x, .60+sway.y, -2.86)
+    assert.equal(n.stature,4.2);
+    assert.equal(dragonLengthScale,1.5);
+    const tail = new Vector3(-.59+sway.x, .60+sway.y, -2.86*dragonLengthScale)
       .multiplyScalar(n.stature).applyEuler(new Euler(pitch, n.heading, 0, 'YXZ'));
     const target = { x:n.x+tail.x, y:n.y+tail.y, z:n.z+tail.z };
     for (const aim of [n.heading, n.heading+Math.PI/2]) {
