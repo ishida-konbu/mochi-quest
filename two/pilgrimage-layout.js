@@ -174,7 +174,9 @@ export function nearbyPeaches(x,z,r,visit){visitPeaches(x,z,r,tree=>{visit(tree)
 function orchard(){
   let state=634711;
   const rand=()=>(state=(Math.imul(state,1664525)+1013904223)>>>0)/4294967296;
-  const trees=[],clearings=[[6,-3,9],[-13,7,7],[-32,-12,7],[40,-10,7],[15,-26,6]];
+  const trees=[];
+  // Picnics, the wrestling circle and the exposed slab on the southern bank.
+  const clearings=[[6,-3,9],[-13,7,7],[-32,-12,7],[40,-10,7],[15,-26,6],[31,63,17]];
   function plant(tree){
     const key=Math.floor(tree.x/peachCell)*512+Math.floor(tree.z/peachCell);
     if(!peachCells.has(key))peachCells.set(key,[]);
@@ -190,67 +192,72 @@ function orchard(){
     return .5*hypot(pilgrimageHeight(x+1,z,5)-pilgrimageHeight(x-1,z,5),
       pilgrimageHeight(x,z+1,5)-pilgrimageHeight(x,z-1,5));
   }
-  // Each crescent follows a single bank or ledge. Their unplanted intervals
-  // let the line of the road and the overlapping shoulders show through.
-  // Local centre, length and width radii, bearing in degrees, trees, blossom form.
-  const pockets=[
-    // A few low groups frame the bath, wrestling ground and old gate tree.
-    [-45, 21, 22,11, -17,11,0], [-41,-31,21,12, 16,10,1],
-    [ -8, 30, 16, 9,  10, 6,4], [  8,-16,15, 7,-18, 4,3],
-    [ 33,-32, 26,12,  14,13,0], [ 37, 25,17,11,-36, 8,1],
-    [ 63, 35, 22, 9,  54, 9,4],
-    // The western shoulder has a bare crest above the moon gate. Stagger
-    // the near banks to frame the oblique view from either side of the bluff.
-    [-78,-36, 24,10, -42, 9,2], [-102,43, 27,13,-56,11,0],
-    [-145,-38,28,13, -61,13,1], [-162,69, 16,10,-24, 6,2],
-    // Only a handful of north and south cirques carry high flowers.
-    [-77,-92, 35,14, -19,17,1], [  15,-66,26,12,  8,10,0],
-    [ 88,-93, 21,10,  22, 8,2], [ -39, 76,31,13, -8,14,4],
-    [ 55, 88, 21,12, -30, 8,1], [ 123, 69,27,12, 31,12,2],
-    // Alternating outside bends mark the ravine; the opposite walls stay rock.
-    [ 65,-30, 21,10,  61, 9,0], [ 97, 51,21,11, -8, 9,1],
-    [124,-46, 19, 9, -20, 8,4], [156, 14,24,10,-63,10,2],
-    [185,-70, 18,10, -11, 6,1], [222, 42,18,10, 50, 6,0],
-    [-61, 56, 18,10, -35, 6,3], [ 44,-106,23,11,-36, 8,1],
-    [246,-23, 18,10,  64, 6,4],
-  ];
-  function setTree(u,v,form,seed,shelfSize){
-    const x=PEACH.x+u,z=PEACH.z+v;
-    const h=pilgrimageHeight(x,z,5),basin=h<26 && hypot(u/84,v/55)<1;
-    const maxGrade=shelfSize!==undefined?2.38:(basin?.76:1.52);
-    if(occupied(x,z,basin?7.2:6.8) || slope(x,z)>maxGrade)return false;
-    // The western overlook looks along this narrowing meadow to the moon gate.
-    // Allow a crown's breadth either side of the opening, even on the brow.
-    if(u< -14 && u> -149 && abs(v-(-u-14)*.065)<7.2+(-u-14)*.075)return false;
+  // The valley holds 263 peaches on its floor and 162 on its slopes. The
+  // ancient peach beside the moon gate is the 426th tree, built in pilgrimage.js.
+  const floorCount=263,slopeCount=162;
+  const pales=[0,1,2,4];
+  function setTree(u,v,cliff,form,seed,size){
+    const x=PEACH.x+u,z=PEACH.z+v,h=pilgrimageHeight(x,z,5);
+    const basin=h<26 && hypot(u/94,v/73)<1;
+    if(cliff===basin || occupied(x,z,cliff?6.8:4.65))return false;
+    if(slope(x,z)>(size!==undefined && cliff?2.38:cliff?1.52:.76))return false;
+    // Keep the flowered banks on either side of the stream and the long
+    // opening from the western bluff down to the moon-gate roof.
     if(hypot(u,v)<10 || (basin && abs(v-3*sin(u/13))<4.8))return false;
-    const variation=rand(),pales=[0,1,2,4];
-    plant({x,z,form:shelfSize!==undefined || variation<.78?form:pales[Math.floor(rand()*pales.length)],
-      size:shelfSize ?? (.85+rand()*.45)*(1-.16*clamp01((h-46)/75)),turn:rand()*PI*2,seed,
-      cliff:!basin,upland:!basin && h>34,wayside:alongPass(x,z,peachPass,21)});
+    if(u< -14 && u> -149 && abs(v-(-u-14)*.065)<7.2+(-u-14)*.075)return false;
+    plant({x,z,form,size:size ?? (.85+rand()*.45)*(1-.16*clamp01((h-46)/75)),
+      turn:rand()*PI*2,seed,cliff,upland:cliff && h>34,wayside:alongPass(x,z,peachPass,21)});
     return true;
   }
-  for(const [i,[u,v,length,width,degrees,count,form]] of pockets.entries()){
-    const yaw=degrees*PI/180,c=cos(yaw),s=sin(yaw);
-    let grown=0;
-    for(let j=0;grown<count && j<250;j++){
-      const a=2*PI*rand(),r=Math.sqrt(rand()),along=r*cos(a);
-      const across=r*sin(a)*width+.30*width*sin(2.8*along+i);
-      if(setTree(u+length*along*c-across*s,v+length*along*s+across*c,form,63000+i*256+j))grown++;
-    }
+
+  // Recorded positions of some of the original gate-side trees. Their
+  // boughs frame the old peach and the two banks at a traveller's eye level.
+  for(const [u,v,form,size,seed] of [
+    [-23.1,-8.9,0,1.3,19773],[-18.8,-13.2,3,1.1,19364],[-19.1,12.1,0,1,4584],
+    [-13.9,14.3,1,1.1,21059],[-8,16,4,.8,21039],[-30.8,17.3,4,1.3,4546],
+  ])setTree(u,v,false,form,seed,size);
+
+  // Sow the two alluvial banks inside the original 94 by 73 metre ellipse.
+  // Drift the pigment from tree to tree across each stand, letting the warm
+  // shell pinks gather in the sheltered ground and the paler trees at its edge.
+  for(let attempt=0;trees.length<floorCount && attempt<30000;attempt++){
+    const u=(rand()-.5)*195,v=(rand()-.5)*153;
+    const band=sin(u*.084+v*.031)+.70*cos(v*.12-u*.02);
+    const form=band>1.29?3:band>.15?0:band>-.58?4:band>-1.21?1:2;
+    setTree(u,v,false,form,81000+attempt);
   }
-  // Lone sentinels on the way in and at the shoulder of the western meadow.
-  for(const [i,[u,v,form]] of [[-113,-12,1],[-61,28,0],[-20,-15,4],[17,12,3],
-    [54,-6,0],[81,17,1],[106,-62,3],[146,-74,0],[189,3,4],[233,32,1]].entries()){
-    setTree(u,v,form,71000+i);
-  }
-  // Crooked wild peaches catch on the lip of the western bluff. The taller
-  // lip tree shows its bough above the near rock; a smaller spray of pink
-  // picks out the opposite bank across the unplanted axis of the moon gate.
-  const bluff=[
+
+  // The near bluff, its opposite bank and the bends on the way in each have
+  // one landmark peach. Their old positions survive the denser valley below.
+  const hillsideStart=trees.length;
+  const accents=[
     [-103,20,3,1.30],[-111,26,4,1.07],[-58,-59,3,1.10],
     [-42,-55,1,1.06],[-47,-46,4,1.11],[-98,-14,0,1.16],
+    [-113,-12,1], [81,17,1], [106,-62,3],[146,-74,0],[189,3,4],[233,32,1],
   ];
-  for(const [i,[u,v,form,size]] of bluff.entries())setTree(u,v,form,72000+i,size);
+  for(const [i,[u,v,form,size]] of accents.entries())setTree(u,v,true,form,72000+i,size);
+
+  // Crescent-shaped stands follow the aspect of separate shelves. Give
+  // each pocket a turn, so the outer ravine gets trees as well as the bluff.
+  // Local centre, length and width radii, bearing, capacity, blossom form.
+  const pockets=[
+    [-78,-36,24,10,-42,9,2],[-102,43,27,13,-56,11,0],[-145,-38,28,13,-61,13,1],[-162,69,16,10,-24,6,2],
+    [-77,-92,35,14,-19,17,1],[15,-66,26,12,8,10,0],[88,-93,21,10,22,8,2],[-39,76,31,13,-8,14,4],
+    [55,88,21,12,-30,8,1],[123,69,27,12,31,12,2],[65,-30,21,10,61,9,0],[97,51,21,11,-8,9,1],
+    [124,-46,19,9,-20,8,4],[156,14,24,10,-63,10,2],[185,-70,18,10,-11,6,1],[222,42,18,10,50,6,0],
+    [-61,56,18,10,-35,6,3],[44,-106,23,11,-36,8,1],[246,-23,18,10,64,6,4],
+  ].map(([u,v,length,width,bearing,count,form])=>({
+    u,v,length,width,c:cos(bearing*PI/180),s:sin(bearing*PI/180),count,form,
+  }));
+  for(let attempt=0;trees.length-hillsideStart<slopeCount && attempt<pockets.length*250;attempt++){
+    const i=attempt%pockets.length,p=pockets[i];
+    if(p.count===0)continue;
+    const angle=2*PI*rand(),r=Math.sqrt(rand()),along=r*cos(angle);
+    const across=r*sin(angle)*p.width+.30*p.width*sin(2.8*along+i);
+    const form=rand()<.78?p.form:pales[Math.floor(rand()*pales.length)];
+    if(setTree(p.u+p.length*along*p.c-across*p.s,p.v+p.length*along*p.s+across*p.c,
+      true,form,63000+attempt))p.count--;
+  }
   return trees;
 }
 export const PEACH_TREES=orchard();

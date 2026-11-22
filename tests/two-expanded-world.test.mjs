@@ -70,12 +70,16 @@ test('the peach orchard lies inside a mountain range with a low eastern pass',()
   }
 });
 
-test('small peach groves frame the moon gate and leave the western outlook and rock shoulders open',()=>{
+test('the 426-tree orchard flowers around the moon gate and leaves its paths and lookout open',()=>{
   const centre=DISTRICTS.peach,spring=RETREATS.find(s=>s.kind==='peach');
-  const basin=PEACH_TREES.filter(t=>!t.cliff),mountain=PEACH_TREES.filter(t=>t.upland);
-  assert.ok(PEACH_TREES.length>=180 && PEACH_TREES.length<=280);
-  assert.ok(basin.length>=35 && basin.length<=70);
-  assert.ok(mountain.some(t=>terrainHeight(t.x,t.z)>85));
+  const basin=PEACH_TREES.filter(t=>!t.cliff),slopes=PEACH_TREES.filter(t=>t.cliff);
+  assert.equal(basin.length,263);
+  assert.equal(slopes.length,162); // The moon-gate sculpture adds the 426th peach.
+  assert.ok(slopes.some(t=>t.upland && terrainHeight(t.x,t.z)>85));
+  for(const side of [-1,1]){
+    assert.ok(basin.filter(t=>Math.sign(t.z-MOON_GATE.z)===side &&
+      Math.hypot(t.x-MOON_GATE.x,t.z-MOON_GATE.z)<22).length>=5,'flowering bank beside the gate');
+  }
   assert.ok(PEACH_TREES.some(t=>t.wayside && t.x>centre.x+170),'flowers on the outer bends');
   // Follow the line of sight from the west bluff to the roof, then check
   // separate open shelves against the north and south flowering stands.
