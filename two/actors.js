@@ -21,7 +21,7 @@ import { updateScrollResident } from './scroll-encounters.js';
 import { createScrollFaunaView } from './scroll-fauna-view.js';
 import { createRyuguPerformers } from './ryugu-performers.js';
 import { dressArtisan, poseArtisan } from './trade-tools.js';
-import { makeRiceModel, poseRice } from './mochi-model.js';
+import { makeRiceModel, poseRice, gripChayaServing } from './mochi-model.js';
 
 const PI = Math.PI,
   TAU = PI * 2;
@@ -208,14 +208,18 @@ function dot(ctx, x, y, rx, ry, fill, angle = 0) {
   ctx.fill();
 }
 
+function servingPose(p) {
+  return p.activity==='chaya' ? (p.activityTime>2.15?'mitarashi':'tea') : p.activity;
+}
 export function getExpression(p, time = 0) {
   if (p.emote) return p.emote;
   if (p.activity === 'fall') return 'hurt';
   if (p.activity === 'sleep') return 'sleepy';
   if (p.activity === 'bath') return 'bath';
-  if (p.activity === 'read' || p.activity === 'tea') return 'joy';
+  const serving=servingPose(p);
+  if (p.activity === 'read' || serving === 'tea') return 'joy';
   if (p.activity === 'drink') return 'blush';
-  if (p.activity === 'eat' || p.activity === 'tsukimi' || p.activity === 'mitarashi') return 'eating';
+  if (p.activity === 'eat' || p.activity === 'tsukimi' || serving === 'mitarashi') return 'eating';
   if (!p.grounded && p.airStretch > 0) return 'joy';
   if (p.throwTime > 0) return 'calling';
   if (p.mount === 'bike' && p.speed > 0.25) return 'joy';
@@ -1382,7 +1386,7 @@ function shortest(a, b) {
 }
 function gaitHero(h, p, t, dt, state) {
   const mood = getExpression(p, t),
-    sit = p.activity,
+    sit = servingPose(p),
     speed = p.speed || 0;
   const riding = !!p.mount;
   const target = p.heading || 0;
@@ -1412,6 +1416,10 @@ function gaitHero(h, p, t, dt, state) {
     const fall=Math.sin(Math.min(1,(p.activityTime||.1)/.68)*PI);
     h.pose.rotation.z+=fall*.93;
     h.pose.position.set(-.11*fall,h.pose.position.y+.16*fall,0);
+  }
+  if(p.activity==='chaya'){
+    h.pose.scale.y*=.92;
+    h.pose.rotation.x+=.07;
   }
   if(sit==='sleep'){h.pose.scale.y*=.76;h.pose.rotation.z=-.13;h.pose.position.y=.009;}
   if(sit==='bath'){h.pose.rotation.x=.11;h.pose.scale.set(g*1.08,g*.92,g*1.09);}
@@ -1462,6 +1470,10 @@ function gaitHero(h, p, t, dt, state) {
         item.position.set(0, 0.45, 1.085);
         item.rotation.x = 0.12;
       }
+      if(p.activity==='chaya'){
+        if(key==='mitarashi')item.rotation.z=1.02;
+        gripChayaServing(h.rice,item,key==='tea');
+      }else if(key==='mitarashi')item.rotation.z=0;
     }
   }
   h.spoon.visible = sit === 'eat';
@@ -1705,7 +1717,8 @@ export function createActors(scene, renderer) {
   h.spoon = model('ramen-spoon', ramenSpoon);
   h.spoon.visible = false;
   h.rolling.add(h.spoon);
-  for (const item of Object.values(h.held)) {
+  for (const [key,item] of Object.entries(h.held)) {
+    item.name=key;
     item.visible = false;
     h.rolling.add(item);
   }

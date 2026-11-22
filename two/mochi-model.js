@@ -232,6 +232,21 @@ function palmSamples(body, hand) {
   return { front, back };
 }
 
+// Seat the prop against the moving palm, including the rice skin's soft stretch.
+export function gripChayaServing(r,item,cup){
+  r.teaGrip ??= {sample:palmSamples(r.body,r.hands[1]),palm:new T.Vector3(),back:new T.Vector3()};
+  const {sample,palm,back}=r.teaGrip;
+  r.model.parent.updateWorldMatrix(true,false);
+  r.model.updateMatrixWorld(true);
+  r.body.getVertexPosition(sample.front,palm);
+  r.body.getVertexPosition(sample.back,back);
+  palm.lerp(back,.5);
+  item.parent.worldToLocal(r.body.localToWorld(palm));
+  // The cup rests on its foot in the mitt. The skewer is held by the bare end.
+  back.set(cup?.075:-.14,cup?-.15:-.17,cup?-.035:0);
+  item.position.copy(palm).sub(back.multiply(item.scale).applyQuaternion(item.quaternion));
+}
+
 function kagamiLayers(r) {
   const parent=r.model.parent;
   const stack = new T.Group();
@@ -411,6 +426,16 @@ export function poseRice(r,p,t,dt,mood) {
       foot.position.y+=(ride ? .053 : .080);
       foot.position.z+=(ride ? .132 : .058);
       foot.rotateX(ride?-.23:.27);
+    }
+    if (p.activity==='chaya') {
+      foot.position.z+=.13;
+      foot.rotateX(-.26);
+      if(i===1){
+        const lift=.5+.5*Math.sin(t*(mood==='joy'?4.3:3.7));
+        hand.position.x-=.17+.12*lift;
+        hand.position.y+=.17+.28*lift;
+        hand.position.z+=.24+.1*lift;
+      }
     }
     if (p.activity==='eat' || p.activity==='drink' || p.activity==='tsukimi') {
       const sip=.5+.5*Math.sin(t*4.2);

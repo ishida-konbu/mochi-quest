@@ -4,6 +4,7 @@ import { InkForm, pigment } from './ryugu-ink.js';
 import { brushWash } from './scroll-sculpt.js';
 import { skin, profile, membrane, brush, eye } from './ryugu-sculpt.js';
 import { reefFans } from './reef-garden.js';
+import { createFishSchools } from './fish-schools.js';
 import { prepareSeaOrnaments } from './ryugu-architecture.js';
 import { RYUGU, HALLS, GATE_V, PALACE_APPROACH } from './ryugu-layout.js';
 
@@ -310,6 +311,7 @@ export function createRyuguLife(scene) {
   };
   silver.customProgramCacheKey=()=>'ryugu-silver-fry';
   const fish=new THREE.InstancedMesh(silverFry(),silver,20);
+  const updateFish=createFishSchools(scene,fish.geometry,silver,clock);
   fish.frustumCulled=false;fish.instanceMatrix.setUsage(THREE.DynamicDrawUsage);group.add(fish);
   const schools=[[-4,-5,8.5,13],[8,8,7,7],[-9,2,12,17],[17,-8,5.6,8],[28,0,10.5,7],[39,5,4,8]];
   const shoal=Array.from({length:fish.count},(_,i)=>({ home:schools[i%schools.length],offset:rng()*3,
@@ -341,7 +343,8 @@ export function createRyuguLife(scene) {
   }
   group.add(shafts);scene.add(group);
   const waterFog=new THREE.Color('#8a9e91');
-  return (time,player,camera)=>{
+  return (time,player,camera,voyageTime=time)=>{
+    updateFish(time,player,camera,voyageTime);
     const immersion=player.diveDepth>0 ? THREE.MathUtils.smoothstep(WATER_Y-camera.position.y,0,3.2):0;
     if(immersion>0) {
       scene.fog.color.lerp(waterFog,immersion);

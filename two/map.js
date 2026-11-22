@@ -4,6 +4,7 @@ import { PALACE_APPROACH, RYUGU, HALLS, GATE_V } from './ryugu-layout.js';
 import { DISTRICTS } from './geography.js';
 import { SEAPORTS, PORT_BUILDINGS, QUAY_CENTER, QUAY_LENGTH, portPoint } from './seaport-layout.js';
 import { SEAWAYS, FLEET, vesselPose } from './ocean-voyage.js';
+import { CHAYA_SITES } from './wayside-hut-layout.js';
 import { COURT } from './retreat-layout.js';
 import { HIGASHIYAMA, KITAYAMA } from './higashiyama.js';
 import { RASHOMON, GATE_STONE, GATE_STONE_APRONS, GATE_STONE_STEPS, GATE_WING } from './kyo-layout.js';
@@ -245,6 +246,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   }
   // Keep the fire characters at their surveyed summits at both map scales.
   const marks=[[COURT,'裁'],[KITAYAMA,'大'],[HIGASHIYAMA,'福']];
+  for(const site of CHAYA_SITES)marks.push([site,'茶']);
   for(const site of state.objects){
     if(site.retreat)marks.push([site,'♨']);
     if(site.goemon)marks.push([site,site.goemon.kind==='charcoal'?'炭':'漁']);

@@ -16,7 +16,7 @@ export const SPECIES = Object.freeze({
   kirin:  { count:1, points:1000, label:'麒麟', stature:1.75, frame:4.9, center:1.72 },
   deer:   { count:32, points:60, label:'鹿', stature:1.16, frame:3.8, center:1.24 },
   boar:   { count:18, points:60, label:'猪', stature:1.08, frame:3.4, center:.8 },
-  shishi: { count:2, points:350, label:'獅子', stature:2.5, frame:4.4, center:1.09 },
+  shishi: { count:2, points:350, label:'獅子', stature:2.5, variantScales:[1.086,1], frame:4.4, center:1.09 },
 });
 export const isFlying = type => type==='bird' || type==='dragon';
 
@@ -42,7 +42,11 @@ export function wildlifeHomes(fixed) {
         break;
       }
       const phase=random()*Math.PI*2;
-      result.push({type,role:'roam',habitat:region.id,x,z,phase,stature:species.stature*(species.count===1?1:.91+random()*.18),
+      const variation=species.count===1?1:.91+random()*.18;
+      // The open- and closed-mouth lions keep their established heights even
+      // when new buildings change how many habitat soundings are rejected.
+      const stature=species.stature*(species.variantScales?.[i] ?? variation);
+      result.push({type,role:'roam',habitat:region.id,x,z,phase,stature,
         variant:type==='shishi'?i:0, manner:i%3,
         flightBand:type==='bird'?Math.floor(i/REGIONS.length):0,
         radius:type==='dragon'?25:type==='bird'?9+random()*6:1.2+random()*1.7,

@@ -22,14 +22,28 @@ export const WAYSIDE_HUTS=clearings.map(([kind,name,x,z,yaw],i)=>{
   hut.bath={x:bx,z:bz,yaw};
   return hut;
 });
+// Surveyed from the painted road centrelines, with the bench facing passing travellers.
+export const CHAYA_SITES=[
+  ['川風の団子茶屋',65.65,94.54,2.8259],
+  ['雪解けの団子茶屋',47.85,-366.70,-1.8649],
+  ['薄野の団子茶屋',105.94,336.96,-.5265],
+  ['桃山の団子茶屋',-368.68,-121.03,.3754],
+  ['稲荷道の団子茶屋',365,-696.22,2.4075],
+  ['潮見の団子茶屋',385.89,-1380.06,-.9562],
+  ['堺道の団子茶屋',47.15,-754.94,.6634],
+].map(([name,x,z,yaw],i)=>({kind:'chaya',name,x,z,yaw,variant:i%4}));
+export const CHAYA_SEAT={x:1.64,z:2.63,width:2.18,depth:.68,top:.48};
+export const WAYSIDE_SITES=[...WAYSIDE_HUTS,...CHAYA_SITES];
 const cells=new Map();
 const cell=(x,z)=>Math.floor(x/32)*256+Math.floor(z/32);
-for(const s of WAYSIDE_HUTS)for(let x=Math.floor((s.x-14)/32);x<=Math.floor((s.x+14)/32);x++)
+for(const s of WAYSIDE_SITES)for(let x=Math.floor((s.x-14)/32);x<=Math.floor((s.x+14)/32);x++)
   for(let z=Math.floor((s.z-14)/32);z<=Math.floor((s.z+14)/32);z++)cells.set(x*256+z,s);
 export const nearbyHut=(x,z)=>cells.get(cell(x,z));
 export function clearingWeight(s,x,z){
   const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
-  const edge=Math.max(Math.abs(dx*c-dz*k)-6.28,Math.abs(dx*k+dz*c-3.33)-6.40);
+  const u=dx*c-dz*k,v=dx*k+dz*c;
+  const edge=s.kind==='chaya' ? Math.max(Math.abs(u)-4.15,Math.abs(v-.5)-4.10)
+    : Math.max(Math.abs(u)-6.28,Math.abs(v-3.33)-6.40);
   const t=Math.max(0,Math.min(1,edge/2.3));
   return 1-t*t*(3-2*t);
 }
@@ -38,11 +52,24 @@ export function inHutYard(x,z){
   return !!hut && clearingWeight(hut,x,z)>.82;
 }
 export function hutSolids(height,put){
-  for(const s of WAYSIDE_HUTS){
+  for(const s of WAYSIDE_SITES){
     const y=height(s.x,s.z),fisher=s.kind==='fisher',floor=fisher?.52:.08,plate=fisher?2.42:1.99;
     function add(u,v,w,d,top,kind,support=false){
       const [x,z]=sitePoint(s,u,v);
       return put(x,z,w/2,d/2,s.yaw,y+top,kind,support);
+    }
+    if(s.kind==='chaya'){
+      add(0,0,4.9,3.7,.09,'floor',true);
+      for(const side of [-1,1])add(side*2.45,0,.12,3.7,2.51,'wall');
+      add(0,-1.85,4.9,.14,2.51,'wall');
+      add(-2.285,1.85,.33,.12,.96,'wall');
+      add(1.945,1.85,1.01,.12,.96,'wall');
+      const roof=add(0,0,6.18,4.92,2.31,'roof',true);
+      roof.form='hip';roof.roofRise=2.46;roof.thickness=.06;
+      add(CHAYA_SEAT.x,CHAYA_SEAT.z,CHAYA_SEAT.width,CHAYA_SEAT.depth,CHAYA_SEAT.top,'floor',true);
+      add(-1.515,1.925,1.77,1.43,1.26,'wall');
+      add(2.92,2.70,.11,.11,3.96,'wall');
+      continue;
     }
     add(0,0,5.1,3.8,floor,'floor',true);
     for(const side of [-1,1]){

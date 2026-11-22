@@ -1,4 +1,5 @@
-import { WAYSIDE_HUTS, BATH_YARD } from './wayside-hut-layout.js';
+import { buildDangoChaya } from './dango-chaya-art.js';
+import { WAYSIDE_SITES, BATH_YARD } from './wayside-hut-layout.js';
 import { buildWaysideHut } from './wayside-hut-art.js';
 import { buildGoemonBath } from './goemon-bath-art.js';
 import { GATE_PAVING, RASHOMON } from './kyo-layout.js';
@@ -1759,15 +1760,19 @@ function driftingLeaves(scene) {
 function createWaysideHuts(scene) {
   const models=new Map();
   return player=>{
-    for(const s of WAYSIDE_HUTS){
+    for(const s of WAYSIDE_SITES){
       const dx=wrapDelta(s.x-player.x),dz=wrapDelta(s.z-player.z);
       let root=models.get(s);
       if(dx*dx+dz*dz>190**2){if(root)root.visible=false;continue;}
       if(!root){
-        root=buildWaysideHut(s.kind,s.variant);
-        const bath=buildGoemonBath(s.variant);
-        bath.position.set(BATH_YARD[0],0,BATH_YARD[1]);
-        root.add(bath);root.rotation.y=s.yaw;root.position.y=h(s.x,s.z);
+        if(s.kind==='chaya')root=buildDangoChaya(s.variant);
+        else{
+          root=buildWaysideHut(s.kind,s.variant);
+          const bath=buildGoemonBath(s.variant);
+          bath.position.set(BATH_YARD[0],0,BATH_YARD[1]);
+          root.add(bath);
+        }
+        root.rotation.y=s.yaw;root.position.y=h(s.x,s.z);
         models.set(s,root);scene.add(root);
       }
       root.visible=true;
@@ -1847,7 +1852,7 @@ export function* prepareWorld(scene) {
         updateTrade(time,player,camera);
         updateHuts(player);
         updateOcean(voyageTime,player);
-        updatePalace(time,player,camera);
+        updatePalace(time,player,camera,voyageTime);
         updateForest(camera, player);
         for (const b of batches) {
           const dx=wrapDelta(b.x-camera.position.x), dz=wrapDelta(b.z-camera.position.z);

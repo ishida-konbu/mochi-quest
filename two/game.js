@@ -1,4 +1,4 @@
-import { WAYSIDE_HUTS,KETTLE } from './wayside-hut-layout.js';
+import { WAYSIDE_HUTS,KETTLE,CHAYA_SITES,CHAYA_SEAT } from './wayside-hut-layout.js';
 import { planTurtleLeg } from './turtle-trail.js';
 import { createPickupContacts } from './pickup-contacts.js';
 import { createAmbientContacts } from './ambient-contacts.js';
@@ -208,6 +208,12 @@ export function createGame(snapshot = null) {
   const { objects, npcs } = makeWorld();
   const riverRider = pairRiverTravellers(npcs);
   const turtle = npcs.find(n => n.type === 'turtle');
+  // A tea service is always available. Only portable items have cooldowns in a journey save.
+  const teaSeats=CHAYA_SITES.map(chaya=>{
+    const [x,z]=sitePoint(chaya,CHAYA_SEAT.x,CHAYA_SEAT.z);
+    return {type:'chaya',active:true,chaya,x,z,y:terrainHeight(chaya.x,chaya.z)+CHAYA_SEAT.top};
+  });
+  const interactables=[...objects,turtle,...teaSeats];
   const player = {
     x: 0, z: 62, y: groundHeight(0,62), h: 0, vx: 0, vz: 0, vy: 0, speed: 0, heading: 0,
     grounded: true, hp: MAX_VITAL, mp: MAX_VITAL, mode: 'normal', mount: null, activity: null,
@@ -303,7 +309,7 @@ export function createGame(snapshot = null) {
     if (player.activity || !player.grounded) return null;
     if (player.mount === 'turtle') return { target: turtle, label: 'カメから降りる', action: 'dismount', distance: 0 };
     let best = null;
-    for (const target of [...objects, turtle]) {
+    for (const target of interactables) {
       if (!target.active && target !== turtle) continue;
       const distance = gap(target);
       if (Math.abs(target.y-player.y)>2.2) continue;
@@ -315,6 +321,10 @@ export function createGame(snapshot = null) {
         radius = 3.1;
       } else if (player.mount) {
         continue;
+      } else if (target.chaya) {
+        const front=(player.x-target.x)*Math.sin(target.chaya.yaw)+(player.z-target.z)*Math.cos(target.chaya.yaw);
+        if(front<-.55 || Math.abs(target.y-player.y)>1)continue;
+        label='団子とお茶をいただく'; radius=1.85;
       } else if (target.type === 'turtle') {
         label = 'カメに乗る'; radius = 2.8;
       } else if (PICKUP_ACTION[target.type] && target !== lastBath) {
@@ -386,6 +396,10 @@ export function createGame(snapshot = null) {
       case 'eat':
         player.buffs.full = BUFF_TIME.full;
         message(player.mode === 'kinako' ? '満腹！ 三条通知が周囲二十四方向へ！' : player.mode === 'kagami' ? '満腹！ 鏡餅から八方へ福を届けよう。' : '満腹！ 三条通知が一度に三方向へ飛ぶ。');
+        break;
+      case 'chaya':
+        player.hp=player.mp=MAX_VITAL;
+        message('お茶を飲みほして、体力とモッチポイントが全回復！');
         break;
       case 'tea':
         player.mp = Math.min(MAX_VITAL,player.mp+32);
@@ -488,6 +502,12 @@ export function createGame(snapshot = null) {
       player.mount = 'turtle';
       turtle.mounted = true;
       message('ミツユビハコガメに乗った！');
+    } else if (target.chaya) {
+      Object.assign(player,{x:target.x,y:target.y,z:target.z,heading:target.chaya.yaw,h:0,vy:0,grounded:true});
+      beginActivity('chaya',4.4);
+      sound('pickup');
+      message(target.chaya.name+'の縁台で、焼きたての団子をひと串。');
+      return true;
     } else if (target.type === 'port') {
       if (target.bikes < 1) return false;
       target.bikes--;
@@ -1124,7 +1144,7 @@ export function createGame(snapshot = null) {
         !finite(p.vx,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vz,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vy,-135,27) ||
         !finite(p.speed,0,MAX_TRAVEL_SPEED) || !finite(p.heading,-Math.PI,Math.PI) || typeof p.grounded!=='boolean' ||
         !finite(p.hp,0,100) || !finite(p.mp,0,100) || !Object.hasOwn(MODE_COST,p.mode) ||
-        ![null,'turtle','bike'].includes(p.mount) || ![null,'fall','sleep','bath','read','drink','eat','tsukimi','tea','mitarashi'].includes(p.activity) ||
+        ![null,'turtle','bike'].includes(p.mount) || ![null,'fall','sleep','bath','read','drink','eat','tsukimi','tea','mitarashi','chaya'].includes(p.activity) ||
         !finite(p.activityTime,0,6) || !p.buffs || !Object.keys(BUFF_TIME).every(k=>finite(p.buffs[k],0,BUFF_TIME[k])) ||
         ![p.stretch,p.invulnerable,p.throwTime].every(n=>finite(n,0,3)) ||
         !Array.isArray(data.items) || !validItemCounts.includes(data.items.length) || !data.items.every(n=>finite(n,0,65)) ||

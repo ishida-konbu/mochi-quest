@@ -139,13 +139,13 @@ function cabin(s,p,fish,seed){
     }
   }
 }
-function charcoalRoof(s,p,seed){
+function charcoalRoof(s,p,seed,lift=0){
   function shape(side,u,v,hip=false,offset=0){
     const t=2*u-1,spread=3.01-1.49*v;
     const x=hip?side*spread:t*spread;
     const z=(hip?t:side)*2.38*(1-v)-.15*v;
     const loose=.05*sin(x*9.8+z*3.8+seed)+.035*sin(x*14.7-z*12.4+seed);
-    const y=1.83+2.27*v-.18*sin(PI*v)+.063*sin(x*1.15+.4*seed)*(.24+.76*v)+loose*(1-v)**4;
+    const y=lift+1.83+2.27*v-.18*sin(PI*v)+.063*sin(x*1.15+.4*seed)*(.24+.76*v)+loose*(1-v)**4;
     return [x+(hip?side*offset:0),y+offset,z+(hip?0:side*offset)];
   }
   for(const side of [-1,1])for(const hip of [false,true]){
@@ -175,10 +175,10 @@ function charcoalRoof(s,p,seed){
       }
     }
   }
-  const points=Array.from({length:9},(_,i)=>[-1.72+i*.43,4.10+.07*sin(i*.55+seed*.4),-.15+.022*cos(i*.7)]);
+  const points=Array.from({length:9},(_,i)=>[-1.72+i*.43,lift+4.10+.07*sin(i*.55+seed*.4),-.15+.022*cos(i*.7)]);
   p.stroke('#9a8058',points,points.map((_,i)=>i===0||i===8?.12:.185),18);
   for(let i=-3;i<=3;i++){
-    const x=i*.43, y=4.12+.058*sin((i+4)*.55+seed*.4);
+    const x=i*.43, y=lift+4.12+.058*sin((i+4)*.55+seed*.4);
     cord(p,[[x-.03,y-.125,.10],[x-.016,y+.075,.034],[x,y+.17,-.14],[x+.014,y+.085,-.32],[x+.024,y-.093,-.39]],.026,'#756044',9);
   }
 }
@@ -385,3 +385,5 @@ export function buildWaysideHut(kind,variant=0){
   }
   return root;
 }
+
+export {materials as waysideMaterials, pole as cedarPole, charcoalRoof as hippedThatch};
