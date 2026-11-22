@@ -1,5 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 import { COURT, COURT_COLUMNS, COURT_STEPS, COURT_GATE_Z } from './retreat-layout.js';
+import { COURT_CANDLES } from './lamp-layout.js';
 import { dressCourtWatch } from './court-watch.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { terrainHeight, seeded } from './terrain.js';
@@ -86,6 +87,19 @@ function hearingRoom(p,f) {
   const image=new T.TextureLoader().load(new URL('./assets/world/hearing-scroll.webp',import.meta.url).href);
   image.colorSpace=T.SRGBColorSpace;image.anisotropy=4;
   const mural=new T.MeshLambertMaterial({map:image});
+  // The dais candles warm the painted wall even from the opposite doorway,
+  // where the two mobile point lights are attending the petitioners.
+  mural.onBeforeCompile=shader=>{
+    shader.uniforms.lampNight=p.lamps.uniforms.night;shader.uniforms.lampTime=p.lamps.uniforms.clock;
+    shader.fragmentShader='uniform float lampNight,lampTime;\n'+shader.fragmentShader.replace('#include <emissivemap_fragment>',`
+      #include <emissivemap_fragment>
+      vec2 metres=(vMapUv-.5)*vec2(16.50,5.50);
+      float left=length(metres-vec2(-4.36,-1.21));
+      float right=length(metres-vec2(4.36,-1.21));
+      float pools=(.96+.04*sin(lampTime*4.8))/(1.+left*left*.37)+
+                  (.97+.03*sin(lampTime*5.2+.9))/(1.+right*right*.37);
+      totalEmissiveRadiance+=diffuseColor.rgb*vec3(.99,.51,.19)*pools*(.06+.60*lampNight);`);
+  };
   f.put('box',0,4.35,-8.22,37.9,6.60,.29,'#d5cbb1',p.solid);
   // The painting hangs inside the timber frame. Its complete 3:1 image
   // reads from the approach, without posts, applied mullions or panel seams.
@@ -282,6 +296,9 @@ export function dressCourt(p,scene) {
   f.put('box',0,7.45,8.32,4.58,.99,.24,brass,p.wood);
   f.put('plane',0,7.45,8.453,4.31,.85,1,'#fff',sign);
   hearingRoom(p,f);
+  for(const [u,v,y,scale] of COURT_CANDLES){
+    const q=f.at(u,y,v);p.lamps.candle(q.x,q.y,q.z,scale);
+  }
   gate(p,f);
   dressInstruments(p,f);
   return dressCourtWatch(scene,p,f);

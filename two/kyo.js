@@ -18,6 +18,7 @@ function frame(p,x,z,yaw) {
   const co=Math.cos(yaw),si=Math.sin(yaw),base=terrainHeight(x,z);
   const pos=(u,y,v)=>vec(x+co*u+si*v,base+y,z-si*u+co*v);
   return {
+    pos, lamps:p.lamps,
     part(shape,u,y,v,sx,sy,sz,tint,mat=p.solid,angle=0,roll=0){
       const a=pos(u,y,v);
       p.part(shape,a.x,a.y,a.z,sx,sy,sz,tint,yaw+angle,0,roll,mat,true,true);
@@ -118,6 +119,8 @@ function lantern(f,x,top,z,r,light) {
   const h=r*2.8;
   f.stroke([x,top+.28,z],[x,top,z],.015,'#6b583f');
   f.part('kyoLantern',x,top-h/2,z,r,h,r,'#ffffff',light);
+  const wick=f.pos(x,top-h*.5,z);
+  f.lamps.covered(wick.x,wick.y,wick.z,r*1.05,terrainHeight(wick.x,wick.z));
   for(const end of [-1,1])
     f.part('round',x,top-h/2+end*h*.462,z,r*.69,.065,r*.69,soot);
   f.stroke([x,top-h,z],[x,top-h-.125,z],.012,'#87603d');
@@ -342,21 +345,19 @@ export function createKyo(scene,painter){
   const p=painter,light=lanternPaper();
   p.shapes.shopBanner=hangingBanner();
   p.shapes.teaKettle=ironKettle();
-  light.emissiveMap=light.map;
+  light.emissiveMap=light.map;light.userData.range=690;
   p.shapes.kyoLantern=new THREE.LatheGeometry([
     [.48,-.5],[.69,-.47],[.87,-.37],[.97,-.22],[1,.04],[.98,.23],[.89,.36],[.70,.47],[.48,.5],
   ].map(q=>new THREE.Vector2(...q)),18);
   p.shapes.kyoCup=new THREE.LatheGeometry([
     [.47,.01],[.57,.06],[.62,.20],[.93,.84],[1,.96],[.97,1],[.86,.96],[.79,.71],
   ].map(q=>new THREE.Vector2(...q)),16);
-  const windowPaper=painted(64,64,(ctx,w,h)=>{
-    const sheen=ctx.createLinearGradient(0,0,w,h);
-    sheen.addColorStop(0,'#dfd7b9');sheen.addColorStop(1,'#bfb79e');
-    ctx.fillStyle=sheen;ctx.fillRect(0,0,w,h);
-  },{emissive:'#f5ae66',emissiveIntensity:0});
+  const windowPaper=p.lamps.shoji;
   for(let picture=0;picture<4;picture++) p.shapes['kyoScreen'+picture]=printSurface(picture,'screen');
   for(let picture=0;picture<2;picture++) p.shapes['kyoCurtain'+picture]=printSurface(picture,'curtain');
+  p.cityShell=true;
   const gateHouse=createRashomon(scene,p);
+  p.cityShell=false;
   const dai=daiFirebeds(terrainHeight),fuku=fukuFirebeds(terrainHeight);
   hillsideInk(p,false,dai);hillsideInk(p,true,fuku);shopFronts(p,light,windowPaper);
   for(const stand of KYO_FOOD)foodCounter(p,stand,light);
@@ -367,8 +368,7 @@ export function createKyo(scene,painter){
   const east=mountainFires(scene,fuku,HIGASHIYAMA.x,HIGASHIYAMA.z,true);
   return (time,player,camera)=>{
     const night=kyoNight(time,player);
-    light.emissiveIntensity=.04+night*.94;
-    windowPaper.emissiveIntensity=night*.46;
+    light.emissiveIntensity=.04+night*1.48;
     streetWatch(time,player);
     gateHouse(time,player);crowd(time,player,camera);north(time,night,player);east(time,night,player);
   };

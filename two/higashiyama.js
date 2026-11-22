@@ -6,6 +6,9 @@ const city=DISTRICTS.kyo;
 export const HIGASHIYAMA={x:city.x+380,z:city.z};
 export const KITAYAMA={x:city.x-4,z:city.z-372};
 export const NISHIYAMA={x:city.x-327,z:city.z-13};
+// Nishiyama has a double ridge. Its higher, city-facing summit is east
+// of the geographic centre of the divide.
+export const KYO_LOOKOUTS=[HIGASHIYAMA,KITAYAMA,{x:NISHIYAMA.x+26,z:NISHIYAMA.z+16}];
 // Geographic bounds of the single painted sheet, in metres from its NW corner.
 export const KYO_HILL_SHEET={x:-320,z:-1552,width:1216,depth:1056};
 
@@ -50,7 +53,10 @@ function watershed(a,b,north) {
   // Slight discontinuities in the beds show in grazing light, without
   // introducing steps in the meadow that holds the ceremonial brushstrokes.
   const folds=1+.016*Math.sin(.034*b+.017*a)*Math.cos(.025*a-.009*b);
-  return Math.max(0,relief)*folds;
+  // A narrow crown above the rounded shoulders opens the view back over
+  // the basin. The toes, firebed grades and passes retain their survey.
+  const crown=Math.abs(a)<60 && Math.abs(b)<85?10*Math.exp(-((a/15)**2+(b/28)**2)):0;
+  return Math.max(0,relief)*folds+crown;
 }
 
 export const eastRidgeHeight=(x,z)=>watershed(x-HIGASHIYAMA.x,z-HIGASHIYAMA.z,false);
@@ -69,7 +75,8 @@ export function westRidgeHeight(x,z) {
     +20*dome((u-86+.62*v)/106,(v+51)/45)
     -9*dome((u-27+.47*v)/80,(v+12)/21);
   const foot=Math.min(1,Math.max(0,(142-v)/50));
-  return Math.max(0,ridge)*foot*foot*(3-2*foot);
+  const summit=Math.abs(u-26)>33 || Math.abs(v-16)>58?0:1.9*Math.exp(-(((u-26)/9)**2+((v-16)/18)**2));
+  return (Math.max(0,ridge)+summit)*foot*foot*(3-2*foot);
 }
 
 export const kyoRidgeHeight=(x,z)=>Math.max(eastRidgeHeight(x,z),northRidgeHeight(x,z),westRidgeHeight(x,z));

@@ -11,12 +11,17 @@ const styles=[
   ['#a28265','#c6ad81','#699197','#8b6052',2],
   ['#868a73','#98a292','#87775f','#645a49',4],
   ['#857593','#9b9395','#a79a68','#5d6664',2],
+  ['#555b59','#a8a495','#87816e','#625c53',4],
 ];
 const cache=new Map();
+const monkKind=5, monkSleeves=[];
+export function monasticHabit(){
+  return {body:ancientClothing(monkKind),sleeves:monkSleeves};
+}
 export function ancientClothing(kind){
   if(cache.has(kind))return cache.get(kind);
   const [outer,lining,accent,hakama,bolt]=styles[kind],p=new SilkPanels();
-  const officer=kind===1,journey=kind===0,hem=journey?.33:officer?.38:kind===3?.57:.46;
+  const officer=kind===1,journey=kind===0,monk=kind===monkKind,hem=monk?.19:journey?.33:officer?.38:kind===3?.57:.46;
   // The split hakama has separate tubular legs. Six pleats in each leg catch the wash.
   for(const side of [-1,1]){
     const leg=(u,v,pad=0)=>{
@@ -75,7 +80,27 @@ export function ancientClothing(kind){
   for(const [base,thick,col] of [[-.028,.063,accent],[.008,.013,'#77664f']]){
     p.cut(4,48,(u,v)=>coat(u,beltV+(base+v*thick)/(1.057-hem),.022),4,col);
   }
+  if(monk){
+    // The kesa passes over one shoulder and under the opposite arm. Piece
+    // its five columns on the same folded surface as the plain hemp robe.
+    const kesa=(u,v,pad=0)=>{
+      const a=(u-.5)*tau,shoulder=.5-.5*sin(a);
+      const top=.57+.42*shoulder,hem=.22+.11*shoulder;
+      return coat(u,hem+(top-hem)*v,.044+pad);
+    };
+    for(let i=0;i<5;i++){
+      const seam=i%2?.35:.65;
+      for(const [lo,hi] of [[0,seam],[seam,1]]){
+        p.cut(7,12,(u,v)=>kesa((i+u)/5,lo+v*(hi-lo)),4,
+          ['#ae8852','#997449','#a88859','#b09160'][(i+(lo?2:0))%4]);
+      }
+      p.cut(2,12,(u,v)=>kesa((i+u)/5,seam+(v-.5)*.032,.003),4,'#796341');
+      p.cut(12,2,(u,v)=>kesa((i+u*.026)/5,v,.005),4,'#746043');
+    }
+    for(const band of [0,.96])p.cut(2,60,(u,v)=>kesa(u,band+v*.04,.007),4,'#c8ac77');
+  }
   for(const side of [-1,1]){
+    const sleevePanels=monk?new SilkPanels():p;
     const wide=officer||journey,forward=side===1?.212:.11;
     const wrist=kind===1&&side===1?.037:kind===3?-.052:0;
     const sleeve=(u,v)=>{
@@ -85,10 +110,10 @@ export function ancientClothing(kind){
           -.078*(1-dy)*.5*sin(Math.PI*v*.85),
         -.030+(.14+forward)*v+.036*sin(v*Math.PI)+.012*cos(a*5)];
     };
-    p.cut(16,36,sleeve,bolt,bolt===4?outer:'#fff');
+    sleevePanels.cut(16,36,sleeve,bolt,bolt===4?outer:'#fff');
     for(let j=0;j<4;j++){
       const start=side>0?.18+j*.08:.82-j*.08;
-      foldMark(p,(u,v,pad)=>{
+      foldMark(sleevePanels,(u,v,pad)=>{
         const q=sleeve(u,v),a=u*tau;q[0]+=pad*sin(a);q[1]+=pad*cos(a);return q;
       },[[start,.15],[start+.022*side,.40],[start+.056*side,.69],[start+.038*side,.94]],
       .023,field,.003);
@@ -98,13 +123,14 @@ export function ancientClothing(kind){
       const a=.219+.281*v,l=sleeve(a,1),r=sleeve(1-a,1);
       return l.map((n,j)=>n+(r[j]-n)*u+(j===2?.012*sin(Math.PI*u)*sin(Math.PI*v):0));
     };
-    p.cut(10,12,pocket,bolt,bolt===4?outer:'#fff',(u,v)=>[.40+.43*u,.05+.33*v]);
-    p.cut(2,12,(u,v)=>pocket(u,.023+.028*v),4,lining);
-    p.cut(3,32,(u,v)=>sleeve(u,.962+.037*v),4,lining);
-    p.cut(6,32,(u,v)=>{
+    sleevePanels.cut(10,12,pocket,bolt,bolt===4?outer:'#fff',(u,v)=>[.40+.43*u,.05+.33*v]);
+    sleevePanels.cut(2,12,(u,v)=>pocket(u,.023+.028*v),4,lining);
+    sleevePanels.cut(3,32,(u,v)=>sleeve(u,.962+.037*v),4,lining);
+    sleevePanels.cut(6,32,(u,v)=>{
       const a=u*tau,edge=sleeve(u,1);return [edge[0]*(1-.16*v)+side*.073*v,
         edge[1]*(1-.22*v)+.157*v,edge[2]-.025*v+.004*sin(a)*v];
     },4,accent);
+    if(monk)monkSleeves.push(sleevePanels.finish());
   }
   const g=p.finish();cache.set(kind,g);return g;
 }
@@ -184,16 +210,17 @@ export function townHeadwear(b,kind){
     for(const s of [-1,1])b.add(brushStroke([[-.32,1.46,-.16],[-.39,1.44,-.21],[s*.11-.38,1.33,-.25]],[.03,.053,.007],9,8),'#aaa284');
   }
 }
+export function townHand(b,kind,side){
+  const z=side>0?.35:.24,wrist=kind===1&&side===1?.037:kind===3?-.052:0;
+  const hand=[[side*.48,.749+wrist,z-.05],[side*.515,.754+wrist,z],
+    [side*.512,.728+wrist,z+.049],[side*.484,.713+wrist,z+.077]];
+  b.add(brushStroke(hand,[.045,.067,.054,.014],13,10),kind===4?'#e3ccae':'#ecdbc0');
+  for(let j=0;j<2;j++)b.add(brushStroke([[side*(.476+j*.024),.716+wrist,z+.058],
+    [side*(.484+j*.023),.732+wrist,z+.064],[side*(.495+j*.020),.736+wrist,z+.066]],
+    [.001,.003,.0005],5,4),'#aa9176');
+}
 export function townBody(b,kind){
-  for(const side of [-1,1]){
-    const z=side>0?.35:.24,wrist=kind===1&&side===1?.037:kind===3?-.052:0;
-    const hand=[[side*.48,.749+wrist,z-.05],[side*.515,.754+wrist,z],
-      [side*.512,.728+wrist,z+.049],[side*.484,.713+wrist,z+.077]];
-    b.add(brushStroke(hand,[.045,.067,.054,.014],13,10),kind===4?'#e3ccae':'#ecdbc0');
-    for(let j=0;j<2;j++)b.add(brushStroke([[side*(.476+j*.024),.716+wrist,z+.058],
-      [side*(.484+j*.023),.732+wrist,z+.064],[side*(.495+j*.020),.736+wrist,z+.066]],
-      [.001,.003,.0005],5,4),'#aa9176');
-  }
+  for(const side of [-1,1])townHand(b,kind,side);
   if(kind===0){
     const staff=[[-.51,.116,.39],[-.532,.45,.332],[-.511,.735,.302],
       [-.538,1.18,.341],[-.58,1.48,.360],[-.572,1.542,.378]];

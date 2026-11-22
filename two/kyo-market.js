@@ -92,11 +92,20 @@ export function dressWardShop(p,b,part){
     for(const v of [-front,0,front])part('box',side*w*.492,(wall+floor)/2,v,.15,wall-floor,.16,post,p.wood);
     for(const v of [-front,front])part('box',0,wall-.10,v,w+.18,.23,.20,beam,p.wood);
   }
+  // A low paper window faces the service alley beside the oil stand. Some
+  // shops have a short, wide light, others a higher square one.
+  const warm=['#f9dba1','#f1dbb4','#f7bf8e','#f3cc96'][Object.keys(WARD_TRADES).indexOf(craft)%4];
+  const span=d*(two?.36:.27),windowHeight=two?.84:1.08,offset=-d*.15;
+  part('box',w*.5+.087,1.72,offset,.043,windowHeight,span,warm,p.lamps.shoji);
+  for(const sign of [-1,1])
+    part('box',w*.5+.11,1.72+sign*windowHeight*.5,offset,.083,.071,span+.085,beam,p.wood);
+  for(let k=-2;k<=2;k++)
+    part('box',w*.5+.12,1.72,offset+k*span*.246,.043,windowHeight+.04,.048,post,p.wood);
   if(two){
     part('box',0,(loft+wall)/2,front-.055,w,wall-loft,.08,'#b7a584',p.boarding);
     for(const q of wardFloorPlan(b).slabs)part('box',q.x,q.top-.065,q.z,q.w,.13,q.d,q.tread?'#a38b66':'#ba9e74',p.deck);
     part('box',0,loft+.49,front,w,1.04,.16,'#a48b64',p.boarding);
-    part('box',0,loft+1.75,front,w,.98,.13,'#645b48',p.workshopArt.reed);
+    part('box',0,loft+1.75,front,w,.98,.13,warm,p.lamps.shoji);
     for(let j=-5;j<=5;j++)part('box',j*w*.093,loft+1.74,front+.08,.064,1.13,.055,beam,p.wood);
     for(const v of [-1,1])part('box',0,loft+1.74+v*.57,front+.09,w,.10,.12,post,p.wood);
     // Shitomi shutters lift from the lower rail under the upstairs window.

@@ -51,7 +51,7 @@ export function roofShell(form, aperture=0) {
         x=across*(.86+.14*t);z=face*t;
       } else {
         const r=aperture+(1-aperture)*t;
-        const span=form==='hip'?.46+.54*t:r;
+        const span=form==='hip' || form==='barkHip' ? .46+.54*t:r;
         x=end?face*span:across*span;
         z=end?across*r:face*r;
       }
@@ -60,7 +60,7 @@ export function roofShell(form, aperture=0) {
     const outward=end?[face,0,0]:[0,0,face];
     sheet.patch(segments,bands,(u,t)=>point(u,t),[0,1,0],3,2);
     sheet.patch(segments,bands,(u,t)=>point(u,t,depth),[0,-1,0],3,2,true);
-    sheet.patch(segments,1,(u,v)=>point(u,1,depth*v),outward,3,.12,true);
+    sheet.patch(segments,1,(u,v)=>point(u,1,depth*v),outward,3,form==='barkHip'?.38:.12,form!=='barkHip');
     if(aperture>0) sheet.patch(segments,1,(u,v)=>point(u,0,depth*v),outward.map(k=>-k),3,.12,true);
     if(gabled) for(const side of [-1,1]) {
       sheet.patch(bands,1,(t,v)=>point((side+1)/2,t,depth*v),[side,0,0],2,.12,true);

@@ -4,6 +4,7 @@ import { REGIONS, bridgeAt, nearRoad, overheadHeight, riverHalfWidth, riverZ, se
   shoreDistance, wrapDelta } from './terrain.js';
 import { kyoNight, kyoInfluence } from './kyo-layout.js';
 import { POUNDING } from './festival.js';
+import { createTempleBell } from './kiyomizu-bell.js';
 
 const places = Object.fromEntries(REGIONS.map(place => [place.id, place]));
 const loops = { bamboo: 27, river: 24, wind: 23, crickets: 25, shore: 29, paddy: 21 };
@@ -62,6 +63,7 @@ export function createSoundscape(ctx, master) {
   outdoor.frequency.value = 14000;
   outdoor.Q.value = .52;
   outdoor.connect(master);
+  const templeBell = createTempleBell(ctx, outdoor);
   const layers = Object.keys(loops).map(name => ({ name, source: null, amp: null, level: 0, lastHeard: 0 }));
   const scores = REGIONS.map(({id}) => ({ name: 'score-'+id, id, source:null, amp:null, level:0, lastHeard:0 }));
   const samples = new Map();
@@ -266,6 +268,7 @@ export function createSoundscape(ctx, master) {
       nextMix = now + .14;
     }
     const moving = lastTime !== null && time > lastTime && time - lastTime < .4;
+    templeBell.update(state.bellStrike, p, yaw, state.time, inside);
     if (!moving) lastBeat = null;
     landmarks(state, time, yaw, now);
     activity(p, yaw, now, photo);
@@ -307,6 +310,7 @@ export function createSoundscape(ctx, master) {
     }
   }
   function stop() {
+    templeBell.stop();
     for (const layer of [...layers, ...scores]) stopLayer(layer);
     for (const source of oneShots) source.stop();
     lastTime = lastBeat = null;

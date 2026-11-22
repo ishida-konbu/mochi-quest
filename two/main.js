@@ -775,7 +775,7 @@ function selectMap(id) {
     autumn: '楓の枝が重なる谷道。紅葉をくぐって峡へ。',
     moon: '北の空には十五夜の月。薄のそばの三方に近づくと、月見団子を食べられます。',
     dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。',
-    kyo: '南の石畳から幅広の石段を上り、羅生門をくぐって京へ。門の東脇の木階段は、老婆が暮らす薄暗い楼上に通じます。大路では商人や旅人が行き交います。評定所へは東西の大路を西へ進み、門前で北へ。夕暮れには辻に立つ衛士が松明を手に歩き出し、街角の篝火を順に灯します。大路の辻から東を望むと東山に「福」、北を望むと北山に「大」の送り火が見えます。',
+    kyo: '南の石段を上り、羅生門をくぐって京へ。門の東脇の木階段は老婆が暮らす楼上へ、西の大路は評定所へ通じます。夕暮れには衛士が辻の篝火を灯し、軒の提灯と家々の行燈が浮かびます。大路から東を望めば「福」、北には「大」の送り火。都の南東、地図の「清」が清水寺です。舞台から西を望むと京が一望できます。鐘楼の梵鐘には三条通知が届きます。',
     peach: '竹隠れの社から西へ。桃霞の湯を過ぎたら、尾根の間を縫う谷底の道をたどってください。山あいを抜けると桃林が開け、里の月門からは山腹いっぱいの桃の花を見渡せます。木陰の土俵では兎と蛙が相撲を取っています。',
     ryugu: '海風の松原から西へ泳ぎ、'+(coarse?'「潜る」':'↓ キー')+'を長押しして海底へ。真珠灯籠と海亀・鯛・蛸の一座をたどり、楼門の先の御朱印所へ。'+(coarse?'「跳ぶ」':'Space キー')+'を長押しすると浮上します。',
     todaiji: '回廊の先に、蓮の座に鎮まる大餅仏。参道で鹿が兎に一礼し、脇では猿と兎が筆を運びます。',
@@ -923,7 +923,7 @@ function frame(now) {
   wake(p, photoMode ? photoTime : state.time);
   const sceneTime = photoMode ? photoTime : state.time;
   audio.updateWorld(state, sceneTime, yaw, photoMode);
-  world.update(sceneTime, p, camera, state.time);
+  world.update(sceneTime, p, camera, state.time, state.bellStrike);
   meadow(sceneTime, p, camera);
   // Keep the photographic pose alive while the travel clock is paused.
   if (photoMode) {

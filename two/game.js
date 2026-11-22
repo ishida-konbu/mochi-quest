@@ -1,5 +1,7 @@
 import { WAYSIDE_HUTS,KETTLE,CHAYA_SITES,CHAYA_SEAT } from './wayside-hut-layout.js';
 import { planTurtleLeg } from './turtle-trail.js';
+import { BELL_FIRST, BELL_INTERVAL, noticeBellDistance, templeBellHour } from './kiyomizu-bell.js';
+import { KIYOMIZU, onMountOtowa, kiyomizuClearing } from './kiyomizu-layout.js';
 import { createPickupContacts } from './pickup-contacts.js';
 import { createAmbientContacts } from './ambient-contacts.js';
 import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
@@ -232,7 +234,7 @@ export function createGame(snapshot = null) {
   };
   const region = REGIONS[regionAt(player.x,player.z)];
   const state = {
-    time: 0, player, npcs, nearbyNpcs: [], objects, shots: [], events: [], score: 0,
+    time: 0, player, npcs, nearbyNpcs: [], objects, shots: [], events: [], score: 0, bellStrike: null,
     delivered: new Set(), recipientTotal:npcs.length, kagamiUnlocked:false,
     region: region.name, regionId: region.id, visited: [region.id]
   };
@@ -301,6 +303,11 @@ export function createGame(snapshot = null) {
   function say(text) { emit('say', { text }); }
   function message(text) { emit('message', { text }); }
   function sound(name) { emit('sound', { name }); }
+  function ringTempleBell(source, time) {
+    if (state.bellStrike && time - state.bellStrike.time < .10) return;
+    state.bellStrike = { time, source };
+    if (source === 'notice') message('三条通知が清水寺の梵鐘を鳴らした。');
+  }
   function protectedVitals() { return player.buffs.warm > 0 || player.buffs.wrap > 0; }
   function spendMP(cost) {
     if (player.buffs.full > 0 || protectedVitals()) return true;
@@ -763,10 +770,16 @@ export function createGame(snapshot = null) {
         const along=sweepResident(n,start,dx*length,0,dz*length,.105,.14,true)*length;
         if(along<first) { first=along; hit=n; }
       }
+      const bellDistance=noticeBellDistance(start,dx,dz,length);
+      const bellFirst=bellDistance<first;
+      if(bellFirst){first=bellDistance;hit=null;}
       const travel=Math.min(first,length), samples=Math.max(1,Math.ceil(travel/.08));
       let stopped=false;
       for(let j=0;j<=samples;j++){
         const t=travel*j/samples, x=wrapCoord(start.x+dx*t), z=wrapCoord(start.z+dz*t);
+        if(bellFirst && (travel===0 || j===samples)){
+          ringTempleBell('notice',state.time);stopped=true;break;
+        }
         const feet=shot.y-.045;
         const ship=voyage.sample(x,z,feet,.045,.09);
         if(staticVolumeAt(x,z,feet,.045,.09) || propOverlap(x,z,feet,.09,.045) || ship &&
@@ -1039,10 +1052,13 @@ export function createGame(snapshot = null) {
       beginActivity('fall',.68); sound('bump');
     }
   }
+  const capital=REGIONS.find(r=>r.id==='kyo');
   function updateRegion(collectStamp) {
-    const region = REGIONS[regionAt(player.x,player.z)];
+    const otowa=onMountOtowa(player.x,player.z);
+    const region = otowa ? capital : REGIONS[regionAt(player.x,player.z)];
     const offshore = region.id === 'ryugu' && (player.diveDepth < 1 || player.y > terrainHeight(region.x,region.z) + 8);
-    state.region = offshore ? '竜宮沖' : region.name; state.regionId = region.id;
+    state.region = offshore ? '竜宮沖' : otowa && kiyomizuClearing(player.x,player.z) ? KIYOMIZU.name : region.name;
+    state.regionId = region.id;
     player.night = Math.max(seasonAt(player.x,player.z,climate).moon,kyoNight(state.time,player)*kyoInfluence(player.x,player.z)) > .48;
     player.inWater = player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z) > .14 && player.y < waterSurfaceAt(player.x,player.z) - .08;
     if (region.id === 'ryugu' && (offshore || player.y > terrainHeight(region.x,region.z) + 3)) return;
@@ -1077,7 +1093,11 @@ export function createGame(snapshot = null) {
     return true;
   }
   function advance(dt, input) {
+    const priorTime=state.time;
     state.time += dt;
+    const offset=player.kyoClockOffset, hour=templeBellHour(state.time,offset);
+    if(hour>templeBellHour(priorTime,offset))
+      ringTempleBell('mallet',BELL_FIRST+hour*BELL_INTERVAL-offset);
     flapRemaining = Math.max(0, flapRemaining - dt);
     voyage.update(state.time,player);
     player.idleTime = player.grounded && player.speed < .22 && !player.activity ? Math.min(3, (player.idleTime || 0) + dt) : 0;

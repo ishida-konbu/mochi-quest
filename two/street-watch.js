@@ -16,6 +16,7 @@ export function createStreetWatch(scene,painter){
       const y=terrainHeight(x,z),heading=i*1.73+j*2.15;
       painter.part('rock',x,y+.06,z,.70,.14,.68,'#9d9784',heading,0,0,painter.stone,true,true);
       painter.part('courtBrazier',x,y+.10,z,1,1,1,'#ffffff',heading,0,0,painter.stems,true,true);
+      painter.lamps.hearth(x,y+1.99,z,beat.ignition[j],beat.dawn);
       const hearth=createWatchFire(group,x,y+.10,z,y+.16,heading);
       // The pool lies across both the road and its graded verge.
       normal.set(terrainHeight(x-.5,z)-terrainHeight(x+.5,z),1,

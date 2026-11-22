@@ -5,10 +5,11 @@ import { DISTRICTS } from './geography.js';
 import { SEAPORTS, PORT_BUILDINGS, QUAY_CENTER, QUAY_LENGTH, portPoint } from './seaport-layout.js';
 import { SEAWAYS, FLEET, vesselPose } from './ocean-voyage.js';
 import { CHAYA_SITES } from './wayside-hut-layout.js';
+import { KIYOMIZU, OTOWA_ROOFS, PAGODA } from './kiyomizu-layout.js';
 import { COURT } from './retreat-layout.js';
 import { HIGASHIYAMA, KITAYAMA, westRidgeHeight } from './higashiyama.js';
 import { RASHOMON, GATE_STONE, GATE_STONE_APRONS, GATE_STONE_STEPS, GATE_WING } from './kyo-layout.js';
-import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
+import { KIYOMIZU_ROAD, REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
 const SIZE = 2048, SPAN = 2 * BOUND, adj = SIZE / SPAN;
 export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾', '十一', '十二', '十三', '十四', '十五', '十六', '十七'];
 const toX = (x) => SIZE / 2 + x * adj;
@@ -23,7 +24,11 @@ export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
     image.src = new URL('./assets/world/journey-map.webp?v=kyoto-woodlands', import.meta.url).href;
-    paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
+    paperRequest = image.decode().then(() => {
+      const c=document.createElement('canvas');c.width=c.height=SIZE;
+      const g=c.getContext('2d');g.drawImage(image,0,0,SIZE,SIZE);
+      stampOtowa(g);paper=c;
+    }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
 }
@@ -53,6 +58,20 @@ function drawPort(g, x, y, bikes, large) {
   g.font = 'bold ' + (large ? 12 : 15) + 'px sans-serif';
   g.fillStyle = '#fff8e9';
   g.fillText('P', pinX, pinY + .5);
+}
+
+function stampOtowa(g){
+  g.save();g.lineJoin=g.lineCap='round';g.beginPath();
+  KIYOMIZU_ROAD.points.forEach(([x,z],i)=>i?g.lineTo(toX(x),toX(z)):g.moveTo(toX(x),toX(z)));
+  g.strokeStyle='#a18a6a';g.lineWidth=3;g.stroke();
+  g.strokeStyle='#e8d8b7';g.lineWidth=1.6;g.stroke();
+  for(const r of [...OTOWA_ROOFS,{...PAGODA,width:10.5,depth:10.5,yaw:0}]){
+    g.save();g.translate(toX(r.x),toX(r.z));g.rotate(-r.yaw);
+    g.fillStyle='#725842';g.fillRect(-r.width*adj/2,-r.depth*adj/2,r.width*adj,r.depth*adj);
+    g.beginPath();g.moveTo(-r.width*adj*.28,0);g.lineTo(r.width*adj*.28,0);
+    g.lineWidth=.8;g.strokeStyle='#e7d7ae';g.stroke();g.restore();
+  }
+  g.restore();
 }
 
 export function paintMapPaper() {
@@ -210,7 +229,7 @@ export function paintMapPaper() {
   g.beginPath();
   PALACE_APPROACH.forEach(([x,z],i) => i ? g.lineTo(toX(x),toX(z)) : g.moveTo(toX(x),toX(z)));
   g.setLineDash([2.5,4]);g.strokeStyle='#537e80';g.lineWidth=1.6;g.stroke();g.setLineDash([]);
-  return c;
+  stampOtowa(g);return c;
 }
 export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null, recipientName = '') {
   const w = canvas.width,
@@ -245,7 +264,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     g.beginPath();g.moveTo(-7,1);g.lineTo(7,1);g.lineTo(3,4);g.lineTo(-3,4);g.closePath();g.fillStyle='#705744';g.fill();g.restore();
   }
   // Keep the fire characters at their surveyed summits at both map scales.
-  const marks=[[COURT,'裁'],[KITAYAMA,'大'],[HIGASHIYAMA,'福']];
+  const marks=[[KIYOMIZU,large?'清':'清水寺'],[COURT,'裁'],[KITAYAMA,'大'],[HIGASHIYAMA,'福']];
   for(const site of CHAYA_SITES)marks.push([site,'茶']);
   for(const site of state.objects){
     if(site.retreat)marks.push([site,'♨']);

@@ -16,7 +16,7 @@ export function hipHeight(x, z) {
 
 export const HOUSE_EAVES = {width:1.24,depth:1.28};
 export const PAGODA_SPAN = 1.33;
-export const roofSkinDepth = form => form==='hip' ? .09 : form==='pagoda' ? .075 : .04;
+export const roofSkinDepth = form => form==='barkHip' ? .039 : form==='hip' ? .09 : form==='pagoda' ? .075 : .04;
 
 export function houseRoof(width,depth,eave,rise,form) {
   return {width:width*HOUSE_EAVES.width,depth:depth*HOUSE_EAVES.depth,eave,rise,form,
@@ -124,6 +124,11 @@ export function roofProfile(form, x, z, aperture = .51, padX = 0, padZ = 0) {
   if (form === 'leanTo') return Math.max(0,Math.min(1,.5-.5*z));
   z = Math.abs(z);
   if (form === 'hip') return hipHeight(x,z);
+  if (form === 'barkHip') {
+    const pitch=Math.max(z,(x-.46)/.54,0), t=Math.min(1,pitch);
+    // The cypress-bark roof swells above the eaves, then lifts at each hip.
+    return (1-t)*(1+.18*Math.sin(Math.PI*t))+.10*Math.min(x,z)**5;
+  }
   if (form === 'pagoda') {
     const r = Math.max(x,z);
     if (x + padX < aperture && z + padZ < aperture) return -Infinity;

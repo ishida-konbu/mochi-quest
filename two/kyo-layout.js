@@ -175,7 +175,10 @@ export function kyoInfluence(x,z) {
   const east=Math.hypot((x-HIGASHIYAMA.x+145)/310,(z-HIGASHIYAMA.z)/175);
   const north=Math.hypot((x-KITAYAMA.x)/171,(z-KITAYAMA.z-145)/310);
   const west=Math.hypot((x-NISHIYAMA.x-147)/300,(z-NISHIYAMA.z)/136);
-  return 1 - smooth(.52, 1.08, Math.min(urban,east,north,west));
+  // The southern shoulder of Higashiyama carries the Kiyomizu approach.
+  // Its long axis points towards the city and leaves Fushimi's sky intact.
+  const otowa=Math.hypot((x-HIGASHIYAMA.x+135)/211,(z-HIGASHIYAMA.z-113)/94);
+  return 1 - smooth(.52, 1.08, Math.min(urban,east,north,west,otowa));
 }
 // Daylight, the curfew, the night watch and both mountains use this noon-to-noon period.
 export const KYO_DAY_SECONDS = 288;

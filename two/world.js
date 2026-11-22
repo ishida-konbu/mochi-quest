@@ -2,7 +2,8 @@ import { buildDangoChaya } from './dango-chaya-art.js';
 import { WAYSIDE_SITES, BATH_YARD } from './wayside-hut-layout.js';
 import { buildWaysideHut } from './wayside-hut-art.js';
 import { buildGoemonBath } from './goemon-bath-art.js';
-import { GATE_PAVING, RASHOMON } from './kyo-layout.js';
+import { createLampCollection } from './kyo-lights.js';
+import { GATE_PAVING, RASHOMON, inCapitalWard } from './kyo-layout.js';
 import { kyoRidgeHeight } from './higashiyama.js';
 import { dressSeaports } from './seaports.js';
 import { createOceanShips } from './ocean-ship-art.js';
@@ -11,6 +12,7 @@ import { dressOutcrops } from './outcrops.js';
 import { DISTRICTS,TERRAIN_TILES,TERRAIN_SUBDIVISIONS } from './geography.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { scrollCoverage } from './scroll-paper.js';
+import { createKiyomizu } from './kiyomizu.js';
 import { createKyo, kyoPavingMaterial } from './kyo.js';
 import { dressPilgrimage, pilgrimageLife } from './pilgrimage.js';
 import { dressCourt } from './magistrates-hall.js';
@@ -142,6 +144,23 @@ function distantHillSurface(ground,grid) {
   distant.setIndex(triangles);
   return distant;
 }
+// A summit view reaches past the street-level terrain radius. One shared
+// index draws the original survey at 20 m intervals, retaining every edge
+// vertex so a 100 m tile meets both its near and its distant neighbours.
+function horizonIndex(grid){
+  const index=[],stride=grid+1,step=8;
+  for(let z=0;z<grid;z+=step)for(let x=0;x<grid;x+=step){
+    const endX=Math.min(x+step,grid),endZ=Math.min(z+step,grid);
+    const centre=Math.floor((z+endZ)/2)*stride+Math.floor((x+endX)/2);
+    const rim=[];
+    for(let j=z;j<endZ;j+=x===0?1:step)rim.push(j*stride+x);
+    for(let i=x;i<endX;i+=endZ===grid?1:step)rim.push(endZ*stride+i);
+    for(let j=endZ;j>z;j-=endX===grid?1:step)rim.push(j*stride+endX);
+    for(let i=endX;i>x;i-=z===0?1:step)rim.push(z*stride+i);
+    for(let k=0;k<rim.length;k++)index.push(centre,rim[k],rim[(k+1)%rim.length]);
+  }
+  return new THREE.Uint16BufferAttribute(index,1);
+}
 function* landscape(scene, art) {
   const mat = meadowMaterial(art);
   const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
@@ -157,7 +176,7 @@ function* landscape(scene, art) {
         bins.get(key).push(tree);
       }
   }
-  const tiles=TERRAIN_TILES, span=2*BOUND/tiles;
+  const tiles=TERRAIN_TILES, span=2*BOUND/tiles,farIndices=horizonIndex(TERRAIN_SUBDIVISIONS);
   for (let row=0; row<tiles; row++) for (let column=0; column<tiles; column++) {
     // Deep ocean is a level shelf. Keep the fine lattice for shores, roads,
     // palace and cliffs, without allocating a million detailed sea vertices.
@@ -214,8 +233,14 @@ function* landscape(scene, art) {
       for(let j=1;j<grid;j++){seamNormal(0,j);seamNormal(grid,j);}
     }
     const land=new THREE.Mesh(ground,mat);
-    if(ridgeTile && !deep){
+    if(!deep){
+      const skyline=new THREE.BufferGeometry();
+      for(const [name,attr] of Object.entries(ground.attributes))skyline.setAttribute(name,attr);
+      skyline.setIndex(farIndices);
+      land.userData.skylineGeometry=skyline;
       land.userData.nearGeometry=ground;
+    }
+    if(ridgeTile && !deep){
       land.userData.farGeometry=distantHillSurface(ground,grid);
     }
     land.receiveShadow=true;
@@ -794,15 +819,21 @@ class Painter {
       if(!this.roofLinings.has(mat)) this.roofLinings.set(mat,timberLining(mat,this.roofTimber));
       mat=this.roofLinings.get(mat);
     }
+    // Retain the silhouettes that actually hide the distant lights. Switch off
+    // narrow mullions and joinery at their usual distances.
+    const e=matrix.elements;
+    const skyline=this.cityShell && (shape==='roof'||shape==='hipRoof'||shape==='pagodaRoof'||
+      shape==='pagodaCrown'||shape.endsWith('Walls')||shape==='round' && e[5]>4 ||shape==='box' && e[5]>1.02 &&
+      (Math.hypot(e[0],e[2])>1.3 || Math.hypot(e[8],e[10])>1.3));
     const key =
-      shape +
+      (skyline?'洛':'') + shape +
       '|' +
       mat.id +
       '|' +
       Number(shadow) + '|' + Math.floor(x / (chunk ? 104 : 144)) + ',' + Math.floor(z / (chunk ? 104 : 144));
     let b = this.groups.get(key);
     if (!b) {
-      b = { shape, geo: this.shapes[shape], mat, matrices: [], colors: [], shadow, extent: 0 };
+      b = { shape, geo: this.shapes[shape], mat, matrices: [], colors: [], shadow, extent: 0, skyline };
       this.groups.set(key, b);
     }
     b.extent = Math.max(b.extent, matrix.getMaxScaleOnAxis());
@@ -845,7 +876,7 @@ class Painter {
   }
   *finish() {
     const sprays=new Set(Object.values(this.sprays));
-    for (const { shape, geo, mat, matrices, colors, shadow, extent } of this.groups.values()) {
+    for (const { shape, geo, mat, matrices, colors, shadow, extent, skyline } of this.groups.values()) {
       const m = new THREE.InstancedMesh(geo, mat, matrices.length);
       let index=0;
       // Interleave sprays so a distant batch can draw two in every five
@@ -856,7 +887,7 @@ class Painter {
         m.setColorAt(index++, colors[i]);
       }
       if(stride>1) m.userData.foliageCount=matrices.length;
-      m.userData.range=geo.userData.range || Math.min(300,72+extent*24);
+      m.userData.range=skyline?690:mat.userData.range || geo.userData.range || Math.min(300,72+extent*24);
       m.computeBoundingSphere();
       m.castShadow = shadow;
       m.receiveShadow = true;
@@ -1204,7 +1235,7 @@ function building(p, b, index) {
           front?span:.07,thickness,front?.07:span,color,mat);
       };
       part('box',u,y+.46,v,width,.92,depth,'#ac8960',p.boarding);
-      part('box',u,y+1.55,v,width,1.27,depth,'#d7cbb0',p.roomArt.paper);
+      part('box',u,y+1.55,v,width,1.27,depth,'#d7cbb0',p.cityShell?p.lamps.shoji:p.roomArt.paper);
       for(let k=-3;k<=3;k++) strip(k*length*.15,1.56,.086,.036,1.25,'#70604e',p.wood);
       for(const h of [1.16,1.54,1.92]) strip(0,h,.097,length,.046,'#70604e',p.wood);
       for(const h of [.12,.89,2.23])strip(0,h,.09,length,.129,'#7d4b35',p.wood);
@@ -1794,13 +1825,17 @@ export function* prepareWorld(scene) {
   buildRoads(landGroup, art);
   const water = makeWater(scene, art, atmosphere.panorama);
   const painter = new Painter(landGroup, paper, art);
+  painter.lamps=createLampCollection(painter);
   yield;
   for (const [i, g] of GATES.entries()) gate(painter, g, i);
   for (const b of BRIDGES) bridge(painter, b);
   for (const [i, b] of BUILDINGS.entries()) {
+    painter.cityShell=inCapitalWard(b.x,b.z);
     building(painter, b, i);
+    painter.lamps.house(b);
     yield;
   }
+  painter.cityShell=false;
   paddies(painter);
   hillsideStairs(painter);
   roadsideInscriptions(painter);
@@ -1815,17 +1850,21 @@ export function* prepareWorld(scene) {
   yield;
   dressSeasonalPlaces(painter);
   yield;
+  painter.cityShell=true;
   const updateCourt=dressCourt(painter,scene);
+  painter.cityShell=false;
   dressWaysideBaths(painter);
   dressSeaports(painter);
   yield;
   const updateKyo=createKyo(scene,painter);
+  const updateKiyomizu=createKiyomizu(scene,painter);
   yield;
   yield* dressPilgrimage(painter);
   dressRyugu(painter);
   yield;
   const updateShrines=pilgrimageLife(scene), updatePalace=createRyuguLife(scene);
   const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene), updateHuts=createWaysideHuts(scene);
+  const updateLamps=painter.lamps.finish(scene,landGroup);
   yield* painter.finish();
   // Each spatial batch lives in its nearest image of the repeating island.
   // Perspective and populated shorelines are preserved on crossing the ocean.
@@ -1844,12 +1883,14 @@ export function* prepareWorld(scene) {
   const leaves = driftingLeaves(scene);
   return {
     textures: [...Object.values(art), atmosphere.panorama],
-    update(time, player, camera, voyageTime=time) {
+    update(time, player, camera, voyageTime=time, bellStrike=null) {
       water.update(time,player);
       painter.sway.value = time;
       if (camera) {
-        atmosphere.update(time, player, camera);
+        const valleyView=atmosphere.update(time, player, camera);
         updateKyo(time,player,camera);
+        updateKiyomizu(voyageTime,player,bellStrike);
+        updateLamps(time,player);
         updateCourt(time,player);
         updateShrines(time,player,camera);
         updateTrade(time,player,camera);
@@ -1862,9 +1903,13 @@ export function* prepareWorld(scene) {
           b.mesh.position.x=Math.round((camera.position.x+dx-b.x)/(2*BOUND))*2*BOUND;
           b.mesh.position.z=Math.round((camera.position.z+dz-b.z)/(2*BOUND))*2*BOUND;
           const squared=dx*dx+dz*dz;
-          b.mesh.visible=squared<(b.range+b.radius)**2;
-          const data=b.mesh.userData;
-          if(data.farGeometry) b.mesh.geometry=squared>(73+b.radius)**2?data.farGeometry:data.nearGeometry;
+          const data=b.mesh.userData,skyline=data.skylineGeometry && valleyView>.015;
+          const range=skyline?b.range+(1350-b.range)*Math.min(1,valleyView*3):b.range;
+          b.mesh.visible=squared<(range+b.radius)**2;
+          if(data.nearGeometry){
+            if(skyline && squared>(385+b.radius)**2)b.mesh.geometry=data.skylineGeometry;
+            else b.mesh.geometry=data.farGeometry && squared>(73+b.radius)**2?data.farGeometry:data.nearGeometry;
+          }
           if(data.foliageCount) b.mesh.count=squared>(105+b.radius)**2?Math.ceil(data.foliageCount*.40):data.foliageCount;
         }
         powder(time,player,atmosphere.climate.value.x);

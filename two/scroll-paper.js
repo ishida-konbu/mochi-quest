@@ -3,9 +3,11 @@ import * as THREE from './vendor/three.module.min.js';
 // Feather the paper ground into the older roads as the traveller approaches.
 import { SEAPORTS } from './seaport-layout.js';
 import { DISTRICTS } from './geography.js';
+import { KIYOMIZU } from './kiyomizu-layout.js';
 const districts = [
   ...SEAPORTS.map(p=>[p.x,p.z,94,81]),
   [DISTRICTS.kyo.x,DISTRICTS.kyo.z-6,157,156],
+  [KIYOMIZU.x-5,KIYOMIZU.z-12,59,65],
   [DISTRICTS.peach.x+24,DISTRICTS.peach.z-23,312,212],
   [DISTRICTS.ryugu.x+12,DISTRICTS.ryugu.z,94,66],
   [DISTRICTS.todaiji.x,DISTRICTS.todaiji.z,88,77],

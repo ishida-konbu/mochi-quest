@@ -12,6 +12,8 @@ import { watchPose } from './court-patrol.js';
 import { STREET_BEATS, streetWatchPose } from './street-watch-layout.js';
 import { WEDDING_SITES, WEDDING_ROLES, weddingWalkerPose } from './pilgrimage-layout.js';
 import { makeCityWalkers, cityWalkerPose } from './city-walkers.js';
+import { KIYOMIZU } from './kiyomizu-layout.js';
+import { TEMPLE_MONKS, templeMonkPose } from './temple-duties.js';
 
 // Each entry is [across, along, half width, half depth, bottom, top] in metres.
 const carriage=[
@@ -26,8 +28,8 @@ const boat=[[0,0,.71,1.89,-.13,.57],[0,2.17,.39,.68,.04,.65],[0,-2.17,.39,.68,.0
 const horse=[[0,-.14,.36,.89,.74,1.78],[0,.77,.24,.39,1.31,2.11],
   ...[-1,1].flatMap(s=>[-.69,.44].map(z=>[s*.24,z,.081,.13,0,.89]))];
 const figure=[[0,0,.34,.28,0,1.86]];
-const traderBody=[[0,0,.27,.23,0,.59],[0,0,.44,.33,.39,1.07],[0,-.01,.475,.34,1.04,1.55],
-  ...[-1,1].map(s=>[s*.48,.17,.115,.15,.60,.91])];
+const riceBody=[[0,0,.27,.23,0,.59],[0,0,.44,.33,.39,1.07],[0,-.01,.475,.34,1.04,1.55]];
+const traderBody=[...riceBody,...[-1,1].map(s=>[s*.48,.17,.115,.15,.60,.91])];
 const traderShapes=[
   [...traderBody,[0,-.01,.48,.39,1.53,1.69],[.24,.47,.27,.25,.565,.821]], // hat and market basket
   [...traderBody,[0,-.02,.34,.27,1.50,1.62],[.05,-.51,.266,.177,.52,1.16]], // hood and knotted bundle
@@ -55,6 +57,7 @@ function penetration(q,shapes,x,z,feet,height,radius,scale=1) {
 export function createAmbientContacts(){
   let sampledTravel, sampledCity, cityOffset, vehicles=[], citizens=[], walkers;
   const courtBase=terrainHeight(COURT.x,COURT.z);
+  const monkPose={};
   const tradingRoads=MERCHANT_ROUTES.map(route=>({
     route,traders:ROAD_MERCHANTS.filter(t=>t.route===route),lastTime:NaN,poses:[],
   }));
@@ -90,6 +93,11 @@ export function createAmbientContacts(){
       }
     }
     for(const q of QUAY_MERCHANTS)if(check(q,figure,q.size))return true;
+    if(Math.abs(wx-KIYOMIZU.x)<18+radius && Math.abs(wz-KIYOMIZU.z)<31+radius){
+      for(const monk of TEMPLE_MONKS){
+        if(check(templeMonkPose(monk,time,monkPose),riceBody,monk.size))return true;
+      }
+    }
     const inCity=Math.abs(wrapDelta(x-DISTRICTS.kyo.x))<200 && Math.abs(wrapDelta(z-DISTRICTS.kyo.z))<185;
     if(inCity){
       if(time!==sampledCity || cityOffset!==player.kyoClockOffset){

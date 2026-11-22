@@ -1,10 +1,12 @@
+import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
-import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, FIRE_COAST, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow } from './higashiyama.js';
+import { KIYOMIZU_APPROACH, kiyomizuTerrain, kiyomizuSolids, kiyomizuClearing, kiyomizuViewTree } from './kiyomizu-layout.js';
+import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
-import { RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
+import { COURT, RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
 import { CEDAR_GROVES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS } from './trade-routes.js';
@@ -217,7 +219,7 @@ export function springRadius(x,z) {
   return hypot((x-SNOW_SPRING.x)/SNOW_SPRING.rx,(z-SNOW_SPRING.z)/SNOW_SPRING.rz);
 }
 export function terrainHeight(x,z) {
-  const native = portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight));
+  const native = kiyomizuTerrain(x,z,portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight)));
   const hut=nearbyHut(x,z);
   if(hut){
     const w=clearingWeight(hut,x,z);
@@ -854,9 +856,41 @@ for(const s of RETREATS){
 ROCKS.push(...offshoreReefs(terrainHeight,shoreDistance,seeded(0x687063)));
 // Respect the same surveyed yards whatever the seeded planting sequence.
 // Cut after planting so a cleared trunk does not reshuffle distant woods.
+export const KIYOMIZU_ROAD={...road(3.85,KIYOMIZU_APPROACH),paved:true};
+ROADS.push(KIYOMIZU_ROAD);indexRoad(KIYOMIZU_ROAD);
+const onTempleApproach=(x,z,pad)=>x>334 && x<512 && z> -794 && z< -714 &&
+  KIYOMIZU_ROAD.points.some(([px,pz])=>(px-x)**2+(pz-z)**2<pad**2);
+for(let i=ROCKS.length-1;i>=0;i--){
+  const r=ROCKS[i];
+  if(kiyomizuClearing(r.x,r.z)||onTempleApproach(r.x,r.z,3+Math.max(r.rx,r.rz)))ROCKS.splice(i,1);
+}
+// Exposed pine shoulders frame the view. Prune only crowns that would
+// interrupt the first stretch of a sightline from one of the three summits.
+const valleyWindows=KYO_LOOKOUTS.map(({x,z})=>{
+  const dx=DISTRICTS.kyo.x-x,dz=DISTRICTS.kyo.z-z,run=Math.hypot(dx,dz);
+  const eye=terrainHeight(x,z)+1.7;
+  return {x,z,eye,dx:dx/run,dz:dz/run,slope:(eye-terrainHeight(DISTRICTS.kyo.x,DISTRICTS.kyo.z)-2)/run};
+});
+function hidesValley(tree){
+  for(const s of valleyWindows){
+    const dx=tree.x-s.x,dz=tree.z-s.z,along=dx*s.dx+dz*s.dz;
+    if(along < -5 || along>130 || Math.abs(dx*s.dz-dz*s.dx)>8+.27*along)continue;
+    if(terrainHeight(tree.x,tree.z)+tree.h>s.eye-s.slope*along-2)return true;
+  }
+  return false;
+}
 for(let i=TREES.length-1;i>=0;i--){
   const {x,z}=TREES[i],hut=nearbyHut(x,z);
-  if(hut && (hypot(x-hut.x,z-hut.z)<=8 || inHutYard(x,z))) TREES.splice(i,1);
+  if(hidesValley(TREES[i]) || hut && (hypot(x-hut.x,z-hut.z)<=8 || inHutYard(x,z)) ||
+    kiyomizuClearing(x,z) || onTempleApproach(x,z,5.3) ||
+    x>=350 && x<=491 && z< -693 && z> -847 && kiyomizuViewTree(x,z,terrainHeight(x,z)+TREES[i].h))TREES.splice(i,1);
+}
+// Autumn maples occupy the edges of the ravine. The western rail retains its
+// sightline to Kyoto and none of the crowns emerge through the timber stage.
+for(const [i,[x,z,h]] of [[479,-701,9.7],[485.5,-695,11.6],[500,-694.6,10.7],
+  [512,-696,8.3],[482.7,-729.3,7.4],[494,-755,6.4],[526,-764,8.3]].entries()){
+  if(nearRoad(x,z,2)||TREES.some(t=>(x-t.x)**2+(z-t.z)**2<8.5))continue;
+  TREES.push({x,z,h,kind:'maple',form:mapleFamily*TREE_FORMS_PER_FAMILY+i%4,seed:483331+i*17});
 }
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
@@ -909,12 +943,23 @@ function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0, bottom = 
     }
   return item;
 }
+for(const [u,v,y,scale] of COURT_CANDLES){
+  const base=terrainHeight(COURT.x,COURT.z);
+  putSolid(COURT.x+u,COURT.z+v,.18*scale,.18*scale,0,base+y+scale,'oval',false,0,base+y);
+}
 for (const b of BUILDINGS) {
   const plan = roomPlan(b);
   function localSolid(u, v, width, depth, height, kind, support, bottom=-Infinity) {
     const x = b.x + u * cos(b.yaw) + v * sin(b.yaw);
     const z = b.z - u * sin(b.yaw) + v * cos(b.yaw);
     return putSolid(x, z, width / 2, depth / 2, b.yaw, b.y + height, kind, support,0,b.y+bottom);
+  }
+  for(const q of houseCandles(b))
+    localSolid(q.u,q.v,.36*q.scale,.36*q.scale,q.y+q.scale,'oval',false,q.y);
+  for(const q of houseFrontLamps(b)){
+    const x=b.x+q.u*b.cos+q.v*b.sin,z=b.z-q.u*b.sin+q.v*b.cos,y=q.plinth?b.y+q.plinth:terrainHeight(x,z);
+    putSolid(x,z,(q.stone?.53:.295)*q.scale,(q.stone?.49:.25)*q.scale,b.yaw,
+      y+(q.stone?3.20:1.31)*q.scale,q.stone?'oval':'box',false,0,y);
   }
   function closedRoof(r,wallBottom) {
     const sheet=localSolid(0,0,r.width,r.depth,r.eave,r.form==='pagoda'?'pagodaEave':'roof',true);
@@ -1005,6 +1050,7 @@ for(const {hearths} of STREET_BEATS)for(const {x,z} of hearths)
   putSolid(x,z,.48,.48,0,terrainHeight(x,z)+1.68,'oval',false);
 gateSolids(terrainHeight,putSolid);
 pilgrimageSolids(terrainHeight,putSolid);
+kiyomizuSolids(terrainHeight,putSolid);
 civicAndBathSolids(terrainHeight,putSolid);
 hutSolids(terrainHeight,putSolid);
 portSolids(putSolid);
@@ -1090,6 +1136,17 @@ function surfaceHeight(s, x, z, pad) {
     dz = z - s.z,
     a = dx * s.c - dz * s.s,
     b = dx * s.s + dz * s.c;
+  if (s.kind === 'bell') {
+    // The bronze waist narrows toward the shoulder. Each vertical line meets
+    // the same piecewise-conical profile used by the cast metal and notices.
+    const radius=hypot(a,b)-pad,p=s.profile;
+    if(radius>p[0][1])return -Infinity;
+    for(let i=p.length-1;i>0;i--){
+      const [h,r]=p[i],[h0,r0]=p[i-1];
+      if(radius<=r)return s.bottom+h;
+      if(radius<=r0)return s.bottom+h0+(h-h0)*(r0-radius)/(r0-r);
+    }
+  }
   if (s.kind === 'kettleRim') {
     const r2=a*a+b*b;
     return r2<=(s.rx+.045+pad)**2 && r2>=(s.rx-.11-pad)**2 ? s.top : -Infinity;

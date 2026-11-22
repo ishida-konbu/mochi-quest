@@ -60,6 +60,7 @@ function mountainSky(scene, panorama) {
     climate: { value: new THREE.Vector4() },
     clock: { value: 0 },
     horizonInk: { value: 1 },
+    valleyHaze: {value:0}, valleyMist: {value:new THREE.Color()},
   };
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
@@ -73,7 +74,7 @@ function mountainSky(scene, panorama) {
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
       }`,
     fragmentShader: `
-      varying vec3 direction; uniform sampler2D ridges; uniform vec4 climate; uniform float clock,horizonInk;
+      varying vec3 direction; uniform sampler2D ridges; uniform vec4 climate; uniform float clock,horizonInk,valleyHaze; uniform vec3 valleyMist;
       float hash(vec2 p) {
         vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);
         return fract((p3.x+p3.y)*p3.z);
@@ -141,6 +142,7 @@ function mountainSky(scene, panorama) {
         ink=mix(ink,vec3(.42,.248,.245),dawn);
         vec3 col=mix(sky,ink,ridge*.75*horizonInk);
         col=mix(col,low,(1.-smoothstep(-.13,.01,ray.y)));
+        col=mix(col,valleyMist,valleyHaze*(1.-smoothstep(-.030,.13,ray.y)));
         gl_FragColor=vec4(col,1.);
         #include <colorspace_fragment>
       }`,
@@ -197,9 +199,18 @@ export function createAtmosphere(scene) {
         const facing=-(dx*view[8]+dz*view[10])/Math.max(1,range);
         hillView=Math.max(hillView,(1-THREE.MathUtils.smoothstep(range,495,650))*THREE.MathUtils.smoothstep(facing,.26,.79));
       }
+      // On the return view the rooftops lie hundreds of metres below the
+      // summits. Give the valley the same evening air as its facing slope.
+      const city=DISTRICTS.kyo,dx=city.x-player.x,dz=city.z-player.z,r=Math.hypot(dx,dz);
+      const cityFacing=-(dx*view[8]+dz*view[10])/Math.max(r,1);
+      const valleyView=THREE.MathUtils.smoothstep(player.y,13,55)*(1-THREE.MathUtils.smoothstep(r,480,660))*
+        THREE.MathUtils.smoothstep(cityFacing,.25,.80);
+      hillView=Math.max(hillView,.86*valleyView);
+      dome.material.uniforms.valleyHaze.value=valleyView;dome.material.uniforms.valleyMist.value.copy(scene.fog.color);
       dome.material.uniforms.horizonInk.value=1-Math.max(.70*peachAir,.42*clearAir,.42*hillView);
       scene.fog.density = 0.0057 - Math.max(.0033*peachAir,.0025*clearAir,.00415*hillView) + 0.003 * s.snow - 0.0008 * s.dawn;
       scene.environmentIntensity = 0.67 - 0.51 * s.moon;
+      return valleyView;
     },
   };
 }

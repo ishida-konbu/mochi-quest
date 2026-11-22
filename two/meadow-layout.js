@@ -2,6 +2,7 @@ import { WAYSIDE_SITES,inHutYard } from './wayside-hut-layout.js';
 import { SEAPORTS,portReserved } from './seaport-layout.js';
 import { HERBS, HERB_FORMS } from './meadow-herbs.js';
 // One repeatable planting plan per 26 m square. All coordinates here are canonical.
+import { KIYOMIZU, kiyomizuClearing } from './kiyomizu-layout.js';
 import { RASHOMON, GATE_STONE, GATE_WING, gateStoneRise } from './kyo-layout.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { COURT, RETREATS, reservedScenery } from './retreat-layout.js';
@@ -67,6 +68,7 @@ export function meadowExclusions(objects,residents=[]) {
     return gateStoneRise(u,v)>0 || (abs(abs(u)-GATE_WING.x)<GATE_WING.w/2 && abs(v-GATE_WING.z)<GATE_WING.d/2+.12);
   });
   add(COURT.x,COURT.z+11.5,29,reservedScenery);
+  add(KIYOMIZU.x,KIYOMIZU.z-16,36,kiyomizuClearing);
   for(const s of RETREATS)add(s.x,s.z,11,reservedScenery);
   for(const s of WAYSIDE_SITES)add(s.x,s.z,14,inHutYard);
   for(const p of SEAPORTS)add(p.x,p.z,72,portReserved);

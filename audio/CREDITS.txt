@@ -60,6 +60,10 @@ https://freesound.org/people/JRWEntertainment/sounds/614137/
 two/soundscape.js の Web Audio 合成です。このモジュールの合成・ミキサーコードは
 CC0 1.0 Universal で提供します。
 
+清水寺の梵鐘は two/kiyomizu-bell.js で合成しています。低音のうなりと
+青銅の倍音を重ね、撞木と三条通知にそれぞれの打音をつけています。
+梵鐘の音色と山間の反響の合成コードも CC0 1.0 Universal で提供します。
+
 【四季十七景の小品】
 十七の地域のBGMは Mochi Quest 2 のためのオリジナル楽曲です。
 箏と三味線の撥弦、尺八風の息と揺り、鉦、太鼓を合成し、各曲を八小節で構成しています。

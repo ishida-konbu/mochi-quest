@@ -7,6 +7,7 @@ export function workshopFrame(p,site,base) {
     return new T.Vector3(x,base+y,z);
   };
   return {
+    at,
     put(shape,u,y,v,sx,sy,sz,tint,mat=p.wood,yaw=0,pitch=0,roll=0){
       const pos=at(u,y,v);
       p.part(shape,pos.x,pos.y,pos.z,sx,sy,sz,tint,site.yaw+yaw,pitch,roll,mat,true,true);
@@ -55,11 +56,6 @@ export function coveredGable(p) {
   p.shapes.courtBarge=new T.ExtrudeGeometry(shape,{depth:1,bevelEnabled:false});
 }
 export function courtLantern(p,f,u,v) {
-  f.put('rock',u,.17,v,.73,.27,.65,'#848879',p.stone);
-  f.put('shaft',u,.26,v,.44,1.48,.44,'#8c9284',p.stone);
-  f.put('box',u,1.98,v,.65,.55,.60,'#e3c89c',p.solid);
-  for(const dx of [-.31,.31])for(const dz of [-.28,.28])
-    f.put('box',u+dx,1.99,v+dz,.09,.64,.095,'#697266',p.stone);
-  f.put('kasa',u,2.30,v,.81,.56,.77,'#879183',p.stone);
-  f.put('finial',u,2.86,v,.19,.34,.19,'#73796b',p.stone);
+  const q=f.at(u,0,v);
+  p.lamps.stoneLantern(q.x,q.y,q.z);
 }
