@@ -122,7 +122,13 @@ export function createAmbientFlocks() {
     flocks.push(localFlight(site,kind,flocks[i%48].birds.length,random));
   }
   const cells=Array.from({length:gridSize*gridSize},()=>[]);
+  let remainder=0;
   for(const f of flocks){
+    // Keep the seeded flight paths and formation leaders. Carry the odd bird
+    // to the next flock so rounding halves the census across the whole sky.
+    const members=f.birds.length+remainder;
+    f.birds.length=Math.floor(members/2);
+    remainder=members%2;
     f.axis=f.habitat==='migration'?0:f.angle;
     f.cosAxis=Math.cos(f.axis);f.sinAxis=Math.sin(f.axis);
     f.spread=3+Math.max(...f.birds.map(b=>Math.hypot(b.side,b.forward,b.rise)));

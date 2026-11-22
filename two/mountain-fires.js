@@ -83,7 +83,7 @@ export function mountainFires(scene,hearths,cx,cz,east=false) {
   sprites.instanceCount=hearths.length;
   sprites.setAttribute('hearth',new THREE.InstancedBufferAttribute(new Float32Array(coords),3));
   sprites.setAttribute('seed',new THREE.InstancedBufferAttribute(new Float32Array(phases),1));
-  const uniforms={clock:{value:0},intensity:{value:0},size:{value:east?2.02:2.26}};
+  const uniforms={clock:{value:0},intensity:{value:0},size:{value:east?1.74:1.94}};
   const flames=new THREE.Mesh(sprites,new THREE.ShaderMaterial({
     uniforms,transparent:true,depthWrite:false,side:THREE.DoubleSide,
     vertexShader:`

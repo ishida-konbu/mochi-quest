@@ -1,14 +1,16 @@
 import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
+import { mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
+import { plantMountainWoods, plantKyotoWoods } from './mountain-woodland.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
 import { KIYOMIZU_APPROACH, kiyomizuTerrain, kiyomizuSolids, kiyomizuClearing, kiyomizuViewTree } from './kiyomizu-layout.js';
-import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow, createFireTreeCeiling, fireTrailDistance } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
 import { COURT, RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
-import { CEDAR_GROVES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
+import { CEDAR_GROVES, CLIFF_PINES, PEACH_TREES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS } from './trade-routes.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
@@ -219,7 +221,8 @@ export function springRadius(x,z) {
   return hypot((x-SNOW_SPRING.x)/SNOW_SPRING.rx,(z-SNOW_SPRING.z)/SNOW_SPRING.rz);
 }
 export function terrainHeight(x,z) {
-  const native = kiyomizuTerrain(x,z,portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight)));
+  const base=portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight));
+  const native=kiyomizuTerrain(x,z,mountainStreamTerrain(x,z,base));
   const hut=nearbyHut(x,z);
   if(hut){
     const w=clearingWeight(hut,x,z);
@@ -253,7 +256,8 @@ export function waterSurfaceAt(x,z) {
   if(hut?.bath && (x-hut.bath.x)**2+(z-hut.bath.z)**2<KETTLE.widthScale**2) return terrainHeight(hut.x,hut.z)+KETTLE.water;
   const site=nearbyRetreat(x,z);
   if(site && bathRadius(site,x,z)<1) return landHeight(site.x,site.z)+.22;
-  return abs(x-SNOW_SPRING.x)<15 && abs(z-SNOW_SPRING.z)<10 && springRadius(x,z)<1 ? SNOW_SPRING.level : WATER_Y;
+  if(abs(x-SNOW_SPRING.x)<15 && abs(z-SNOW_SPRING.z)<10 && springRadius(x,z)<1)return SNOW_SPRING.level;
+  return max(WATER_Y,mountainStreamWaterAt(x,z));
 }
 export const BRIDGES = [-137, 0, 134].map((x) => ({
   x,
@@ -692,9 +696,21 @@ export const TREES = trees.filter(t => !portReserved(t.x,t.z) && !reservedScener
 // Fill the boundary of the maple district and line the new country roads with
 // loose stands of cedar, zelkova and red pine. Keep all gates and views open.
 const saplings = seeded(0x5c311);
+// Retain the seed sequence used for established trees and rocks across the islands.
+// The additional Kyoto planting below uses the current surveyed banks and trails.
+function earlierFireSurvey(x,z){
+  const city=DISTRICTS.kyo,east=x-city.x,north=city.z-z;
+  function clearing(along,across,rise,minimum,width){
+    if(along<100 || along>369)return false;
+    const irregular=10+4.8*sin(along*.082)+3.6*sin(along*.049+across*.025);
+    return abs(across)<along*width+irregular && rise+14>(along-47)*minimum;
+  }
+  return east>100 && east<370 && clearing(east,z-city.z,eastRidgeHeight(x,z),.128,.17) ||
+    north>100 && north<370 && clearing(north,x-city.x,northRidgeHeight(x,z),.111,.157);
+}
 function transplant(x,z,family) {
   if(abs(x-RASHOMON.x)<19 && abs(z-RASHOMON.z)<29)return false;
-  if(portReserved(x,z)||reservedScenery(x,z)||inFireMeadow(x,z))return false;
+  if(portReserved(x,z)||reservedScenery(x,z)||earlierFireSurvey(x,z))return false;
   if(nearPeachTrunk(x,z,5))return false;
   if (shoreDistance(x,z)<10 || landHeight(x,z)<2 || nearRoad(x,z,3.1) ||
       abs(z-riverZ(x))-riverHalfWidth(x)<11 || safe(x,z,6) ||
@@ -758,7 +774,7 @@ for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
     const along=(plant()-.55)*511, across=(plant()-.5)*573;
     const x=summit.x+(east?along:across),z=summit.z+(east?across:-along);
     const high=height(x,z);
-    if(high<7 || inFireMeadow(x,z) || nearRoad(x,z,4) || portReserved(x,z) || protectedDistrict(x,z))continue;
+    if(high<7 || earlierFireSurvey(x,z) || nearRoad(x,z,4) || portReserved(x,z) || protectedDistrict(x,z))continue;
     if(Math.sin(across*.044+along*.013)+Math.sin(along*.055-across*.018)>.93 && plant()<.86)continue;
     if(TREES.some(t=>(t.x-x)**2+(t.z-z)**2<68))continue;
     const family=(high>96?[0,0,1,2,3]:[0,1,2,2,3])[i%5];
@@ -802,7 +818,7 @@ for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
         const az=plant()*Math.PI*2,rad=Math.sqrt(plant());
         const u=cos(az)*length*rad,v=sin(az)*breadth*rad;
         const x=cx+u*c-v*s,z=cz+u*s+v*c;
-        if(height(x,z)<6 || occupied(x,z,gap) || inFireMeadow(x,z) ||
+        if(height(x,z)<6 || occupied(x,z,gap) || earlierFireSurvey(x,z) ||
            shoreDistance(x,z)<10 || nearRoad(x,z,4.5) || protectedDistrict(x,z) || reservedScenery(x,z))continue;
         const kind=plant()<.16?(exposed?9:12):family;
         const h=(exposed?4.8:6.3)+plant()*(exposed?4.2:5.5)+1.6*(1-rad);
@@ -825,7 +841,7 @@ const stoneSeed=seeded(0x11e41);
 for(const [cx,cz,rx,rz] of PENINSULAS) {
   for(let bed=0;bed<8;bed++){
     const ax=cx+(stoneSeed()-.5)*rx*1.85,az=cz+(stoneSeed()-.5)*rz*1.8;
-    if(originalShore(ax,az)>9 || inFireMeadow(ax,az) || protectedDistrict(ax,az) || shoreDistance(ax,az)<9) continue;
+    if(originalShore(ax,az)>9 || earlierFireSurvey(ax,az) || protectedDistrict(ax,az) || shoreDistance(ax,az)<9) continue;
     const yaw=.88*sin(az*.019)+.63, c=cos(yaw),s=sin(yaw);
     const high=terrainHeight(ax,az)>35;
     for(let n=0;n<5;n++){
@@ -833,7 +849,7 @@ for(const [cx,cz,rx,rz] of PENINSULAS) {
       const x=ax+c*along+s*side,z=az-s*along+c*side;
       const scale=(n===0?1.7:.48)+stoneSeed()*(high?2.05:1.56);
       const rx=scale*(1.04+stoneSeed()*.68),rz=scale*(.61+stoneSeed()*.34);
-      if(nearRoad(x,z,rx+2.6) || inFireMeadow(x,z) || reservedScenery(x,z) || protectedDistrict(x,z) ||
+      if(nearRoad(x,z,rx+2.6) || earlierFireSurvey(x,z) || reservedScenery(x,z) || protectedDistrict(x,z) ||
          shoreDistance(x,z)<3 || TREES.some(t=>(t.x-x)**2+(t.z-z)**2<(rx+.45)**2))continue;
       ROCKS.push({x,z,rx,rz,h:scale*(high?1.16:.78),yaw:yaw+(stoneSeed()-.5)*.32,
         stratum:(bed+n)%4,tint:high?'#b7beb9':cz>0?'#cbc2a9':'#c6cbaf'});
@@ -881,9 +897,11 @@ function hidesValley(tree){
 }
 for(let i=TREES.length-1;i>=0;i--){
   const {x,z}=TREES[i],hut=nearbyHut(x,z);
-  if(hidesValley(TREES[i]) || hut && (hypot(x-hut.x,z-hut.z)<=8 || inHutYard(x,z)) ||
-    kiyomizuClearing(x,z) || onTempleApproach(x,z,5.3) ||
-    x>=350 && x<=491 && z< -693 && z> -847 && kiyomizuViewTree(x,z,terrainHeight(x,z)+TREES[i].h))TREES.splice(i,1);
+  const streamBank=inMountainStreamClearing(x,z);
+  // Two long-established bamboo clumps frame the lower stream on dry banks.
+  // Keep their trunks if the channel's water never reaches their roots.
+  if(hut && (hypot(x-hut.x,z-hut.z)<=8 || inHutYard(x,z)) ||
+     streamBank && (!isBamboo(TREES[i]) || Number.isFinite(mountainStreamWaterAt(x,z)))) TREES.splice(i,1);
 }
 // Autumn maples occupy the edges of the ravine. The western rail retains its
 // sightline to Kyoto and none of the crowns emerge through the timber stage.
@@ -891,6 +909,57 @@ for(const [i,[x,z,h]] of [[479,-701,9.7],[485.5,-695,11.6],[500,-694.6,10.7],
   [512,-696,8.3],[482.7,-729.3,7.4],[494,-755,6.4],[526,-764,8.3]].entries()){
   if(nearRoad(x,z,2)||TREES.some(t=>(x-t.x)**2+(z-t.z)**2<8.5))continue;
   TREES.push({x,z,h,kind:'maple',form:mapleFamily*TREE_FORMS_PER_FAMILY+i%4,seed:483331+i*17});
+}
+// Append the mountain understory after surveying the earlier rocks, perches and
+// garden trees. All new trunks enter the same contacts and canopy as those trees.
+function mountainGlade(x,z,ground){
+  if(inMountainStreamClearing(x,z) || nearRoad(x,z,3.8) || reservedScenery(x,z))return false;
+  const orchardApron=hypot((x-DISTRICTS.peach.x)/133,(z-DISTRICTS.peach.z)/112);
+  if(orchardApron<.58 || (orchardApron>=1.02 && protectedDistrict(x,z)))return false;
+  const hut=nearbyHut(x,z);
+  if(hut && (hypot(x-hut.x,z-hut.z)<=9 || inHutYard(x,z)))return false;
+  if(abs(z-riverZ(x))<riverHalfWidth(x)+11 || shoreDistance(x,z)<10 || safe(x,z,6))return false;
+  if(springRadius(x,z)<1.5 || (x>275 && abs(z-mapleStreamZ(x))<8))return false;
+  if(Math.abs(terrainMeshHeight(x,z)-ground)>.14)return false;
+  const lots=lotGrid.get(Math.floor(x/24)*128+Math.floor(z/24));
+  return !lots || lots.every(b=>hypot(b.x-x,b.z-z)>hypot(b.w,b.d)*.52+5);
+}
+plantMountainWoods(TREES,ROCKS,PEACH_TREES,CLIFF_PINES,terrainHeight,
+  (x,z,ground)=>!earlierFireSurvey(x,z) && mountainGlade(x,z,ground),seeded);
+
+const fireCeiling=createFireTreeCeiling(terrainHeight);
+function trailBranchReach(h,form){
+  const family=TREE_FAMILIES[Math.floor(form/TREE_FORMS_PER_FAMILY)];
+  if(!family)return h*.50;
+  // Low boughs need lateral room for a traveller and the trailing camera.
+  // A tall, bare trunk can stand much nearer and frame the path overhead.
+  const habit=[.065,-.025,.025,-.08][form%4];
+  const firstBough=h*(family[4]+habit-(family[1]==='spire' ? .08 : .035));
+  return h*(.10+(family[3]+.10)*(1-smooth(3.7,6.0,firstBough)));
+}
+function inFireOpening(x,z,h,crown,foot,ground){
+  if(inFireMeadow(x,z,2) || fireTrailDistance(x,z)<1.25+foot)return true;
+  const top=fireCeiling(x,z,crown);
+  return Number.isFinite(top) && (ground ?? terrainHeight(x,z))+h>top;
+}
+// Prune individual obstructions. Low cover and tall trees beyond the fires
+// remain on the same slopes as the cleared hearths.
+for(let i=TREES.length-1;i>=0;i--){
+  const t=TREES[i];
+  if(inFireOpening(t.x,t.z,t.h,t.h*.56,trailBranchReach(t.h,t.form)))TREES.splice(i,1);
+}
+for(let i=ROCKS.length-1;i>=0;i--){
+  const r=ROCKS[i],reach=Math.max(r.rx,r.rz);
+  if(inFireOpening(r.x,r.z,r.h,reach,reach))ROCKS.splice(i,1);
+}
+plantKyotoWoods(TREES,ROCKS,terrainHeight,
+  (x,z,ground,h,form)=>!inFireOpening(x,z,h,h*.56,trailBranchReach(h,form),ground) && mountainGlade(x,z,ground),seeded);
+// Survey the full canopy, including the newly grown foothill stands. Keep
+// the approach walkable and the capital visible from the stage and summits.
+for(let i=TREES.length-1;i>=0;i--){
+  const t=TREES[i],{x,z}=t;
+  if(kiyomizuClearing(x,z) || onTempleApproach(x,z,5.3) || hidesValley(t) ||
+    x>=350 && x<=491 && z< -693 && z> -847 && kiyomizuViewTree(x,z,terrainHeight(x,z)+t.h))TREES.splice(i,1);
 }
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
@@ -1091,7 +1160,7 @@ for (const t of TREES)
     t.form !== undefined ? t.h*.027 : t.kind === 'bamboo' ? 0.3 : 0.37,
     t.form !== undefined ? t.h*.027 : t.kind === 'bamboo' ? 0.3 : 0.37,
     0,
-    terrainHeight(t.x, t.z) + t.h * 0.68,
+    (t.ground ?? terrainHeight(t.x, t.z)) + t.h * 0.68,
     'oval',
     false,
   );
@@ -1198,7 +1267,7 @@ function highest(x, z, pad, feet, supportOnly, body = 1.42) {
 export const solidHeightAt = (x, z, clearance = 0, y = Infinity) => highest(x, z, clearance, y, false);
 // The swimming line is part of locomotion even when grass mochi passes through scenery.
 export function landscapeFloor(x, z) {
-  return max(WATER_Y - 0.57, terrainHeight(x, z));
+  return max(max(WATER_Y,mountainStreamWaterAt(x,z))-.57,terrainHeight(x,z));
 }
 export function groundHeight(x, z, feet = -Infinity) {
   const b = bridgeAt(x, z);

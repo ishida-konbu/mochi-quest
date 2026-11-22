@@ -21,24 +21,33 @@ test('the expanded recipient ledger preserves the original 691 entries and the t
 });
 
 test('notices intersect the actual airborne volume, and unique recipients and old scores survive save and transfer',()=>{
-  for(const type of ['bird','dragon']){
-    let game=createGame();
+  // Replay a rising dragon and a faster level flight. Launches from the south
+  // can chase a northbound dragon at almost the speed of the letter itself.
+  for(const [type,flightSeed] of [['bird',1788458060],['dragon',3394068386],['dragon',3816266512]]){
+    let game=createGame({...createGame().save(),flightSeed});
     const n=game.state.npcs.find(n=>n.type===type), p=game.state.player,scale=n.stature;
     Object.assign(p,{x:n.x,z:n.z-2,heading:0,y:n.y,h:n.y-groundHeight(n.x,n.z),grounded:false,mode:'habutae'});
     game.step(1/60);
     const wrongHeight=n.y-2;
     assert.equal(recipientContact(n,{x:n.x,y:wrongHeight,z:n.z-1},0,1,2),Infinity);
     const savedTime=game.state.time;
-    function throwAtAltitude(){
-      const height=n.y+(type==='bird'?.13:.54)*scale;
-      Object.assign(p,{x:n.x,z:n.z-2,y:height-.93,h:height-.93-groundHeight(n.x,n.z),grounded:false,heading:0,vy:0});
+    function throwAtAltitude(side=1,missBy=0){
+      const dragon=type==='dragon', range=dragon?3.5:2, heading=dragon?n.heading+side*Math.PI/2:0;
+      const flightTime=dragon?(range-.65)/18:0;
+      const x=n.x+Math.sin(n.heading)*n.speed*flightTime-range*Math.sin(heading);
+      const z=n.z+Math.cos(n.heading)*n.speed*flightTime-range*Math.cos(heading);
+      const height=n.y+(dragon?.54:.13)*scale+(n.verticalSpeed||0)*flightTime+missBy;
+      Object.assign(p,{x,z,y:height-.93,h:height-.93-groundHeight(x,z),grounded:false,heading,vy:0});
       assert.ok(game.act('throw'));
       for(let i=0;i<25;i++)game.step(1/60);
     }
+    throwAtAltitude(1,8);
+    assert.equal(game.state.delivered.has(n.id),false,type+' missed above');
+    assert.equal(game.state.score,0);
     throwAtAltitude();
     assert.equal(game.state.delivered.has(n.id),true,type);
     assert.equal(game.state.score,SPECIES[type].points);
-    throwAtAltitude();
+    throwAtAltitude(-1);
     assert.ok(game.state.time>savedTime);
     assert.equal(game.state.delivered.size,1);
     assert.equal(game.state.score,2*SPECIES[type].points);

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
 import { WATER_Y, BOUND, shoreDistance, terrainMeshHeight } from '../two/terrain.js';
+import { FIRE_TRAILS, fireTrailDistance, inFireMeadow } from '../two/higashiyama.js';
 import { HERBS, HERB_FORMS } from '../two/meadow-herbs.js';
 import { meadowExclusions, visitMeadowTile, MEADOW_TILES, MEADOW_TILE } from '../two/meadow-layout.js';
 
@@ -36,4 +37,23 @@ test('the seeded meadows reach the density target while leaving water and the ba
   assert.ok(roots.length>100);
   for(const [x,y,z] of roots)assert.ok(Math.abs(y+.022-terrainMeshHeight(x,z))<1e-7);
   assert.deepEqual(roots,sample());
+});
+
+test('the mountain paths keep a worn tread and the firebanks stay mown',()=>{
+  const masks=meadowExclusions([]);
+  for(const trail of Object.values(FIRE_TRAILS)){
+    const tiles=new Map();
+    for(const [x,z] of trail){
+      const i=Math.floor((x+BOUND)/MEADOW_TILE),j=Math.floor((z+BOUND)/MEADOW_TILE);
+      tiles.set(i*MEADOW_TILES+j,[i,j]);
+    }
+    let bankPlants=0;
+    for(const [i,j] of tiles.values())visitMeadowTile(i,j,masks,(x,y,z,width)=>{
+      assert.ok(!inFireMeadow(x,z));
+      const distance=fireTrailDistance(x,z);
+      assert.ok(distance>=.54+width*.25);
+      if(distance<2)bankPlants++;
+    });
+    assert.ok(bankPlants>20,'the narrow path retains planted edges');
+  }
 });

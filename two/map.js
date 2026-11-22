@@ -1,3 +1,4 @@
+import { MOUNTAIN_STREAMS } from './mountain-streams.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { DAIBUTSU, INARI_SANCTUARY, PEACH_TREES } from './pilgrimage-layout.js';
 import { PALACE_APPROACH, RYUGU, HALLS, GATE_V } from './ryugu-layout.js';
@@ -7,7 +8,7 @@ import { SEAWAYS, FLEET, vesselPose } from './ocean-voyage.js';
 import { CHAYA_SITES } from './wayside-hut-layout.js';
 import { KIYOMIZU, OTOWA_ROOFS, PAGODA } from './kiyomizu-layout.js';
 import { COURT } from './retreat-layout.js';
-import { HIGASHIYAMA, KITAYAMA, westRidgeHeight } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, FIRE_TRAILS, westRidgeHeight } from './higashiyama.js';
 import { RASHOMON, GATE_STONE, GATE_STONE_APRONS, GATE_STONE_STEPS, GATE_WING } from './kyo-layout.js';
 import { KIYOMIZU_ROAD, REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
 const SIZE = 2048, SPAN = 2 * BOUND, adj = SIZE / SPAN;
@@ -23,7 +24,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=kyoto-woodlands', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=okuribi-forest-1', import.meta.url).href;
     paperRequest = image.decode().then(() => {
       const c=document.createElement('canvas');c.width=c.height=SIZE;
       const g=c.getContext('2d');g.drawImage(image,0,0,SIZE,SIZE);
@@ -144,6 +145,14 @@ export function paintMapPaper() {
     }
     g.fill();
   }
+  // Paths for carrying firewood are a single fine stroke on the travel map.
+  g.lineWidth=.85;
+  g.strokeStyle='#ac9878';
+  for(const path of Object.values(FIRE_TRAILS)){
+    g.beginPath();
+    path.forEach(([x,z],i)=>i?g.lineTo(toX(x),toX(z)):g.moveTo(toX(x),toX(z)));
+    g.stroke();
+  }
   const rockInk=seeded(73167);
   g.strokeStyle='#54574884';g.lineWidth=.85;
   for(let i=0;i<1900;i++){
@@ -252,6 +261,15 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     if (map && left < w && top < h && left + side > 0 && top + side > 0)
       g.drawImage(map, left, top, side, side);
   }
+  for(const stream of MOUNTAIN_STREAMS){
+    g.beginPath();
+    for(const [i,point] of stream.stations.entries()){
+      const x=sx(point.x),y=sy(point.z);
+      if(i===0)g.moveTo(x,y);
+      else g.lineTo(x,y);
+    }
+    g.strokeStyle='#708f8b';g.lineWidth=large?1.15:2.2;g.stroke();
+  }
   for(const ship of FLEET){
     const vessel=vesselPose(ship,state.time);
     if(large && vessel.docked)continue;
@@ -265,6 +283,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   }
   // Keep the fire characters at their surveyed summits at both map scales.
   const marks=[[KIYOMIZU,large?'清':'清水寺'],[COURT,'裁'],[KITAYAMA,'大'],[HIGASHIYAMA,'福']];
+  for(const {fall} of MOUNTAIN_STREAMS)marks.push([fall.toe,'滝']);
   for(const site of CHAYA_SITES)marks.push([site,'茶']);
   for(const site of state.objects){
     if(site.retreat)marks.push([site,'♨']);
@@ -277,7 +296,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     const size=large ? (regional && !highlighted ? 11 : 15) : 17;
     g.font='bold '+size+'px serif';g.textAlign='center';g.textBaseline='middle';
     g.lineWidth=3;g.strokeStyle='#fff2d6';
-    g.fillStyle=site===COURT?'#685449':highlighted?'#933c2e':'#8c5140';
+    g.fillStyle=glyph==='滝'?'#416b70':site===COURT?'#685449':highlighted?'#933c2e':'#8c5140';
     const labelX=site===COURT && large?x-4:x;
     g.strokeText(glyph,labelX,y);g.fillText(glyph,labelX,y);
   }

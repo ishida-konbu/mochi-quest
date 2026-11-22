@@ -8,6 +8,7 @@ import { kyoRidgeHeight } from './higashiyama.js';
 import { dressSeaports } from './seaports.js';
 import { createOceanShips } from './ocean-ship-art.js';
 import { dressWardShop } from './kyo-market.js';
+import { createMountainWaterfalls } from './mountain-waterfalls.js';
 import { dressOutcrops } from './outcrops.js';
 import { DISTRICTS,TERRAIN_TILES,TERRAIN_SUBDIVISIONS } from './geography.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
@@ -1862,6 +1863,7 @@ export function* prepareWorld(scene) {
   yield* dressPilgrimage(painter);
   dressRyugu(painter);
   yield;
+  const updateWaterfalls=createMountainWaterfalls(scene);
   const updateShrines=pilgrimageLife(scene), updatePalace=createRyuguLife(scene);
   const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene), updateHuts=createWaysideHuts(scene);
   const updateLamps=painter.lamps.finish(scene,landGroup);
@@ -1895,6 +1897,7 @@ export function* prepareWorld(scene) {
         updateShrines(time,player,camera);
         updateTrade(time,player,camera);
         updateHuts(player);
+        updateWaterfalls(time,player,camera);
         updateOcean(voyageTime,player);
         updatePalace(time,player,camera,voyageTime);
         updateForest(camera, player);

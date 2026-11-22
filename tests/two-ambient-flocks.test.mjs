@@ -8,12 +8,13 @@ import { createFlockFlights } from '../two/sky-life.js';
 
 const {flocks,near,capacity}=createAmbientFlocks();
 
-test('ten times the ambient census spans the distant sea and the connecting roads',()=>{
+test('half the previous ambient birds follow the same migration, sea and road routes',()=>{
   const migration=flocks.filter(f=>f.habitat==='migration');
   const census=groups=>groups.reduce((sum,f)=>sum+f.birds.length,0);
-  assert.deepEqual([migration.length,census(migration)],[48,555]);
-  assert.equal(flocks.length,migration.length*10);
-  assert.equal(census(flocks),census(migration)*10);
+  assert.equal(migration.length,48);
+  assert.equal(flocks.length,480);
+  assert.equal(census(flocks),5550/2);
+  assert.ok(flocks.every(f=>f.birds.length>=3 && f.birds.length<=8));
   const distance=(x,z,f)=>Math.hypot(wrapDelta(x-f.x),wrapDelta(z-f.z));
   for(const [habitat,routes,reach] of [
     ['road',CONNECTING_ROADS,105],

@@ -1,6 +1,6 @@
 import { groundPrintGLSL } from './ground-print.js';
 import { mountainFires } from './mountain-fires.js';
-import { HIGASHIYAMA, KITAYAMA, eastRidgeHeight, northRidgeHeight, fukuFirebeds, daiFirebeds, inFireMeadow } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, eastRidgeHeight, northRidgeHeight, fukuFirebeds, daiFirebeds, inFireMeadow, FIRE_TRAILS, fireTrailDistance } from './higashiyama.js';
 import { createRashomon } from './rashomon.js';
 import { districtPoint } from './geography.js';
 import * as THREE from './vendor/three.module.min.js';
@@ -8,7 +8,7 @@ import { KYO_BUILDINGS, KYO_FOOD, KYO_SCREENS, screenFold, kyoNight } from './ky
 import { scrollPaper, printSurface } from './kyo-scrollwork.js';
 import { createStreetCrowd } from './kyo-people.js';
 import { createStreetWatch } from './street-watch.js';
-import { seeded, terrainHeight } from './terrain.js';
+import { seeded, terrainHeight, terrainMeshHeight } from './terrain.js';
 import { sculpture } from './pilgrimage-pigment.js';
 
 const TAU=Math.PI*2;
@@ -290,6 +290,52 @@ export function kyoPavingMaterial(granite) {
   return stone;
 }
 
+// Two single-file footpaths follow the real ground triangles. Their worn
+// centres, pooled brown washes and grassy banks feather into the hill sheet.
+function hearthApproaches(p){
+  const mat=new THREE.MeshLambertMaterial({map:p.stone.map,vertexColors:true,
+    transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3,
+    side:THREE.DoubleSide});
+  mat.onBeforeCompile=shader=>{
+    shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`
+      vec3 gravel=texture2D(map,vMapUv).rgb;
+      float grit=dot(gravel,vec3(.30,.54,.16));
+      diffuseColor.rgb*=.76+.53*smoothstep(.05,.53,grit);
+    `);
+  };
+  const moss=new THREE.Color('#8e9271'),earth=new THREE.Color('#ad9979'),scrape=new THREE.Color('#c7b89b'),tint=new THREE.Color();
+  for(const [side,line] of Object.entries(FIRE_TRAILS)){
+    const [cx,cz]=line[0],pos=[],uv=[],colors=[],indices=[];
+    let length=0;
+    for(let i=0;i<line.length;i++){
+      const [x,z]=line[i],previous=line[Math.max(0,i-1)],next=line[Math.min(line.length-1,i+1)];
+      length+=Math.hypot(x-previous[0],z-previous[1]);
+      const dx=next[0]-previous[0],dz=next[1]-previous[1],span=Math.hypot(dx,dz);
+      const width=.54+.045*Math.sin(length*.57)+.042*Math.sin(length*.21+x*.18);
+      const endFade=Math.min(1,(line.length-1-i)/7);
+      for(let j=0;j<5;j++){
+        const t=(j-2)*.5,bank=width+.048*Math.sin(1.7*length+t);
+        const xx=x-t*bank*dz/span,zz=z+t*bank*dx/span;
+        pos.push(xx-cx,terrainMeshHeight(xx,zz)+.026,zz-cz);
+        uv.push(xx*.21+zz*.08,zz*.26-xx*.06);
+        const wash=.5+.5*Math.sin(x*.27+z*.17+1.6*Math.sin(z*.69));
+        tint.copy(earth).lerp(scrape,wash*.63).lerp(moss,Math.abs(t)*.58);
+        colors.push(tint.r,tint.g,tint.b,j===0||j===4?0:(.84+.13*wash)*endFade);
+        if(i && j){
+          const k=i*5+j;indices.push(k-6,k-5,k-1,k-1,k-5,k);
+        }
+      }
+    }
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+    g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+    g.setAttribute('color',new THREE.Float32BufferAttribute(colors,4));
+    g.setIndex(indices);g.computeVertexNormals();g.userData.range=190;
+    const name=side+'FireFootpath';p.shapes[name]=g;
+    p.part(name,cx,0,cz,1,1,1,'#fff',0,0,0,mat,false,true);
+  }
+}
+
 // Small tufts of cut susuki stand above the mountain painting on the two fire meadows.
 function hillsideInk(p,east,hearths) {
   const {x:cx,z:cz}=east?HIGASHIYAMA:KITAYAMA;
@@ -301,7 +347,7 @@ function hillsideInk(p,east,hearths) {
     positions.push(x-cx,y,z-cz);colors.push(ink.r,ink.g,ink.b);
   }
   function susuki(x,z,size) {
-    const y=terrainHeight(x,z)+.13;
+    const y=terrainMeshHeight(x,z)-.015;
     for(let j=0;j<6;j++){
       const turn=rand()*TAU,dx=Math.cos(turn)*size,dz=Math.sin(turn)*size;
       const base=positions.length/3,ink=palette[j%3],tall=(.43+rand()*.36)*size;
@@ -323,12 +369,18 @@ function hillsideInk(p,east,hearths) {
   }
   for(let i=0;i<735;i++){
     const [x,z]=point(-253+rand()*248,(rand()-.5)*180);
-    if(!inFireMeadow(x,z) || height(x,z)<8 ||
+    if(!inFireMeadow(x,z,-2) || height(x,z)<8 || fireTrailDistance(x,z)<4 ||
       hearths.some(([hx,,hz])=>(x-hx)**2+(z-hz)**2<12))continue;
+    // Mowers leave taller seed heads only on the ragged verge. Between
+    // the charcoal beds the remaining blades are sparse stubble.
+    const clipped=inFireMeadow(x,z,-7);
+    if(clipped && rand()<.68)continue;
     const turn=rand()*TAU,dx=Math.cos(turn),dz=Math.sin(turn);
-    for(let j=0,count=2+Math.floor(rand()*5);j<count;j++){
-      const along=rand()*3.6,side=(rand()-.5)*1.25;
-      susuki(x+along*dx-side*dz,z+along*dz+side*dx,.48+rand()*.73);
+    for(let j=0,count=clipped?2:2+Math.floor(rand()*3);j<count;j++){
+      const along=rand()*(clipped?1.3:2.4),side=(rand()-.5)*.8;
+      const xx=x+along*dx-side*dz,zz=z+along*dz+side*dx;
+      if(!hearths.some(([hx,,hz])=>(xx-hx)**2+(zz-hz)**2<6))
+        susuki(xx,zz,clipped?.10+rand()*.14:.27+rand()*.43);
     }
   }
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
@@ -359,7 +411,7 @@ export function createKyo(scene,painter){
   const gateHouse=createRashomon(scene,p);
   p.cityShell=false;
   const dai=daiFirebeds(terrainHeight),fuku=fukuFirebeds(terrainHeight);
-  hillsideInk(p,false,dai);hillsideInk(p,true,fuku);shopFronts(p,light,windowPaper);
+  hearthApproaches(p);hillsideInk(p,false,dai);hillsideInk(p,true,fuku);shopFronts(p,light,windowPaper);
   for(const stand of KYO_FOOD)foodCounter(p,stand,light);
   streetLamps(p,light);
   const crowd=createStreetCrowd(scene);

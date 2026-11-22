@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { MOUNTAIN_STREAMS } from '../two/mountain-streams.js';
 import { landscapeMix, footSurface } from '../two/soundscape.js';
 import { BOUND, BRIDGES, REGIONS, groundHeight, riverZ, seasonAt } from '../two/terrain.js';
 
@@ -20,6 +21,14 @@ test('nearby landscapes blend continuously and weight distinct field recordings'
   for (const z of [-290, 18, 288]) {
     const west = landscapeMix(here(-BOUND + .01, z)), east = landscapeMix(here(BOUND - .01, z));
     for (const key of Object.keys(west)) assert.ok(Math.abs(west[key] - east[key]) < .002, key);
+  }
+});
+
+test('the sound of falling water fades between the plunge pool and the sky above it', () => {
+  for(const {fall:{toe}} of MOUNTAIN_STREAMS){
+    const pool={...toe,h:0},overhead={...pool,y:pool.y+70,h:70};
+    assert.ok(landscapeMix(pool).river>.70);
+    assert.ok(landscapeMix(overhead).river<.01);
   }
 });
 
