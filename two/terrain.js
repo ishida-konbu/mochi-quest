@@ -91,6 +91,7 @@ function originalShore(x, z) {
 }
 // Signed shore distances unite the original coast with three peninsulas. The
 // western bay remains open to the sea between the peach valley and the temple.
+const templeHeadland = [112,382,210,166];
 export const PENINSULAS = [
   // The coastal lobe beneath each route supplies real foothills on either side.
   [0,-464,282,228], [93,-640,253,241], [108,-822,290,204], [237,-889,210,166],
@@ -103,7 +104,7 @@ export const PENINSULAS = [
   [-913,-218,158,145], [-881,-306,163,121], [-746,-301,147,107],
   // A mountain coast shelves into the sea around the extended peach watershed.
   [-704,-269,248,122],[-575,-229,165,89],[-811,-101,203,145],[-661,-122,181,148],
-  [112,382,210,166], [193,497,156,181], [256,616,180,165],
+  templeHeadland, [193,497,156,181], [256,616,180,165],
   [336,707,177,163], [427,837,181,175],
   // Pine-covered islets flank the Ryugu sea lane, with open water between.
   [-413,121,62,27], [-492,311,52,30], [-583,174,24,15],
@@ -730,7 +731,7 @@ export const TREES = trees.filter(t => !portReserved(t.x,t.z) && !reservedScener
   (t.form === undefined || !nearRoad(t.x,t.z,2.7)));
 // Fill the boundary of the maple district and line the new country roads with
 // loose stands of cedar, zelkova and red pine. Keep all gates and views open.
-const saplings = seeded(0x5c311);
+let saplings = seeded(0x5c311);
 // Retain the seed sequence used for established trees and rocks across the islands.
 // Current firebeds and footpaths receive their own local clearance below.
 function earlierFireSurvey(x,z){
@@ -777,6 +778,9 @@ function wildTree(x,z) {
   transplant(x,z,family[Math.floor(saplings()*family.length)]);
 }
 for(const avenue of CONNECTING_ROADS) {
+  // Each successful transplant draws its own size and form. Resume the
+  // published survey after the peach road so pruning it cannot move a shrine tree.
+  if(avenue.id==='inari-road')saplings=seeded(0xdcf1d981);
   for(let i=5;i<avenue.points.length;i+=4) {
     const [ax,az]=avenue.points[i];
     for(let k=0;k<5;k++) wildTree(ax+(saplings()-.5)*92,az+(saplings()-.5)*92);
@@ -784,7 +788,10 @@ for(const avenue of CONNECTING_ROADS) {
 }
 // Woodland masses off the roads follow the aspect of each slope. Broken
 // clusters create openings across the valleys and a distinct high timberline.
-for (const [cx,cz,rx,rz] of PENINSULAS) {
+for (const headland of PENINSULAS) {
+  // The southern coast starts a separate survey after the western valley.
+  if(headland===templeHeadland)saplings=seeded(0x3a6f7a3b);
+  const [cx,cz,rx,rz]=headland;
   for(let grove=0;grove<13;grove++){
     const x=cx+(saplings()-.5)*rx*1.77,z=cz+(saplings()-.5)*rz*1.77;
     for(let tree=0;tree<17;tree++) wildTree(x+(saplings()-.5)*79,z+(saplings()-.5)*65);
@@ -872,8 +879,11 @@ for(const [i,t] of CEDAR_GROVES.entries()) {
 }
 // Fractured shoulders crop out in groups, their long axes sharing a strike.
 // They stay clear of riding lanes, of the courtyards and of each bath entrance.
-const stoneSeed=seeded(0x11e41);
-for(const [cx,cz,rx,rz] of PENINSULAS) {
+let stoneSeed=seeded(0x11e41);
+for(const headland of PENINSULAS) {
+  // Rock placement also depends on the local trunks.
+  if(headland===templeHeadland)stoneSeed=seeded(0x569f83d3);
+  const [cx,cz,rx,rz]=headland;
   for(let bed=0;bed<8;bed++){
     const ax=cx+(stoneSeed()-.5)*rx*1.85,az=cz+(stoneSeed()-.5)*rz*1.8;
     if(originalShore(ax,az)>9 || earlierFireSurvey(ax,az) || protectedDistrict(ax,az) || shoreDistance(ax,az)<9) continue;
@@ -987,7 +997,7 @@ for(let i=TREES.length-1;i>=0;i--){
 }
 for(let i=ROCKS.length-1;i>=0;i--){
   const r=ROCKS[i],reach=Math.max(r.rx,r.rz);
-  if(inFireOpening(r.x,r.z,r.h,reach,reach))ROCKS.splice(i,1);
+  if(inHutYard(r.x,r.z,reach) || inFireOpening(r.x,r.z,r.h,reach,reach))ROCKS.splice(i,1);
 }
 // Loose bands of trees follow the contours around the firebeds and break up
 // the old straight cut to the summits. The first few stands stay on the outer

@@ -7,6 +7,9 @@ import { createGame } from '../two/game.js';
 test('three mountain watercourses descend along submerged painted beds to a river or the sea',()=>{
   for(const stream of MOUNTAIN_STREAMS){
     const {stations,lipIndex,toeIndex}=stream;
+    // At the first station the cut fades into the natural hillside.
+    const head=stations[0];
+    assert.ok(Math.abs(terrainHeight(head.x,head.z)-head.y)<.6,stream.name+' source elevation');
     assert.equal(toeIndex,lipIndex+1);
     assert.ok(stations[lipIndex].y-stations[toeIndex].y>7,stream.name);
     for(const [i,p] of stations.entries()){

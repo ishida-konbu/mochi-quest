@@ -4,14 +4,20 @@ import { sculpture, brushStroke } from './pilgrimage-pigment.js';
 
 const TAU=Math.PI*2, {cos,sin}=Math;
 const vec=(x,y,z)=>new T.Vector3(x,y,z);
-// Beni pooled in the throat, a wash over the petal, and paper showing at its tip.
+// Blossom colour pools around the ovary and thins into the paper at the rim.
 const dyes=[
-  ['#971b45','#f23f70','#ff9aac'],
-  ['#af2856','#fb6980','#ffd0c6'],
-  ['#8e194e','#e63d80','#ff99bc'],
-  ['#ac2941','#fa5869','#ffa590'],
-  ['#bc405e','#ff8498','#ffdfd3'],
+  ['#b14f66','#ec97a8','#ffd9d3'], // shell pink
+  ['#ae786d','#e7cfc6','#f6e6d6'], // white peach
+  ['#996576','#d3b0b5','#edd5d3'], // ash rose
+  ['#ac405a','#ed7287','#ffc1b4'], // deeper beni at a few places on the path
+  ['#af6e65','#e4afa3','#f4d8c4'], // apricot
 ];
+const lighterDye=[1,0,0,0,1];
+const shootOpening=[.89,.78,.52];
+// Later-flowering trees leave budwood in the high gullies. The rosy varieties
+// open in fuller clusters along the path and above the moon gate.
+const fullness=[.16,0,.015,.23,.065];
+const bloomScale=[1.28,1.09,1.06,1.36,1.16];
 const flowers=new Map(),sprigs=new Map();
 
 function colouredMesh(){
@@ -41,7 +47,7 @@ function openFlower(dye,double,detailed) {
   function ringPoint(angle,radius,height,colour){
     return m.point(cos(angle)*radius,height,sin(angle)*radius,colour);
   }
-  const base=m.point(0,0,0,'#863149'),throat=m.point(0,.21,0,'#b54745'),calyx=[];
+  const base=m.point(0,0,0,'#735851'),throat=m.point(0,.21,0,heart),calyx=[];
   for(let j=0;j<5;j++)calyx.push(ringPoint(j*TAU/5,.34,.23+(j%2)*.03,heart));
   for(let j=0;j<5;j++){
     const k=(j+1)%5;m.face(base,calyx[j],calyx[k]);m.face(throat,calyx[k],calyx[j]);
@@ -90,13 +96,13 @@ function openFlower(dye,double,detailed) {
     // Fine filaments with separate ochre anthers sit above the red throat.
     for(let j=0;j<6;j++){
       const a=j*2.40,r=.20+.065*sin(j*4),h=.49+.07*cos(j*3.1);
-      const foot=ringPoint(a,.088,.19,'#db874e'),neck=[],pollen=[];
+      const foot=ringPoint(a,.088,.19,'#ae865d'),neck=[],pollen=[];
       for(let k=0;k<3;k++){
         const b=k*TAU/3;
-        neck.push(m.point(cos(a)*r+.026*cos(b),h-.06,sin(a)*r+.026*sin(b),'#ffd990'));
-        pollen.push(m.point(cos(a)*r+.055*cos(b),h,sin(a)*r+.055*sin(b),'#ffc160'));
+        neck.push(m.point(cos(a)*r+.026*cos(b),h-.06,sin(a)*r+.026*sin(b),'#dec59a'));
+        pollen.push(m.point(cos(a)*r+.055*cos(b),h,sin(a)*r+.055*sin(b),'#cfaa68'));
       }
-      const cap=ringPoint(a,r,h+.055,'#ffe9a1');
+      const cap=ringPoint(a,r,h+.055,'#ead5a2');
       for(let k=0;k<3;k++){
         const n=(k+1)%3;
         m.face(foot,neck[k],neck[n]);m.face(neck[k],pollen[k],neck[n]);
@@ -104,22 +110,22 @@ function openFlower(dye,double,detailed) {
       }
     }
   }else{
-    const centre=m.point(0,.45,0,'#ffdb78');
+    const centre=m.point(0,.45,0,'#dbbd86');
     for(let j=0;j<5;j++)m.face(centre,calyx[(j+1)%5],calyx[j]);
   }
   const g=m.finish();flowers.set(key,g);return g;
 }
 
-function newBud(){
-  const m=colouredMesh(),base=m.point(0,0,0,'#653941'),tip=m.point(.04,1.22,0,'#ff8c99');
+function newBud(sides){
+  const m=colouredMesh(),base=m.point(0,0,0,'#655047'),tip=m.point(.04,1.22,0,'#dba499');
   const lower=[],lip=[];
-  for(let j=0;j<6;j++){
-    const a=TAU*j/6;
-    lower.push(m.point(.43*cos(a),.39,.43*sin(a),j%2?'#924353':'#865e50'));
-    lip.push(m.point(.34*cos(a+.16),.88,.34*sin(a+.16),j%2?'#e8486f':'#bc2b59'));
+  for(let j=0;j<sides;j++){
+    const a=TAU*j/sides;
+    lower.push(m.point(.43*cos(a),.39,.43*sin(a),j%2?'#865e58':'#81735d'));
+    lip.push(m.point(.34*cos(a+.16),.88,.34*sin(a+.16),j%2?'#ba8382':'#a36973'));
   }
-  for(let j=0;j<6;j++){
-    const k=(j+1)%6;m.face(base,lower[j],lower[k]);m.face(lower[j],lip[j],lower[k]);
+  for(let j=0;j<sides;j++){
+    const k=(j+1)%sides;m.face(base,lower[j],lower[k]);m.face(lower[j],lip[j],lower[k]);
     m.face(lower[k],lip[j],lip[k]);m.face(tip,lip[k],lip[j]);
   }
   return m.finish();
@@ -131,7 +137,7 @@ function newLeaf(){
   m.face(base,mid,left);m.face(left,mid,tip);m.face(mid,right,tip);m.face(right,mid,base);
   return m.finish();
 }
-const bud=newBud(),leaf=newLeaf();
+const closedBud=newBud(6),distantBud=newBud(4),leaf=newLeaf();
 
 // Four shoots fork out of the page and carry flowers directly at their nodes.
 // Both detail levels use the very same nodes, orientations and colour choices.
@@ -139,6 +145,7 @@ export function peachSprig(form,variant,detailed){
   const key=[form,variant,detailed].join('/');
   if(sprigs.has(key))return sprigs.get(key);
   const rng=seeded(19815+form*2711+variant*1597),s=sculpture();
+  const bud=detailed?closedBud:distantBud;
   const curl=(rng()-.48)*.41,rise=.40+rng()*.26;
   const spine=[vec(0,0,0),vec(.28,.10,curl*.18),vec(.60,rise*.44,curl*.85),vec(.94,rise,curl)];
   const shoots=[spine];
@@ -151,16 +158,24 @@ export function peachSprig(form,variant,detailed){
   for(const [i,knots] of shoots.entries()){
     const twig=brushStroke(knots.map(q=>q.toArray()),i===0?[.019,.014,.009,.002]:[.010,.007,.002],
       detailed?(i===0?6:4):knots.length-1,detailed?5:3);
-    s.add(twig,i===0?'#613e43':'#78474c');
+    s.add(twig,i===0?'#574d47':'#69564f');
+    // A shoot flowers unevenly along last year's wood. A few paired flowers
+    // open together; an adjoining fork still shows buds and bare tapering ink.
+    const opening=shootOpening[variant]+fullness[form]+.14*(rng()-.5)-(i===variant+1?.26:0);
     for(let j=1;j<knots.length;j++){
       const from=knots[j-1],end=knots[j],count=i===0 || j===2?2:1;
       for(let k=0;k<count;k++){
         // A half-open flower leans down, its neighbour turns up or across.
         const t=(k+.38+rng()*.42)/count,q=from.clone().lerp(end,t);
         const pitch=.50+1.68*rng(),yaw=i*2.19+j*2.51+k*2.84+rng()*.85;
-        const size=(.085+.037*rng())*(i===0?1.05:1),dye=rng()<.74?form:Math.floor(rng()*dyes.length);
-        const layered=(form===1 || form===4) && rng()<.42;
-        s.add(openFlower(dye,layered,detailed),'#ffffff',q.x,q.y,q.z,size,size,size,pitch,yaw);
+        if(rng()<opening){
+          const size=(.078+.032*rng())*bloomScale[form]*(i===0?1.05:1);
+          const dye=rng()<.86?form:lighterDye[form];
+          const layered=(form===1 || form===4) && rng()<.27;
+          s.add(openFlower(dye,layered,detailed),'#ffffff',q.x,q.y,q.z,size,size,size,pitch,yaw);
+        }else if(rng()<.38){
+          s.add(bud,'#ffffff',q.x,q.y,q.z,.040,.067,.040,pitch,yaw);
+        }
       }
     }
     const q=knots.at(-1);

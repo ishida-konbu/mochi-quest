@@ -20,7 +20,7 @@ const palette = {
   darkEarth: color('#4a566c'),
   twilight: color('#ffdbb6'),
   fog: color('#e2dbca'),
-  peachFog: color('#dfced8'),
+  peachFog: color('#d9d7cb'),
   winterFog: color('#c3d5e4'),
   fallFog: color('#d9bc99'),
   nightFog: color('#273b56'),
@@ -223,7 +223,7 @@ export function createAtmosphere(scene) {
       dome.material.uniforms.valleyHaze.value=Math.max(valleyView,peachAir);
       dome.material.uniforms.horizonInk.value=1-Math.max(.70*peachAir,.42*clearAir,.42*hillView);
       const openAir=.0057-Math.max(.0025*clearAir,.00415*hillView);
-      const valleyAir=.0070-.0018*THREE.MathUtils.smoothstep(player.y,28,90);
+      const valleyAir=.0062-.0016*THREE.MathUtils.smoothstep(player.y,28,90);
       scene.fog.density = THREE.MathUtils.lerp(openAir,valleyAir,peachAir) + .003*s.snow - .0008*s.dawn;
       const submerged=player.diveDepth>0 ? THREE.MathUtils.smoothstep(WATER_Y-camera.position.y,0,6) : 0;
       scene.fog.color.lerp(palette.seaFog,submerged);

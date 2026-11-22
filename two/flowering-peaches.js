@@ -15,21 +15,22 @@ peachPetals.onBeforeCompile=shader=>{
   // Daylight comes through the thin corollas. Reflect their own pigment
   // into the shaded face while leaving the ink-brown twigs deep in tone.
   shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`
-    float beni=smoothstep(.08,.40,diffuseColor.r-diffuseColor.g);
-    outgoingLight+=diffuseColor.rgb*(.06+.53*beni);
+    float petal=smoothstep(.19,.52,diffuseColor.r);
+    float rose=smoothstep(.14,.46,diffuseColor.r-diffuseColor.g);
+    outgoingLight+=diffuseColor.rgb*(.035+(.33+.16*rose)*petal);
     #include <opaque_fragment>`);
 };
 function peachTree(seed){
   const rng=seeded(seed), s=sculpture(), sprays=[];
   const drift=(rng()-.46)*.91, tilt=(rng()-.5)*.49;
   const trunk=[[.03,-.34,0],[-.10,.34,.064],[drift+.13,.98,tilt],[drift*.38,1.69,.105],[drift*.4+.16,2.34,-.11]];
-  s.stroke('#614f45',trunk,[.39,.35,.25,.223,.066],18);
-  s.stroke('#a19078',trunk.map(([x,y,z],i)=>[x-.075,y,z+[.23,.28,.23,.16,.05][i]]),
+  s.stroke('#554f47',trunk,[.39,.35,.25,.223,.066],18);
+  s.stroke('#938c79',trunk.map(([x,y,z],i)=>[x-.075,y,z+[.23,.28,.23,.16,.05][i]]),
     [.014,.038,.053,.026,.002],16);
   for(let i=0;i<4;i++){
     const a=i*1.57+rng()*.63;
     const c=cos(a),d=sin(a);
-    s.stroke('#6f5c4b',[[.04,.41,0],[.28*c,.16,.28*d],[.64*c,-.09,.64*d],
+    s.stroke('#69604f',[[.04,.41,0],[.28*c,.16,.28*d],[.64*c,-.09,.64*d],
       [.76*c,-.32,.76*d],[.67*c,-.76,.67*d],[.72*c,-1.36,.72*d]],
       [.17,.19,.09,.061,.035,.008],10);
   }
@@ -39,10 +40,10 @@ function peachTree(seed){
     const elbow=[root[0]+(.45+rng()*.40)*cos(a+bend),h,root[2]+.49*sin(a+bend)];
     const tip=[root[0]+reach*cos(a),h+.52+rng()*.62,root[2]+reach*sin(a)];
     const wood=[root,elbow,[.66*tip[0]+.34*elbow[0],elbow[1]-.15+.4*rng(),.66*tip[2]+.34*elbow[2]],tip];
-    s.stroke(i%2?'#725d4e':'#755e55',wood,[.145,.123,.076,.018],11);
+    s.stroke(i%2?'#655d52':'#6d6259',wood,[.145,.123,.076,.018],11);
     const midway=wood[2];
     const spur=[midway[0]+.57*cos(a+bend+.87),midway[1]+.58,midway[2]+.57*sin(a+bend+.87)];
-    s.stroke('#796252',[elbow,midway,spur],[.064,.059,.019],6);
+    s.stroke('#736659',[elbow,midway,spur],[.064,.059,.019],6);
     sprays.push({q:tip,a,length:1.22+rng()*.67,pitch:.18+rng()*.53},
       {q:spur,a:a+.91,length:1.16+rng()*.49,pitch:.39+rng()*.27},
       {q:tip,a:a-.85,length:.98+rng()*.67,pitch:-.29+rng()*.39});
@@ -65,15 +66,17 @@ export function peachModel(i,detailed=true){
 export function createPeachOrchard(scene) {
   const N=PEACH_TREES.length;
   const stands=new Map();
-  const size=48;
-  for(const [i,tree] of PEACH_TREES.entries()){
+  const size=48, formCounts=new Array(5).fill(0);
+  for(const tree of PEACH_TREES){
     const key=Math.floor(tree.x/size)*128+Math.floor(tree.z/size);
     if(!stands.has(key))stands.set(key,{trees:[],box:new T.Box3()});
     const stand=stands.get(key),y=terrainMeshHeight(tree.x,tree.z),extent=tree.size*CROWN_SPAN*.55;
     const at=new T.Vector3(tree.x,y,tree.z);
     stand.box.expandByPoint(at.clone().add(new T.Vector3(-extent,-1,-extent)));
     stand.box.expandByPoint(at.clone().add(new T.Vector3(extent,extent*1.7,extent)));
-    stand.trees.push({...tree,form:i%5,y});
+    const form=tree.form??tree.seed%5;
+    stand.trees.push({...tree,form,y});
+    formCounts[form]++;
   }
   for(const stand of stands.values())stand.sphere=stand.box.getBoundingSphere(new T.Sphere());
   const root=new T.Group();root.name='桃源郷の桃の林';scene.add(root);
@@ -83,11 +86,11 @@ export function createPeachOrchard(scene) {
     mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);root.add(mesh);return mesh;
   }
   const crowns=Array.from({length:5},(_,i)=>{
-    const [[wood,bark],[close,petals]]=peachModel(i),capacity=Math.ceil(N/5);
+    const [[wood,bark],[close,petals]]=peachModel(i),capacity=formCounts[i];
     return {trunk:batch(wood,bark,capacity,true),close:batch(close,petals,capacity,false),
       middle:batch(peachModel(i,false)[1][0],petals,capacity,false)};
   });
-  const map=new T.TextureLoader().load(new URL('./assets/world/peach-crowns.webp?v=sculpted-beni-1',import.meta.url).href);
+  const map=new T.TextureLoader().load(new URL('./assets/world/peach-crowns.webp?v=orchard-wash-2',import.meta.url).href);
   map.colorSpace=T.SRGBColorSpace;map.anisotropy=4;
   // The crown impressions already contain directional light and twig shadows.
   const mat=new T.MeshBasicMaterial({map,alphaTest:.29});
@@ -101,7 +104,7 @@ export function createPeachOrchard(scene) {
     `);
   };
   const distant=batch(plane,mat,N,false),dummy=new T.Object3D(),colour=new T.Color(),up=new T.Vector3();
-  const tints=['#ffffff','#fff3f3','#ffe5eb','#fff3e0','#f7d5e4','#fff8f2'];
+  const tints=['#ffffff','#fcf9f5','#f8f5f4','#fff8ee','#f6f2f1','#fffcf5'];
   const frustum=new T.Frustum(),projection=new T.Matrix4(),lastProjection=new T.Matrix4(),lastRotation=new T.Quaternion(),bounds=new T.Sphere();
   let lastX=Infinity,lastZ=Infinity,lastY=Infinity;
   return camera=>{
@@ -122,7 +125,7 @@ export function createPeachOrchard(scene) {
       for(const tree of stand.trees){
         const dx=wrapDelta(tree.x-x),dz=wrapDelta(tree.z-z),dist=Math.hypot(dx,dz,y-tree.y-CROWN_MID*tree.size);
         if(dist>630)continue;
-        colour.set(tints[tree.tint??tree.seed%tints.length]);
+        colour.set(tints[tree.seed%tints.length]);
         if(dist<(29+tree.size*7)){
           bounds.center.set(x+dx,tree.y+CROWN_MID*tree.size,z+dz);bounds.radius=CROWN_SPAN*.58*tree.size;
           if(!frustum.intersectsSphere(bounds))continue;

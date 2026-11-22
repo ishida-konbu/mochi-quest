@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
-import { WAYSIDE_HUTS,KETTLE } from '../two/wayside-hut-layout.js';
+import { WAYSIDE_HUTS,KETTLE,inHutYard } from '../two/wayside-hut-layout.js';
 import { sitePoint } from '../two/retreat-layout.js';
 import { createPickupContacts } from '../two/pickup-contacts.js';
-import { TREES, REGIONS, shoreDistance, nearRoad, terrainHeight, groundHeight, waterSurfaceAt, staticVolumeAt } from '../two/terrain.js';
+import { TREES, ROCKS, REGIONS, shoreDistance, nearRoad, terrainHeight, groundHeight, waterSurfaceAt, staticVolumeAt } from '../two/terrain.js';
 
 function walk(game,[x,z]){
   const p=game.state.player;
@@ -21,6 +21,7 @@ function arrive(p,[x,z]){
 
 test('sparse rural clearings have walk-in huts in woodland and on dry beaches',()=>{
   const g=createGame(),p=g.state.player;
+  for(const r of ROCKS)assert.ok(!inHutYard(r.x,r.z,Math.max(r.rx,r.rz)),'rock in a wayside yard at '+[r.x,r.z]);
   for(const hut of WAYSIDE_HUTS){
     assert.ok(TREES.every(t=>Math.hypot(t.x-hut.x,t.z-hut.z)>8));
     assert.ok(REGIONS.every(r=>Math.hypot(r.x-hut.x,r.z-hut.z)>55));

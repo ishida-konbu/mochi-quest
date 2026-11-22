@@ -123,7 +123,10 @@ function findGround(n,residents) {
     for(let j=0;j<samples;j++){
       walkCircuit(n,tau*j/samples,spot);
       const h=terrainHeight(spot.x,spot.z);
-      if(!openGround(spot.x,spot.z,pad+.19) || Math.abs(terrainHeight(spot.x+1,spot.z+1)-h)>.9){clear=false;break;}
+      // A low foothill clearing can sit below a steep orchard bank. Check the
+      // whole baku circuit, allowing half a metre above the sampled trail.
+      if((wilderness && h>=24.5) || !openGround(spot.x,spot.z,pad+.19) ||
+        Math.abs(terrainHeight(spot.x+1,spot.z+1)-h)>.9){clear=false;break;}
     }
     if(clear)return;
   }
