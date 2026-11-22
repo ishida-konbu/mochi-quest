@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
 import { RETREATS,sitePoint } from '../two/retreat-layout.js';
 import { groundHeight,waterSurfaceAt } from '../two/terrain.js';
-import { RINSING_FLOOR,RINSING_SEATS,rinseFloorHeight } from '../two/kyo-bath-layout.js';
+import { RINSING_FLOOR,RINSING_SEATS,RINSING_TUB,rinseFloorHeight } from '../two/kyo-bath-layout.js';
+
+import { Group } from '../two/vendor/three.module.min.js';
+import { createSuzuriRinsing } from '../two/suzuri-bathing-art.js';
 
 const court=RETREATS.find(site=>site.shape==='suzuri');
 const point=(u,v)=>sitePoint(court,u,v);
@@ -49,4 +52,15 @@ test('walk from the street, take four rinses on their own stools, and leave on f
   for(const stop of access.reverse())walk(...stop);
   walk(0,9.35);
   assert.ok(!p.activity && !p.inWater);
+});
+
+test('the four empty dippers float with their bottoms in the buckets before the visitor picks one up',()=>{
+  const room=new Group(),update=createSuzuriRinsing(room);
+  update(0,{x:court.x,z:court.z});
+  const ladles=room.getObjectByName('花京の掛け湯').children.filter(m=>m.name==='汲み柄杓');
+  assert.equal(ladles.length,4);
+  for(const vessel of ladles){
+    const draft=RINSING_TUB.water-vessel.position.y;
+    assert.ok(draft>.008 && draft<.02,'empty hinoki vessel draft '+draft);
+  }
 });

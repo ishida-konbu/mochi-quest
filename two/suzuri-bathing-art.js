@@ -78,7 +78,7 @@ export function createSuzuriRinsing(scene){
   const group=new T.Group();group.name='花京の掛け湯';group.visible=false;group.rotation.y=site.yaw;
   const level=waterSurfaceAt(site.x,site.z);
   let vessels=[],fall,drops,holder,activeVessel,phase,blend=0,seconds=0;
-  const clock={value:0};
+  const clock={value:0},floatOffset=RINSING_TUB.water-.011-rinseDipperAt(0).y;
   function build(){
     const geo=ladle(),wood=suzuriWashTimber();
     const liquid=new T.MeshPhysicalMaterial({color:'#c6d8ca',clearcoat:.55,roughness:.18,
@@ -140,7 +140,10 @@ export function createSuzuriRinsing(scene){
     for(const vessel of vessels){
       const {station,head,surface,traces,planned}=vessel,washing=pose?.action==='rinse' && pose.id===station.id;
       const t=washing?station.duration-player.activityTime:0,q=rinseDipperAt(t,Boolean(player.buffs?.full));
-      planned.set(station.u+q.u,q.y,q.v);head.position.copy(planned);head.rotation.set(q.pitch,-.51,q.roll,'YXZ');
+      // The empty dipper floats with 11 mm of draft in this pail. Transfer
+      // the height back to the shoulder path as the hand takes its weight.
+      const draft=floatOffset*(1-q.hold);
+      planned.set(station.u+q.u,q.y+draft,q.v);head.position.copy(planned);head.rotation.set(q.pitch,-.51,q.roll,'YXZ');
       surface.visible=q.wet>.027;surface.scale.setScalar(.94*q.wet);
       // The shaft enters near the left side of the pail. Two displaced
       // fronts expand out from the scoop and fade before they reach its rim.
