@@ -1,3 +1,6 @@
+import { evidence as storyEvidence } from './mystery-data.js';
+import { createMystery } from './mystery-state.js';
+import { createMysteryWorld } from './mystery-world.js';
 import { WAYSIDE_HUTS,KETTLE,CHAYA_SITES,CHAYA_SEAT } from './wayside-hut-layout.js';
 import { planTurtleLeg } from './turtle-trail.js';
 import { BELL_FIRST, BELL_INTERVAL, noticeBellDistance, templeBellHour } from './kiyomizu-bell.js';
@@ -327,7 +330,7 @@ export function createGame(snapshot = null) {
     if (target.grand) return springRadius(player.x, player.z) <= (leaving ? 1 : .88);
     return gap(target) <= (leaving ? 3.35 : 3.1);
   }
-  function nearest() {
+  function nearestLegacy() {
     if (player.activity || !player.grounded) return null;
     if (player.mount === 'turtle') return { target: turtle, label: 'カメから降りる', action: 'dismount', distance: 0 };
     let best = null;
@@ -369,6 +372,22 @@ export function createGame(snapshot = null) {
     }
     return best;
   }
+  function meaningfulContact(entry) {
+    if (entry.npcId || entry.legacyId || mystery.state.status.C07 === 'resolved') return true;
+    if (entry.locationId === 'LOC_KYO_COURT' || entry.locationId === 'LOC_KYO_JUDGE') return true;
+    return storyEvidence.some(e => e.locationId === entry.locationId &&
+      e.acquisition.mode !== 'resolution' && e.acquisition.mode !== 'talk' && mystery.meets(e.acquisition.condition));
+  }
+  function interactionChoices() {
+    const legacy = nearestLegacy();
+    if (player.mount || player.activity) return legacy ? [legacy] : [];
+    const choices = mysteryWorld.nearby().filter(meaningfulContact).map(entry => ({
+      target:entry, label:entry.label + (entry.npcId || entry.legacyId ? 'と話す' : 'を調べる'), distance:entry.distance, action:'story',
+    }));
+    if (legacy) choices.unshift(legacy);
+    return choices;
+  }
+  function nearest() { return interactionChoices()[0] ?? null; }
   function beginActivity(activity, duration) {
     player.activity = activity;
     player.activityTime = duration;
@@ -514,6 +533,7 @@ export function createGame(snapshot = null) {
     const found = nearest();
     if (!found) return false;
     const target = found.target;
+    if (found.action === 'story') { emit('mystery', { target }); return true; }
     if (target === turtle) {
       if (player.buffs.full > 0) {
         message('カメが首を引っ込めた。満腹のお餅はちょっと重い。'); return false;
@@ -1155,7 +1175,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 11, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 11, mystery:mystery.save(), flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: inventory.map(o => o?.cooldown ?? 0),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -1290,5 +1310,7 @@ export function createGame(snapshot = null) {
   }
   updateHareRider(riverRider,state.time);
   refreshCrowd();
-  return { state, act, step, nearest, teleport, save, restored, voyage };
+  const mystery = createMystery(restored ? snapshot.mystery : null);
+  const mysteryWorld = createMysteryWorld(state, mystery);
+  return { state, act, step, nearest, interactionChoices, mystery, mysteryWorld, teleport, save, restored, voyage };
 }

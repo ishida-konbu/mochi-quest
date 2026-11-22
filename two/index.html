@@ -22,6 +22,8 @@
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
     <link rel="stylesheet" href="./game.css?v=4.0" />
+    <link rel="stylesheet" href="./mystery.css?v=1" />
+    <link rel="stylesheet" href="./mystery-exhibits.css?v=1" />
     <script type="importmap">
       {
         "imports": {
@@ -56,10 +58,10 @@
           "./forest-forms.js": "./forest-forms.js?v=3.3",
           "./forest-mesh.js": "./forest-mesh.js?v=5.0",
           "./forest.js": "./forest.js?v=kyoto-open-basin-1",
-          "./game.js": "./game.js?v=peach-kasumi-1",
+          "./game.js": "./game.js?v=mochiyori-1",
           "./handscroll-beasts.js": "./handscroll-beasts.js?v=3.3",
           "./ink.js": "./ink.js?v=peach-kasumi-1",
-          "./interface.js": "./interface.js?v=peach-kasumi-1",
+          "./interface.js": "./interface.js?v=mochiyori-1",
           "./kagami-fern.js": "./kagami-fern.js?v=6.3",
           "./kagami-mochibana.js": "./kagami-mochibana.js?v=6.5",
           "./mochibana-rice.js": "./mochibana-rice.js?v=6.5",
@@ -180,7 +182,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=peach-ink-groves-1" />
+    <link rel="modulepreload" href="./main.js?v=mochiyori-1" />
   </head>
   <body>
     <main id="stage">
@@ -204,6 +206,7 @@
           <div id="compass"></div>
         </div>
         <nav aria-label="旅の道具">
+          <button id="mystery-book" class="circle" aria-label="謎解き帖" title="謎解き帖（J）"><i data-glyph="open-book"></i><span>謎解き帖</span></button>
           <button class="circle" id="map" aria-label="地図" title="地図（M）">
             <i data-glyph="map"></i>
           </button>
@@ -266,7 +269,7 @@
       </button>
       <div class="keyline">
         <span><kbd>WASD</kbd> 移動</span><span><kbd>Space</kbd> 跳ぶ・連打で伸びる</span
-        ><span><kbd>Z</kbd> 三条通知</span><span><kbd>E</kbd> 乗降・調べる</span
+        ><span><kbd>Z</kbd> 三条通知</span><span><kbd>E</kbd> 話す・調べる</span
         ><span>ドラッグで見回す</span>
       </div>
       <div id="photo-dock" hidden>
@@ -290,7 +293,7 @@
         <div id="dialog-content"></div>
       </div>
     </dialog>
-    <script type="module" src="./main.js?v=peach-ink-groves-1"></script>
+    <script type="module" src="./main.js?v=mochiyori-1"></script>
     <noscript>JavaScript を有効にして遊んでください。</noscript>
   </body>
 </html>
