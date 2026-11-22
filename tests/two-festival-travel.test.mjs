@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createGame} from '../two/game.js';
-import {BOUND,groundHeight} from '../two/terrain.js';
+import {BOUND,groundHeight,nearRoad,regionAt,REGIONS,terrainMeshHeight,waterSurfaceAt} from '../two/terrain.js';
+import {KADOMATSU,POUNDING} from '../two/festival.js';
 
 const tick = (game,seconds,input={}) => {
   for(let frame=0; frame<Math.round(seconds*60); frame++) game.step(1/60,input);
@@ -116,4 +117,34 @@ test('both animals at the dawn mortar accept notices at their actual workstation
     game.step(1/60); assert.ok(game.act('throw',heading)); tick(game,.12);
     assert.ok(game.state.delivered.has(artist.id));
   }
+});
+
+test('the sunrise beach holds the mat, decorations and bicycle rack on dry, level ground',()=>{
+  const game=createGame();
+  const stops=game.state.objects.filter(o=>REGIONS[regionAt(o.x,o.z)].id==='dawn');
+  const port=stops.find(o=>o.type==='port'), cuff=stops.find(o=>o.type==='haramaki');
+  const fixtures=[
+    [POUNDING.x,POUNDING.z,1.57,1.075,POUNDING.yaw-.27,.018],
+    [port.x,port.z,1.05,1,0,.035],
+    [cuff.x,cuff.z,.85,.65,0,.035],
+    ...KADOMATSU.map(([x,z,yaw])=>[x,z,.5,.5,yaw,.02])
+  ];
+  for(const [x,z,halfWidth,halfDepth,yaw,tolerance] of fixtures){
+    const base=groundHeight(x,z);
+    assert.ok(base>waterSurfaceAt(x,z));
+    assert.equal(nearRoad(x,z,.55),false);
+    for(let i=-2;i<=2;i++)for(let j=-2;j<=2;j++){
+      const u=halfWidth*i/2,v=halfDepth*j/2;
+      const surface=terrainMeshHeight(x+u*Math.cos(yaw)+v*Math.sin(yaw),z-u*Math.sin(yaw)+v*Math.cos(yaw));
+      assert.ok(Math.abs(surface-base)<tolerance,`uneven footing at ${x}, ${z}`);
+    }
+  }
+  // The older terrain survey ends on this meridian, near the path to the sea.
+  for(let z=155;z<=194;z++)
+    assert.ok(Math.abs(groundHeight(310.02,z)-groundHeight(309.98,z))<.02);
+  place(game.state.player,port.x,port.z+1.2);
+  game.step(1/60);
+  assert.equal(game.nearest()?.target,port);
+  assert.ok(game.act('interact'));
+  assert.equal(game.state.player.mount,'bike');
 });

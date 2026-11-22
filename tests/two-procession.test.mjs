@@ -1,10 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import { createGame } from '../two/game.js';
 import { BUILDINGS, ORIGINAL_REGIONS as REGIONS, regionAt, groundHeight, nearRoad, waterDepth, solidHeightAt } from '../two/terrain.js';
 import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { roomPlan } from '../two/architecture.js';
 import { DYES, TRADES } from '../two/procession.js';
+
+test('restored journeys keep the village cast when local fixtures and ground move',()=>{
+  const workers=createGame().state.npcs.filter(n=>n.area);
+  const cast=workers.map(n=>[n.id,n.role,n.phase,n.stature,n.build,n.dye]);
+  // Published cast before the maple turnout and the dawn port were repaired.
+  assert.equal(createHash('sha256').update(JSON.stringify(cast)).digest('hex'),
+    'f692b8a3100964e5a659270e7de4cbe833e5e36c1b274992dd17ea2b4d6ab4a0');
+  for(const [id,x,z] of [['frog-341',296.433807457209,-102.82211438380389],
+    ['rabbit-411',257.0213819625716,133.44051278125917],
+    ['frog-433',263.56874440819973,118.038205001877]]){
+    const worker=workers.find(n=>n.id===id);
+    assert.ok(Math.hypot(worker.homeX-x,worker.homeZ-z)<.001);
+  }
+});
 
 test('the ten villages support ten times the original hares and frogs, with varied trades and clear roads',()=>{
   const game=createGame(), {npcs,objects}=game.state;

@@ -1415,7 +1415,7 @@ function gaitHero(h, p, t, dt, state) {
   const g=giant?1.28:1;
   h.pose.scale.set(g*response.width,g*response.stretch,g*response.width);
   const mountHeight = p.mount === 'bike' ? .90 : p.mount === 'turtle' ? 1.04 : 0;
-  h.pose.position.set(0,response.bob+mountHeight+(sit==='bath'?(p.inWater?-.12:-.49)+.018*Math.sin(t*2):0),riding?-.14:0);
+  h.pose.position.set(0,response.bob+mountHeight,riding?-.14:0);
   h.pose.rotation.set(response.pitch,0,response.lean);
   if (p.inWater && !riding && !sit) {
     const stroke=Math.min(1,speed/3),cycle=t*(2.3+stroke*1.9);
@@ -1433,7 +1433,13 @@ function gaitHero(h, p, t, dt, state) {
     h.pose.rotation.x+=.07;
   }
   if(sit==='sleep'){h.pose.scale.y*=.76;h.pose.rotation.z=-.13;h.pose.position.y=.009;}
-  if(sit==='bath'){h.pose.rotation.x=.11;h.pose.scale.set(g*1.08,g*.92,g*1.09);}
+  if(sit==='bath'){
+    // The water crosses the lower belly. Leave the brush-drawn mouth clear
+    // of the surface, including at the bottom of the breathing cycle.
+    h.pose.position.y=p.bathWaterY-p.y-g*(.33+.012*Math.cos(t*2));
+    h.pose.rotation.x=.028;
+    h.pose.scale.set(g*1.06,g*.96,g*1.06);
+  }
   if(p.buffs?.drunk>0) h.pose.rotation.z+=.115*Math.sin(t*3.7);
   h.leaves.visible = p.mode === 'kusa';
   h.leaves.position.y = response.extension;

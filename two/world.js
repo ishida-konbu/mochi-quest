@@ -42,13 +42,13 @@ import {
   seasonAt,
   shoreDistance, PENINSULAS, CONNECTING_ROADS,
   BUILDINGS,
-  GATES,
+  GATES, gateFooting,
   TREES,
   LANDMARK_TREES,
   ROCKS,
   REGIONS,
   ROADS,
-  BRIDGES,
+  BRIDGES, MAPLE_FOOTINGS,
   WATER_Y,
   terrainHeight,
   bridgeHeight,
@@ -254,19 +254,22 @@ function* landscape(scene, art) {
 }
 // Both road materials pull their surface toward the camera for intersections.
 // Cut their pigment precisely at the dressed stone, even in a grazing view.
-function reserveGatePaving(original) {
+const masonryFootprints=[
+  ...GATE_PAVING.map(b=>new THREE.Vector4(RASHOMON.x+b.x,RASHOMON.z+b.z,b.w/2,b.d/2)),
+  ...MAPLE_FOOTINGS.thresholds.map(s=>new THREE.Vector4(s.x,s.z,s.w/2,s.d/2)),
+];
+function reserveMasonry(original) {
   const material=original.clone(),compile=original.onBeforeCompile,previousKey=original.customProgramCacheKey();
-  material.customProgramCacheKey=()=>previousKey+'-gate-masonry';
+  material.customProgramCacheKey=()=>previousKey+'-paved-entrances';
   material.onBeforeCompile=function(shader,renderer){
     compile.call(this,shader,renderer);
-    shader.uniforms.gatePaving={value:GATE_PAVING.map(b=>new THREE.Vector4(
-      RASHOMON.x+b.x,RASHOMON.z+b.z,b.w/2,b.d/2))};
+    shader.uniforms.pavedEntrances={value:masonryFootprints};
     shader.vertexShader='varying vec2 roadPosition;\n'+shader.vertexShader.replace('#include <begin_vertex>',
       '#include <begin_vertex>\n roadPosition=position.xz;');
-    shader.fragmentShader=`varying vec2 roadPosition; uniform vec4 gatePaving[${GATE_PAVING.length}];\n`+
+    shader.fragmentShader=`varying vec2 roadPosition; uniform vec4 pavedEntrances[${masonryFootprints.length}];\n`+
       shader.fragmentShader.replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>
-        for(int k=0;k<${GATE_PAVING.length};k++){
-          vec4 box=gatePaving[k];
+        for(int k=0;k<${masonryFootprints.length};k++){
+          vec4 box=pavedEntrances[k];
           if(all(lessThanEqual(abs(roadPosition-box.xy),box.zw)))discard;
         }`);
   };
@@ -274,14 +277,16 @@ function reserveGatePaving(original) {
 }
 function buildRoads(scene, art) {
   const material = trailMaterial(art), paving=kyoPavingMaterial(art.rock), climate={};
-  const approach=reserveGatePaving(material),avenue=reserveGatePaving(paving);
+  const approach=reserveMasonry(material),avenue=reserveMasonry(paving);
   for (const road of ROADS) {
     const p=[], uv=[], ix=[], snow=[];
-    let travel=0;
+    const end=road.points.at(-1);
     for (let i=0; i<road.points.length; i++) {
       const [x,z]=road.points[i], prev=road.points[max(0,i-1)], next=road.points[min(i+1,road.points.length-1)];
       const dx=next[0]-prev[0], dz=next[1]-prev[1], l=Math.hypot(dx,dz)||1;
-      travel+=Math.hypot(x-prev[0],z-prev[1]);
+      // Dirt pigment is sampled in world space. Its UVs control wear at the
+      // sides and at the open end of the path into the sunrise beach.
+      const endWeight=road.fadeEnd?min(1,Math.hypot(end[0]-x,end[1]-z)/road.fadeEnd):1;
       const width=road.paved ? road.width : road.width*(1+.045*sin(x*1.2+z*.7)+.035*sin(z*1.8));
       const snowAmount=seasonAt(x,z,climate).snow;
       const underDeck=BRIDGES.some(b=>abs(x-b.x)<b.halfWidth+.5 && abs(z-b.z)<b.length*.5-.4);
@@ -289,7 +294,7 @@ function buildRoads(scene, art) {
         const across=(j/4-.5)*width, xx=x+(dz/l)*across, zz=z-(dx/l)*across;
         p.push(xx,h(xx,zz)+.08,zz);
         if(road.paved) uv.push(xx,zz);
-        else uv.push(j/4,travel/4.8);
+        else uv.push(j/4,endWeight);
         snow.push(snowAmount);
         if(!underDeck && i<road.points.length-1 && j<4) {
           const k=i*5+j;
@@ -299,8 +304,9 @@ function buildRoads(scene, art) {
     }
     const geo=geometry(p,ix,uv);
     geo.setAttribute('snowAmount',new THREE.Float32BufferAttribute(snow,1));
-    const atGate=road.points.some(([x,z])=>abs(x-RASHOMON.x)<25 && abs(z-RASHOMON.z)<22);
-    const mesh=new THREE.Mesh(geo,road.paved?(atGate?avenue:paving):(atGate?approach:material));
+    const atEntrance=road.points.some(([x,z])=>abs(x-RASHOMON.x)<25 && abs(z-RASHOMON.z)<22 ||
+      MAPLE_FOOTINGS.thresholds.some(s=>abs(x-s.x)<4 && abs(z-s.z)<4));
+    const mesh=new THREE.Mesh(geo,road.paved?(atEntrance?avenue:paving):(atEntrance?approach:material));
     mesh.receiveShadow=true;mesh.renderOrder=road.paved?2:1;scene.add(mesh);
   }
 }
@@ -957,6 +963,10 @@ function* woodland(p, art) {
     }
   }
 }
+function seatStone(p,foot) {
+  p.part('round',foot.x,(foot.bottom+foot.top)/2,foot.z,foot.radius,
+    foot.top-foot.bottom,foot.radius,'#9d9c90',0,0,0,p.stone);
+}
 function gate(p, g, index) {
   const { x, z, w, h: ht, yaw } = g,
     y = terrainHeight(x, z);
@@ -969,11 +979,13 @@ function gate(p, g, index) {
     edge = '#393c34',
     shade = '#843b2c';
   for (const sign of [-1, 1]) {
-    const a = local(sign * w * 0.36, -0.3, 0),
+    const foot=gateFooting(g,sign),offset=foot.top-y;
+    seatStone(p,foot);
+    const a = local(sign * w * 0.36, offset-.03, 0),
       b = local(sign * w * 0.33, ht - 0.38, 0);
     p.link(a, b, w * 0.045, vermilion, false, true, false, p.lacquer);
-    part('round', sign * w * 0.359, 0.23, 0, w * 0.061, 0.52, w * 0.061, '#494d43');
-    part('round', sign * w * 0.357, 0.54, 0, w * 0.052, 0.135, w * 0.052, edge);
+    part('round', sign * w * 0.359, offset+.23, 0, w * 0.061, 0.52, w * 0.061, '#494d43');
+    part('round', sign * w * 0.357, offset+.54, 0, w * 0.052, 0.135, w * 0.052, edge);
     part('box', sign * w * 0.335, ht * 0.785, 0, w * 0.115, 0.19, 0.47, shade);
   }
   part('box', 0, ht * 0.725, 0, w * 0.91, ht * 0.058, 0.39, vermilion);
@@ -981,8 +993,6 @@ function gate(p, g, index) {
   p.part('shimaki', x, y, z, w, ht, w, vermilion, yaw, 0, 0, p.lacquer);
   p.part('kasagi', x, y, z, w, ht, w, '#55584b', yaw, 0, 0, p.wood);
   for (const sign of [-1, 1]) {
-    const q = local(sign * w * 0.36, -0.04, 0.01);
-    p.part('rock', q.x, q.y, q.z, w * 0.081, 0.24, w * 0.078, '#b5b6a9', yaw + 0.5, 0, 0, p.stone);
     for (const offset of [-0.08, 0.08]) {
       const bolt = local(sign * w * 0.335 + offset, ht * 0.72, 0.21);
       p.part('ball', bolt.x, bolt.y, bolt.z, 0.057, 0.057, 0.035, '#93845c', yaw, 0, 0, p.bronze);
@@ -1042,14 +1052,15 @@ function gate(p, g, index) {
     }
   }
 }
-function lantern(p, x, z, s = 1) {
-  const y = h(x, z),
+function lantern(p, x, z, s = 1, foot) {
+  const y = foot?.top ?? h(x, z),
     stone = '#a4ab9f',
     base = '#8c958c';
   const part = (shape, v, rx, height, rz, color, rot = 0, mat = p.stone) =>
     p.part(shape, x, y + v * s, z, rx * s, height * s, rz * s, color, rot, 0, 0, mat);
-  part('rock', 0.072, 0.44, 0.16, 0.42, base, 0.26);
-  part('round', 0.15, 0.39, 0.13, 0.39, base);
+  if(foot)seatStone(p,foot);
+  else part('rock', 0.072, 0.44, 0.16, 0.42, base, 0.26);
+  part('round', foot ? .08 : .15, 0.39, foot ? .22 : .13, 0.39, base);
   part('shaft', 0.19, 0.35, 0.99, 0.35, stone, PI / 12);
   part('round', 1.2, 0.35, 0.14, 0.35, base);
   part('box', 1.45, 0.42, 0.39, 0.42, '#655d46', 0, p.solid);
@@ -1160,7 +1171,7 @@ function bridge(p, b) {
           p.link(V(xx, yy + height, zz), V(xx, ny + height, nz), thick, col, true, true, false, p.wood);
         }
       }
-      if (i === 0 || i === seg) {
+      if (!b.maple && (i === 0 || i === seg)) {
         const approach = zz + (i === 0 ? -0.68 : 0.68);
         p.part(
           'rock',
@@ -1177,7 +1188,7 @@ function bridge(p, b) {
           p.stone,
         );
       }
-      if (i % 3 === 1) {
+      if (!b.maple && i % 3 === 1) {
         p.part('box', xx, yy * 0.5 - 0.15, zz, 0.34, yy + 1.6, 0.34, '#685c48', 0, 0, 0, p.wood);
         if (i + 2 <= seg)
           p.link(
@@ -1191,6 +1202,26 @@ function bridge(p, b) {
             p.wood,
           );
       }
+    }
+  }
+  if(b.maple){
+    const block=(s,color,material)=>p.part('box',s.x,(s.top+s.bottom)/2,s.z,
+      s.w,s.top-s.bottom,s.d,color,0,0,0,material);
+    for(const s of MAPLE_FOOTINGS.piers){
+      block(s,'#685c48',p.wood);
+      const knee=min(1.75,(s.top-s.bottom)*.53);
+      for(const dir of [-1,1]){
+        const endZ=s.z+dir*knee;
+        p.link(V(s.x,s.top-knee,s.z),V(s.x,bridgeHeight(b,endZ)-.40,endZ),
+          .16,'#756448',true,true,false,p.wood);
+      }
+    }
+    for(const s of MAPLE_FOOTINGS.beams)block(s,'#736047',p.wood);
+    for(const s of MAPLE_FOOTINGS.ties)block(s,'#736047',p.wood);
+    for(const s of MAPLE_FOOTINGS.abutments)block(s,'#a6a494',p.masonry);
+    for(const s of MAPLE_FOOTINGS.endStones)block(s,'#b6b7a8',p.stone);
+    for(const s of MAPLE_FOOTINGS.thresholds)for(let j=-1;j<=1;j++){
+      block({...s,x:s.x+j*s.w/3,w:s.w/3-.012},j===0?'#bcbba9':'#b2b2a1',p.stone);
     }
   }
 }
@@ -1582,7 +1613,26 @@ function details(p) {
       true,
     );
   }
-  // Worn pebbles and sunken gravel cross the margins of the illustrated road.
+  dressRoadGravel(p, r);
+}
+
+// Dirt lanes meet and sometimes continue underneath the paved avenues.
+// Test the stone's footprint against every paved strip at those crossings.
+const pavedStrips = ROADS.filter(road => road.paved).flatMap(road =>
+  road.points.slice(1).map(([endX, endZ], i) => {
+    const [x, z] = road.points[i];
+    const length = Math.hypot(endX - x, endZ - z);
+    return { x, z, dx: (endX - x) / length, dz: (endZ - z) / length, length, half: road.width / 2 };
+  }));
+function touchesPaving(x, z, radius) {
+  if (masonryFootprints.some(b => abs(x - b.x) <= b.z + radius && abs(z - b.y) <= b.w + radius)) return true;
+  return pavedStrips.some(s => {
+    const u = x - s.x, v = z - s.z;
+    const along = u * s.dx + v * s.dz, across = u * s.dz - v * s.dx;
+    return along >= -radius && along <= s.length + radius && abs(across) <= s.half + radius;
+  });
+}
+export function dressRoadGravel(p, r) {
   for (const road of ROADS) {
     for (let i = 2; i < road.points.length; i += 4) {
       const [x, z] = road.points[i],
@@ -1592,16 +1642,18 @@ function details(p) {
       const xx = x + ((z - q[1]) / len) * across,
         zz = z - ((x - q[0]) / len) * across;
       if (h(xx, zz) < WATER_Y + 0.2 || abs(zz - riverZ(xx)) < riverHalfWidth(xx) + 1) continue;
+      // Draw the whole stone first to keep the original gravel sequence on other trails.
+      const sx = 0.14 + r() * 0.21, sy = 0.06 + r() * 0.07, sz = 0.12 + r() * 0.15;
+      const yaw = r() * TAU;
+      if (touchesPaving(xx, zz, 1.2 * max(sx, sz))) continue;
       p.part(
         'rock',
         xx,
         h(xx, zz) + 0.04,
         zz,
-        0.14 + r() * 0.21,
-        0.06 + r() * 0.07,
-        0.12 + r() * 0.15,
+        sx, sy, sz,
         '#a6a18e',
-        r() * TAU,
+        yaw,
         0.12,
         -0.08,
         p.stone,
@@ -1655,8 +1707,10 @@ function roadsideInscriptions(p) {
 }
 function hillsideStairs(p) {
   for (const gate of GATES) {
-    for (const dir of [-1, 1])
-      lantern(p, gate.x + dir * (gate.w * 0.57), gate.z + 1.6, gate === GATES[0] ? 1.16 : 1);
+    for (const dir of [-1, 1]) {
+      const foot=gateFooting(gate,dir,true);
+      lantern(p,foot.x,foot.z,gate===GATES[0]?1.16:1,foot);
+    }
   }
   for (const b of BRIDGES)
     for (const sign of [-1, 1]) lantern(p, b.x + sign * (b.halfWidth + 0.94), b.z + b.length * 0.5 + 0.48, 0.91);

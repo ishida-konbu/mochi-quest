@@ -6,7 +6,7 @@ import { createPickupContacts } from './pickup-contacts.js';
 import { createAmbientContacts } from './ambient-contacts.js';
 import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
-import { VILLAGE_BATHS } from './village-baths.js';
+import { VILLAGE_BATHS, VILLAGE_WATER_HEIGHT } from './village-baths.js';
 import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
 import { SEAPORTS,relocateOldQuay } from './seaport-layout.js';
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
@@ -94,13 +94,14 @@ function makeWorld() {
       phase, side, heading, speed: 0, flash: 0, mounted: false
     });
   }
-  ORIGINAL_REGIONS.forEach(({ id, x, z }, i) => {
+  ORIGINAL_REGIONS.forEach(({ id, x, z, port }, i) => {
     if (SEASONAL_STOPS[id]) {
       const [first, second] = SEASONAL_STOPS[id];
       object(first, x - 13, z - 9);
       if(first==='onsen')objects.at(-1).villageBath=VILLAGE_BATHS[id];
-      object(second, x + 6, z + 14);
-      object('port', x + 12, z + 5);
+      if(id==='dawn') object(second,300,184.8);
+      else object(second,x+6,z+14);
+      object('port', ...(port || [x+12,z+5]));
       if (id==='dawn') {
         const c=Math.cos(POUNDING.yaw), s=Math.sin(POUNDING.yaw);
         for (const member of POUNDING_CREW) {
@@ -252,6 +253,14 @@ export function createGame(snapshot = null) {
   let bufferedJump = 0;
   let ledgeGrace = 0;
   let lastBath = null;
+  // Old journals remember the bath ID. Rebuild its waterline from the site
+  // so the first frame of a resumed soak uses the same level as the mesh.
+  Object.defineProperty(player, 'bathWaterY', {get() {
+    if(player.activity!=='bath')return;
+    if(lastBath?.villageBath)return lastBath.y+VILLAGE_WATER_HEIGHT;
+    if(lastBath)return waterSurfaceAt(lastBath.x,lastBath.z);
+    return player.inWater ? waterSurfaceAt(player.x,player.z) : player.y+VILLAGE_WATER_HEIGHT;
+  }});
   let shotId = 0;
   let throwCooldown = 0;
   let turtlePause = 0;

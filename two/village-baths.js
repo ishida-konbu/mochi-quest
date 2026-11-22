@@ -1,5 +1,7 @@
 import { regionalSpringLip } from './regional-springs.js';
 
+export const VILLAGE_WATER_HEIGHT = .189;
+
 // The old village tubs stand above ground. Their cloth rails and fountain stay
 // in the original spots, while the foot, water and stone ring share this lip.
 const tubs=[

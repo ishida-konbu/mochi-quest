@@ -1,6 +1,7 @@
 import { dressSnowBath } from './snow-bath.js';
 import * as THREE from './vendor/three.module.min.js';
 import { snowDaruma } from './snow-daruma.js';
+import { KADOMATSU } from './festival.js';
 import { terrainHeight as height, seeded, TREES, BUILDINGS, nearRoad, TSUKIMI, springRadius } from './terrain.js';
 
 const tau = 2 * Math.PI;
@@ -246,6 +247,8 @@ function mapleLeaf() {
   g.computeVertexNormals();
   return g;
 }
+// Boulder groups occupy the maple bank and ravine, beyond the bicycle rack.
+export const MAPLE_ROCK_GROUPS=[[280,-101,1.35],[292,-132,.94]];
 function mapleHollow(p) {
   const rng = seeded(191434),
     fall = ['#bd442d', '#cd6536', '#d98c41', '#9b4d32', '#df9f4f'];
@@ -297,12 +300,7 @@ function mapleHollow(p) {
       true,
     );
   }
-  // Three rock groups act as quiet islands beneath the warm canopy.
-  for (const [cx, cz, scale] of [
-    [298, -110, 1.1],
-    [280, -101, 1.35],
-    [292, -132, 0.94],
-  ])
+  for (const [cx, cz, scale] of MAPLE_ROCK_GROUPS)
     for (let j = 0; j < 4; j++) {
       const x = cx + cos(j * 2.2) * (j ? 1.65 : 0),
         z = cz + sin(j * 2.2) * (j ? 1.4 : 0),
@@ -350,11 +348,8 @@ function dawnShore(p) {
     p.part('streamer', q.x, q.y - 0.16, q.z, 0.34, 0.45, 1, '#efe8cf', 0.47, 0, 0.08, p.fine, false, true);
   }
   // Paired New Year bamboo arrangements flank the celebration.
-  for (const [x, z, sign] of [
-    [306.2, 177.3, -1],
-    [313, 175.1, 1],
-  ]) {
-    const f = frame(p, x, z, sign * 0.22);
+  for (const [x, z, yaw] of KADOMATSU) {
+    const f = frame(p, x, z, yaw);
     f.part('bucket', 0, 0, 0, 0.36, 0.5, 0.33, '#ab8e59', p.wood);
     for (const y of [0.12, 0.3, 0.44]) f.part('muffler', 0, y, 0, 0.35, 0.032, 0.34, '#8b7350', p.solid);
     for (let j = 0; j < 3; j++) {

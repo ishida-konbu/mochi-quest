@@ -179,7 +179,7 @@ export function trailMaterial(art) {
       diffuseColor.rgb*=dirt*(.91+.16*wash)+vec3(.042,.044,.040);
       vec3 snowPath=mix(vec3(.48,.56,.61),vec3(.77,.84,.88),smoothstep(.03,.48,ochre));
       diffuseColor.rgb=mix(diffuseColor.rgb,snowPath,snowCover*.94);
-      diffuseColor.a *= fade;
+      diffuseColor.a *= fade*smoothstep(0.,1.,vMapUv.y);
     `,
     );
   };

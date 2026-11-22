@@ -145,6 +145,9 @@ function mountainSky(scene, panorama) {
         vec3 col=mix(sky,ink,ridge*.75*horizonInk);
         col=mix(col,low,(1.-smoothstep(-.13,.01,ray.y)));
         col=mix(col,valleyMist,valleyHaze*(1.-smoothstep(-.030,.13,ray.y)));
+        // The distant sea ends in scene fog. Carry its colour just over the
+        // sunrise horizon so the edge of the water mesh leaves no orange stripe.
+        col=mix(col,valleyMist,seaOpening*(1.-smoothstep(-.015,.048,ray.y)));
         gl_FragColor=vec4(col,1.);
         #include <colorspace_fragment>
       }`,

@@ -1,4 +1,5 @@
 import { fireTrailDistance, inFireMeadow } from './higashiyama.js';
+import { POUNDING } from './festival.js';
 import { inMountainStreamClearing } from './mountain-streams.js';
 import { WAYSIDE_SITES,inHutYard } from './wayside-hut-layout.js';
 import { SEAPORTS,portReserved } from './seaport-layout.js';
@@ -9,7 +10,7 @@ import { RASHOMON, GATE_STONE, GATE_WING, gateStoneRise } from './kyo-layout.js'
 import { STREET_BEATS } from './street-watch-layout.js';
 import { COURT, RETREATS, reservedScenery } from './retreat-layout.js';
 import { scrollCoverage } from './scroll-paper.js';
-import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, MARKET_STALLS, ROCKS, REGIONS, TREES, WATER_Y,
+import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, GATES, gateFooting, MARKET_STALLS, ROCKS, REGIONS, TREES, WATER_Y,
   nearRoad, seeded, seasonAt, shoreDistance, riverZ, riverHalfWidth, terrainHeight, terrainMeshHeight } from './terrain.js';
 
 export const MEADOW_TILES = 122;
@@ -81,12 +82,16 @@ export function meadowExclusions(objects,residents=[]) {
     return abs(dx*b.cos-dz*b.sin)<b.w*.52+.45 && abs(dx*b.sin+dz*b.cos-.85)<b.d*.5+1.55;
   });
   for (const b of BRIDGES) add(b.x,b.z,b.length*.5+.9,(x,z)=>abs(x-b.x)<b.halfWidth+.4 && abs(z-b.z)<b.length*.5+.9);
+  for(const g of GATES)for(const side of [-1,1])for(const lamp of [false,true]){
+    const foot=gateFooting(g,side,lamp);
+    circle(foot.x,foot.z,foot.radius+.35);
+  }
   for (const [x,z] of MARKET_STALLS) circle(x,z,3.1);
   for (const b of ROCKS) circle(b.x,b.z,Math.max(b.rx,b.rz));
   for (const o of objects) circle(o.x,o.z,o.type==='onsen'?4.8:o.type==='port'?3.0:1.85);
   for (const n of residents) if(n.encounter) circle(n.homeX,n.homeZ,n.travel+2.3);
   for (const r of REGIONS) circle(r.x,r.z,4.4);
-  circle(307,169.8,6); circle(-55,290,7); circle(143,96,5);
+  circle(POUNDING.x,POUNDING.z,6); circle(-55,290,7); circle(143,96,5);
   // The earthen borders of the planted paddies are left as narrow green lanes.
   for (let row=0;row<4;row++) for (let col=0;col<6;col++) {
     const x=105+col*16.2+sin(row)*4,z=123+row*12.8;

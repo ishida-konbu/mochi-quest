@@ -1,5 +1,6 @@
 import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
 import { mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
+import { MAPLE_BRIDGE, mapleDeckHeight, mapleApproachHeight, mapleBridgeFootings } from './maple-crossing.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
 import { plantMountainWoods, growNishiyamaBamboo } from './mountain-woodland.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
@@ -31,7 +32,7 @@ export const ORIGINAL_REGIONS = [
   { id: 'snow', name: '雪灯りの都', x: -78, z: -290 },
   { id: 'autumn', name: '錦秋の楓峡', x: 285, z: -115 },
   { id: 'moon', name: '十五夜の薄野', x: -55, z: 290 },
-  { id: 'dawn', name: '初日の出の浦', x: 302, z: 175 },
+  { id: 'dawn', name: '初日の出の浦', x: 302, z: 175, port:[304,180] },
 ];
 export const REGIONS = [
   ...ORIGINAL_REGIONS,
@@ -139,7 +140,11 @@ function outerHeight(x,z,base) {
     const basin=x>DISTRICTS.kyo.x-124 && x<DISTRICTS.kyo.x+124 && z>DISTRICTS.kyo.z-106 && z<DISTRICTS.kyo.z+106
       ? rolls+(hills-rolls)*smooth(0,22,streetEdge):hills;
     const newLand=-1.8+(basin+1.8)*smooth(-3.3,11,shore);
-    ground=base+(max(base,newLand)-base)*(1-smooth(11,22,originalShore(x,z)));
+    // Blend the added coastline into the sunrise beach. The old survey ends
+    // at x=310, across the path from the mortar to the sea.
+    const beachJoin=x>=310 && x<326 && abs(z-175)<46
+      ? 1-(1-smooth(310,326,x))*(1-smooth(26,46,abs(z-175))) : 1;
+    ground=base+(max(base,newLand)-base)*(1-smooth(11,22,originalShore(x,z)))*beachJoin;
   }
   if (shore>0) ground+=(pilgrimageHeight(x,z,ground)-ground)*smooth(0,20,shore);
   const gateVerge=max(abs(x-RASHOMON.x)-14,abs(z-RASHOMON.z-3)-19);
@@ -223,7 +228,7 @@ export function springRadius(x,z) {
 }
 export function terrainHeight(x,z) {
   const base=portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight));
-  const native=kiyomizuTerrain(x,z,mountainStreamTerrain(x,z,base));
+  const native=kiyomizuTerrain(x,z,mountainStreamTerrain(x,z,mapleApproachHeight(x,z,base)));
   const hut=nearbyHut(x,z);
   if(hut){
     const w=clearingWeight(hut,x,z);
@@ -266,8 +271,9 @@ export const BRIDGES = [-137, 0, 134].map((x) => ({
   length: (riverHalfWidth(x) + 9) * 2,
   halfWidth: x === 0 ? 3.45 : 2.6,
 }));
-BRIDGES.push({x:292,z:mapleStreamZ(292),length:24.8,halfWidth:2.1,maple:true});
+BRIDGES.push(MAPLE_BRIDGE);
 export function bridgeHeight(bridge, z) {
+  if(bridge.maple)return mapleDeckHeight(z);
   const t = sat((z - bridge.z) / bridge.length + 0.5);
   const { x, length } = bridge,
     cz = bridge.z;
@@ -401,7 +407,7 @@ ROADS.push(
   road(4.3,[[-125,-289],[-103,-289],[-78,-290],[-55,-289],[-40,-282]]),
   road(4.4,[[144,-107],[178,-136],[204,-148],[229,-131],[253,-115],[273,-109],[285,-115],[291.7,-117.2],[292,-125],[292,-135],[292.2,-144],[308,-151],[331,-154]]),
   road(4.2,[[7,213],[-4,233],[-31,255],[-57,270],[-55,290],[-70,305],[-89,313]]),
-  road(4.6,[[156,105],[202,136],[234,150],[250,176],[276,185],[290,182],[302,175],[311,173]]),
+  {...road(4.6,[[156,105],[202,136],[234,150],[250,176],[276,185],[290,182],[302,175],[311,173]]), fadeEnd:5.5},
   road(3.3,[[285,-115],[303,-72],[296,-39],[283,0],[280,43],[266,80],[271,132],[290,182]]),
 );
 const roadCells = new Map();
@@ -490,8 +496,24 @@ export const GATES = [
   { x: -161, z: -99, w: 6.3, h: 5.2, yaw: 0.25 },
   { x: -20, z: -103, w: 7.4, h: 5.6, yaw: -0.18 },
   { x: -79, z: -273, w: 8.6, h: 6.3, yaw: .12 },
-  { x: 258, z: -114, w: 6.4, h: 4.7, yaw: 1.3 },
+  { x: 257.55, z: -112.90, w: 7.8, h: 4.7, yaw: 1.184, lamps: {side:3.2, approach:3.4} },
 ];
+// The beam is level, but each stone socket sits on its own side of
+// the slope. Sample the visible terrain triangles around the stone rim.
+export function gateFooting(g,side,lamp=false) {
+  const scale=g===GATES[0] ? 1.16 : 1;
+  const u=side*(lamp ? (g.lamps?.side ?? .57*g.w) : .36*g.w);
+  const v=lamp ? (g.lamps?.approach ?? 1.6) : 0;
+  const x=g.x+u*cos(g.yaw)+v*sin(g.yaw), z=g.z-u*sin(g.yaw)+v*cos(g.yaw);
+  const radius=lamp ? .44*scale : .071*g.w;
+  let low=terrainMeshHeight(x,z), high=low;
+  for(let i=0;i<12;i++){
+    const a=i*Math.PI/6;
+    const y=terrainMeshHeight(x+radius*cos(a),z+radius*sin(a));
+    low=min(low,y);high=max(high,y);
+  }
+  return {x,z,radius,bottom:low-.12,top:high+.08};
+}
 export const ROCKS = [
   { x: -18.3, z: 53, rx: 1.65, rz: 1.35, h: 2.4 },
   { x: -20.5, z: 48.7, rx: 1.7, rz: 1.3, h: 2.7 },
@@ -1218,8 +1240,7 @@ for(const t of SHRINE_BAMBOO) {
     putSolid(t.x+t.sx*f,t.z+t.sz*f,radius,radius,0,y+t.height*(k+1)/2,'oval',false,0,y+t.height*k/2-.1);
   }
 }
-function lampSolid(x,z,scale) {
-  const base=terrainHeight(x,z);
+function lampSolid(x,z,scale,base=terrainHeight(x,z)) {
   putSolid(x,z,.23*scale,.23*scale,0,base+1.67*scale,'oval',false);
   putSolid(x,z,.50*scale,.50*scale,0,base+2.15*scale,'oval',false,0,base+1.23*scale);
 }
@@ -1230,17 +1251,26 @@ for (const g of GATES) {
   const crown=putSolid(g.x,g.z,g.w*.55,g.w*.055,g.yaw,base+g.h*.973,'toriiCrown',true,g.h*.076);
   crown.thickness=g.h*.087;
   for (const sign of [-1, 1]) {
-    const x = g.x + sign * g.w * 0.36 * cos(g.yaw),
-      z = g.z - sign * g.w * 0.36 * sin(g.yaw);
-    putSolid(x, z, g.w * 0.045, g.w * 0.045, 0, base + g.h, 'oval', false);
-    lampSolid(g.x+sign*g.w*.57,g.z+1.6,g===GATES[0]?1.16:1);
+    const post=gateFooting(g,sign),lamp=gateFooting(g,sign,true);
+    for(const foot of [post,lamp])
+      putSolid(foot.x,foot.z,foot.radius,foot.radius,0,foot.top,'oval',true,0,foot.bottom);
+    putSolid(post.x,post.z,g.w*.045,g.w*.045,0,base+g.h,'oval',false,0,post.top);
+    lampSolid(lamp.x,lamp.z,g===GATES[0]?1.16:1,lamp.top);
   }
+}
+export const MAPLE_FOOTINGS=mapleBridgeFootings(terrainMeshHeight);
+for(const s of [...MAPLE_FOOTINGS.piers,...MAPLE_FOOTINGS.abutments,...MAPLE_FOOTINGS.endStones]){
+  putSolid(s.x,s.z,s.w/2,s.d/2,0,s.top,'wall',false,0,s.bottom);
+}
+for(const s of MAPLE_FOOTINGS.thresholds)putSolid(s.x,s.z,s.w/2,s.d/2,0,s.top,'floor',true,0,s.bottom);
+for(const s of [...MAPLE_FOOTINGS.beams,...MAPLE_FOOTINGS.ties]){
+  putSolid(s.x,s.z,s.w/2,s.d/2,0,s.top,'slab',true,0,s.bottom);
 }
 for (const b of BRIDGES) for (const sign of [-1,1]) {
   const x=b.x+sign*(b.halfWidth-.13);
   const rail=putSolid(x,b.z,.105,b.length/2,0,1.21,'bridgeRail',false);
   rail.bridge=b;
-  for(let j=1;j<=14;j+=3) {
+  if(!b.maple)for(let j=1;j<=14;j+=3) {
     const z=b.z+b.length*(j/14-.5);
     putSolid(x,z,.17,.17,0,bridgeHeight(b,z),'wall',false,0,-.95);
   }
@@ -1321,6 +1351,12 @@ export function groundHeight(x, z, feet = -Infinity) {
   const deck = b ? bridgeHeight(b, z) : -Infinity;
   const onBridge = b && (feet === -Infinity || feet >= deck - .36);
   return max(onBridge ? deck : -Infinity, landscapeFloor(x, z), highest(x, z, 0, feet, true));
+}
+// The village census predates the level bicycle turnout. Its dry earthen
+// shoulder supplied the seed slopes; actual homes use today's walking floor.
+export function villageSurveyHeight(x,z) {
+  if (x>290 && x<305 && z>-117.5 && z< -102.5) return landHeight(x,z);
+  return groundHeight(x,z);
 }
 export function waterDepth(x, z) {
   return max(0, waterSurfaceAt(x,z) - terrainHeight(x, z));

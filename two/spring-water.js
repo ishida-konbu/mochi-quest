@@ -1,9 +1,8 @@
 import { springLip } from './retreat-layout.js';
 import { bathCraft,regionalBathFittings,inletImpactV } from './regional-bath-fittings.js';
-import { waterSurfaceAt } from './terrain.js';
+import { VILLAGE_WATER_HEIGHT } from './village-baths.js';
 import * as T from './vendor/three.module.min.js';
 
-const poolLevel = 0.189;
 const uniforms = {
   poolTime: { value: 0 },
   reflected: { value: null },
@@ -18,7 +17,10 @@ const regionalWater=new Map();
 function regionalFinish(craft) {
   if(regionalWater.has(craft))return regionalWater.get(craft);
   const m=poolMaterial.clone();m.color.set(craft.water);
-  m.roughness=craft.rim==='sinter'?.32:.27;
+  m.roughness=craft.rim==='sinter'?.43:.36;
+  m.specularIntensity=.43;
+  m.clearcoat=.14;
+  m.clearcoatRoughness=.40;
   m.onBeforeCompile=shader=>{
     poolMaterial.onBeforeCompile(shader);
     shader.vertexShader='attribute vec3 springInflow; varying vec3 source;\n'+
@@ -37,7 +39,7 @@ function regionalFinish(craft) {
   m.customProgramCacheKey=()=> 'regional-spring-inlet-v1';
   regionalWater.set(craft,m);return m;
 }
-export function addSpringSurface(parent, rx=1.96, rz=1.56, level=poolLevel, site=null, waterWash=null) {
+export function addSpringSurface(parent, rx=1.96, rz=1.56, level=VILLAGE_WATER_HEIGHT, site=null, waterWash=null) {
   if (!poolMaterial) {
     disc = new T.CircleGeometry(1, 80);
     disc.rotateX(-Math.PI / 2);
@@ -177,7 +179,7 @@ export function createBathReflection(renderer, scene, hero) {
       target = new T.WebGLRenderTarget(384, 256, { minFilter: T.LinearFilter, magFilter: T.LinearFilter });
       uniforms.reflected.value = target.texture;
     }
-    const waterY = player.inWater ? waterSurfaceAt(player.x,player.z) : player.y + poolLevel;
+    const waterY = player.bathWaterY;
     uniforms.poolCenter.value.set(player.x, player.z);
     const clearAlpha = renderer.getClearAlpha(),
       bg = scene.background;

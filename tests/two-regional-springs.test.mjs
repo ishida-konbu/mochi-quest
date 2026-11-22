@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
+import { Group } from '../two/vendor/three.module.min.js';
+import { regionalSpringBank } from '../two/regional-bath-art.js';
+import { addSpringSurface } from '../two/spring-water.js';
+import { VILLAGE_WATER_HEIGHT } from '../two/village-baths.js';
 import { REGIONS, groundHeight, regionAt, terrainHeight, terrainMeshHeight, waterSurfaceAt } from '../two/terrain.js';
 import { RETREATS, bathRadius, sitePoint, springLip } from '../two/retreat-layout.js';
 
@@ -74,6 +78,24 @@ test('regional basins have distinct shorelines, continuous water and a dry appro
   assert.ok(profiles.size>=10,'distinct shorelines across the island');
 });
 
+test('the visible bank meets the water at every vertex and beds into the hillside',()=>{
+  for(const s of regional()){
+    const level=waterSurfaceAt(s.x,s.z),pool=new Group();
+    addSpringSurface(pool,s.rx,s.rz,0,s);
+    const water=pool.children[0].geometry.attributes.position;
+    const bank=regionalSpringBank(s,level).attributes.position;
+    const segments=water.count-2,stride=segments+1;
+    for(let i=0;i<segments;i++){
+      const j=1+(segments-i)%segments,rim=stride+i,outer=bank.count-stride+i;
+      const dx=bank.getX(rim)-s.rx*water.getX(j),dz=bank.getZ(rim)-s.rz*water.getZ(j);
+      assert.ok(Math.hypot(dx,dz)<.001,s.name+' shared shoreline');
+      assert.ok(bank.getY(i)<0 && bank.getY(rim)>0 && bank.getY(rim)<.01,s.name+' water contact');
+      const ground=terrainMeshHeight(...sitePoint(s,bank.getX(outer),bank.getZ(outer)));
+      assert.ok(Math.abs(level+bank.getY(outer)-ground+.05)<.001,s.name+' outside edge below ground');
+    }
+  }
+});
+
 test('a walker enters, bathes, resumes, leaves and bathes again at every regional spring',()=>{
   const sites=regional();
   assert.equal(sites.length,21);
@@ -93,10 +115,14 @@ test('a walker enters, bathes, resumes, leaves and bathes again at every regiona
     const snapshot=game.save(),back=createGame(snapshot);
     assert.ok(back.restored,s.name+' journal');
     assert.equal(snapshot.lastBath,id);
+    assert.equal(p.bathWaterY,waterSurfaceAt(s.x,s.z));
+    assert.equal(back.state.player.bathWaterY,p.bathWaterY);
+    assert.ok(!Object.hasOwn(snapshot.player,'bathWaterY'));
     assert.equal(back.state.player.activity,'bath');
     assert.equal(back.save().lastBath,id);
     for(let i=0;i<38;i++)back.step(.1);
     assert.equal(back.state.player.activity,null);
+    assert.equal(back.state.player.bathWaterY,undefined);
     assert.equal(back.state.player.hp,100);assert.equal(back.state.player.mp,100);
     assert.ok(back.state.player.buffs.warm>0);
     assert.notEqual(back.nearest()?.target.id,id,s.name+' no repeated bath while still seated');
@@ -126,6 +152,8 @@ test('the original village baths still welcome walkers automatically and rearm o
     arrive(game,...approach);
     walk(game,[o.x,o.z],o.id);
     assert.equal(p.activity,'bath',o.id);
+    assert.equal(p.bathWaterY,o.y+VILLAGE_WATER_HEIGHT,o.id);
+    assert.equal(createGame(game.save()).state.player.bathWaterY,p.bathWaterY,o.id+' resumed tub');
     assert.equal(game.save().lastBath,o.id);
     for(let i=0;i<37;i++)game.step(.1);
     walk(game,approach,o.id+' exit');
@@ -145,6 +173,7 @@ test('an original v11 inventory and an in-progress Goemon bath retain their mean
   Object.assign(snap.player,{x:hut.x,z:hut.z,y:groundHeight(hut.x,hut.z),activity:'bath',activityTime:1.8,h:0});
   const restored=createGame(snap);
   assert.ok(restored.restored);assert.equal(restored.state.score,2130);
+  assert.equal(restored.state.player.bathWaterY,waterSurfaceAt(hut.x,hut.z));
   for(const [i,id] of historicIds.entries()){
     const o=restored.state.objects.find(o=>o.id===id);
     if(retiredIds.has(id))assert.equal(o,undefined,id);

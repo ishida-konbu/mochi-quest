@@ -1,8 +1,8 @@
 // Plan the whole trip before an animal sets out. A traveller can be streamed
 // out or restored at any point on the circuit without jumping across a trunk.
-import { BUILDINGS, BRIDGES, GATES, MARKET_STALLS, REGIONS, TREES, SHRINE_BAMBOO, regionAt, solidHeightAt, terrainHeight, waterDepth, groundHeight, nearRoad } from './terrain.js';
+import { BUILDINGS, BRIDGES, GATES, MARKET_STALLS, REGIONS, TREES, SHRINE_BAMBOO, gateFooting, regionAt, solidHeightAt, terrainHeight, waterDepth, groundHeight, nearRoad } from './terrain.js';
 import { buildingCraft, roomPlan } from './architecture.js';
-import { POUNDING } from './festival.js';
+import { KADOMATSU, POUNDING } from './festival.js';
 import { predatorRange, patrolAt } from './predator-trails.js';
 
 const tau=Math.PI*2, stepSize=16;
@@ -31,10 +31,19 @@ for(const tree of TREES) {
 for(const t of SHRINE_BAMBOO) {
   indexDisc(crowns,t.x+t.sx,t.z+t.sz,1.5,terrainHeight(t.x,t.z)+t.height);
 }
-for(const g of GATES) for(const side of [-1,1]) indexDisc(fixtures,g.x+side*g.w*.57,g.z+1.6,.54);
+for(const g of GATES) for(const side of [-1,1]) {
+  if(g.lamps) {
+    const lamp=gateFooting(g,side,true);
+    indexDisc(fixtures,lamp.x,lamp.z,lamp.radius+.10);
+  } else {
+    // Older village circuits keep their established turning space.
+    indexDisc(fixtures,g.x+side*g.w*.57,g.z+1.6,.54);
+  }
+}
 for(const b of BRIDGES) for(const side of [-1,1]) indexDisc(fixtures,b.x+side*(b.halfWidth+.94),b.z+b.length*.5+.48,.49);
 for(const [x,z] of MARKET_STALLS) indexDisc(fixtures,x,z,2.0);
 indexDisc(fixtures,POUNDING.x,POUNDING.z,2.2);
+for(const [x,z] of KADOMATSU) indexDisc(fixtures,x,z,.4);
 
 export function canopyHeight(x,z,pad) {
   let top=-Infinity;
