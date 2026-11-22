@@ -12,6 +12,8 @@ import { createTravellerTalk } from './mystery-travellers.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { SCROLL_FAUNA } from './scroll-fauna.js';
 
+export const storyResidentIds = new Set(cast.map(person=>person.sourceBinding.legacyId).filter(Boolean));
+
 const hall = {
   LOC_KYO_REQUEST: [-3.1, COURT_GATE_Z + 3.5],
   LOC_KYO_INTAKE: [3.5, COURT_GATE_Z - 5.4],
@@ -104,7 +106,6 @@ function survey(location, bound) {
 export function createMysteryWorld(gameState, mystery) {
   const travellerTalk = createTravellerTalk();
   const actorsById = new Map(gameState.npcs.map(entity=>[entity.id,entity]));
-  const namedIds = new Set(cast.map(person=>person.sourceBinding.legacyId).filter(Boolean));
   const occupants = new Map();
   for (const person of cast) {
     const actor = actorsById.get(person.sourceBinding.legacyId);
@@ -186,7 +187,7 @@ export function createMysteryWorld(gameState, mystery) {
       }
     }
     for (const n of gameState.nearbyNpcs) {
-      if (namedIds.has(n.id) || n.mounted) continue;
+      if (storyResidentIds.has(n.id) || n.mounted) continue;
       const submerged=n.y<-.8 && (n.seaResident || n.type==='fishfolk');
       add({entity:n, legacyId:n.id,locationId:null,label:speciesNames[n.type] || '里の住人',
         species:n.type,x:n.x,y:n.y,z:n.z},2.75,submerged);

@@ -123,8 +123,8 @@ function seatWorkers(npcs) {
 }
 // Small scenes on the longer walks use the same working animals, clothes,
 // tools and delivery entries as the ten original village processions.
-function seatWaysideTravellers(npcs) {
-  const workers=npcs.filter(n=>n.area && n.room===undefined);
+function seatWaysideTravellers(npcs,storyResidentIds) {
+  const workers=npcs.filter(n=>n.area && n.room===undefined && !storyResidentIds.has(n.id));
   const scenes=[
     ...CHAYA_SITES.map((site,i)=>({site,u:-6,v:3,roles:i%2?['flute','fan']:['tea','flowers']})),
     ...WAYSIDE_HUTS.filter(s=>s.kind==='fisher').map(site=>({site,u:6.7,v:3.6,roles:['fisher','scribe']})),
@@ -196,14 +196,14 @@ function settlePredator(n, workers, objects) {
   n.habitat=REGIONS[regionAt(n.homeX,n.homeZ)].id;
 }
 let villagePlan;
-export function prepareVillageRoutes(npcs,objects) {
+export function prepareVillageRoutes(npcs,objects,storyResidentIds) {
   if(villagePlan) {
     for(const n of npcs) Object.assign(n,villagePlan.get(n.id));
     return;
   }
   registerVillageObjects(objects);
   seatWorkers(npcs);
-  seatWaysideTravellers(npcs);
+  seatWaysideTravellers(npcs,storyResidentIds);
   const workers=npcs.filter(n=>n.area);
   const occupied=[];
   for(const n of npcs) {
