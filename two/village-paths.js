@@ -111,10 +111,11 @@ function seatWorkers(npcs) {
     n.craft=style[1];n.room=i;
   }
 }
-function findSite(n,accept) {
+function findSite(n,accept,wild=false) {
   const originX=n.homeX,originZ=n.homeZ;
-  for(let i=0;i<800;i++) {
-    const angle=i*2.39996323+n.phase, distance=i ? .85*Math.sqrt(i) : 0;
+  for(let i=0;i<(wild?3800:800);i++) {
+    const angle=i*2.39996323+n.phase;
+    const distance=i<800 ? .85*Math.sqrt(i) : Math.sqrt(24**2+(i-800)*7);
     const x=originX+Math.cos(angle)*distance,z=originZ+Math.sin(angle)*distance;
     if(!accept(x,z)) continue;
     n.x=n.homeX=x;n.z=n.homeZ=z;n.y=groundHeight(x,z);
@@ -145,7 +146,7 @@ function settlePredator(n, workers, objects) {
         Math.abs(terrainHeight(px,pz+1)-terrainHeight(px,pz-1))>1.22)return false;
     }
     return true;
-  });
+  },true);
   n.trail=trail;
   n.radius=trail.radius;
   n.cruise=(n.type==='shishi'?.89:1.18)/n.radius;

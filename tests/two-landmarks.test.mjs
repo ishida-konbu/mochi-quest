@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
-import { BUILDINGS, groundHeight, SNOW_SPRING, TSUKIMI, waterDepth, waterSurfaceAt } from '../two/terrain.js';
+import { BUILDINGS, terrainHeight, groundHeight, SNOW_SPRING, TSUKIMI, waterDepth, waterSurfaceAt } from '../two/terrain.js';
+
+import { RASHOMON } from '../two/kyo-layout.js';
 
 function stand(game,x,z,y=groundHeight(x,z)) {
   Object.assign(game.state.player,{x,z,y,h:0,vy:0,vx:0,vz:0,speed:0,grounded:true});
@@ -23,17 +25,42 @@ test('both five-storey pagodas can be climbed, saved and descended entirely on f
     walk(0,2.23);walk(-.85,2.23);
     for(let i=1;i<5;i++){
       walk(-.85,-2.23);walk(.85,-2.23);walk(.85,2.23);
-      assert.ok(Math.abs(p.y-b.y-.48-i*3.52)<.03);
+      assert.ok(Math.abs(p.y-b.y-.48-i*3.52*(b.roof/14.5))<.03);
       const restored=createGame(g.save());
       assert.equal(restored.restored,true);assert.equal(restored.state.player.y,p.y);
       if(i<4)walk(-.85,2.23);
     }
     for(let i=3;i>=0;i--){
       walk(.85,-2.23);walk(-.85,-2.23);walk(-.85,2.23);
-      assert.ok(Math.abs(p.y-b.y-.48-i*3.52)<.04);
+      assert.ok(Math.abs(p.y-b.y-.48-i*3.52*(b.roof/14.5))<.04);
       if(i)walk(.85,2.23);
     }
     walk(0,2.23);walk(0,b.d/2+2);
+  }
+});
+test('the Rashomon gate chamber and shops on either side of the street can be climbed on foot',()=>{
+  const twoStoreys=BUILDINGS.filter(b=>b.kind==='wardShop'&&b.wall>5);
+  const shops=[twoStoreys.find(b=>b.yaw===0),twoStoreys.find(b=>b.yaw!==0)];
+  const trips=shops.map(shop=>{
+    const stair=-shop.w/2+1.02, front=shop.d/2,back=-front+.52;
+    return {site:shop,level:3.38,steps:[[0,front+1.25],[0,front-.28],[stair,front-.4],[stair,back],[0,back],[0,0]]};
+  });
+  trips.push({site:RASHOMON,level:RASHOMON.base,steps:[[9.52,5.2],[9.52,-4.12],[5.35,-4.03],[5.05,-3.25],[5.02,-.85],[-2.58,-.15]]});
+  for(const {site,level,steps} of trips){
+    const g=createGame(),p=g.state.player,angle=site.yaw||0,c=Math.cos(angle),s=Math.sin(angle);
+    const point=([u,v])=>[site.x+u*c+v*s,site.z-u*s+v*c];
+    stand(g,...point(steps[0]));
+    for(const way of steps.slice(1)){
+      const [x,z]=point(way);
+      for(let i=0;i<450;i++){
+        const dx=x-p.x,dz=z-p.z,dist=Math.hypot(dx,dz);
+        if(dist<.055)break;
+        p.invulnerable=2;g.step(1/60,{x:.56*dx/dist,z:.56*dz/dist});
+      }
+      assert.ok(Math.hypot(x-p.x,z-p.z)<.055,'blocked at '+[x,z]);
+    }
+    assert.ok(Math.abs(p.y-terrainHeight(site.x,site.z)-level)<.04);
+    assert.equal(createGame(g.save()).state.player.y,p.y);
   }
 });
 test('the open-air snow bath can be waded across and used away from the centre',()=>{

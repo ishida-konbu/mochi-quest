@@ -1,5 +1,7 @@
-import { relocateLegacyPosition } from './geography.js';
-import { RETREATS, bathRadius } from './retreat-layout.js';
+import { createVoyage } from './ocean-voyage.js';
+import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
+import { RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
+import { SEAPORTS } from './seaport-layout.js';
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
 import { KYO_FOOD, KYO_ANIMALS, kyoNight, kyoInfluence } from './kyo-layout.js';
 import { makeScrollResidents, updateScrollResident } from './scroll-encounters.js';
@@ -118,7 +120,7 @@ function makeWorld() {
     Object.assign(npcs.at(-1),visitor);
   }
   // New entries follow both historical inventories so imported item and recipient IDs stay stable.
-  for (const r of REGIONS.slice(ORIGINAL_REGIONS.length)) {
+  for (const r of REGIONS.slice(ORIGINAL_REGIONS.length,15)) {
     if (r.id !== 'ryugu') {
       const [x,z]=r.port || [r.x+12,r.z+5];
       object('port',x,z);
@@ -134,6 +136,10 @@ function makeWorld() {
   for(const site of RETREATS) {
     object('onsen',site.x,site.z,site.yaw);
     objects.at(-1).retreat=site;
+  }
+  for(const harbour of SEAPORTS){
+    object('port',...harbour.port);
+    objects.at(-1).region=harbour.id;
   }
   prepareVillageRoutes(npcs,objects);
   npcs.push(...makeScrollResidents(), ...makeRyuguResidents(), ...makeScrollFauna());
@@ -157,6 +163,7 @@ export function createGame(snapshot = null) {
     region: region.name, regionId: region.id, visited: [region.id]
   };
   const climate = {};
+  const voyage = createVoyage();
   let heldJump = false;
   let bufferedJump = 0;
   let ledgeGrace = 0;
@@ -659,13 +666,15 @@ export function createGame(snapshot = null) {
       }
     }
     player.diveDepth=0;
-    const at = phasing ? { x:wrapCoord(x), z:wrapCoord(z) } : constrainMove(player.x,player.z,x,z,player.h,player.y,player.mount==='turtle' ? animalRadius(turtle) : undefined);
+    const land = phasing ? {x:wrapCoord(x),z:wrapCoord(z)} : constrainMove(player.x,player.z,x,z,player.h,player.y,player.mount==='turtle' ? animalRadius(turtle) : undefined);
+    const at = phasing ? land : voyage.move(player.x,player.z,land.x,land.z,player.y);
     player.vx = wrapDelta(at.x-player.x)/dt;
     player.vz = wrapDelta(at.z-player.z)/dt;
     player.speed = Math.hypot(player.vx,player.vz);
     player.x = at.x; player.z = at.z;
-    const floor = phasing ? landscapeFloor(at.x,at.z) : groundHeight(at.x,at.z,player.y);
-    const ceiling = phasing ? Infinity : overheadHeight(at.x,at.z,player.y);
+    const ship = phasing ? null : voyage.sample(at.x,at.z,player.y);
+    const floor = phasing ? landscapeFloor(at.x,at.z) : Math.max(groundHeight(at.x,at.z,player.y),ship?.floor ?? -Infinity);
+    const ceiling = phasing ? Infinity : Math.min(overheadHeight(at.x,at.z,player.y),ship?.ceiling ?? Infinity);
     const wasGrounded = player.grounded;
     if (player.grounded && floor >= player.y-.32 && player.vy<=0) player.y = floor;
     if (player.mode==='habutae' && !player.mount && input.jump && !player.activity) {
@@ -738,7 +747,7 @@ export function createGame(snapshot = null) {
     if (region.id === 'ryugu' && (offshore || player.y > terrainHeight(region.x,region.z) + 3)) return;
     if (!collectStamp || state.visited.includes(region.id) || distance(player,region)>STAMP_RADIUS || player.h>3) return;
     state.visited.push(region.id);
-    const text = state.visited.length === REGIONS.length ? '十五景踏破！ 旅の印がすべて揃った。' : region.name+'の旅の印をもらった。';
+    const text = state.visited.length === REGIONS.length ? '十七景踏破！ 旅の印がすべて揃った。' : region.name+'の旅の印をもらった。';
     emit('stamp',{ id:region.id, text }); message(text); sound('pickup');
   }
   function teleport(x, z) {
@@ -767,6 +776,7 @@ export function createGame(snapshot = null) {
   }
   function advance(dt, input) {
     state.time += dt;
+    voyage.update(state.time,player);
     player.idleTime = player.grounded && player.speed < .22 && !player.activity ? Math.min(3, (player.idleTime || 0) + dt) : 0;
     for (const name of Object.keys(player.buffs)) player.buffs[name] = Math.max(0, player.buffs[name] - dt);
     if (bufferedJump > 0 && player.grounded) jump();
@@ -815,7 +825,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 6, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 7, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: objects.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -826,14 +836,14 @@ export function createGame(snapshot = null) {
   function restore(data) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
     const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
-    if (!data || ![2,3,4,5,6].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    if (!data || ![2,3,4,5,6,7].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
     let p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
     // The original six districts occupy the prefix of the inventory. New
     // stops start stocked even when an old journey resumes on a borrowed bike.
     const old = data.version === 2;
-    const savedPorts = old ? 6 : data.version <= 4 ? 10 : ports.length;
-    const validItemCounts = old ? [36] : data.version <= 4 ? [48,50] : data.version===5 ? [56] : [objects.length];
+    const savedPorts = old ? 6 : data.version <= 4 ? 10 : data.version <= 6 ? 14 : ports.length;
+    const validItemCounts = old ? [36] : data.version <= 4 ? [48,50] : data.version===5 ? [56] : data.version===6 ? [62] : [objects.length];
     if (!finite(data.time,0,1e9) || !Number.isSafeInteger(data.score) || data.score<0 ||
         !data.visited.every(id=>REGIONS.some(region=>region.id===id)) ||
         !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,CEILING+160) ||
@@ -849,11 +859,21 @@ export function createGame(snapshot = null) {
         data.bikes.reduce((total,n)=>total+n,p.mount==='bike'?1:0)!==savedPorts*2 ||
         !point(t.x,t.z) || !point(t.homeX,t.homeZ) || !finite(t.pause,0,12) ||
         !Number.isInteger(t.leg) || !finite(t.leg,0,3)) return;
-    if(data.version===5) {
-      const [x,z]=relocateLegacyPosition(p.x,p.z);
+    if(data.version===5 || data.version===6) {
+      const relocate=data.version===5 ? relocateLegacyPosition : relocateSixthEdition;
+      let [x,z]=relocate(p.x,p.z);
+      if(data.version===6){
+        for(const [kind,bx,bz,yaw] of [['cedar',70.6414975,-547.0094339,1.0957856],['slate',-126.0135841,-869.3986739,-.6536359]]){
+          const dx=p.x-bx,dz=p.z-bz;
+          if(Math.hypot(dx,dz)<9.5){
+            [x,z]=sitePoint(RETREATS.find(s=>s.kind===kind),dx*Math.cos(yaw)-dz*Math.sin(yaw),dx*Math.sin(yaw)+dz*Math.cos(yaw));
+            break;
+          }
+        }
+      }
       p={...p,x,z};
-      const [tx,tz]=relocateLegacyPosition(t.x,t.z);
-      const [homeX,homeZ]=relocateLegacyPosition(t.homeX,t.homeZ);
+      const [tx,tz]=relocate(t.x,t.z);
+      const [homeX,homeZ]=relocate(t.homeX,t.homeZ);
       t={...t,x:tx,z:tz,homeX,homeZ};
     }
     for (const key of Object.keys(player)) {
@@ -864,13 +884,17 @@ export function createGame(snapshot = null) {
     player.landing = finite(p.landing,0,.25) ? p.landing : 0;
     player.impact = finite(p.impact,0,1) ? p.impact : 0;
     for (const key of Object.keys(BUFF_TIME)) player.buffs[key]=p.buffs[key];
+    voyage.update(data.time);
     if (player.mode === 'kusa') {
       const floor = landscapeFloor(player.x,player.z);
       // Older saves can start on a roof. Resume from the saved altitude and fall through it.
       player.h = clamp(p.y-floor,0,CEILING);
       player.y = floor+player.h;
       player.grounded = player.h <= .001 && player.vy <= 0;
-    } else player.y = groundHeight(player.x,player.z,p.y - p.h)+player.h;
+    } else {
+      const feet=p.y-p.h, ship=voyage.sample(player.x,player.z,feet);
+      player.y=Math.max(groundHeight(player.x,player.z,feet),ship?.floor ?? -Infinity)+player.h;
+    }
     if (data.version >= 5 && finite(p.diveDepth, .000001, 100) && !p.mount && shoreDistance(p.x,p.z) < 0) {
       const line=WATER_Y-.57;
       player.diveDepth=clamp(p.diveDepth,0,Math.max(0,line-terrainHeight(p.x,p.z)-.16));
@@ -915,5 +939,5 @@ export function createGame(snapshot = null) {
   }
   updateHareRider(riverRider,state.time);
   refreshCrowd();
-  return { state, act, step, nearest, teleport, save, restored };
+  return { state, act, step, nearest, teleport, save, restored, voyage };
 }

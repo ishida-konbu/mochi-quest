@@ -1,10 +1,13 @@
-import { DAIBUTSU, INARI_SANCTUARY } from './pilgrimage-layout.js';
+import { DAIBUTSU, INARI_SANCTUARY, PEACH_TREES } from './pilgrimage-layout.js';
 import { PALACE_APPROACH, RYUGU, HALLS, GATE_V } from './ryugu-layout.js';
 import { DISTRICTS } from './geography.js';
+import { SEAPORTS, PORT_BUILDINGS, QUAY_CENTER, QUAY_LENGTH, portPoint } from './seaport-layout.js';
+import { SEAWAYS, FLEET, vesselPose } from './ocean-voyage.js';
 import { COURT } from './retreat-layout.js';
-import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, seeded } from './terrain.js';
+import { RASHOMON } from './kyo-layout.js';
+import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
 const SIZE = 1536, SPAN = 2 * BOUND, adj = SIZE / SPAN;
-export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾', '十一', '十二', '十三', '十四', '十五'];
+export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾', '十一', '十二', '十三', '十四', '十五', '十六', '十七'];
 const toX = (x) => SIZE / 2 + x * adj;
 const pigments = [
   ['snow', [226, 231, 229]], ['autumn', [213, 177, 133]],
@@ -16,7 +19,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=16', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=17', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -140,15 +143,30 @@ export function paintMapPaper() {
       g.quadraticCurveTo(u+w*.49,v+.1,u+w,v);g.strokeStyle='#517d8052';g.lineWidth=.75;g.stroke();
     }
   }
-  for(let i=0;i<125;i++) {
-    const x=DISTRICTS.peach.x+(random()-.5)*144,z=DISTRICTS.peach.z+(random()-.5)*115;
-    if(Math.hypot((x-DISTRICTS.peach.x)/75,(z-DISTRICTS.peach.z)/58)>1) continue;
-    g.fillStyle=i%3?'#be89868c':'#f5d2be'; g.beginPath();g.arc(toX(x),toX(z),.8+random()*1.6,0,2*Math.PI);g.fill();
+  for(const [i,tree] of PEACH_TREES.entries()){
+    g.fillStyle=['#cc7884b0','#d98f9fa8','#ecb9c0bc'][i%3];
+    g.beginPath();g.arc(toX(tree.x),toX(tree.z),tree.size*(tree.cliff?1.88:1.53),0,2*Math.PI);g.fill();
   }
-  g.save();g.translate(toX(COURT.x),toX(COURT.z));
-  g.fillStyle='#6f5543';g.fillRect(-17*adj,-8*adj,34*adj,16*adj);
-  g.strokeStyle='#d5bd94';g.lineWidth=1.6;g.strokeRect(-16*adj,-7*adj,32*adj,14*adj);
-  g.beginPath();g.moveTo(-11*adj,0);g.lineTo(11*adj,0);g.stroke();g.restore();
+  roof(RASHOMON.x,RASHOMON.z,21,9,0,'#77594d');
+  roof(COURT.x,COURT.z,46,24,0,'#645746');
+  for(const lot of PORT_BUILDINGS)roof(lot.x,lot.z,lot.w,lot.d,lot.p.yaw,lot.i===0?'#665d4e':'#988066');
+  for(const p of SEAPORTS){
+    const [x,z]=portPoint(p,QUAY_CENTER,23.7);
+    roof(x,z,QUAY_LENGTH,4.2,p.yaw,'#957650');
+  }
+  for(const r of ROCKS)if(r.reef){
+    const u=toX(r.x),v=toX(r.z);
+    g.beginPath();g.moveTo(u-r.rx*adj,v);g.lineTo(u-r.rx*.14*adj,v-r.rz*adj);
+    g.lineTo(u+r.rx*.77*adj,v+.4);g.closePath();g.fillStyle='#657677';g.fill();
+  }
+  g.setLineDash([3.5,6]);g.lineWidth=1;g.strokeStyle='#4e798880';
+  // The ocean circuit crosses the northern map edge and reappears to the south.
+  for(const lane of SEAWAYS)for(const zOffset of [0,SPAN]){
+    g.beginPath();
+    lane.points.forEach(([x,z],i)=>{if(i%4===0){if(i)g.lineTo(toX(x),toX(z+zOffset));else g.moveTo(toX(x),toX(z+zOffset));}});
+    g.closePath();g.stroke();
+  }
+  g.setLineDash([]);
   // The bathymetric approach from the pine shore is marked as a dotted sea lane.
   g.beginPath();
   PALACE_APPROACH.forEach(([x,z],i) => i ? g.lineTo(toX(x),toX(z)) : g.moveTo(toX(x),toX(z)));
@@ -176,6 +194,17 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     if (map && left < w && top < h && left + side > 0 && top + side > 0)
       g.drawImage(map, left, top, side, side);
   }
+  for(const ship of FLEET){
+    const vessel=vesselPose(ship,state.time);
+    if(large && vessel.docked)continue;
+    const x=w/2+wrapDelta(vessel.x-midX)*scale,y=h/2+wrapDelta(vessel.z-midZ)*scale;
+    if(x<0||x>w||y<0||y>h)continue;
+    g.save();g.translate(x,y);
+    const size=large?.72:1.0;g.scale(size,size);
+    g.fillStyle='#f9edcd';g.strokeStyle='#47584e';g.lineWidth=1.2;
+    g.beginPath();g.moveTo(-5,0);g.lineTo(2,-7);g.quadraticCurveTo(1,-3,3,0);g.closePath();g.fill();g.stroke();
+    g.beginPath();g.moveTo(-7,1);g.lineTo(7,1);g.lineTo(3,4);g.lineTo(-3,4);g.closePath();g.fillStyle='#705744';g.fill();g.restore();
+  }
   // The baths remain legible at both atlas and walking scales; names appear on arrival.
   for(const site of [COURT,...state.objects.filter(o=>o.retreat)]){
     const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
@@ -191,6 +220,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     [0,28,'center'],[-16,-7,'right'],[-6,-21,'right'],[3,-28,'center'],
     [11,-12,'left'],[-13,11,'right'],[-5,-19,'center'],[17,-3,'left'],
     [-2,21,'center'],[16,8,'left'],
+    [-15,-15,'right'],[0,22,'center'],[0,22,'center'],[0,22,'center'],[17,0,'left'],[18,0,'left'],[-16,0,'right'],
   ];
   for (const [i, r] of REGIONS.entries()) {
     const x = w / 2 + wrapDelta(r.x - midX) * scale,
@@ -223,7 +253,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
       g.strokeStyle = '#f8f1db';
       const [dx,dy,anchor]=callouts[i] || [0,22,'center'];
       const lx=x+dx, ly=y+dy;
-      if(i<10) {
+      if(i<10 || i===10 || i>=14) {
         const length=Math.hypot(dx,dy);
         g.beginPath();g.moveTo(x+dx*rad/length,y+dy*rad/length);
         g.lineTo(lx,ly);g.lineWidth=1;g.strokeStyle='#827966';g.stroke();

@@ -1,6 +1,7 @@
 // Eight views, baked from the actual posed meshes and rice shader. The same
 // white of the silk remains visible as a small silhouette down the street.
 import * as T from '../two/vendor/three.module.min.js';
+import { TOWNSFOLK } from '../two/heian-dress.js';
 import { createStreetCrowd } from '../two/kyo-people.js';
 import { foxParties } from '../two/pilgrimage-foxes.js';
 import { DISTRICTS } from '../two/geography.js';
@@ -25,14 +26,14 @@ export async function bakeCostumes(){
     const mesh=new T.Mesh(part.geometry,part.material);
     part.getMatrixAt(id,matrix);mesh.applyMatrix4(matrix.premultiply(inverse));group.add(mesh);
   }
-  const crowd=actors.getObjectByName('花街をゆく餅たち');
-  const footwear=crowd.getObjectByName('鼻緒と下駄'),robes=crowd.children.filter(o=>o.name==='染め小袖');
+  const crowd=actors.getObjectByName('京の辻をゆく餅たち');
+  const footwear=crowd.getObjectByName('鼻緒と下駄'),robes=crowd.children.filter(o=>o.name==='都の装束');
   const faces=crowd.children.filter(o=>o.name==='にっこり餅の面相');
-  const names=['舞妓餅','芸妓餅','太鼓餅','風呂敷の旅餅','京の売り餅'];
+  const names=TOWNSFOLK;
   for(const [k,name] of names.entries()){
     const trim=crowd.getObjectByName(name),group=person(trim);
     piece(group,trim);piece(group,robes[k]);piece(group,faces[k]);
-    for(const foot of [0,1])piece(group,footwear,10*k+foot);
+    for(const foot of [0,1])piece(group,footwear,2*k*faces[0].count+foot);
   }
   for(const [i,role] of ['lantern','groom','bride','parasol','flute'].entries()){
     const group=person(actors.getObjectByName('稲荷・'+role));

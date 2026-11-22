@@ -1,3 +1,4 @@
+import { blossomGeometry, peachMaterials, createPeachOrchard } from './flowering-peaches.js';
 import { DISTRICTS } from './geography.js';
 import { summitJoinery, orchardCarving, kesaMaterial } from './pilgrimage-carving.js';
 import { sculpture, brushStroke } from './pilgrimage-pigment.js';
@@ -10,7 +11,7 @@ import { DAIBUTSU, PEACH, PEACH_TREES, WEDDING_SITES, weddingPoint, MOON_GATE, I
 
 const { sin,cos,PI,abs,hypot,min,max } = Math, TAU=PI*2;
 const vec=(...v)=>new T.Vector3(...v);
-const rice='#efe3c7', ochre='#be9457', vermilion='#a84430';
+const rice='#efe3c7', ochre='#be9457', vermilion='#cd492d';
 
 function drawing(width,height,paint) {
   const canvas=document.createElement('canvas');
@@ -46,13 +47,13 @@ function toriiGeometry() {
   const s=sculpture();
   // Normalised in aperture width and beam height, with buried feet on the mountainside.
   for(const d of [-1,1]){
-    s.post('#ac4832',d*.356,.39,0,.039,1.20,.039,0,0,d*.018);
+    s.post('#d64c27',d*.356,.39,0,.039,1.20,.039,0,0,d*.018);
     s.post('#413f36',d*.363,-.002,0,.045,.42,.045);
     s.post('#654635',d*.36,.206,0,.046,.036,.046);
-    s.box('#913a2b',d*.345,.75,0,.102,.064,.074);
+    s.box('#b13620',d*.345,.75,0,.102,.064,.074);
   }
-  s.box('#b95134',0,.745,0,.911,.047,.052);
-  s.box('#943c2d',0,.84,0,.046,.16,.046);
+  s.box('#e05a2d',0,.745,0,.911,.047,.052);
+  s.box('#c64125',0,.84,0,.046,.16,.046);
   // A crowned kasagi tapers continuously toward either tip. Carry the dark
   // lacquer lip under the eave so the distant corridor reads as a brushed arc.
   function beam(y,thickness,depth,span,color){
@@ -67,7 +68,7 @@ function toriiGeometry() {
     const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(xyz,3));g.setIndex(ix);
     g.computeVertexNormals();s.add(g,color);
   }
-  beam(.908,.053,.041,1.032,'#9f432d');
+  beam(.908,.053,.041,1.032,'#c14827');
   beam(.948,.041,.053,1.078,'#463e35');
   beam(.966,.013,.050,1.082,'#736b52');
   return s.finish();
@@ -137,7 +138,7 @@ function* inari(p) {
   for(const [i,g] of INARI_GATES.entries()) {
     const y=terrainHeight(g.x,g.z);
     p.part('senbon',g.x,y,g.z,g.width,g.height,g.width,
-      ['#fff5dd','#f4cfbb','#ffe7bf','#e7ceb9'][i%4],g.yaw,0,0,pigments,true,true);
+      ['#fff7ef','#f5e0ce','#ffe8cc','#fae1d3'][i%4],g.yaw,0,0,pigments,true,true);
     if(i%4===0) {
       const f=frame(p,g.x,g.z,g.yaw,y);
       for(const side of [-1,1]) f.part('plane',side*g.width*.348,g.height*.53,-g.width*.038,
@@ -168,39 +169,6 @@ function* inari(p) {
 function washTexture(file){
   const map=new T.TextureLoader().load(new URL('./assets/world/'+file+'.webp',import.meta.url).href);
   map.colorSpace=T.SRGBColorSpace; map.anisotropy=4;return map;
-}
-function blossomSpray(file){
-  const map=washTexture(file);
-  return new T.MeshLambertMaterial({map,side:T.DoubleSide,alphaTest:.33,
-    emissiveMap:map,emissive:'#e4ccbd',emissiveIntensity:.32});
-}
-function peachTree(seed){
-  const rng=seeded(seed), s=sculpture(), sprays=[];
-  const drift=(rng()-.46)*.91, tilt=(rng()-.5)*.49;
-  const trunk=[[.03,-.34,0],[-.10,.34,.064],[drift+.13,.98,tilt],[drift*.38,1.69,.105],[drift*.4+.16,2.34,-.11]];
-  s.stroke('#614f45',trunk,[.39,.35,.25,.223,.066],18);
-  s.stroke('#a19078',trunk.map(([x,y,z],i)=>[x-.075,y,z+[.23,.28,.23,.16,.05][i]]),
-    [.014,.038,.053,.026,.002],16);
-  for(let i=0;i<4;i++){
-    const a=i*1.57+rng()*.63;
-    s.stroke('#6f5c4b',[[.04,.41,0],[.28*cos(a),.16,.28*sin(a)],[.78*cos(a),-.12,.78*sin(a)]],
-      [.17,.19,.022],5);
-  }
-  for(let i=0;i<6;i++){
-    const a=i*2.39+rng()*.93, bend=(rng()-.5)*1.12, reach=1.1+rng()*1.32;
-    const root=trunk[2+(i%3)], h=root[1]+.65+rng()*.73;
-    const elbow=[root[0]+(.45+rng()*.40)*cos(a+bend),h,root[2]+.49*sin(a+bend)];
-    const tip=[root[0]+reach*cos(a),h+.52+rng()*.62,root[2]+reach*sin(a)];
-    const wood=[root,elbow,[.66*tip[0]+.34*elbow[0],elbow[1]-.15+.4*rng(),.66*tip[2]+.34*elbow[2]],tip];
-    s.stroke(i%2?'#725d4e':'#755e55',wood,[.145,.123,.076,.018],11);
-    const midway=wood[2];
-    const spur=[midway[0]+.57*cos(a+bend+.87),midway[1]+.58,midway[2]+.57*sin(a+bend+.87)];
-    s.stroke('#796252',[elbow,midway,spur],[.064,.059,.019],6);
-    sprays.push({q:tip,a,length:1.22+rng()*.67,pitch:.18+rng()*.53},
-      {q:spur,a:a+.91,length:1.16+rng()*.49,pitch:.39+rng()*.27},
-      {q:tip,a:a-.85,length:.98+rng()*.67,pitch:-.29+rng()*.39});
-  }
-  return {geo:s.finish(),sprays};
 }
 function oldPeach(p,art,bloom){
   const {x,z}=MOON_GATE, f=frame(p,x,z,PI/2), tree=sculpture();
@@ -245,24 +213,11 @@ function oldPeach(p,art,bloom){
     }
   }
 }
-function* peachGrove(p) {
-  const art=blossomSpray('peach-bough'), bloom=blossomSpray('peach-blossom-cloud'), wash=brushWash(new T.MeshLambertMaterial({vertexColors:true}),.29);
-  p.shapes.peachSprig=new T.PlaneGeometry(1,1).translate(.46,.44,0);
-  const trees=Array.from({length:5},(_,i)=>{
-    const variant=peachTree(76231+i*3504);p.shapes['twistedPeach'+i]=variant.geo;return variant;
-  });
-  for(const [i,t] of PEACH_TREES.entries()){
-    const form=i%trees.length, f=frame(p,t.x,t.z,t.turn), s=t.size;
-    f.part('twistedPeach'+form,0,0,0,s,s,s,'#fff',wash);
-    for(const [j,{q,a,length,pitch}] of trees[form].sprays.entries()){
-      const w=length*s*(j%3===0?1.06:1.39);
-      f.part('peachSprig',q[0]*s,q[1]*s,q[2]*s,w,w*.76,1,'#fff7ef',j%3===0?art:bloom,-a,pitch,0,false);
-    }
-    if(i%32===0)yield;
-  }
-  oldPeach(p,art,bloom);
+function gateBlossoms(p) {
+  p.shapes.peachSprig=blossomGeometry();
+  const {ink,flowers}=peachMaterials();
+  oldPeach(p,ink,flowers);
 }
-
 function groveShrine(p){
   const f=frame(p,MOON_GATE.x,MOON_GATE.z,PI/2);
   // A circular opening is cut all the way through a whitewashed garden wall.
@@ -283,10 +238,10 @@ function groveShrine(p){
   }
 }
 function fallenBlossoms(p) {
-  const rng=seeded(96254), bins=new Map(), colors=['#f1bbb9','#fde1d3','#e7a7ad','#e6c4ae','#fff0db'].map(c=>new T.Color(c));
+  const rng=seeded(96254), bins=new Map(), colors=['#f493a1','#fed3d4','#da788e','#e8a29c','#fff0db'].map(c=>new T.Color(c));
   const material=new T.MeshLambertMaterial({side:T.DoubleSide,vertexColors:true,emissive:'#a68b81',emissiveIntensity:.14});
   for(const tree of PEACH_TREES){
-    for(let j=0;j<66;j++){
+    for(let j=0;j<(tree.cliff?7:48);j++){
       const a=rng()*TAU,d=(.21+rng()**.7*4.32)*tree.size;
       const x=tree.x+cos(a)*d,z=tree.z+sin(a)*d, key=Math.floor(x/30)+','+Math.floor(z/30);
       if(!bins.has(key))bins.set(key,{x,z,p:[],c:[],idx:[]});
@@ -529,7 +484,7 @@ export function* dressPilgrimage(painter) {
   yield* inari(painter);
   yield;
   yield* paintPeachCliffs(painter,washTexture('peach-valley-rock'));
-  yield* peachGrove(painter);
+  gateBlossoms(painter);
   fallenBlossoms(painter);
   groveShrine(painter);
   yield;
@@ -611,7 +566,7 @@ function fallingPetals(scene) {
   const geo=new T.ShapeGeometry(shape,5),mat=new T.MeshLambertMaterial({side:T.DoubleSide});
   const petals=new T.InstancedMesh(geo,mat,210),obj=new T.Object3D(),rng=seeded(6231);
   const specs=Array.from({length:210},()=>[rng(),rng(),rng(),rng()]);
-  for(let j=0;j<210;j++)petals.setColorAt(j,new T.Color(j%3?'#efc0b8':'#f9ded0'));
+  for(let j=0;j<210;j++)petals.setColorAt(j,new T.Color(j%3?'#ee8fa3':'#ffd2d4'));
   petals.frustumCulled=false;petals.instanceMatrix.setUsage(T.DynamicDrawUsage);scene.add(petals);
   return (time,player,active)=>{
     petals.visible=active;if(!active)return;
@@ -643,8 +598,10 @@ export function pilgrimageLife(scene){
     valley.push({x,z,y:terrainHeight(x,z)+2+rng()*7,w:19+rng()*35,h:3.7+rng()*6});
   }
   const cloud=banks(scene,map,clouds,'#f0ece3',.64), mist=banks(scene,map,valley,'#ead9d0',.47);
+  const orchard=createPeachOrchard(scene);
   const foxes=foxParties(scene), rain=sunshower(scene), petals=fallingPetals(scene);
   return (time,player,camera)=>{
+    orchard(camera);
     const nearInari=abs(wrapDelta(player.x-DISTRICTS.inari.x+60))<260 && abs(wrapDelta(player.z-DISTRICTS.inari.z-82))<217;
     const nearPeach=hypot(wrapDelta(player.x-PEACH.x),wrapDelta(player.z-PEACH.z))<157;
     cloud(time,player,nearInari);mist(time,player,nearPeach);foxes(time,player,nearInari,camera);

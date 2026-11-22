@@ -1,7 +1,9 @@
+import { offshoreReefs } from './tidal-reefs.js';
+import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint } from './geography.js';
 import { RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
-import { KYO_BUILDINGS, KYO_ROADS, KYO_SCREENS, screenFold } from './kyo-layout.js';
-import { CEDAR_GROVES, INARI_ROUTE, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
+import { KYO_BUILDINGS, KYO_ROADS, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, RASHOMON } from './kyo-layout.js';
+import { CEDAR_GROVES, INARI_ROUTE, PEACH_TREES, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS } from './trade-routes.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
 import { roomPlan, pagodaPlan, roofForm, hipHeight } from './architecture.js';
@@ -30,6 +32,10 @@ export const REGIONS = [
   { id: 'ryugu', name: '海底の竜宮城', ...DISTRICTS.ryugu },
   { id: 'todaiji', name: '東大寺の大餅仏', ...DISTRICTS.todaiji },
   { id: 'inari', name: '伏見稲荷', ...DISTRICTS.inari, district: districtPoint('inari',-213,-445), port: districtPoint('inari',-148,-376) },
+  ...SEAPORTS.map(p=>{
+    const [x,z]=portPoint(p,-5,7);
+    return {...p,x,z};
+  }),
 ];
 function nearestRegion(x, z, regions, halfSpan) {
   let best = 0, distance = Infinity;
@@ -81,6 +87,7 @@ export const PENINSULAS = [
   // The coastal lobe beneath each route supplies real foothills on either side.
   [0,-464,282,228], [93,-640,253,241], [108,-822,290,204], [237,-889,210,166],
   [-155,-859,270,148], [-366,-903,339,240], [-521,-932,268,207],
+  [394,-547,249,214], [433,-641,166,141], [316,-402,192,148],
   [-304,-91,178,86], [-502,-142,230,101], [-714,-170,224,137], [-782,-187,198,153],
   [-913,-218,158,145], [-881,-306,163,121], [-746,-301,147,107],
   [112,382,210,166], [193,497,156,181], [256,616,180,165],
@@ -98,7 +105,7 @@ export function shoreDistance(x,z) {
     const junction=max(0,1-abs(shore-margin)/24);
     shore=max(shore,margin)+6*junction*junction;
   }
-  return shore;
+  return portShore(x,z,shore);
 }
 function outerHeight(x,z,base) {
   if (z > -305 && z < 311 && x > -180 && x < 310) return base;
@@ -112,10 +119,16 @@ function outerHeight(x,z,base) {
       + 26*hill(x,z,-563,-198,87,46) + 18*hill(x,z,-451,-80,72,39) + 6.4*hill(x,z,-240,-84,28,27)
       + 25*hill(x,z,219,556,64,89) + 32*hill(x,z,382,677,84,81)
       + 21*hill(x,z,480,922,76,55) + 13*hill(x,z,-413,121,40,21);
-    const newLand=-1.8+(hills+1.8)*smooth(-3.3,11,shore);
+    // The capital stands on a river terrace. The lookout rises beyond the last street.
+    const streetEdge=max(abs(x-DISTRICTS.kyo.x)-102,abs(z-DISTRICTS.kyo.z)-84);
+    const basin=x>DISTRICTS.kyo.x-124 && x<DISTRICTS.kyo.x+124 && z>DISTRICTS.kyo.z-106 && z<DISTRICTS.kyo.z+106
+      ? rolls+(hills-rolls)*smooth(0,22,streetEdge):hills;
+    const newLand=-1.8+(basin+1.8)*smooth(-3.3,11,shore);
     ground=base+(max(base,newLand)-base)*(1-smooth(11,22,originalShore(x,z)));
   }
   if (shore>0) ground+=(pilgrimageHeight(x,z,ground)-ground)*smooth(0,20,shore);
+  const gateVerge=max(abs(x-RASHOMON.x)-14,abs(z-RASHOMON.z-3)-19);
+  if(gateVerge<20)ground+=(5-ground)*(1-smooth(0,20,gateVerge));
   if (shore < 0) {
     // Offshore shoals gradually give way to open water. A sandy terrace
     // holds the palace and its gate at the bottom of the western bay.
@@ -194,7 +207,7 @@ export function springRadius(x,z) {
   return hypot((x-SNOW_SPRING.x)/SNOW_SPRING.rx,(z-SNOW_SPRING.z)/SNOW_SPRING.rz);
 }
 export function terrainHeight(x,z) {
-  const native = courtTerrain(x,z,landHeight(x,z),landHeight);
+  const native = portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight));
   const site=nearbyRetreat(x,z);
   if(site) return bathTerrain(site,x,z,native,landHeight(site.x,site.z)+.22);
   if (abs(x-SNOW_SPRING.x)>23 || abs(z-SNOW_SPRING.z)>16) return native;
@@ -639,13 +652,16 @@ export const CONNECTING_ROADS = TRADE_ROADS.map(({width,knots,destination,origin
 const extensions = [...CONNECTING_ROADS, ...KYO_ROADS.map(([width,knots,paved])=>({...road(width,knots),paved})), {width:3.7,points:INARI_ROUTE}];
 for (const avenue of extensions) { ROADS.push(avenue); indexRoad(avenue); }
 for (const args of KYO_BUILDINGS) house(...args);
-export const TREES = trees.filter(t => !reservedScenery(t.x,t.z) && (isBamboo(t) || keep.has(t)) &&
+export const TREES = trees.filter(t => !portReserved(t.x,t.z) && !reservedScenery(t.x,t.z) && (isBamboo(t) || keep.has(t)) &&
   (t.form === undefined || !nearRoad(t.x,t.z,2.7)));
 // Fill the boundary of the maple district and line the new country roads with
 // loose stands of cedar, zelkova and red pine. Keep all gates and views open.
 const saplings = seeded(0x5c311);
 function transplant(x,z,family) {
-  if(reservedScenery(x,z))return false;
+  if(abs(x-RASHOMON.x)<19 && abs(z-RASHOMON.z)<29)return false;
+  if(portReserved(x,z)||reservedScenery(x,z))return false;
+  if(abs(x-DISTRICTS.peach.x)<220 && abs(z-DISTRICTS.peach.z)<180 &&
+    PEACH_TREES.some(t=>(x-t.x)**2+(z-t.z)**2<25))return false;
   if (shoreDistance(x,z)<10 || landHeight(x,z)<2 || nearRoad(x,z,3.1) ||
       abs(z-riverZ(x))-riverHalfWidth(x)<11 || safe(x,z,6) ||
       BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4.5) ||
@@ -662,7 +678,7 @@ for(let i=0;autumnNeeded>0 && i<3000;i++) {
 // Groves are separated by grassland and rocky shoulders along the longer
 // country roads. Keep managed courtyards, pilgrimage paths and views clear.
 function protectedDistrict(x,z) {
-  return hypot(x-DISTRICTS.kyo.x,z-DISTRICTS.kyo.z)<93 ||
+  return portReserved(x,z) || inCapitalWard(x,z,5) ||
     hypot(x-DISTRICTS.todaiji.x,z-DISTRICTS.todaiji.z+12)<67 ||
     hypot((x-DISTRICTS.peach.x)/133,(z-DISTRICTS.peach.z)/112)<1.02 ||
     (abs(x-DISTRICTS.inari.x+58)<100 && abs(z-DISTRICTS.inari.z-77)<106);
@@ -671,7 +687,7 @@ const mountainFamily=[0,1,2,2,3,3,4,9];
 const lowlandFamily=[1,2,3,8,9,12,12,13];
 function wildTree(x,z) {
   if(originalShore(x,z)>12 || protectedDistrict(x,z)) return;
-  const highland=(z < -706 && x < 36) || (x < -625 && z < -65 && terrainHeight(x,z)>29);
+  const highland=(Math.abs(x-DISTRICTS.inari.x+78)<260 && Math.abs(z-DISTRICTS.inari.z-60)<160 && terrainHeight(x,z)>25) || (x < -625 && z < -65 && terrainHeight(x,z)>29);
   const family=highland ? mountainFamily : lowlandFamily;
   transplant(x,z,family[Math.floor(saplings()*family.length)]);
 }
@@ -745,6 +761,7 @@ for(const s of RETREATS){
       h:(s.kind==='cedar'?9.3:s.kind==='slate'?4.4:5.7)+i*.54});
   }
 }
+ROCKS.push(...offshoreReefs(terrainHeight,shoreDistance,seeded(0x687063)));
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
 // The shrine's small bamboo stands are planted individually between its
@@ -809,16 +826,16 @@ for (const b of BUILDINGS) {
   if (b.kind === 'pagoda') {
     const tower=pagodaPlan(b);
     for(const wall of tower.panels)
-      localSolid(wall.u,wall.v,wall.width,wall.depth,wall.y+2.50,'wall',false,wall.y);
+      localSolid(wall.u,wall.v,wall.width,wall.depth,wall.y+2.50*tower.scale,'wall',false,wall.y);
     for (const tread of tower.slabs)
       localSolid(tread.u,tread.v,tread.w,tread.d,tread.top,'slab',true);
     for (const [i,storey] of tower.storeys.entries()) {
-      const {y,w,d}=storey, eave=y+2.60, cap=i===4;
+      const {y,w,d}=storey, eave=y+2.60*tower.scale, cap=i===4;
       const outerW=w*1.33, outerD=d*1.33;
       // The lower eaves shelter the outer gallery; the central well is open.
-      const roof=putSolid(b.x,b.z,outerW/2,outerD/2,b.yaw,b.y+eave,'pagodaEave',true,cap?2.05:1.19);
+      const roof=putSolid(b.x,b.z,outerW/2,outerD/2,b.yaw,b.y+eave,'pagodaEave',true,(cap?2.05:1.19)*tower.scale);
       roof.aperture=cap?.052:.51;
-      localSolid(0,0,.19,1.9,y+2.66,'ceiling',false);
+      localSolid(0,0,.19,1.9,y+2.66*tower.scale,'ceiling',false);
     }
   } else {
     localSolid(0, 0, b.w * 1.08, b.d * 1.08, plan.ceiling, 'ceiling', false);
@@ -833,6 +850,8 @@ for (const b of BUILDINGS) {
     }
     if (plan.porch) for (const side of [-1,1])
       localSolid(side*b.w*.207,plan.porch.v+b.d*.19,.15,.16,plan.porch.eave,'wall',false);
+    if(b.kind==='wardShop' && b.wall>5)for(const q of wardFloorPlan(b).slabs)
+      localSolid(q.x,q.z,q.w,q.d,q.top,'slab',true);
     if (plan.workbench) {
       const f = plan.workbench;
       localSolid(f.u, f.v, f.width, f.depth, plan.floor + f.height, 'box', true);
@@ -851,8 +870,10 @@ for(const {x,z,width,height,yaw} of KYO_SCREENS) {
       base+height+.54,'wall',false);
   }
 }
+gateSolids(terrainHeight,putSolid);
 pilgrimageSolids(terrainHeight,putSolid);
 civicAndBathSolids(terrainHeight,putSolid);
+portSolids(putSolid);
 for(const stone of SPRING_STONES) {
   putSolid(SNOW_SPRING.x+stone.x,SNOW_SPRING.z+stone.z,stone.w*.84,stone.d*.84,stone.yaw,
     SNOW_SPRING.level+.18+stone.h,'oval',true);

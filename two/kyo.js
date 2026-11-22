@@ -1,3 +1,4 @@
+import { createRashomon } from './rashomon.js';
 import { districtPoint, DISTRICTS } from './geography.js';
 import * as THREE from './vendor/three.module.min.js';
 import { KYO_BUILDINGS, KYO_FOOD, KYO_SCREENS, screenFold, kyoNight } from './kyo-layout.js';
@@ -117,30 +118,6 @@ function lantern(f,x,top,z,r,light) {
     f.part('round',x,top-h/2+end*h*.462,z,r*.69,.065,r*.69,soot);
   f.stroke([x,top-h,z],[x,top-h-.125,z],.012,'#87603d');
 }
-function entrance(p,light) {
-  const gate=frame(p,...districtPoint('kyo',120,-377),0);
-  const plaque=cloth('洛中','#474942','#e4c683');
-  for(const x of [-5.7,-3.9,3.9,5.7]){
-    for(const z of [-1.49,1.49]){
-      gate.part('round',x,.19,z,.36,.49,.36,'#a2a291',p.stone);
-      gate.post(x,z,4.55,.225,lacquer);
-      gate.part('round',x,4.07,z,.39,.14,.39,'#997353',p.wood);
-      gate.part('box',x,4.28,z,1.02,.18,.47,lacquer,p.wood);
-    }
-    gate.part('box',x,4.49,0,.26,.27,4.35,timber,p.wood);
-  }
-  for(const side of [-1,1]){
-    gate.part('box',side*4.8,1.15,0,1.49,2.22,.19,'#967753',p.boarding);
-    for(const y of [.55,1.49,2.08])gate.part('box',side*4.8,y,.12,1.67,.13,.09,timber,p.wood);
-    for(let i=0;i<7;i++)gate.part('box',side*4.8-.7+i*.23,3.18,0,.058,1.44,.067,'#6e573d',p.wood);
-  }
-  for(const z of [-1.51,1.51])gate.part('box',0,4.49,z,13.1,.34,.36,lacquer,p.wood);
-  gate.part('hipRoof',0,4.66,0,14.3,2.13,6.6,'#677273',p.roofs);
-  gate.part('box',0,6.79,0,8.55,.19,.28,'#59635f',p.roofs);
-  gate.part('box',0,4.02,1.65,2.32,.87,.15,timber,p.wood);
-  gate.part('plane',0,4.02,1.741,2.20,.75,1,'#ffffff',plaque);
-  for(const x of [-2.8,2.8])lantern(gate,x,4.28,1.71,.36,light);
-}
 function paintedShutters(p,{x,z,yaw,width:w,height:h,picture}) {
   const f=frame(p,x,z,yaw),base=.34,depth=1.55;
   const mat=scrollPaper();
@@ -169,7 +146,7 @@ function shopFronts(p,light,windowPaper){
     rice:cloth('米','#a87656','#f2dfbf',true),lodge:cloth('旅籠','#586b68','#e9dec2',true)};
   for(const [i,entry] of KYO_BUILDINGS.entries()){
     const [x,z,w,d,wall,,yaw,kind,craft]=entry;
-    if(kind==='pagoda'||kind==='temple')continue;
+    if(kind==='pagoda'||kind==='temple'||kind==='wardShop')continue;
     const f=frame(p,x,z,yaw),end=(i%2?1:-1)*w*.44, front=d*.5+1.16;
     f.stroke([end,wall-.46,front-1.28],[end,wall-.41,front+.20],.055,timber);
     if(i%3){
@@ -261,7 +238,7 @@ function streetLamps(p,light){
       lantern(f,-side*.70,2.88,0,.235,light);
     }
   }
-  // A line of gaily dyed lanterns draws visitors to the entrance of the hanamachi.
+  // Dyed lanterns mark the crossing between the two market rows.
   const f=frame(p,...districtPoint('kyo',150,-425),0);
   for(const z of [-4.6,4.6])f.post(0,z,4.33,.087);
   const cable=z=>3.48+.81*(z/4.6)**2;
@@ -438,7 +415,8 @@ export function createKyo(scene,painter){
   },{emissive:'#f5ae66',emissiveIntensity:0});
   for(let picture=0;picture<4;picture++) p.shapes['kyoScreen'+picture]=printSurface(picture,'screen');
   for(let picture=0;picture<2;picture++) p.shapes['kyoCurtain'+picture]=printSurface(picture,'curtain');
-  hillsideInk(p);entrance(p,light);shopFronts(p,light,windowPaper);
+  const gateHouse=createRashomon(scene,p);
+  hillsideInk(p);shopFronts(p,light,windowPaper);
   for(const stand of KYO_FOOD)foodCounter(p,stand,light);
   streetLamps(p,light);
   const crowd=createStreetCrowd(scene), fires=mountainFires(scene);
@@ -446,6 +424,6 @@ export function createKyo(scene,painter){
     const night=kyoNight(time);
     light.emissiveIntensity=.04+night*.94;
     windowPaper.emissiveIntensity=night*.46;
-    crowd(time,player,camera);fires(time,night,player);
+    gateHouse(time,player);crowd(time,player,camera);fires(time,night,player);
   };
 }

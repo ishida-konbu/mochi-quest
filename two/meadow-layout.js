@@ -1,4 +1,6 @@
+import { SEAPORTS,portReserved } from './seaport-layout.js';
 // One repeatable planting plan per 26 m square. All coordinates here are canonical.
+import { RASHOMON } from './kyo-layout.js';
 import { COURT, RETREATS, reservedScenery } from './retreat-layout.js';
 import { scrollCoverage } from './scroll-paper.js';
 import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, MARKET_STALLS, ROCKS, REGIONS, WATER_Y,
@@ -36,8 +38,10 @@ export function meadowExclusions(objects,residents=[]) {
       }
   };
   const circle = (x,z,r) => add(x,z,r,(u,v)=>(u-x)**2+(v-z)**2 < r*r);
-  add(COURT.x,COURT.z+7,30,reservedScenery);
+  add(RASHOMON.x,RASHOMON.z,16,(x,z)=>abs(x-RASHOMON.x)<12 && abs(z-RASHOMON.z)<9);
+  add(COURT.x,COURT.z+11.5,29,reservedScenery);
   for(const s of RETREATS)add(s.x,s.z,11,reservedScenery);
+  for(const p of SEAPORTS)add(p.x,p.z,72,portReserved);
   add(SNOW_SPRING.x,SNOW_SPRING.z,17,(x,z)=>springRadius(x,z)<1.18);
   for (const b of BUILDINGS) add(b.x,b.z,hypot(b.w,b.d)*.65+5,(x,z)=>{
     const dx=x-b.x, dz=z-b.z;

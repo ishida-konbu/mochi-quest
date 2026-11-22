@@ -201,6 +201,34 @@ function orchard() {
     if(trees.some(q=>(q.x-PEACH.x-u)**2+(q.z-PEACH.z-v)**2<27)) continue;
     trees.push({x:PEACH.x+u,z:PEACH.z+v,size: .76+rand()*.63,turn:rand()*PI*2,seed:i+4493});
   }
+  // The ancient tree at the moon gate is a separate sculpture. Include it
+  // in the census when tripling the original orchard; retain every old trunk.
+  const target=(trees.length+1)*3-1;
+  const clearings=[[6,-3,9],[-13,7,7],[-32,-12,7],[40,-10,7],[15,-26,6]];
+  const floorTarget=target-162;
+  for(let attempt=0;trees.length<target && attempt<30000;attempt++){
+    const cliff=trees.length>=floorTarget;
+    let u,v;
+    if(cliff){
+      // Groups of five to ten follow separate shelves. Vary their height
+      // between the inner cliff and the receding western and northern ridges.
+      const c=crags[(Math.floor(attempt/8)*7)%crags.length];
+      const d=.73+rand()*.86;
+      u=(c.x-PEACH.x)*d+(rand()-.5)*24;
+      v=(c.z-PEACH.z)*d+(rand()-.5)*19;
+    }else{
+      u=(rand()-.5)*195;v=(rand()-.5)*153;
+      if(hypot(u/94,v/73)>1 || hypot(u,v)<11 || abs(v-3*sin(u/13))<4.0)continue;
+    }
+    const x=PEACH.x+u,z=PEACH.z+v,h=pilgrimageHeight(x,z,5);
+    const slope=hypot(pilgrimageHeight(x+.7,z,5)-h,pilgrimageHeight(x,z+.7,5)-h)/.7;
+    if(cliff ? h<21 || slope>1.65 : slope>.72 || h>24)continue;
+    if(alongPass(x,z,peachPass,4.8) || hypot(x-MOON_GATE.x,z-MOON_GATE.z)<9 ||
+      clearings.some(([a,b,r])=>hypot(u-a,v-b)<r) || CLIFF_PINES.some(q=>hypot(x-q.x,z-q.z)<3))continue;
+    const spacing=cliff?5.3:4.65;
+    if(trees.some(q=>(x-q.x)**2+(z-q.z)**2<spacing*spacing))continue;
+    trees.push({x,z,cliff,size:cliff?.72+rand()*.75:.78+rand()*.67,turn:rand()*2*PI,seed:19342+attempt});
+  }
   return trees;
 }
 export const PEACH_TREES = orchard();

@@ -107,7 +107,7 @@ test('notices reach each of the six new animals through the live game and journa
 
 test('the complete fifth-edition scroll retains Kagami when opened with the new animals',()=>{
   const game=createGame(),snap=game.save();
-  snap.version=5;snap.items.length=56;
+  snap.version=5;snap.items.length=56;snap.bikes.length=14;
   snap.delivered=game.state.npcs.slice(0,794).map(n=>n.id);
   delete snap.kagamiUnlocked;
   const restored=createGame(snap);

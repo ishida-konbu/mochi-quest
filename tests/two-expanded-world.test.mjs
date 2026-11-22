@@ -1,8 +1,9 @@
-import {DISTRICTS, DISTRICT_SHIFT, relocateLegacyPosition} from '../two/geography.js';
+import {DISTRICTS, FIFTH_EDITION_CENTRES, relocateLegacyPosition} from '../two/geography.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
-import {INARI_GATES, INARI_ROUTE} from '../two/pilgrimage-layout.js';
+import {RETREATS,sitePoint} from '../two/retreat-layout.js';
+import {INARI_GATES, INARI_ROUTE, PEACH_TREES, MOON_GATE} from '../two/pilgrimage-layout.js';
 import {PALACE_APPROACH} from '../two/ryugu-layout.js';
 import {kyoInfluence, kyoNight} from '../two/kyo-layout.js';
 import {measureRoute, cartPosition} from '../two/trade-routes.js';
@@ -12,11 +13,12 @@ import {createGame} from '../two/game.js';
 test('the expanded island doubles each horizontal dimension and joins at an even ocean floor',()=>{
   assert.ok(Math.abs((2*BOUND)**2-8*832**2)<1e-8);
   assert.deepEqual(REGIONS.slice(0,10),ORIGINAL_REGIONS);
-  for(const a of REGIONS.slice(10)) for(const b of REGIONS.slice(10)) {
-    const oldA=DISTRICT_SHIFT[a.id],oldB=DISTRICT_SHIFT[b.id];
+  for(const a of REGIONS.slice(10,14)) for(const b of REGIONS.slice(10,14)) {
+    const oldA=FIFTH_EDITION_CENTRES[a.id],oldB=FIFTH_EDITION_CENTRES[b.id];
     assert.equal(Math.hypot(a.x-b.x,a.z-b.z),2*Math.hypot(oldA.x-oldB.x,oldA.z-oldB.z));
     assert.deepEqual(relocateLegacyPosition(oldA.x,oldA.z),[a.x,a.z]);
   }
+  assert.ok(DISTRICTS.inari.z > DISTRICTS.kyo.z+150);
   for(let v=-BOUND+1;v<BOUND;v+=5.1){
     assert.ok(Math.abs(terrainHeight(v,-BOUND+.01)-terrainHeight(v,BOUND-.01))<.015);
     assert.ok(Math.abs(terrainHeight(-BOUND+.01,v)-terrainHeight(BOUND-.01,v))<.015);
@@ -39,7 +41,7 @@ test('the Inari route leads through a thousand open gates up to the summit seal'
   assert.equal(createGame(game.save()).restored,true);
 });
 
-test('the northern watershed has broad wooded spurs above and beyond the torii road',()=>{
+test('the Fushimi watershed has broad wooded spurs above and beyond the torii road',()=>{
   const {x,z}=DISTRICTS.inari;
   for(const [u,v] of [[-260,71],[-210,169],[-180,211],[58,84]]) {
     assert.ok(terrainHeight(x+u,z+v)>28,'natural spur at '+[u,v]);
@@ -65,10 +67,45 @@ test('the peach orchard lies inside a mountain range with a low eastern pass',()
   }
 });
 
+test('the original peach valley and its surrounding bluffs support three times the flowering trees',()=>{
+  assert.equal(PEACH_TREES.length+1,3*142); // The moon gate's ancient peach is separately modeled.
+  const cliffs=PEACH_TREES.filter(t=>t.cliff);
+  assert.equal(cliffs.length,162);
+  const heights=cliffs.map(t=>terrainHeight(t.x,t.z));
+  assert.ok(Math.max(...heights)-Math.min(...heights)>35);
+  for(const t of PEACH_TREES){
+    assert.ok(Math.hypot(t.x-MOON_GATE.x,t.z-MOON_GATE.z)>8.9);
+    assert.ok(terrainHeight(t.x,t.z)>0);
+  }
+});
+
+test('sixth-edition journeys follow the relocated Fushimi shrine and the two roadside baths',()=>{
+  const game=createGame(),save=game.save();
+  save.version=6;save.items.length=62;save.bikes.length=14;
+  const old=[-306,-1070],inari=DISTRICTS.inari;
+  Object.assign(save.player,{x:old[0]-9,z:old[1]+4});
+  Object.assign(save.turtle,{x:old[0]+1,z:old[1]+6,homeX:old[0],homeZ:old[1]});
+  save.visited=['inari','river'];save.delivered=[game.state.npcs[0].id];
+  const resumed=createGame(save);
+  assert.equal(resumed.restored,true);
+  const next=resumed.save();
+  assert.deepEqual([next.player.x,next.player.z],[inari.x-9,inari.z+4]);
+  assert.deepEqual([next.turtle.homeX,next.turtle.homeZ],[inari.x,inari.z]);
+  assert.deepEqual(next.delivered,save.delivered);
+  assert.ok(next.visited.includes('inari'));
+  assert.deepEqual(next.bikes,[...save.bikes,2,2]);
+  for(const [kind,x,z,yaw] of [['cedar',70.6414975,-547.0094339,1.0957856],['slate',-126.0135841,-869.3986739,-.6536359]]){
+    [save.player.x,save.player.z]=sitePoint({x,z,yaw},1.3,-.7);
+    const [expectedX,expectedZ]=sitePoint(RETREATS.find(s=>s.kind===kind),1.3,-.7);
+    const bath=createGame(save).save().player;
+    assert.ok(Math.hypot(bath.x-expectedX,bath.z-expectedZ)<1e-6);
+  }
+});
+
 test('a fifth-edition save follows its district, including underwater depth and turtle position',()=>{
   const game=createGame(), snap=game.save();
-  snap.version=5;snap.items.length=56;
-  for(const [id,at] of Object.entries(DISTRICT_SHIFT)){
+  snap.version=5;snap.items.length=56;snap.bikes.length=14;
+  for(const [id,at] of Object.entries(FIFTH_EDITION_CENTRES)){
     const underwater=id==='ryugu';
     Object.assign(snap.player,{x:at.x,z:at.z,y:underwater?-15:6,diveDepth:underwater?15:0});
     Object.assign(snap.turtle,{x:at.x+3,z:at.z+2,homeX:at.x+3,homeZ:at.z+2});

@@ -1,3 +1,6 @@
+import { dressSeaports } from './seaports.js';
+import { createOceanShips } from './ocean-ship-art.js';
+import { dressWardShop } from './kyo-market.js';
 import { dressOutcrops } from './outcrops.js';
 import { DISTRICTS } from './geography.js';
 import { scrollCoverage } from './scroll-paper.js';
@@ -106,7 +109,7 @@ function grain() {
 function* landscape(scene, art) {
   const mat = meadowMaterial(art);
   const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
-    '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd','#e4d5b5','#efd5ce','#a9c1b3','#e1d8bb','#dbd6bb'].map(css);
+    '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd','#e4d5b5','#efd5ce','#a9c1b3','#e1d8bb','#dbd6bb','#d8d7bf','#e1d1b4'].map(css);
   const soil = css('#efeadc'), stone = css('#d5d4c6'), c = new THREE.Color(), season = {};
   const bins = new Map();
   for (const tree of TREES) {
@@ -1133,8 +1136,10 @@ function building(p, b, index) {
     wood = '#69513b',
     deep = '#554b3e';
   const local = (u, v, s) => V(x + u * cos(yaw) + s * sin(yaw), y + v, z - u * sin(yaw) + s * cos(yaw));
+  let modelScale=1,modelDatum=0;
   const part = (shape, u, v, s, sx, sy, sz, color, mat = p.solid, rot = 0) => {
-    const v3 = local(u, v, s);
+    const v3 = local(u, modelDatum+(v-modelDatum)*modelScale, s);
+    sy*=modelScale;
     p.part(shape, v3.x, v3.y, v3.z, sx, sy, sz, color, yaw + rot, 0, 0, mat);
   };
   let foundationBottom = y - 0.32;
@@ -1147,6 +1152,7 @@ function building(p, b, index) {
   part('box', 0, 0.42 - stoneHeight / 2, 0, w + 1.1, stoneHeight, d + 1.08, '#969484', p.masonry);
   for (let j = 0; j < 3; j++)
     part('box', 0, 0.18 - j * 0.19, d / 2 + 0.48 + j * 0.39, w * 0.48, 0.28, 0.46, '#a4a28a');
+  if (kind === 'wardShop') { dressWardShop(p,b,part); return; }
   furnishRoom(p, b, index, part, local);
   if (kind === 'pagoda') {
     const tower=pagodaPlan(b);
@@ -1156,6 +1162,7 @@ function building(p, b, index) {
       if(tread) part('box',s.u,s.top-.018,s.v-Math.sign(s.u)*s.d*.43,s.w,.045,.047,'#d3af78',p.wood);
     }
     for(const panel of tower.panels) {
+      modelScale=tower.scale;modelDatum=panel.y;
       const {u,v,width,depth,length,y,front,face}=panel;
       const strip=(lateral,height,out,span,thickness,color,mat)=>{
         part('box',u+(front?lateral:face*out),y+height,v+(front?face*out:lateral),
@@ -1169,12 +1176,14 @@ function building(p, b, index) {
       for(const k of [-1,1]) strip(k*length*.48,1.26,0,.115,2.52,'#8a513b',p.lacquer);
       part('box',u,y+2.40,v,width,.32,depth,'#d4c69f',p.fine);
     }
+    modelScale=1;
     for(let i=0;i<tower.posts.length;i+=2) {
       const a=tower.posts[i], c=tower.posts[i+1];
       for(const post of [a,c]) part('box',post.u,post.top+.35,post.v,.065,.70,.065,'#694b39',p.wood);
       p.link(local(a.u,a.top+.69,a.v),local(c.u,c.top+.69,c.v),.052,'#88573a',false,true,false,p.lacquer);
     }
     for(const [j,level] of tower.storeys.entries()) {
+      modelDatum=level.y;modelScale=tower.scale;
       const {y,w:ww,d:dd}=level, top=j===4, eave=y+2.60;
       const beam='#6f3c2d';
       for(const side of [-1,1]) {
@@ -1186,7 +1195,7 @@ function building(p, b, index) {
             part('box',u,eave-.55+k*.16,v,.39+k*.24,.14,.27,beam,p.wood);
             part('box',u,eave-.47+k*.16,v,.24,.13,.42+k*.28,'#ac6c48',p.wood);
           }
-          const q=local(side*ww*.648,eave+.22,corner*dd*.648);
+          const q=local(side*ww*.648,y+2.82*modelScale,corner*dd*.648);
           p.part('finial',q.x,q.y,q.z,.14,.29,.14,'#a7976c',0,0,0,p.bronze);
         }
         part('box',side*ww*.42,eave-.12,0,.21,.22,dd*.94,beam,p.wood);
@@ -1724,8 +1733,9 @@ export function* prepareWorld(scene) {
   yield;
   dressSeasonalPlaces(painter);
   yield;
-  dressCourt(painter);
+  const updateCourt=dressCourt(painter,scene);
   dressWaysideBaths(painter);
+  dressSeaports(painter);
   yield;
   const updateKyo=createKyo(scene,painter);
   yield;
@@ -1733,7 +1743,7 @@ export function* prepareWorld(scene) {
   dressRyugu(painter);
   yield;
   const updateShrines=pilgrimageLife(scene), updatePalace=createRyuguLife(scene);
-  const updateTrade=createTravellers(scene);
+  const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene);
   yield* painter.finish();
   // Each spatial batch lives in its nearest image of the repeating island.
   // Perspective and populated shorelines are preserved on crossing the ocean.
@@ -1752,14 +1762,16 @@ export function* prepareWorld(scene) {
   const leaves = driftingLeaves(scene);
   return {
     textures: [...Object.values(art), atmosphere.panorama],
-    update(time, player, camera) {
+    update(time, player, camera, voyageTime=time) {
       water.update(time,player);
       painter.sway.value = time;
       if (camera) {
         atmosphere.update(time, player, camera);
         updateKyo(time,player,camera);
+        updateCourt(time,player);
         updateShrines(time,player,camera);
         updateTrade(time,player);
+        updateOcean(voyageTime,player);
         updatePalace(time,player,camera);
         updateForest(camera, player);
         for (const b of batches) {

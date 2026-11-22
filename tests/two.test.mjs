@@ -66,7 +66,7 @@ test('a spent flight settles on the river at the landing point and can swim asho
   assert.ok(swimmer.z > z+18);
 });
 
-test('fifteen distinct landmarks give their stamps on arrival, not on district boundary',()=>{
+test('seventeen distinct landmarks give their stamps on arrival, not on district boundary',()=>{
   const game=createGame();
   assert.deepEqual(game.state.visited,['river']);
   for(const region of REGIONS.slice(1)) {

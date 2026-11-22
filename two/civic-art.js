@@ -16,8 +16,8 @@ export function workshopFrame(p,site,base) {
     },
   };
 }
-export function inscriptionMaterial(label,{ground='#343c37',ink='#ead9a8',cloth=false}={}) {
-  const c=document.createElement('canvas');c.width=cloth?224:640;c.height=cloth?288:192;
+export function inscriptionMaterial(label,{ground='#343c37',ink='#ead9a8',cloth=false,square=false}={}) {
+  const c=document.createElement('canvas');c.width=cloth?224:square?208:640;c.height=cloth?288:192;
   const g=c.getContext('2d');
   g.fillStyle=ground;g.fillRect(0,0,c.width,c.height);
   for(let j=0;j<c.height;j+=2){
@@ -31,7 +31,7 @@ export function inscriptionMaterial(label,{ground='#343c37',ink='#ead9a8',cloth=
     else g.strokeRect(edge,edge,c.width-2*edge,c.height-2*edge);
   }
   g.fillStyle=ink;g.textAlign='center';g.textBaseline='middle';
-  g.font=(cloth?'150px':'bold 108px')+' "Hiragino Mincho ProN","Yu Mincho",serif';
+  g.font=(cloth?'150px':square && label.length===1?'bold 140px':'bold 108px')+' "Hiragino Mincho ProN","Yu Mincho",serif';
   if(cloth && label==='♨'){
     // Steam above an open pool, printed as unbroken strokes in the dyed hemp.
     g.strokeStyle=ink;g.lineWidth=6;g.lineCap='round';

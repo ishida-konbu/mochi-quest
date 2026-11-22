@@ -493,7 +493,11 @@ function updateCamera(dt, snap = false) {
       }
       continue;
     }
-    const solid = solidHeightAt(x,z,.2,y);
+    const hull = game.voyage.sample(x,z,y,.12);
+    if (hull && focus.y<hull.ceiling && y+.18>hull.ceiling) {
+      fraction=Math.max(.16,(i-1)/n);break;
+    }
+    const solid = Math.max(solidHeightAt(x,z,.2,y),hull?.solid ?? -Infinity,hull?.floor ?? -Infinity);
     if (emerging && solid + .19 <= y) emerging = false;
     const floor = emerging ? landscapeFloor(x,z) : Math.max(groundHeight(x,z,y),solid);
     if (floor + .19 > y) {
@@ -616,7 +620,7 @@ function openDialog(kind) {
   save();
   lastFocus = document.activeElement;
   dialogKind = kind;
-  $('dialog-title').textContent = kind === 'map' ? '十五景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
+  $('dialog-title').textContent = kind === 'map' ? '十七景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
   dialog.showModal();
   if (kind === 'map') {
     selectedPlace = goal || state.regionId;
@@ -698,7 +702,7 @@ function journalDialog() {
   body.innerHTML='<div id="delivery-book"><div class="ledger-head"><p id="ledger-note"></p><span id="ledger-count"></span></div><div class="ledger-animals"></div></div>';
   const count=state.delivered.size, total=state.recipientTotal;
   $('ledger-count').textContent=count+' / '+total;
-  $('ledger-note').textContent=count===total ? '全員に配達しました。鏡餅で十五景の旅をどうぞ。' : state.kagamiUnlocked ? '鏡餅が使えます。新しく加わった動物にも通知を届けてみましょう。' : '動物を選ぶと、まだ届いていない一匹へご案内します。全員に届けると鏡餅が開きます。';
+  $('ledger-note').textContent=count===total ? '全員に配達しました。鏡餅で十七景の旅をどうぞ。' : state.kagamiUnlocked ? '鏡餅が使えます。新しく加わった動物にも通知を届けてみましょう。' : '動物を選ぶと、まだ届いていない一匹へご案内します。全員に届けると鏡餅が開きます。';
   if (state.score >= 10000000) $('ledger-note').append('　通知点 ' + fullScore.format(state.score) + ' 点。');
   for (const [type,name] of Object.entries(speciesNames)) {
     const group=state.npcs.filter(n=>n.type===type);
@@ -744,7 +748,7 @@ function redrawAtlas() {
   const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
   const name = trackedAnimal ? speciesNames[trackedAnimal.type] : '';
   const atlas = $('atlas');
-  atlas.setAttribute('aria-label', '十五の名所、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
+  atlas.setAttribute('aria-label', '十七の名所、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
   drawMap(atlas,state,yaw,selectedPlace,true,point,trackedAnimal,name);
 }
 function selectMap(id) {
@@ -766,11 +770,13 @@ function selectMap(id) {
     autumn: '楓の枝が重なる谷道。紅葉をくぐって峡へ。',
     moon: '北の空には十五夜の月。薄のそばの三方に近づくと、月見団子を食べられます。',
     dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。',
-    kyo: '舞妓餅が行き交う都。広場の茶席で蛙が盆を差し出し、向かいの辻では兎と蛙が笛と太鼓を合わせます。西の辻から北へ入ると京の評定所。白洲の奥に裁きの座があります。茶とみたらし団子は店先で。夜は大通りから北の山に大の送り火が見えます。',
-    peach: '東の峠を抜け、桃の花をたどって谷底へ。木陰では兎と蛙が相撲を取り、猿が土俵をのぞきこみます。',
+    kyo: '南の羅生門をくぐって京へ。門の薄暗い楼上には老婆が暮らし、大路には商人や旅人が行き交います。西の辻にある京の評定所では、夜になると衛士が篝火を灯します。',
+    peach: '谷底の月門から見上げると、桃の花が岩棚から尾根へ続きます。木陰の土俵では兎と蛙が相撲を取っています。',
     ryugu: '海風の松原から西へ泳ぎ、'+(coarse?'「潜る」':'↓ キー')+'を長押しして海底へ。真珠灯籠と海亀・鯛・蛸の一座をたどり、楼門の先の御朱印所へ。'+(coarse?'「跳ぶ」':'Space キー')+'を長押しすると浮上します。',
     todaiji: '回廊の先に、蓮の座に鎮まる大餅仏。参道で鹿が兎に一礼し、脇では猿と兎が筆を運びます。',
-    inari: '朱の鳥居をくぐって雲上の奥社へ。日が差す雨の参道には、狐の嫁入りの行列が現れます。'
+    tsuruga: '京の北、入り江に開いた敦賀の津。昆布や塩を扱う家の先に、大船をつなぐ桟橋があります。甲板の船梯子を下ると荷の積まれた船倉です。',
+    sakai: '京の南西の湊町。陶器や染布を荷造りする商家を抜けると、外洋をめぐる大船が出入りする波止場です。',
+    inari: '京から南の街道をたどり、朱塗りの千本鳥居をくぐって雲上の奥社へ。日が差す雨の参道には、狐の嫁入りの行列が現れます。'
   };
   if (landmarks[id]) detail.append(document.createElement('br'), landmarks[id]);
   const port = regionPort(state, id);
@@ -912,7 +918,7 @@ function frame(now) {
   wake(p, photoMode ? photoTime : state.time);
   const sceneTime = photoMode ? photoTime : state.time;
   audio.updateWorld(state, sceneTime, yaw, photoMode);
-  world.update(sceneTime, p, camera);
+  world.update(sceneTime, p, camera, state.time);
   meadow(sceneTime, p, camera);
   // Keep the photographic pose alive while the travel clock is paused.
   if (photoMode) {

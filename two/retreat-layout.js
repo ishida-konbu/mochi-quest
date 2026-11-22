@@ -3,10 +3,14 @@
 import { districtPoint } from './geography.js';
 import { TRADE_ROADS, measureRoute, cartPosition } from './trade-routes.js';
 
-const [cx,cz]=districtPoint('kyo',42,-448);
+const [cx,cz]=districtPoint('kyo',35,-458);
 export const COURT={x:cx,z:cz,name:'京の評定所',yaw:0};
-export const COURT_COLUMNS=[-13.2,-8.8,-4.4,0,4.4,8.8,13.2];
-export const COURT_STEPS=Array.from({length:5},(_,i)=>({z:9.36-i*.56,top:.21+i*.21}));
+// The audience floor is a clear span. Transverse tie beams transfer the
+// roof load onto the two outer aisles, clear of the unbroken painted wall.
+export const COURT_COLUMNS=[-18.8,-14.6,-10.95,10.95,14.6,18.8];
+export const COURT_GATE_Z=33.52;
+export const COURT_BRAZIERS=[[-8.2,29.5],[-9.8,14.4],[8.2,29.5],[9.8,14.4]];
+export const COURT_STEPS=Array.from({length:5},(_,i)=>({z:12.6-i*.64,top:.21+i*.21}));
 
 function wayside(id, fraction, offset) {
   const road=measureRoute(TRADE_ROADS.find(r=>r.id===id).knots);
@@ -41,13 +45,13 @@ export function bathRadius(s,x,z) {
   return Math.hypot(u,v)/springLip(s.index,Math.atan2(v,u));
 }
 export function reservedScenery(x,z) {
-  if(Math.abs(x-cx)<19.8 && z>cz-10.9 && z<cz+28) return true;
+  if(Math.abs(x-cx)<24.4 && z>cz-14.1 && z<cz+37.2) return true;
   const s=nearbyRetreat(x,z);
   return !!s && Math.hypot(s.x-x,s.z-z)<(s.hut?9.6:7.1);
 }
 const ease=n=>{const t=Math.min(1,Math.max(0,n));return t*t*(3-2*t);};
 export function courtTerrain(x,z,native,base) {
-  const edge=Math.max(Math.abs(x-cx)-18,cz-10-z,z-cz-25);
+  const edge=Math.max(Math.abs(x-cx)-23.7,cz-13.3-z,z-cz-35.5);
   return edge>=5 ? native : native+(base(cx,cz)-native)*(1-ease(edge/5));
 }
 export function bathTerrain(s,x,z,native,level) {
@@ -78,30 +82,34 @@ export function civicAndBathSolids(height,put) {
   function solid(x,z,w,d,top,kind,support=false) {
     return put(cx+x,cz+z,w/2,d/2,0,base+top,kind,support);
   }
-  solid(0,0,29,14,1.05,'floor',true);
-  for(const step of COURT_STEPS) solid(0,step.z,7.8,.61,step.top,'floor',true);
-  for(const x of COURT_COLUMNS) for(const z of [-5.55,5.55]){
-    if(z>0&&x===0) continue;
-    solid(x,z,.53,.53,7.7,'oval');
-  }
+  solid(0,0,41,20,1.05,'floor',true);
+  for(const step of COURT_STEPS) solid(0,step.z,9.4,.68,step.top,'floor',true);
+  for(const x of COURT_COLUMNS) for(const z of [-8.05,8.05])solid(x,z,.63,.63,7.9,'oval');
+  for(const [x,z] of COURT_BRAZIERS)solid(x,z,.98,.98,1.59,'oval');
   for(const side of [-1,1]){
-    solid(side*10.4,-4.82,3.96,.91,3.46,'box',true);
-    solid(side*13.3,0,.29,11.4,7.4,'wall');
-    solid(side*9.10,6.78,8.75,.14,2.37,'wall');
-    solid(side*13.4,15.5,.36,17,2.0,'wall');
-    solid(side*9.0,23.7,9.36,.48,2.0,'wall');
-    solid(side*3.91,22.87,.18,2.0,3.35,'wall');
-    for(const v of [-.72,.72])solid(side*4.15,23.7+v,.48,.48,4.53,'wall');
-    for(const v of [9.7,20.3])solid(side*7.4,v,1.05,.98,3.20,'oval',true);
+    solid(side*16.0,-7.07,4.10,.99,3.46,'box',true);
+    solid(side*18.9,0,.30,16.3,7.45,'wall');
+    solid(side*12.16,9.45,13.2,.14,2.37,'wall');
+    solid(side*19.0,21.8,.41,24.0,2.0,'wall');
+    solid(side*11.98,COURT_GATE_Z,14.44,.49,2.0,'wall');
+    solid(side*4.42,COURT_GATE_Z-.83,.18,2.0,3.35,'wall');
+    for(const v of [-.72,.72])solid(side*4.68,COURT_GATE_Z+v,.5,.5,4.53,'wall');
+    for(const v of [13.2,28.5])solid(side*14.3,v,1.05,.98,3.20,'oval',true);
   }
-  solid(-9,2.9,2.48,.94,1.65,'box',true);
-  solid(0,-5.68,26.8,.32,7.6,'wall');
-  solid(0,-2.85,7.6,3.7,1.35,'floor',true);
-  solid(0,-1.93,3.05,.92,1.98,'box',true);
-  solid(0,0,30.2,15.4,7.71,'ceiling');
-  solid(0,23.7,10.7,4.4,4.42,'ceiling');
-  put(cx,cz,16.2,8.9,0,base+7.74,'roof',true,5.12).form='hip';
-  put(cx,cz+23.7,5.8,2.2,0,base+4.44,'roof',true,1.83).form='hip';
+  solid(14.9,2.7,3.45,1.1,1.65,'box',true);
+  solid(-14.9,2.7,3.45,1.1,1.65,'box',true);
+  solid(-16.0,21.8,2.4,1.15,3.2,'box');
+  for(const x of [15.1,17.5])for(const z of [19.85,23.9])solid(x,z,.22,.22,3.2,'oval');
+  solid(16.87,21.88,.78,3.84,.68,'box',true);
+  solid(16.3,21.88,3.74,6.3,3.12,'ceiling');
+  put(cx+16.3,cz+21.88,3.15,1.87,Math.PI/2,base+3.12,'roof',true,1.17).form='hip';
+  solid(0,-8.22,37.9,.32,7.6,'wall');
+  solid(0,-4.29,10.40,4.85,1.35,'floor',true);
+  solid(0,-2.79,3.48,.94,1.98,'box',true);
+  solid(0,0,42,22,7.98,'ceiling');
+  solid(0,COURT_GATE_Z,11.9,4.8,4.42,'ceiling');
+  put(cx,cz,23.0,12.54,0,base+8.02,'roof',true,5.62).form='hip';
+  put(cx,cz+COURT_GATE_Z,6.46,2.4,0,base+4.44,'roof',true,1.91).form='hip';
 
   for(const s of RETREATS) {
     const level=height(s.x,s.z)+.52;

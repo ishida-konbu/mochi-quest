@@ -1,3 +1,5 @@
+import { inCapitalWard } from './kyo-layout.js';
+import { reservedScenery } from './retreat-layout.js';
 import * as THREE from './vendor/three.module.min.js';
 import {
   BRIDGES,
@@ -347,7 +349,12 @@ function scatteredHerbs(p, art) {
     d = new THREE.Object3D();
   const plant = (kind, x, z, size, width = 1, dir = rng() * TAU, count = 2, tint = '#f1f0dc') => {
     const y = h(x, z);
-    if (y < WATER_Y - 0.08 || (z < -185 && seasonAt(x,z).snow>.45)) return;
+    // A verge of one lane can cross the flagstones of the perpendicular one.
+    if(inCapitalWard(x,z,3) && (nearRoad(x,z,1.4) || BUILDINGS.some(b=>{
+      const dx=x-b.x,dz=z-b.z;
+      return abs(dx*b.cos-dz*b.sin)<b.w/2+.80 && abs(dx*b.sin+dz*b.cos)<b.d/2+1.4;
+    })))return;
+    if (reservedScenery(x,z) || y < WATER_Y - 0.08 || (z < -185 && seasonAt(x,z).snow>.45)) return;
     const cell = HERB[kind],
       key = Math.floor(x / 68) + ',' + Math.floor(z / 68);
     let group = patches.get(key);
@@ -367,6 +374,7 @@ function scatteredHerbs(p, art) {
     }
   };
   const stone = (x, z, s, yaw, shade) => {
+    if (reservedScenery(x,z)) return;
     p.part(
       'rock',
       x,

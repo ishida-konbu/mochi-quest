@@ -49,7 +49,10 @@ function hawkRoute(index) {
   // The same tree form and transform as the batched forest. Choose three
   // separate crowns, whose paths spread the ten birds across the scroll.
   const district=place(['river','shrine','coast','autumn','snow','dawn','kyo','peach','todaiji','inari'][index]);
-  const trees=TREES.filter(t=>t.form!==undefined && t.kind!=='moso' && t.h>4);
+  // In the second cedar and cypress forms the lowest needle fan hangs
+  // directly over the landing spur. Other forms leave space for the feet.
+  const trees=TREES.filter(t=>t.form!==undefined && t.kind!=='moso' && t.h>4 &&
+    !((t.kind==='cedar'||t.kind==='cypress') && t.form%4===1));
   const stops=[];
   for(let j=0;j<3;j++){
     const a=index*2.39996+j*tau/3;

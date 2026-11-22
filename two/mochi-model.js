@@ -76,6 +76,9 @@ function skinMaterial(maps) {
         float clean=front*bareSkin.a*swap;
         vec4 features=mix(texture2D(riceFaces,cell),
                           texture2D(riceFaces,(vec2(1.,5.)+uvFace)/vec2(4.,6.)),riceSmile);
+        #ifdef RICE_BRUSH_PORTRAIT
+        features=texture2D(riceFaces,uvFace);
+        #endif
         float paint=front*features.a*swap;
         float mouthPaint=paint*(1.-smoothstep(.12,.20,abs(uvFace.x-.507)))
                               *smoothstep(.39,.46,uvFace.y);
@@ -170,24 +173,31 @@ function riceBust(src) {
 
 let residentSkin;
 const residentMaterials=new Map();
-export function dressedRiceFace(kind,capacity=0) {
+export function dressedRiceFace(kind,capacity=0,portrait=null) {
   const face=capacity ? new T.InstancedMesh(new T.BufferGeometry(),undefined,capacity) : new T.Mesh();
   face.name='にっこり餅の面相';face.castShadow=true;face.visible=false;
   if(capacity){face.frustumCulled=false;face.instanceMatrix.setUsage(T.DynamicDrawUsage);}
   function fit(){
     const original=source.gltf.scene.getObjectByName('Nikkori');
     residentSkin??=riceBust(original.geometry);
-    if(!residentMaterials.has(kind)){
+    const costume=portrait||kind;
+    if(!residentMaterials.has(costume)){
       const {material,uniforms}=skinMaterial(source.maps);
       const gestures=['Warm','Read','Surprise','Normal','Warm','Read','Normal'];
       uniforms.riceSmile.value=0;
       uniforms.riceCell.value=original.userData.faceCues[gestures[kind]][0][1];
       uniforms.riceTint.value.set(kind===3?'#dce6ae':kind===4?'#f2d3a4':'#fff9ec');
-      residentMaterials.set(kind,material);
+      if(portrait){
+        material.defines={...material.defines,RICE_BRUSH_PORTRAIT:1};
+        uniforms.riceFaces.value=portrait;
+        uniforms.riceTint.value.set('#e4d7b7');
+        material.roughness=.66;material.clearcoat=.09;
+      }
+      residentMaterials.set(costume,material);
     }
     face.material.dispose();
     face.geometry.dispose();
-    face.geometry=residentSkin;face.material=residentMaterials.get(kind);face.visible=true;
+    face.geometry=residentSkin;face.material=residentMaterials.get(costume);face.visible=true;
   }
   if(source)fit();
   else loadRiceModel().then(fit,()=>{}); // The boot screen owns the shared loading error.

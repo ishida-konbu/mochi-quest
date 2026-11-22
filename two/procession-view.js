@@ -49,7 +49,7 @@ function plate(filename,color) {
   if (!plates.has(filename)) {
     let texture;
     const ready=new Promise((resolve,reject)=>{
-      texture=new THREE.TextureLoader().load(new URL('./assets/residents/'+filename,import.meta.url).href,resolve,undefined,reject);
+      texture=new THREE.TextureLoader().load(new URL('./assets/residents/'+filename+(filename==='costumes.webp'?'?v=heian-1':''),import.meta.url).href,resolve,undefined,reject);
     });
     // Weight the RGB by coverage before generating mip levels, then unweight
     // it in the shader. Transparent WebP texels otherwise introduce a black

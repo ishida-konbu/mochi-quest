@@ -4,7 +4,7 @@ export function buildingCraft(b) {
 }
 
 export function roofForm(b) {
-  return ['net', 'rice', 'lodge'].includes(buildingCraft(b)) ? 'hip' : 'gable';
+  return ['net', 'rice', 'lodge', 'rush', 'baskets'].includes(buildingCraft(b)) ? 'hip' : 'gable';
 }
 
 // Coordinates range from -1 to 1 across the eaves. The hipped roof has a
@@ -31,7 +31,7 @@ export function roomPlan(b) {
       { u: (sign * width) / 2, v: 0, width: 0.18, depth },
     ]),
   ];
-  const workbench = pagoda ? null : { u: width * .36, v: -depth * .22, width: width * .21, depth: depth * .39, height: .49 };
+  const workbench = pagoda ? null : b.kind==='wardShop' ? {u:width*.255,v:depth*.22,width:width*.32,depth:1.09,height:.49} : { u: width * .36, v: -depth * .22, width: width * .21, depth: depth * .39, height: .49 };
   const porch = b.kind === 'temple' || b.kind === 'inn' ? {
     u: 0, v: depth*.49, width: depth*.51, depth: width*.48,
     eave: b.wall*.78, rise: b.kind === 'temple' ? 1.16 : .78, rotation: Math.PI/2,
@@ -47,7 +47,7 @@ export function roomPlan(b) {
 // Five open storeys around paired stair flights. Rendering and collision use
 // these exact treads and openings, including the landings at either end.
 export function pagodaPlan(b) {
-  const floor=.48, rise=3.52, run=3.68, stairWidth=1.42, lane=.85, steps=10;
+  const scale=b.roof/14.5, floor=.48, rise=3.52*scale, run=3.68, stairWidth=1.42, lane=.85, steps=Math.ceil(10*scale);
   const slabs=[], storeys=[], posts=[], panels=[];
   const slab=(u,v,w,d,top,kind)=>slabs.push({u,v,w,d,top,kind});
   for(let n=0;n<5;n++) {
@@ -89,5 +89,5 @@ export function pagodaPlan(b) {
       }
     }
   }
-  return {slabs,storeys,posts,panels,rise};
+  return {slabs,storeys,posts,panels,rise,scale};
 }

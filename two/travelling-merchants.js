@@ -12,7 +12,7 @@ const { PI, sin, cos }=Math;
 const ink='#3c3935', lacquer='#653c31', straw='#b2915b', pine='#526551', gold='#cba861';
 const hoop=new THREE.TorusGeometry(1,.072,8,40);
 
-function traveller(parent,noble){
+export function traveller(parent,noble){
   const root=new THREE.Group();root.name=noble?'御簾の公達餅':'網代笠の問屋餅';
   parent.add(root);
   const kind=noble?5:6,head=dressedRiceFace(kind);
