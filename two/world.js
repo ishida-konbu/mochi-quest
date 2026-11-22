@@ -1713,7 +1713,7 @@ function touchesPaving(x, z, radius) {
 // from the old street surveys, then give each rerouted lane its own print.
 const formerGravelSites=new Map([
   ['snow-avenue',30],['snow-bath-lane',10],['capital-road',81],
-  ['lakeside-approach',0],['inland-road',0],
+  ['lakeside-approach',0],['inland-road',0],['spring-pass-road',0],
 ]);
 export function dressRoadGravel(p, originalRoll) {
   for (const road of ROADS) {
@@ -1723,7 +1723,12 @@ export function dressRoadGravel(p, originalRoll) {
       const [x,z]=road.points[0];
       r=seeded(Math.round(x*823+z*163));
     }
+    // The extra stretch into Sakai's warehouse court has its own gravel.
+    // Keep the established harbour road and all later lanes on their old seed.
+    const formerEnd=road.id==='sakai-road'
+      ? road.points.findIndex(([x,z])=>x===-159 && z===-603) : Infinity;
     for (let i = 2; i < road.points.length; i += 4) {
+      if (i>formerEnd && r===originalRoll) r=seeded(0x5a4a1);
       const [x, z] = road.points[i],
         q = road.points[i - 1],
         len = Math.hypot(x - q[0], z - q[1]) || 1;

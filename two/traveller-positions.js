@@ -1,19 +1,84 @@
 import { districtPoint } from './geography.js';
-import { BRIDGES, CONNECTING_ROADS, WATER_Y, roadSurfaceHeight, riverZ, coastX, eastCoastX } from './terrain.js';
+import { BRIDGES, CONNECTING_ROADS, WATER_Y, bridgeAt, bridgeHeight, roadSurfaceHeight, riverZ, coastX, eastCoastX } from './terrain.js';
 import { waterWave } from './shoreline.js';
 import { measureRoute, cartPosition } from './trade-routes.js';
+import { MARKET_HIGHWAYS, THROUGH_MARKET_HIGHWAY } from './market-highways.js';
+import { RASHOMON, gateStoneRise } from './kyo-layout.js';
 
 const {sin,cos}=Math;
 export const OX_HITCH=3.78, HORSE_SCALE=1.23;
-export const CARRIAGES=CONNECTING_ROADS.slice(0,2).map((road,i)=>({
-  route:measureRoute(road.points),speed:i===0?1.85:1.63,offset:i===0?85:30,
-}));
+const legacyRoad=id=>measureRoute(CONNECTING_ROADS.find(road=>road.id===id).points);
+const templeTeam={id:'susuki-todaiji',route:legacyRoad('temple-road'),speed:1.63,offset:30};
+function carriageStops(route,endStop=7.5){
+  // The driver turns before the walkers' market stall. The yoke sweeps more
+  // than five metres from the axle during the turn.
+  const stop=7.5,first=cartPosition(route,stop,1),last=cartPosition(route,route.length-endStop,1);
+  const inside=route.points.filter((_,i)=>route.distances[i]>stop && route.distances[i]<route.length-endStop);
+  return {...route,...measureRoute([[first.x,first.z],...inside,[last.x,last.z]])};
+}
+// Sakai's turn is in the open quay, beyond the projecting warehouse corner.
+const sakaiRoad=carriageStops(MARKET_HIGHWAYS.find(route=>route.id==='kyoto-sakai'),3);
+const southernRoad=carriageStops(THROUGH_MARKET_HIGHWAY);
+// In two complete market circuits the local ox team runs five. This keeps
+// their passing places on the open southern road, away from the town turns.
+const southernLeg=2.5*(templeTeam.route.length/templeTeam.speed+7);
+const southernTeam={id:'kyoto-todaiji',route:southernRoad,
+  speed:southernRoad.length/(southernLeg-7),offset:southernLeg*1.364,load:'silk'};
+export const CARRIAGES=[
+  {id:'snow-kyoto',route:legacyRoad('capital-road'),speed:1.85,offset:85},templeTeam,
+  {id:'kyoto-sakai',route:sakaiRoad,speed:1.72,offset:sakaiRoad.length*.30/1.72,load:'sakai'},southernTeam,
+];
 
-export function carriagePose(journey,time){
+export function carriageGroundHeight(x,z){
+  const bridge=bridgeAt(x,z);
+  if(bridge)return bridgeHeight(bridge,z);
+  const paving=gateStoneRise(x-RASHOMON.x,z-RASHOMON.z)>0?0:.08;
+  return roadSurfaceHeight(x,z)+paving;
+}
+
+export function carriageHorizontalPose(journey,time){
   const q=cartPosition(journey.route,time,journey.speed,journey.offset);
-  q.y=roadSurfaceHeight(q.x,q.z);
-  const fore=roadSurfaceHeight(q.x+3*sin(q.yaw),q.z+3*cos(q.yaw));
-  q.grade=(fore-q.y)/3;
+  // A long yoke follows the bend under the whole vehicle. Using only its
+  // current polyline edge made the ox jump sideways at a surveyed knot.
+  const before=cartPosition(journey.route,Math.max(0,q.distance-2.2),1);
+  const after=cartPosition(journey.route,Math.min(journey.route.length,q.distance+2.2),1);
+  const bearing=Math.atan2(after.x-before.x,after.z-before.z);
+  q.yaw+=Math.atan2(sin(bearing-q.bearing),cos(bearing-q.bearing));q.bearing=bearing;
+  // The two temple teams travel the same southern road. Approach the verge
+  // gradually and keep a consistent side even when one team is overtaking.
+  const local=journey.id===templeTeam.id;
+  q.passing=0;
+  if(local || journey.id===southernTeam.id){
+    const partner=local?southernTeam:templeTeam;
+    const other=cartPosition(partner.route,time,partner.speed,partner.offset);
+    const gap=Math.hypot(other.x-q.x,other.z-q.z),u=Math.min(1,Math.max(0,(25-gap)/15));
+    const side=(local?1:-1)*1.39*u*u*(3-2*u);
+    q.passing=side;
+    q.x+=side*cos(q.bearing); q.z-=side*sin(q.bearing);
+  }
+  return q;
+}
+export function carriagePose(journey,time,q=carriageHorizontalPose(journey,time)){
+  // A wheel may already be on the bridge while the ox has reached the bank.
+  // Fit the loaded frame to both wheel rims and the ox. The second fit uses
+  // the actual foreshortening of those three supports on an inclined plane.
+  const dx=sin(q.yaw),dz=cos(q.yaw);
+  const floor=(u,v)=>carriageGroundHeight(q.x+u*dz+v*dx,q.z-u*dx+v*dz);
+  let grade=0,bank=0;
+  for(let fit=0;fit<2;fit++){
+    const cg=1/Math.hypot(1,grade),sg=grade*cg;
+    const cb=1/Math.hypot(1,bank*cg),sb=bank*cg*cb;
+    // The rim is 1.05056m in radius, on an axle 1.035m above the frame datum.
+    const rim=-.01556,midU=-sb*rim,midV=-.63*cg-sg*cb*rim;
+    const halfU=1.055*cb,halfV=-1.055*sg*sb,foreV=OX_HITCH*cg;
+    const lift=-rim*Math.hypot(1,grade,bank);
+    const left=floor(midU-halfU,midV-halfV)+lift,right=floor(midU+halfU,midV+halfV)+lift;
+    const axle=(left+right)*.5,across=(right-left)*.5,fore=floor(0,foreV);
+    grade=(fore-axle+across*midU/halfU)/(foreV-midV+halfV*midU/halfU);
+    bank=(across-grade*halfV)/halfU;
+    q.y=fore-grade*foreV;
+  }
+  q.grade=grade;q.bank=bank;
   return q;
 }
 

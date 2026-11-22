@@ -1,6 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 import { groundHeight, wrapDelta } from './terrain.js';
-import { ROAD_MERCHANTS, roadMerchantPose } from './road-merchant-routes.js';
+import { MAX_MERCHANT_SHOULDER, ROAD_MERCHANTS, roadMerchantPose } from './road-merchant-routes.js';
 export { MERCHANT_ROUTES, ROAD_MERCHANTS, roadMerchantPose } from './road-merchant-routes.js';
 import { batchActorParts } from './actors.js';
 import { ancientClothing, townBody, townHeadwear } from './heian-dress.js';
@@ -44,13 +44,22 @@ function makeMerchant(kind){
 export function createRoadMerchants(scene) {
   const company=new T.Group();company.name='村々を往来する行商餅';scene.add(company);
   const distant=costumeDistance(company,ROAD_MERCHANTS.length),templates=new Map();
-  const walkers=ROAD_MERCHANTS.map(merchant=>({merchant,costume:merchant.costume,figure:null}));
+  const drawRadius=140;
+  const walkers=ROAD_MERCHANTS.map(merchant=>{
+    // Reject a whole itinerary before locating the walker on its arc-length
+    // table. Include the shoulder and the turnaround at both ends.
+    const {west,east,north,south}=merchant.route.bounds;
+    const pad=drawRadius+MAX_MERCHANT_SHOULDER;
+    return {merchant,costume:merchant.costume,figure:null,
+      cx:(west+east)/2,cz:(north+south)/2,rx:(east-west)/2+pad,rz:(south-north)/2+pad};
+  });
   return (time,player,camera)=>{
     distant.begin(time,player,camera);
     for(const walker of walkers){
-      const {merchant}=walker,p=roadMerchantPose(merchant,time),dx=wrapDelta(p.x-player.x),dz=wrapDelta(p.z-player.z);
       if(walker.figure)walker.figure.visible=false;
-      if(dx*dx+dz*dz>140**2)continue;
+      if(Math.abs(wrapDelta(player.x-walker.cx))>walker.rx || Math.abs(wrapDelta(player.z-walker.cz))>walker.rz)continue;
+      const {merchant}=walker,p=roadMerchantPose(merchant,time),dx=wrapDelta(p.x-player.x),dz=wrapDelta(p.z-player.z);
+      if(dx*dx+dz*dz>drawRadius*drawRadius)continue;
       const x=player.x+dx,z=player.z+dz,y=groundHeight(p.x,p.z),s=merchant.size;
       const phase=pi*p.travelled/merchant.stride,step=p.moving?Math.sin(phase):0;
       const bob=.028*step**2;
