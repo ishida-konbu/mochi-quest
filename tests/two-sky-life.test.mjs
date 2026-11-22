@@ -4,7 +4,7 @@ import {circuitTime} from '../two/legend-flight.js';
 import {createGame} from '../two/game.js';
 import {moveWildlife, legendFlight} from '../two/bestiary.js';
 import {canopyHeight} from '../two/village-paths.js';
-import {dragonPitch, dragonWave, walkingScore} from '../two/animal-motion.js';
+import {dragonLengthScale, dragonPhase, dragonPitch, dragonWave, walkingScore} from '../two/animal-motion.js';
 import {terrainHeight, groundHeight, WATER_Y, REGIONS, ORIGINAL_REGIONS, BOUND, wrapDelta, regionAt, waterDepth, solidHeightAt} from '../two/terrain.js';
 
 test('flight strata span each district and a distant crane moves on every tick',()=>{
@@ -42,6 +42,12 @@ test('each legend traverses all 25 sectors, changing altitude above sea, ridges 
   const journey={...createGame().save(),flightSeed:32495}, game=createGame(journey);
   for(const type of ['dragon','kirin']) {
     const n=game.state.npcs.find(n=>n.type===type), period=circuitTime(n);
+    if(type==='dragon') {
+      const {player}=game.state;
+      assert.ok(Math.abs(n.x-player.x)<35 && n.z<player.z-90 && n.z>player.z-160);
+      assert.ok(n.altitude>18 && n.altitude<33 && Math.abs(Math.sin(n.heading))>.8,
+        'the first dragon crosses the skyline in front of the ferry');
+    }
     const samples=period*4*2, cells=new Set(), districts=new Set(), previous={};
     let low=Infinity,high=-Infinity,sea=0,mountain=0,ascending=0,descending=0;
     const section=delta=>(Math.round(wrapDelta(delta)/(2*BOUND/5))+5)%5;
@@ -58,13 +64,18 @@ test('each legend traverses all 25 sectors, changing altitude above sea, ridges 
       if(i) {
         assert.ok(Math.hypot(wrapDelta(p.x-previous.x),wrapDelta(p.z-previous.z))<8,'continuous across map seams');
         assert.ok(Math.abs(p.y-previous.y)<3.5,'continuous climb');
+        if(type==='dragon') {
+          const turn=p.heading-previous.heading;
+          assert.ok(Math.abs(Math.atan2(Math.sin(turn),Math.cos(turn)))<.5,'the tail sweeps around a turn');
+        }
         if(p.y>previous.y+.08) ascending++;
         if(p.y<previous.y-.08) descending++;
       }
       Object.assign(previous,p);
     }
     assert.equal(cells.size,25);assert.equal(districts.size,REGIONS.length);
-    assert.ok(low<11 && high>(type==='dragon'?85:52));
+    if(type==='dragon') assert.ok(low>18 && low<26 && high>130);
+    else assert.ok(low<11 && high>52);
     assert.ok(sea>0 && mountain>0 && ascending>40 && descending>40);
     const next=legendFlight(n,period,{}), first=legendFlight(n,0,{});
     assert.ok(Math.hypot(wrapDelta(next.x-first.x),wrapDelta(next.z-first.z))>5,'next circuit has fresh stops');
@@ -109,19 +120,24 @@ test('the flight velocity follows the drawn curve across route and altitude samp
       assert.ok(Math.hypot(vx(a)-vx(c),vz(a)-vz(c))<.025);
     }
   }
-  // Survey the actual trees along the enlarged tour, including steep climbs
-  // where the six-metre tail hangs below the dragon's centre.
+  // Follow the pitch and wave at both ends of the enlarged body. Its tail
+  // may still be crossing a canopy when the head is already in the clear.
   const dragon=game.state.npcs.find(n=>n.type==='dragon');
+  const sections=[[-.35,.03,-2.92],[.42,-.12,-.35],[-.45,.42,.70],[-.13,1.50,1.60]];
   let crossings=0;
   for(let time=0;time<circuitTime(dragon);time+=.25) {
-    const p=legendFlight(dragon,time,{}), pitch=dragonPitch(p);
-    if(pitch>=-.3) continue;
-    const offset=-6.25*Math.cos(pitch)+1.42*Math.sin(pitch);
-    const crown=canopyHeight(p.x+Math.sin(p.heading)*offset,p.z+Math.cos(p.heading)*offset,3.6);
-    if(!Number.isFinite(crown))continue;
-    crossings++;
-    const belly=p.y-.35*Math.cos(pitch)+6.5*Math.sin(pitch);
-    assert.ok(belly>crown+.5,'pitched tail clears the crown at '+time);
+    const p=legendFlight(dragon,time,{}), pitch=dragonPitch(p), scale=dragon.stature;
+    for(const [x,y,z] of sections) {
+      const sway=dragonWave(z,dragonPhase(time,dragon),{});
+      const along=z*scale*dragonLengthScale, across=(x+sway.x)*scale, up=(y+sway.y)*scale;
+      const forward=along*Math.cos(pitch)+up*Math.sin(pitch);
+      const px=wrapDelta(p.x+Math.sin(p.heading)*forward+Math.cos(p.heading)*across);
+      const pz=wrapDelta(p.z+Math.cos(p.heading)*forward-Math.sin(p.heading)*across);
+      const crown=canopyHeight(px,pz,2), top=Math.max(crown,solidHeightAt(px,pz,2),terrainHeight(px,pz));
+      const belly=p.y+up*Math.cos(pitch)-along*Math.sin(pitch);
+      if(pitch<-.3 && z< -2 && Number.isFinite(crown))crossings++;
+      assert.ok(belly>top+.5,'pitched body clears the terrain, roofs and crowns at '+time);
+    }
   }
   assert.ok(crossings>15);
 });

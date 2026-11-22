@@ -2,6 +2,10 @@
 const clamp = value => Math.min(1, Math.max(0, value));
 const smooth = value => {const t=clamp(value);return t*t*(3-2*t);};
 
+// The sculpt stretches lengthwise inside its pitched trunk. Delivery volumes
+// use this same ratio before applying world stature and pitch.
+export const dragonLengthScale = 1.5;
+
 // The crest travels from the head through the tail. Give the light tip a wider
 // sweep. Both the rendered transverse sections and the delivery volumes use it.
 export function dragonWave(z, phase, out) {

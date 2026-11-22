@@ -1,13 +1,14 @@
 // Paint the original emaki pigment maps in a browser, then export to WebP.
 // X follows the spine towards the nose. Y is one revolution around the pelt,
 // with the left and right flanks meeting the spine at 1/4 of a revolution.
+import { paintDragonHide } from './paint-dragon-hide.mjs';
 import { seeded } from '../two/terrain.js';
 const TAU=Math.PI*2;
 const pigment={monkey:'#87664e',bird:'#e6e0cc',fox:'#bd6d3f',tiger:'#c08640',dragon:'#547c74',kirin:'#8a9f86',deer:'#bcaa90',boar:'#9d967f',shishi:'#cbbfa1'};
 
 function paintMask(g,type) {
-  const tiger=type==='tiger', dragon=type==='dragon', fox=type==='fox';
-  const ink='#443a31', light='#ede2c9', accent=dragon?'#b09262':'#ad7955';
+  const tiger=type==='tiger', fox=type==='fox';
+  const ink='#443a31', light='#ede2c9', accent='#ad7955';
   const ellipse=(x,y,rx,ry,c)=>{
     g.fillStyle=c;g.beginPath();g.ellipse(x,y,rx,ry,0,0,TAU);g.fill();
   };
@@ -30,7 +31,7 @@ function paintMask(g,type) {
     g.save();g.translate(0,y);g.scale(1,sign);
     {
       // Buff jaw and ruff wash set off the eye at the edge of the white cheek.
-      g.fillStyle=dragon?'#b7ae84':light;g.beginPath();g.moveTo(218,-47);
+      g.fillStyle=light;g.beginPath();g.moveTo(218,-47);
       g.bezierCurveTo(283,-43,342,-20,401,-18);g.bezierCurveTo(526,-15,625,-30,710,4);
       g.lineTo(790,-39);g.lineTo(790,-89);g.lineTo(234,-87);g.closePath();g.fill();
     }
@@ -46,7 +47,7 @@ function paintMask(g,type) {
       leaf([202,-30],[311,-34],[345,-17],[377,-11],accent);
       leaf([248,-37],[326,-43],[356,-24],[394,-21],accent);
       leaf([222,9],[302,11],[347,3],[382,2],accent);
-    }else if(dragon||type==='kirin'){
+    }else if(type==='kirin'){
       for(let i=0;i<8;i++){
         const x=174+23*(i%3),ly=-11+12*Math.floor(i/3);
         g.strokeStyle='#7f7156';g.lineWidth=1.8;g.beginPath();g.arc(x,ly,12,.18*Math.PI,.82*Math.PI);g.stroke();
@@ -135,30 +136,24 @@ function fox(g) {
     for(let i=0;i<16;i++)flick(g,492+i*14,120-i*.9,-20,13,1.5,'#a7794f');
   });
 }
-function scales(g,kind) {
-  const kirin=kind==='kirin';
+function kirinScales(g) {
   flanks(g,()=>{
     const base=g.createLinearGradient(0,0,0,192);
-    for(const [n,c] of kirin?[[0,'#6e7562'],[.35,'#74998c'],[.67,'#a9af83'],[.84,'#d7bd80'],[1,'#ead09a']]:
-      [[0,'#385951'],[.33,'#557a72'],[.68,'#89a995'],[.79,'#bcba8a'],[1,'#e3c392']])base.addColorStop(n,c);
+    for(const [n,c] of [[0,'#6e7562'],[.35,'#74998c'],[.67,'#a9af83'],[.84,'#d7bd80'],[1,'#ead09a']])base.addColorStop(n,c);
     g.fillStyle=base;g.fillRect(0,0,768,192);
-    const dx=kirin?40:23,dy=kirin?27:22;
+    const dx=40,dy=27;
     for(let j=0;j<Math.ceil(140/dy);j++)for(let k=-1;k<Math.ceil(768/dx)+1;k++) {
       const x=k*dx+(j%2)*dx*.49+2*Math.sin(k*.83+j*.52),y=j*dy+5+2.7*Math.sin(k*.55+j*.9);
-      const fade=kirin?.62:.72;
-      g.globalAlpha=fade;
-      fill(g,j%3===0?(kirin?'#7e9983':'#668577'):(kirin?'#a0b398':'#708e79'),()=>{
+      g.globalAlpha=.62;
+      fill(g,j%3===0?'#7e9983':'#a0b398',()=>{
         g.moveTo(x-dx*.48,y);g.quadraticCurveTo(x,y+dy*.6,x+dx*.52,y);
         g.bezierCurveTo(x+dx*.35,y+dy*.66,x+dx*.28,y+dy*.90,x,y+dy);
         g.quadraticCurveTo(x-dx*.36,y+dy*.77,x-dx*.48,y);
       });
       g.globalAlpha=1;
-      stroke(g,kirin?'#796740':'#435e53',x-dx*.47,y,x-dx*.27,y+dy*.8,x,y+dy,2.1);
-      stroke(g,kirin?'#796740':'#435e53',x,y+dy,x+dx*.37,y+dy*.72,x+dx*.51,y,1.8);
-      stroke(g,kirin?'#e0c886':'#b2c4a3',x-dx*.33,y+3,x-dx*.26,y+dy*.51,x-dx*.04,y+dy*.73,2.6);
-    }
-    if(!kirin)for(let i=-1;i<45;i++){
-      const x=i*22;stroke(g,'#9c8e6c',x,143,x-7,166,x-13,191,2.4);
+      stroke(g,'#796740',x-dx*.47,y,x-dx*.27,y+dy*.8,x,y+dy,2.1);
+      stroke(g,'#796740',x,y+dy,x+dx*.37,y+dy*.72,x+dx*.51,y,1.8);
+      stroke(g,'#e0c886',x-dx*.33,y+3,x-dx*.26,y+dy*.51,x-dx*.04,y+dy*.73,2.6);
     }
   });
 }
@@ -216,7 +211,7 @@ function printBrushwork(g,type,part) {
   const originX = (tile%2)*source + 3, originY = (tile>>1)*source + 3;
   g.save();
   g.globalCompositeOperation='multiply';
-  g.globalAlpha = part==='face' ? .48 : ['deer','tiger','fox'].includes(type) ? .76 : .58;
+  g.globalAlpha = type==='dragon' ? .16 : part==='face' ? .48 : ['deer','tiger','fox'].includes(type) ? .76 : .58;
   // Subrectangles overlap with mirrored edges. No wrap line is drawn at 0/360.
   for(let j=0;j<2;j++) for(let i=0;i<3;i++){
     const w=256,h=192;
@@ -227,11 +222,12 @@ function printBrushwork(g,type,part) {
 }
 
 export function paintBeastCoat(type,part) {
-  const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=512;
-  const g=canvas.getContext('2d');g.scale(4/3,4/3);g.lineCap=g.lineJoin='round';
+  const canvas=document.createElement('canvas');canvas.width=type==='dragon' && part==='body'?2048:1024;canvas.height=512;
+  const g=canvas.getContext('2d');g.scale(canvas.width/768,canvas.height/384);g.lineCap=g.lineJoin='round';
   const rng=seeded(318+type.charCodeAt(2)*103+part.charCodeAt(0));
   g.fillStyle=pigment[type];g.fillRect(0,0,768,384);
-  if(part==='tail' && type==='tiger'){
+  if(type==='dragon')paintDragonHide(g,part,seeded);
+  else if(part==='tail' && type==='tiger'){
     flanks(g,()=>{
       const wash=g.createLinearGradient(0,0,0,192);
       wash.addColorStop(0,'#b58855');wash.addColorStop(.65,'#d1a46f');wash.addColorStop(1,'#d8c49c');
@@ -253,7 +249,7 @@ export function paintBeastCoat(type,part) {
   else if(part==='brush')tail(g,rng);
   else if(type==='tiger')tiger(g);
   else if(type==='fox')fox(g);
-  else if(type==='kirin'||type==='dragon')scales(g,type);
+  else if(type==='kirin')kirinScales(g);
   else if(type==='bird')down(g,rng);
   else {
     flanks(g,()=>{

@@ -4,6 +4,8 @@ import * as THREE from './vendor/three.module.min.js';
 import { DYES, TRADES } from './procession.js';
 import { SCROLL_FAUNA, FAUNA_SHEET, faunaDrawing, faunaFrequency } from './scroll-fauna.js';
 import { SPECIES } from './bestiary.js';
+import { dragonPitch } from './animal-motion.js';
+import { dragonSkyHaze } from './dragon-flight.js';
 import { seasonAt } from './terrain.js';
 import { finishInSlices } from './preparation.js';
 
@@ -27,10 +29,10 @@ export function beastDrawing(type, variant=0) {
 }
 export const VILLAGERS={poses:6,columns:42,rows:39,width:96,height:104,frameX:2.88,frameY:3.24,center:1.37};
 export const residentFrameX=craft=>craft==='fisher'?3.48:VILLAGERS.frameX;
-export const BEASTS={columns:24,rows:Math.ceil(poseCount/3),width:160,height:160};
+export const BEASTS={atlas:'beasts.webp?v=ryu-emaki-1',columns:24,rows:Math.ceil(poseCount/3),width:160,height:160};
 // Three-quarter and broadside views need room for the full brush tail,
 // wingtips and dragon whiskers, including a gutter at the coarsest mip.
-const paddedFrames={bird:4,fox:3.3,tiger:3.8,dragon:8};
+const paddedFrames={bird:4,fox:3.3,tiger:3.8,dragon:11.5};
 export const beastFrame=type=>paddedFrames[type]??SPECIES[type].frame;
 export const clothGround='#999999';
 const base=new THREE.Color(clothGround);
@@ -69,7 +71,7 @@ export const costumeFrame=role=>role<5 ? 2.28:role===8 ? 4.45:3.18;
 export const costumeCentre=role=>role<5 ? .94:1.39;
 
 export async function preparePlates(renderer) {
-  const entries=[plate('procession.webp',true),plate('procession-dyes.webp',false),plate('beasts.webp',true),plate(FAUNA_SHEET.atlas,true),plate('emaki-costumes.webp',true)];
+  const entries=[plate('procession.webp',true),plate('procession-dyes.webp',false),plate(BEASTS.atlas,true),plate(FAUNA_SHEET.atlas,true),plate('emaki-costumes.webp',true)];
   await Promise.all(entries.map(entry=>entry.ready));
   function* upload() {
     for (const {texture} of entries) {renderer?.initTexture(texture);yield;}
@@ -85,7 +87,7 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   geometry.setAttribute('tileCell',cells);
   const motion=new THREE.InstancedBufferAttribute(new Float32Array(capacity*3),3).setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('nextPose',motion);
-  const atlas=plate(costumes?'emaki-costumes.webp':scroll?FAUNA_SHEET.atlas:beasts?'beasts.webp':'procession.webp',true).texture;
+  const atlas=plate(costumes?'emaki-costumes.webp':scroll?FAUNA_SHEET.atlas:beasts?BEASTS.atlas:'procession.webp',true).texture;
   const cloth=beasts ? null : plate('procession-dyes.webp',false).texture;
   const material=new THREE.MeshBasicMaterial({map:atlas,transparent:true,alphaTest:.035});
   material.onBeforeCompile=shader=>{
@@ -96,6 +98,11 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
     shader.vertexShader = 'attribute vec3 nextPose; varying vec3 poseBlend;\n' + shader.vertexShader.replace(
         '#include <uv_vertex>', `#include <uv_vertex>
         poseBlend = vec3(nextPose.xy/vec2(${sheet.columns}.0,${sheet.rows}.0), nextPose.z);`);
+    if(beasts===true) {
+      const dragon=beastDrawing('dragon');
+      const tile=`(tileCell.x + (${sheet.rows-1}. - tileCell.y) * ${sheet.columns}.)`;
+      dragonSkyHaze(shader,`${tile} >= ${dragon.start}. && ${tile} < ${dragon.start+8*dragon.poses}.`);
+    }
     shader.fragmentShader = 'varying vec3 poseBlend;\n' + shader.fragmentShader;
     // The full next cell starts beyond the transparent gutter. Limit the
     // coarsest sample footprint before it can touch another animal's ink.
@@ -184,6 +191,7 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
     const center=n.y+(costumes?costumeCentre(n.costume):spec?.center??VILLAGERS.center)*scale;
     transform.position.set(x,center,z);
     transform.rotation.set(-Math.atan2(camera.position.y-center,Math.hypot(vx,vz)),facing,0,'YXZ');
+    if(n.type==='dragon')transform.rotation.z=-dragonPitch(n)*Math.sin(n.heading-facing);
     const span=costumes?costumeFrame(n.costume):scroll ? spec.frame : spec ? beastFrame(n.type) : 0;
     transform.scale.set((span||residentFrameX(n.craft || n.role))*scale*build,(span||VILLAGERS.frameY)*scale,1);
     transform.updateMatrix();figures.setMatrixAt(count,transform.matrix);

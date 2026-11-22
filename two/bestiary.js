@@ -5,14 +5,14 @@ import { SCROLL_FAUNA } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { canopyHeight, walkCircuit } from './village-paths.js';
 import { legendary, legendPath } from './legend-flight.js';
-import { craneWingbeat, dragonWave, dragonPhase, dragonPitch, maxDragonPitch, walkingScore } from './animal-motion.js';
+import { craneWingbeat, dragonWave, dragonPhase, dragonPitch, dragonLengthScale, maxDragonPitch, walkingScore } from './animal-motion.js';
 
 export const SPECIES = Object.freeze({
   monkey: { count:90, points:30, label:'猿', stature:1, frame:2.7, center:.88 },
   bird:   { count:40, points:30, label:'丹頂', stature:1, frame:3.5, center:.13 },
   fox:    { count:40, points:50, label:'狐', stature:1, frame:2.7, center:.72 },
   tiger:  { count:10, points:100, label:'虎', stature:2.44, frame:3.6, center:.84 },
-  dragon: { count:1, points:1000, label:'龍', stature:2.1, frame:6.2, center:1.18 },
+  dragon: { count:1, points:1000, label:'龍', stature:4.2, frame:9.3, center:1.18 },
   kirin:  { count:1, points:1000, label:'麒麟', stature:1.75, frame:4.9, center:1.72 },
   deer:   { count:32, points:60, label:'鹿', stature:1.16, frame:3.8, center:1.24 },
   boar:   { count:18, points:60, label:'猪', stature:1.08, frame:3.4, center:.8 },
@@ -62,22 +62,32 @@ export function wildlifeHomes(fixed) {
 
 const motion = {}, wave = {}, samplePath={};
 const altitudeCourses=new WeakMap();
-const dragonSpine=[-7.5,-4.3,-1.1,2.1,5.3], kirinFeet=[0], maxDragonSlope=Math.sin(maxDragonPitch);
+const dragonSpine=[-3.55,-2.55,-1.55,-.55,.45,1.45,2.55], dragonFlanks=[-.86,.86];
+const maxDragonSlope=Math.sin(maxDragonPitch);
 function requiredHeight(n,time) {
   if(legendary(n.type)) {
     legendPath(n,time,samplePath);
     const {x,z,speed,heading,clearance}=samplePath;
-    const dragon=n.type==='dragon', ground=Math.max(WATER_Y,terrainHeight(x,z));
-    let required=ground+clearance;
-    // The long tail and the whiskered head cross a ridge at different times.
-    // Inflate by half the inter-sample travel so thin roofs cannot slip between checks.
-    const radius=(dragon?3.95:3.05)+speed*.11, sin=Math.sin(heading),cos=Math.cos(heading);
-    for(const offset of dragon?dragonSpine:kirinFeet) {
-      const px=wrapCoord(x+sin*offset),pz=wrapCoord(z+cos*offset);
-      // A steep climb lowers the tail relative to the middle of the body.
-      const pitchDrop=dragon ? Math.abs(offset)*maxDragonSlope : 0;
-      required=Math.max(required,Math.max(WATER_Y,terrainHeight(px,pz))+1.4+pitchDrop,
-        solidHeightAt(px,pz,radius)+1.8+pitchDrop,canopyHeight(px,pz,radius)+1.15+pitchDrop);
+    const ground=Math.max(WATER_Y,terrainHeight(x,z));
+    if(n.type==='kirin') {
+      const radius=3.05+speed*.11;
+      return Math.max(ground+clearance,solidHeightAt(x,z,radius)+1.8,canopyHeight(x,z,radius)+1.15);
+    }
+    // Cross high ridges with room underneath the belly, then return to the
+    // cruising altitude over the valley. A mountain should not lift the high
+    // flight levels by its entire height.
+    let required=Math.max(ground+20,WATER_Y+clearance+.34*(ground-WATER_Y));
+    const scale=n.stature || SPECIES.dragon.stature, sin=Math.sin(heading),cos=Math.cos(heading);
+    // Two parallel rows cover the waving tail, feet and whiskers. Each disc
+    // stays inside the 6.8 m search margin of the roof and tree indices.
+    for(const station of dragonSpine) {
+      const offset=station*scale*dragonLengthScale, pitchDrop=Math.abs(offset)*maxDragonSlope;
+      for(const flank of dragonFlanks) {
+        const side=flank*scale;
+        const px=wrapCoord(x+sin*offset+cos*side),pz=wrapCoord(z+cos*offset-sin*side);
+        const top=Math.max(terrainHeight(px,pz),solidHeightAt(px,pz,6.7),canopyHeight(px,pz,6.7));
+        required=Math.max(required,top+3+pitchDrop);
+      }
     }
     return required;
   }
@@ -227,6 +237,7 @@ export function sweepResident(n, origin, dx, dy, dz, radius, halfHeight, moving 
   if(!volumes)return Infinity;
   const c=Math.cos(n.heading),s=Math.sin(n.heading);
   const dragon=n.type==='dragon', pitch=dragon ? dragonPitch(n) : 0;
+  const lengthScale=dragon ? scale*dragonLengthScale : scale;
   const cp=Math.cos(pitch),sp=Math.sin(pitch);
   const forward=rx*s+rz*c, along=dx*s+dz*c;
   const x=rx*c-rz*s, y=ry*cp+forward*sp, z=forward*cp-ry*sp;
@@ -243,9 +254,9 @@ export function sweepResident(n, origin, dx, dy, dz, radius, halfHeight, moving 
       const tall=Math.hypot(h*c,d*s);d=Math.hypot(d*c,h*s);h=tall;
     }
     if(dragon) dragonWave(cz,n.wavePhase||0,wave);
-    const a=w*width+radius,b=h*scale+halfHeight,e=d*scale+radius;
+    const a=w*width+radius,b=h*scale+halfHeight,e=d*lengthScale+radius;
     const xx=(x-(cx+(dragon?wave.x:0))*width)/a;
-    const yy=(y-(cy+(dragon?wave.y:0))*scale)/b, zz=(z-cz*scale)/e;
+    const yy=(y-(cy+(dragon?wave.y:0))*scale)/b, zz=(z-cz*lengthScale)/e;
     const ux=vx/a,uy=vy/b,uz=vz/e;
     const C=xx*xx+yy*yy+zz*zz-1, B=xx*ux+yy*uy+zz*uz;
     let t=0;

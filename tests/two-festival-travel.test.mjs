@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createGame} from '../two/game.js';
 import {BOUND,groundHeight,nearRoad,regionAt,REGIONS,terrainMeshHeight,waterSurfaceAt} from '../two/terrain.js';
 import {KADOMATSU,POUNDING} from '../two/festival.js';
+import {HIGASHIYAMA} from '../two/higashiyama.js';
 
 const tick = (game,seconds,input={}) => {
   for(let frame=0; frame<Math.round(seconds*60); frame++) game.step(1/60,input);
@@ -40,15 +41,22 @@ test('a turtle ride reaches five times its former top speed, with a continuous r
   assert.ok(createGame(game.save()).restored);
 });
 
-test('habutae can reach and save at the new 120 metre flight ceiling',()=>{
+test('habutae can climb 180 metres above Higashiyama and resume there',()=>{
   const game=createGame(),p=game.state.player;
-  place(p,310,380);
-  game.act('habutae');tick(game,24,{jump:true});
-  assert.equal(p.h,120);
+  place(p,HIGASHIYAMA.x,HIGASHIYAMA.z);
+  const summit=p.y;
+  assert.ok(game.act('habutae'));
+  tick(game,32.5,{jump:true});
+  assert.equal(p.h,180);
+  assert.equal(p.y,summit+180);
+  assert.equal(p.mode,'habutae');
   const restored=createGame(game.save());
-  assert.equal(restored.state.player.h,120);
+  assert.ok(restored.restored);
+  assert.equal(restored.state.player.y,p.y);
+  assert.equal(restored.state.player.h,180);
   tick(restored,5);
-  assert.equal(restored.state.player.grounded,true);
+  assert.ok(restored.state.player.grounded);
+  assert.equal(restored.state.player.y,summit);
 });
 
 test('only a completed delivery book unlocks a triple-speed kagami with map travel and eight notices even when full',()=>{
@@ -88,20 +96,20 @@ test('kagami beats on each jump tap and sustained press, climbs without MP and l
   assert.ok(p.h>19 && Math.abs(p.speed-16)<.05);
 
   let beats = 0;
-  for (let frame = 0; frame < 24*60; frame++) {
+  for (let frame = 0; frame < 32*60; frame++) {
     const before = p.flapBeat;
     game.step(1/60, {jump:true});
     if (p.flapBeat > before) beats++;
   }
   assert.ok(beats>50);
-  assert.equal(p.h,120);
+  assert.equal(p.h,180);
   assert.equal(p.mp,0);
   assert.equal(p.mode,'kagami');
   game.act('jump'); // An individual button press at the ceiling still starts a fresh stroke.
   assert.equal(p.flapBeat,1);
   const resumed = createGame(game.save());
   assert.ok(resumed.restored);
-  assert.equal(resumed.state.player.h,120);
+  assert.equal(resumed.state.player.h,180);
   tick(resumed,5);
   assert.ok(resumed.state.player.grounded);
   assert.equal(resumed.state.player.flapBeat,0);

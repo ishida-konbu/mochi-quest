@@ -1,7 +1,7 @@
 // Scroll silhouettes are lofted through painted cross-sections. A single atlas per
 // pelt wraps continuously across both flanks; the mane, joints and toes retain volume.
 import { prepareDragon, poseDragon } from './dragon-flight.js';
-import { craneWingbeat, kirinFrequency, hoofPhase, poseKirinLeg, poseKirinTrunk } from './animal-motion.js';
+import { dragonLengthScale, craneWingbeat, kirinFrequency, hoofPhase, poseKirinLeg, poseKirinTrunk } from './animal-motion.js';
 import * as THREE from './vendor/three.module.min.js';
 import { buildScrollBeast, buildQuadrupedTrunk, bindScrollSkin } from './handscroll-beasts.js';
 import { inkVolume, brushWash, brushContour, surfaceGrain } from './scroll-sculpt.js';
@@ -52,7 +52,8 @@ function coat(type, detail) {
     coats.set(key, material);
   }
   if (!coatLoads.has(key)) {
-    const url = new URL('./assets/bestiary/' + key + '.webp', import.meta.url).href;
+    const file=key+'.webp'+(type==='dragon'?'?v=ink-dragon-1':'');
+    const url = new URL('./assets/bestiary/' + file, import.meta.url).href;
     const ready = coatLoader.loadAsync(url).then(image => {
       image.colorSpace = THREE.SRGBColorSpace;
       image.anisotropy = 4;
@@ -167,7 +168,7 @@ function sculptEye(head,stations,type,group,batch) {
     anchor.addScaledVector(outward,fox?.0055:.0085);
     const eye=group(head,'eyelid'+s,...anchor.toArray());
     eye.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right,outward.clone().cross(right).normalize(),outward));
-    eye.scale.setScalar(dragon?1.36:fox?.87:kirin?.93:1.14);
+    eye.scale.setScalar(dragon?1.65:fox?.87:kirin?.93:1.14);
     const pupil=dragon?'#362b20':'#3c3027',iris=kirin?'#937345':fox?'#956432':'#b48a41';
     batch(eye,b=>{
       function almond(width,height,base,depth,color) {
@@ -780,32 +781,113 @@ const dragonSpine=[[-.78,1.21,-2.95,.004,.004],[-.80,.98,-3.12,.061,.073],[-.65,
   [.54,.66,-.79,.279,.291],[.45,.50,-.35,.301,.318],[.10,.52,.04,.315,.323],
   [-.24,.75,.40,.312,.32],[-.44,1.06,.70,.286,.301],[-.45,1.45,.87,.27,.284],
   [-.35,1.74,1.08,.239,.264],[-.13,1.88,1.42,.214,.243]];
+// Taper the long strokes into swept silhouettes. The exposed reverse of a
+// lock carries dense ink, while the ridge catches the light like bare paper.
+const maneInk=['#3d4945','#798277','#242e2b'];
+const maneWash=['#69776b','#a2a58d','#3c4a43'];
+const maneLight=['#93947b','#bbb296','#565747'];
+// Two narrow ink strands ride the folded face of a broad lock, tapering
+// independently into the tip. All strips merge into the joint's usual draw.
+function maneLock(b,path,width,normal,colors) {
+  lock(b,path,width,normal,colors);
+  const curve=new THREE.CatmullRomCurve3(path.map(p=>new THREE.Vector3(...p)));
+  const out=new THREE.Vector3(...normal).normalize(),side=new THREE.Vector3(),tangent=new THREE.Vector3();
+  for(const strand of [-.63,.34]){
+    const vertices=[],indices=[];
+    for(let j=0;j<=12;j++){
+      const t=.03+j/12*(strand<0?.79:.89);
+      const w=width*(.10+.90*Math.sin(Math.PI*t**.64))*(1-t**4)+.0006;
+      const p=curve.getPoint(t),offset=strand+.058*Math.sin(3*t+strand);
+      curve.getTangent(t,tangent);side.crossVectors(tangent,out).normalize();
+      // Interpolate between the two edges and the ridge in lock().
+      const relief=offset<-.23?(offset+1)/.77:(.78-offset)/1.01;
+      p.addScaledVector(side,w*offset).addScaledVector(out,w*.57*relief+.0015);
+      const half=w*(strand<0?.043:.032)*Math.sin(Math.PI*j/12);
+      vertices.push(...p.clone().addScaledVector(side,-half).toArray(),...p.addScaledVector(side,half).toArray());
+      if(j){const v=j*2;indices.push(v-2,v-1,v+1,v-2,v+1,v);}
+    }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+    geo.setIndex(indices);geo.computeVertexNormals();
+    b.add(geo,strand<0?colors[2]:colors[0]);geo.dispose();
+  }
+}
+function dragonTail(parent,group,batch) {
+  const tip=dragonSpine[0],tassel=group(parent,'tailBrush',...tip.slice(0,3));
+  batch(tassel,b=>{
+    for(let i=0;i<6;i++) {
+      const t=i/5, side=(t-.5)*2, curl=.12*Math.sin(i*1.5);
+      maneLock(b,[[.026*side,-.17,-.08],[.06*side,.01,.012],
+        [.13*side+curl,.20+.055*Math.cos(i),.09],[.18*side+curl,.28+.14*Math.sin(i),.22],
+        [.22*side,.43+.17*Math.sin(Math.PI*t),.31+curl]],.067+.025*Math.sin(Math.PI*t),
+        [1,.11,side*.5],i%3===0?maneLight:i%2?maneInk:maneWash);
+    }
+  });
+}
+function dragonAntler(b,s) {
+  const beam=[[s*.15,.30,-.06],[s*.20,.50,-.15],[s*.30,.64,-.27],
+    [s*.42,.76,-.40],[s*.49,.82,-.55],[s*.54,.88,-.60]];
+  tusk(b,beam,.060,'#877c5f');
+  const forks=[
+    [beam[1],[s*.166,.638,-.075],[s*.168,.741,-.054],[s*.208,.816,-.096]],
+    [beam[2],[s*.362,.745,-.219],[s*.402,.850,-.244]],
+    [beam[3],[s*.427,.856,-.384],[s*.463,.948,-.436]],
+  ];
+  for(const [i,path] of forks.entries())tusk(b,path,.037-i*.005,'#a79b7c');
+  tusk(b,[[s*.165,.309,-.047],[s*.213,.492,-.132],[s*.313,.632,-.251],
+    [s*.424,.746,-.384],[s*.487,.816,-.531]],.015,'#4c5144');
+}
+function dragonWhisker(head,group,batch,s) {
+  const whisker=group(head,'barbel'+s,s*.154,.079,.711);
+  batch(whisker,b=>{
+    // The moustache opens away from the muzzle and doubles back into a
+    // long S in the airstream, leaving the eye and tooth visible in profile.
+    const path=[[0,0,0],[s*.16,.005,.11],[s*.35,-.026,.148],[s*.54,-.078,.041],
+      [s*.73,-.175,-.212],[s*.84,-.220,-.439],[s*.96,-.194,-.55],
+      [s*1.04,-.138,-.548],[s*1.06,-.064,-.498],[s*1.021,-.043,-.474]];
+    tusk(b,path,.019,'#353c33');
+    tusk(b,[[0,.005,0],[s*.141,.020,.098],[s*.347,-.012,.141],
+      [s*.530,-.066,.048]],.009,'#c6bfa3');
+    tusk(b,[[s*.04,-.01,0],[s*.18,-.109,.047],[s*.37,-.130,-.108],
+      [s*.55,-.085,-.317],[s*.63,-.108,-.450]],.012,'#626751');
+  });
+}
 function dragon(root,{group,batch}){
   const body=group(root,'trunk');
+  body.scale.z=dragonLengthScale;
+  dragonTail(body,group,batch);
   const skin=pelt(body,'dragon',dragonSpine);
   skin.name='龍の胴';
   const curve=new THREE.CatmullRomCurve3(dragonSpine.map(s=>new THREE.Vector3(...s.slice(0,3))));
   for(let i=0;i<18;i++){
     const t=.05+i*.051,pt=curve.getPoint(t),r=dragonSpine[Math.round(t*(dragonSpine.length-1))][4];
     const joint=group(body,'spine'+i,pt.x,pt.y,pt.z);
+    const tangent=curve.getTangent(t),across=new THREE.Vector3(1,0,0);
+    across.addScaledVector(tangent,-tangent.x).normalize();
+    joint.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(across,tangent.clone().cross(across),tangent));
     batch(joint,b=>{
-      const flare=.085+r*.49;
-      lock(b,[[0,r*.73,.108],[.013,r+flare*.47,.006],[.026,r+flare*.79,-.070],
-        [.029,r+flare*1.40,-.167-.035*Math.sin(i)]],.047+r*.16,[.96,0,.12],['#aa7346','#d19d64','#765741']);
+      const sway=Math.sin(i*1.75),flare=(.11+r*.43)*(1+.27*sway),lean=.16+.07*Math.cos(i*1.6);
+      maneLock(b,[[0,r*.83,.100],[.018,r*1.10,.058],[.026+sway*.03,r+flare*.84,-.045],
+        [.033+sway*.044,r+flare,-lean],[.036+sway*.06,r+flare*1.38,-lean-.11]],
+        .062+r*.15,[.96,0,.12],i%3===0?maneInk:maneWash);
       if(i%2===0)for(const side of [-1,1]){
-        lock(b,[[side*r*.22,r*.81,.085],[side*r*.37,r*.97,.006],[side*r*.40,r*1.16,-.077],
-          [side*r*.52,r*1.19,-.14]],.034+r*.065,[side,.22,0],['#668979','#85a28a','#4b6256']);
+        maneLock(b,[[side*r*.22,r*.83,.075],[side*r*.42,r*1.01,.006],[side*r*.50,r*1.13,-.088],
+          [side*r*.62,r*1.26,-.22]],.035+r*.06,[side,.22,0],maneLight);
       }
-      for(const s of [-1,1])tusk(b,[[s*r*.70,-r*.54,.025],[s*r*.46,-r*.83,.028],[s*.002,-r*.92,.052]],.016,'#c9b58a');
-      if(i===7||i===13)for(const s of [-1,1]){
+    });
+    if(i===7||i===13)for(const s of [-1,1]){
+      const foot=group(joint,(i===7?'hindClaw':'foreClaw')+s);
+      batch(foot,b=>{
         const q=i===7?-1:1;
         const reach=i===13?.16:-.07;
         const wrist=[s*(r+.41),-.49,.107*q+reach];
         volume(b,[[s*r*.57,-.04,0,.103,.12],[s*(r+.123),-.102,-q*.090,.117,.111],
           [s*(r+.265),-.221,-q*.257,.093,.101],[s*(r+.337),-.326,-q*.137,.059,.068],
           [...wrist,.052,.058],[s*(r+.47),-.530,.146*q+reach,.063,.043]],pigment.dragon,19);
+        tusk(b,[[s*(r+.10),-.065,-q*.081],[s*(r+.24),-.147,-q*.215],
+          [s*(r+.29),-.225,-q*.26],[s*(r+.34),-.318,-q*.153]],.022,'#586456');
         for(let digit=-1;digit<=1;digit++){
-          const x=s*(r+.47+digit*.083),z=q*.16+reach;
+          const x=s*(r+.47+digit*.096),z=q*.16+reach;
           volume(b,[[s*(r+.404+digit*.034),-.49,q*.121+reach,.034,.030],
             [x,-.567,z,.027,.022],[x+s*.014,-.617,z+.054,.014,.014]],'#9b9566',11);
           tusk(b,[[x+s*.011,-.603,z+.043],[x+s*.032,-.631,z+.085],
@@ -814,11 +896,11 @@ function dragon(root,{group,batch}){
         // The rear talon opposes the three extended digits.
         tusk(b,[[s*(r+.39),-.495,.113*q+reach],[s*(r+.353),-.507,.038*q+reach],
           [s*(r+.341),-.547,.008*q+reach],[s*(r+.350),-.566,-.023*q+reach]],.020,ivory);
-        lock(b,[[s*(r+.072),-.080,-q*.009],[s*(r+.190),-.129,-q*.121],
+        maneLock(b,[[s*(r+.072),-.080,-q*.009],[s*(r+.190),-.129,-q*.121],
           [s*(r+.223),-.081,-q*.235],[s*(r+.204),-.043,-q*.302]],.053,
-          [s,.1,0],['#a57c4f','#c39b65','#795e42']);
-      }
-    });
+          [s,.1,0],maneWash);
+      });
+    }
   }
   const head=group(body,'mask',-.13,1.88,1.42);
   head.scale.setScalar(1.26);
@@ -826,47 +908,58 @@ function dragon(root,{group,batch}){
     [0,.048,.38,.231,.16],[0,.045,.53,.176,.117],[0,.087,.70,.199,.127],[0,.088,.775,.10,.081]];
   pelt(head,'dragon',stations,true);
   sculptEye(head,stations,'dragon',group,batch);
-  batch(head,b=>{
-    volume(b,[[0,-.061,-.016,.17,.084],[0,-.123,.19,.224,.093],[0,-.150,.42,.175,.064],
-      [0,-.150,.61,.154,.046],[0,-.118,.743,.071,.027]],'#ccb587',19);
-    volume(b,[[0,-.088,.15,.146,.085],[0,-.117,.32,.188,.067],[0,-.108,.49,.158,.043],
-      [0,-.116,.61,.131,.026],[0,-.109,.699,.062,.014]],'#825541',16);
-    volume(b,[[0,-.107,.391,.057,.039],[0,-.113,.49,.087,.024],[0,-.110,.61,.062,.015],
-      [0,-.112,.64,.031,.008]],'#ad765a',12);
+  const jaw=group(head,'lowerJaw');
+  batch(jaw,b=>{
+    volume(b,[[0,-.050,-.073,.13,.095],[0,-.100,.13,.217,.106],[0,-.146,.37,.183,.067],
+      [0,-.162,.60,.145,.051],[0,-.122,.747,.062,.030]],'#a59f85',20);
+    volume(b,[[0,-.060,.12,.144,.070],[0,-.104,.32,.188,.043],[0,-.120,.48,.155,.031],
+      [0,-.118,.61,.119,.019],[0,-.109,.693,.056,.010]],'#594a40',16);
+    volume(b,[[0,-.080,.29,.043,.033],[0,-.082,.44,.077,.026],[0,-.091,.55,.069,.019],
+      [0,-.093,.64,.029,.009]],'#995f50',12);
     for(const s of [-1,1]){
-      antler(b,s,.291,-.057,1.16);
-      tusk(b,[[s*.267,.590,-.273],[s*.314,.710,-.346],[s*.289,.813,-.439]],.025,'#b4a27e');
+      tusk(b,[[s*.144,-.071,.138],[s*.193,-.128,.269],[s*.163,-.161,.433],
+        [s*.134,-.172,.584],[s*.083,-.146,.698]],.011,'#43483b');
+      tusk(b,[[s*.153,-.146,.537],[s*.156,-.089,.558],[s*.151,-.071,.577]],.017,ivory);
+    }
+    for(let j=-2;j<=2;j++){
+      const d=Math.abs(j);
+      maneLock(b,[[j*.046,-.153,.580],[j*.060,-.229,.506],
+        [j*.062,-.346+d*.020,.395],[j*.090,-.363+d*.032,.259],[j*.122,-.469+d*.052,.151]],
+        .046-d*.004,[j*.19,-.21,.85],d===1?maneLight:maneWash);
+    }
+  });
+  for(const s of [-1,1])dragonWhisker(head,group,batch,s);
+  batch(head,b=>{
+    for(const s of [-1,1]){
+      dragonAntler(b,s);
       ear(b,s,.258,.136,-.12,.20,pigment.dragon,'#ac9472');
 
-      tusk(b,[[s*.13,.222,.37],[s*.238,.29,.25],[s*.343,.264,.13],[s*.398,.31,.013]],.048,'#ab8058');
-      // Layered gill plates erupt into hooked flame locks behind the jaw.
-      // Their dark roots are visible between the vermilion and gold sweeps.
-      for(let j=0;j<6;j++){
-        const y=.224-j*.070,z=.021-j*.012,x=.210+j*.009;
-        lock(b,[[s*x,y,z],[s*(x+.135),y+.068,z-.124],
-          [s*(x+.224),y+.015+j*.012,z-.265],[s*(x+.295),y+.14-j*.010,z-.396]],
-          .083-j*.004,[s,.08,.13],j%2?['#ac6b44','#c68c53','#74503c']:['#966244','#bd8b53','#684b39']);
-      }
-      for(let j=0;j<3;j++){
-        const y=.08-j*.07,z=.023-j*.032;
-        tusk(b,[[s*.235,y,z],[s*(.348+.02*j),y-.018,z-.14],[s*(.403+.03*j),y+.069,z-.32],[s*(.390+.021*j),y+.105,z-.46]],.043,'#a47851');
+      // Stream each tuft behind the cheekbone with its own lifted or
+      // hooked tip. The changing lengths leave gaps of sky between locks.
+      for(let k=0;k<7;k++){
+        const t=k/6,y=.27-.45*t,x=.197+.039*Math.sin(t*Math.PI);
+        const rise=.15-.23*t+.12*Math.cos(k*1.7),reach=.49+.17*Math.sin(t*Math.PI)+.10*Math.sin(k*1.42);
+        maneLock(b,[[s*x,y,.082],[s*(x+.124),y+.056,.009],
+          [s*(x+.203),y+.101-t*.112,-.147],[s*(x+.287),y+.015+rise*.32,-reach*.66],
+          [s*(x+.34+.065*Math.cos(k)),y+rise,-reach]],
+          .082-.014*t,[s,.11,.18],k%3===0?maneInk:k%2?maneWash:maneLight);
       }
       volume(b,[[s*.105,.112,.662,.027,.023],[s*.134,.143,.698,.056,.042],
         [s*.119,.163,.735,.045,.027],[s*.091,.144,.757,.018,.013]],'#8d966e',12);
-      b.ball(s*.129,.163,.718,.032,.017,.036,soot,[.20,0,-s*.18]);
-      lock(b,[[s*.141,.204,.39],[s*.232,.308,.269],[s*.272,.328,.12],[s*.353,.410,-.01]],
-        .059,[s,.18,.20],['#93603e','#c38b55','#684c37']);
+      b.ball(s*.136,.169,.720,.033,.019,.042,'#3b4238',[.20,0,-s*.18]);
+      tusk(b,[[s*.163,.151,.694],[s*.158,.174,.707],[s*.133,.184,.729],
+        [s*.099,.174,.744]],.009,'#9da58b');
+      maneLock(b,[[s*.141,.204,.39],[s*.232,.308,.269],[s*.272,.328,.12],[s*.353,.410,-.01]],
+        .061,[s,.18,.20],maneInk);
       tusk(b,[[s*.072,-.006,.745],[s*.16,-.018,.673],[s*.183,-.05,.490],[s*.22,-.029,.348]],.018,soot);
       tusk(b,[[s*.174,-.009,.571],[s*.182,-.099,.583],[s*.168,-.128,.605]],.028,ivory);
-      const whisker=[[s*.131,.066,.702],[s*.286,.075,.857],[s*.484,.223,.908],[s*.697,.357,.743],
-        [s*.839,.296,.505],[s*.834,.164,.404],[s*.733,.126,.417],[s*.700,.151,.490]];
-      tusk(b,whisker,.019,'#655540');
-      lock(b,[whisker[0],[s*.197,.079,.776],[s*.232,.114,.800],[s*.273,.137,.797]],.029,
-        [s,.15,.4],['#a88d65','#d0b991','#79654c']);
+      // Two smaller teeth interrupt the ink of the upper lip. A pale
+      // collar broadens each whisker root into the wing of the nostril.
+      for(const z of [.398,.468])tusk(b,[[s*.183,-.026,z],[s*.185,-.073,z+.004],
+        [s*.174,-.088,z+.014]],.015,ivory);
+      maneLock(b,[[s*.119,.102,.676],[s*.161,.096,.716],[s*.212,.112,.759],[s*.248,.126,.772]],
+        .035,[s,.15,.4],maneLight);
     }
-    for(let j=-1;j<=1;j++)lock(b,[[j*.048,-.081,.608],[j*.074,-.196,.557],
-      [j*.087,-.295,.467],[j*.121,-.381,.341]],.054,[j*.6,-.13,.85],['#af8957','#d3b37c','#806847']);
-    for(let j=-2;j<=2;j++)tusk(b,[[j*.04,-.11,.528],[j*.053,-.264,.43],[j*.047,-.32,.31]],.035,'#a5845a');
   });
 }
 

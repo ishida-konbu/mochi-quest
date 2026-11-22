@@ -722,7 +722,7 @@ function journalDialog() {
       print.style.backgroundSize='contain';
     } else if (SPECIES[type]) {
       const drawing = beastDrawing(type);
-      print.style.backgroundImage="url('./assets/residents/beasts.webp')";
+      print.style.backgroundImage="url('./assets/residents/"+BEASTS.atlas+"')";
       const [angle,box,cx,cy] = {
         monkey:[1,63,44,50], bird:[1,61,54,43], fox:[2,72,54,49], tiger:[2,73,54,50],
         dragon:[2,80,52,43], kirin:[1,67,52,53], deer:[1,73,46,46], boar:[2,73,46,53], shishi:[1,68,47,48],

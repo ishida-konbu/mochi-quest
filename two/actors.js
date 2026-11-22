@@ -1802,7 +1802,9 @@ export function createActors(scene, renderer) {
       const view=state.photo ? atPhotoTime(n,t) : n;
       const dx=wrapDelta(view.x-p.x),dz=wrapDelta(view.z-p.z);
       const distance=Math.hypot(dx,dz);
-      if(distance>=128) continue;
+      const dragon=n.type==='dragon';
+      const viewRange=dragon ? 900 : 128;
+      if(distance>=viewRange) continue;
       const x=p.x+dx,z=p.z+dz,spec=SPECIES[n.type],scale=n.stature||1;
       const center=view.y+(spec?.center??(n.type==='turtle'?.78:VILLAGERS.center))*scale;
       const span=(spec?beastFrame(n.type):VILLAGERS.frameY)*scale;
@@ -1819,14 +1821,21 @@ export function createActors(scene, renderer) {
       const pixels=span*focalPixels/Math.max(camera.near,depth);
       // The depth of the focused camera subject and its framebuffer size are
       // what determine whether an atlas cell would be visibly magnified.
-      slot.view=view;slot.x=x;slot.z=z;slot.depth=depth;slot.fade=Math.min(1,(128-distance)/16);
+      slot.view=view;slot.x=x;slot.z=z;slot.depth=depth;
+      slot.fade=Math.min(1,(viewRange-distance)/(dragon?180:16));
       // Keep singular performances articulated, including the hare's seat and the
       // kirin's four individual cloud contacts.
-      const performanceRig = n.ridesDeer || n.carriesHare || ['dragon','kirin','shishi','turtle'].includes(n.type);
+      const performanceRig = n.ridesDeer || n.carriesHare || ['kirin','shishi','turtle'].includes(n.type);
       // The paper atlas has a walking cycle for each beast. Keep the paired
       // actions articulated from across the clearing, especially the deer’s bow.
       const encounterWeight=n.encounter && distance<24 ? 1.85 : 1;
       slot.priority = performanceRig ? 10000+pixels : pixels*encounterWeight*(npcs.has(n.id)?1.23:1);
+      if(dragon) {
+        // Keep the real belly, claws and winding spine overhead. At long range
+        // switch to the animated ink plate once its native resolution suffices.
+        const articulated=distance<220 || (npcs.has(n.id) ? pixels>72 : pixels>96);
+        slot.priority=articulated && distance<690 ? 20000+pixels : 0;
+      }
       visible.push(slot);
     }
     visible.sort(byCoverage);
