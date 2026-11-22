@@ -20,7 +20,7 @@ test('actions interrupt a lingering flush, and the face settles back after the a
   assert.equal(getExpression(player), 'blush');
 });
 
-test('jumping, stretching and flying have distinct faces, and a camera pose is temporary', () => {
+test('launch expressions change into a smile on every airborne pull, including under the moon', () => {
   const player = createGame().state.player;
   Object.assign(player, { grounded: false, h: 1, stretch: .2 });
   assert.equal(getExpression(player), 'surprise');
@@ -28,10 +28,19 @@ test('jumping, stretching and flying have distinct faces, and a camera pose is t
   assert.equal(getExpression(player), 'determined');
   player.mode = 'habutae';
   assert.equal(getExpression(player), 'joy');
+  for (const mode of ['normal','kusa','kinako','habutae','dango','kagami']) {
+    Object.assign(player, {mode, night:true, throwTime:.12});
+    for (const airStretch of [.23,.46,.69,.92,1]) {
+      player.airStretch=airStretch;
+      assert.equal(getExpression(player), 'joy', mode);
+    }
+  }
   player.emote = 'sleepy';
   assert.equal(getExpression(player), 'sleepy');
   delete player.emote;
   assert.equal(getExpression(player), 'joy');
+  Object.assign(player, {grounded:true, airStretch:0, throwTime:0});
+  assert.equal(getExpression(player), 'sleepy');
 });
 
 test('the moon makes a strolling mochi drowsy and a rolling dango smiles at every speed', () => {

@@ -5,6 +5,7 @@ const asset = name => new URL('./assets/actors/nikkori/' + name, import.meta.url
 const clamp = T.MathUtils.clamp;
 const smooth = T.MathUtils.smoothstep;
 const riceScale = .708;
+const pullExtension = 1.33 * riceScale;
 let source, loading;
 
 // All paint, the skin weights, the smile relief and the eight performances
@@ -24,6 +25,7 @@ export function loadRiceModel() {
     }
     maps[4].wrapS = maps[4].wrapT = T.RepeatWrapping;
     source = { gltf, maps };
+    return maps;
   })();
   return loading;
 }
@@ -75,6 +77,8 @@ function skinMaterial(maps) {
         vec4 features=mix(texture2D(riceFaces,cell),
                           texture2D(riceFaces,(vec2(1.,5.)+uvFace)/vec2(4.,6.)),riceSmile);
         float paint=front*features.a*swap;
+        float mouthPaint=paint*(1.-smoothstep(.12,.20,abs(uvFace.x-.507)))
+                              *smoothstep(.39,.46,uvFace.y);
         float grain=riceGrainAt(vRiceRest);
         float eye=texture2D(riceEyes,cell).r*front*(1.-riceSmile);
         vec3 dough=mix(diffuseColor.rgb,bareSkin.rgb,clean);
@@ -85,7 +89,8 @@ function skinMaterial(maps) {
         dough*=1.+(grain-.5)*.07*doughMask;
         diffuseColor.rgb=mix(dough,features.rgb,paint);`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor=clamp(roughnessFactor+(grain-.5)*.27*skinMask-.19*(1.-skinMask)+.055*ricePull,.23,.78);`)
+        roughnessFactor=clamp(roughnessFactor+(grain-.5)*.27*skinMask-.19*(1.-skinMask)+.055*ricePull,.23,.78);
+        roughnessFactor=mix(roughnessFactor,.87,mouthPaint);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         normal=normalize(mix(normal,nonPerturbedNormal,clean));
         // Fade detail at distance through the mip chain. Derivatives are in view space.
@@ -94,6 +99,11 @@ function skinMaterial(maps) {
         vec3 rx=cross(qy,normal), ry=cross(normal,qx);
         float det=dot(qx,rx);
         normal=normalize(max(abs(det),1.e-10)*normal-sign(det)*(dFdx(height)*rx+dFdy(height)*ry));`)
+      .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+        // Keep the tongue and dark inner lip matte beneath the glossy skin.
+        material.specularColor*=1.-.95*mouthPaint;
+        material.specularF90*=1.-.95*mouthPaint;
+        material.clearcoat*=1.-mouthPaint;`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         reflectedLight.indirectDiffuse += diffuseColor.rgb*vec3(.12,.105,.087)*skinMask;`);
   };
@@ -220,9 +230,10 @@ export function poseRice(r,p,t,dt,mood) {
     r.pull+=r.pullV*h;
   }
   const pull=clamp(r.pull,0,1.015);
+  const tug=clamp(r.pullV*.22,-.7,1);
   const dip=grounded ? smooth(-r.press,.005,.22) : 0;
   const breath=.006*Math.sin(t*2.24);
-  const stretch=clamp(1+r.press+breath+.095*pull,.67,1.38);
+  const stretch=clamp(1+r.press+breath+.045*pull,.67,1.32);
   const joy=mood==='joy' && p.activity!=='read';
   const name=p.activity==='read' ? 'Read' : (poses[mood]||'Normal');
   const cell=playGesture(r,name,dt);
@@ -242,7 +253,11 @@ export function poseRice(r,p,t,dt,mood) {
     foot.position.z+=stride*phase*.203;
     foot.rotateX(-phase*stride*.48);
     hand.rotateX(-phase*stride*.47);
-    hand.rotateZ(side*(lift*.14+pull*.29));
+    hand.rotateZ(side*(lift*.14+pull*.035));
+    // The lift reaches the mitts before the heels. Let the impulse settle
+    // while the player holds a long pull, then release it on the rebound.
+    hand.position.x+=side*(.040*pull+.029*Math.max(0,tug));
+    hand.position.y+=.047*pull+.055*Math.max(0,tug);
     if (!grounded || ride) {
       foot.position.y+=(ride ? .053 : .080);
       foot.position.z+=(ride ? .132 : .058);
@@ -264,13 +279,13 @@ export function poseRice(r,p,t,dt,mood) {
   if(stack){
     r.model.scale.setScalar(riceScale*.78);
     r.model.position.y=.32;
-    r.kagami.citrus.position.set(.013,1.75+1.11*pull,-.01);
+    r.kagami.citrus.position.set(.013,1.75+.78*pullExtension*pull,-.01);
     r.kagami.citrus.rotation.z=.09+step*stride*.07;
   }else{
     r.model.position.y=0;
     r.model.scale.setScalar(riceScale);
   }
-  return {stretch,width:1/Math.sqrt(stretch),pull,extension:1.43*pull,
-    bob:Math.abs(step)*stride*.046,lean:-step*stride*.040,
-    pitch:stride*(-.036+plant*.023),breath};
+  return {stretch,width:1/Math.sqrt(stretch),pull,extension:pullExtension*pull,
+    bob:Math.abs(step)*stride*.046,lean:-step*stride*.040-.028*tug,
+    pitch:stride*(-.036+plant*.023)-.045*tug,breath};
 }

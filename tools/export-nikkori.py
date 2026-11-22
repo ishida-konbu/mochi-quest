@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector, kdtree
 
 rig_file, gesture_file = map(Path, sys.argv[sys.argv.index('--') + 1:])
@@ -56,18 +57,21 @@ def smooth(a,b,x):
 
 def pulled(co):
     x,y,z = co
-    h = z/2.32
-    u = min(1,max(0,(h-.035)/.535))
-    rise = u**3*(10-15*u+6*u*u)
-    # The weight stays in two rounded ends; tension pinches the softer
-    # dough between them. Keep the face together on the upper portion.
-    neck = math.exp(-((h-.295)/.168)**2) * smooth(.035,.17,h)
-    a = math.atan2(y,x)
-    flute = neck*(.023*math.cos(5*a+h*3)+.016*math.sin(3*a-h*5))
-    radius = .89 - .44*neck - .08*smooth(.36,.74,h) + flute
-    return Vector((x*radius + .092*math.sin(h*math.pi)*rise,
-                   y*radius - .047*rise + .031*neck*math.cos(a),
-                   z + 2.02*rise))
+    h = min(1,max(0,z/2.32))
+    # A continuous oval of dough with a heavy crown. Distribute tension
+    # below the cheeks; the lower flanks draw in without forming a neck.
+    rise = .20*h + .80*smooth(.035,.44,h)
+    # Carry the little palms with their surrounding flank. A height-only
+    # pull would turn the hands themselves into strips. This continuous
+    # field spans both the hand and its attachment on the skin.
+    palm = smooth(.55,.91,abs(x))*smooth(.19,.42,-y)*math.exp(-((h-.326)/.21)**4)
+    palm_rise = .20*.326 + .80*smooth(.035,.44,.326)
+    rise += (palm_rise + .12*(h-.326) - rise)*palm
+    belly = math.exp(-((h-.20)/.21)**2)
+    radius = .82-.062*belly+.17*smooth(.08,.61,h)
+    curve = .115*rise+.046*math.sin(math.pi*h)*smooth(.035,.50,h)
+    return Vector((x*radius+curve, y*(radius+.025)-.045*rise,
+                   z+1.33*rise))
 
 def pressed(co):
     x,y,z = co
@@ -76,24 +80,50 @@ def pressed(co):
     return Vector((x*(1+.13*base),y*(1+.16*base),z-.13*smooth(.03,.72,h)))
 
 base = [v.co.copy() for v in mesh.vertices]
+# The supplied clean-skin key flattens the carved mouth. Several collapsed
+# lip triangles still have nearly vertical normals in the middle of the
+# painted opening. Fit a continuous skin patch to the intact surrounding
+# shell. Its slope also gives a stable normal for those thin triangles.
+def lip_radius(co):
+    return math.hypot((co.x-.006)/.245,(co.z-1.18)/.18) if co.y < -.80 else 10.
+
+def lip_basis(x,z):
+    h=z-1.18
+    return (1,x,h,x*x,x*h,h*h)
+
+ring=[v for v in base if 1.12 < lip_radius(v) < 1.65]
+lip_fit=np.linalg.lstsq([lip_basis(v.x,v.z) for v in ring],[v.y for v in ring],rcond=None)[0]
+def lip_surface(x,z):
+    return Vector((x,float(np.dot(lip_fit,lip_basis(x,z))),z))
+
+lip_weights=[1-smooth(.76,1.25,lip_radius(v)) for v in base]
+for v,w in zip(base,lip_weights):
+    if w: v.y += w*(lip_surface(v.x,v.z).y-v.y)
 smile = []
-for co in base:
+for co,lip_weight in zip(base,lip_weights):
     nearest=lookup.find_n(co,4)
     weights=[1/max(dist,.00015)**2 for _,_,dist in nearest]
     offset = sum((delta[n]*w for ((_,n,_),w) in zip(nearest,weights)),Vector((0,0,0)))/sum(weights)
     # Transfer the small original smile-eyelid relief. All mouth shapes use
     # the clean lip bed prepared for painted expressions in the gestures file.
-    smile.append(co+offset*smooth(1.20,1.29,co.z))
+    smile.append(co+offset*smooth(1.20,1.29,co.z)*(1-lip_weight))
 
 shapes=[smile, [pulled(v) for v in base], [pressed(v) for v in base]]
 # Compute smooth normals once per original vertex, before splitting UV seams.
-def normals(vertices):
+def normals(vertices,deform=lambda p:p):
     for v,coord in zip(mesh.vertices,vertices):
         v.co=coord
     mesh.update()
-    return [v.normal.copy() for v in mesh.vertices]
+    result=[v.normal.copy() for v in mesh.vertices]
+    for i,(co,w) in enumerate(zip(base,lip_weights)):
+        if not w: continue
+        x,z=co.x,co.z
+        dx=deform(lip_surface(x+.001,z))-deform(lip_surface(x-.001,z))
+        dz=deform(lip_surface(x,z+.001))-deform(lip_surface(x,z-.001))
+        result[i]=result[i].lerp(dx.cross(dz).normalized(),w).normalized()
+    return result
 base_normals=normals(base)
-shape_normals=[normals(points) for points in shapes]
+shape_normals=[normals(smile),normals(shapes[1],pulled),normals(shapes[2],pressed)]
 normals(base)
 
 bones=list(arm.data.bones)

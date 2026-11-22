@@ -7,7 +7,8 @@ import { addSpringSurface } from './spring-water.js';
 import { finishResident, residentLimb, residentTorso } from './resident-art.js';
 import { inkVolume, sculptHead, scrollParasol, scrollShell, sculptTurtleHead } from './scroll-sculpt.js';
 import { DYES } from './procession.js';
-import { distantProcession } from './procession-view.js';
+import { distantProcession, preparePlates, VILLAGERS, beastFrame } from './procession-view.js';
+import { finishInSlices } from './preparation.js';
 import { SPECIES } from './bestiary.js';
 import { buildBeast, beastRig, poseBeast } from './beast-art.js';
 import { dressArtisan, poseArtisan } from './trade-tools.js';
@@ -205,6 +206,7 @@ export function getExpression(p, time = 0) {
   if (p.activity === 'read') return 'joy';
   if (p.activity === 'drink') return 'blush';
   if (p.activity === 'eat' || p.activity === 'tsukimi') return 'eating';
+  if (!p.grounded && p.airStretch > 0) return 'joy';
   if (p.throwTime > 0) return 'calling';
   if (p.mount === 'bike' && p.speed > 0.25) return 'joy';
   if (p.mode === 'dango' && p.grounded && p.speed > 0.25) return 'joy';
@@ -1384,20 +1386,17 @@ function paperNotice() {
 function shortest(a, b) {
   return Math.atan2(Math.sin(b - a), Math.cos(b - a));
 }
-function gaitHero(h, p, t, dt, camera, state) {
+function gaitHero(h, p, t, dt, state) {
   const mood = getExpression(p, t),
     sit = p.activity,
     speed = p.speed || 0;
-  const riding = !!p.mount,
-    idle = speed < 0.22 && !riding;
-  const faceCam = (idle || sit === 'read' || sit === 'eat' || sit === 'drink') && p.grounded !== false;
-  let target = p.heading || 0;
-  if (faceCam || p.emote) {
-    target = Math.atan2(camera.position.x - p.x, camera.position.z - p.z);
-  }
-  if (state.photo && h.angle !== undefined) target = h.angle;
+  const riding = !!p.mount;
+  const target = p.heading || 0;
   if (h.angle === undefined) h.angle = target;
-  h.angle += shortest(h.angle, target) * (1 - Math.exp(-dt * (idle ? 3.9 : 9)));
+  if (!state.photo) {
+    const turn = shortest(h.angle, target);
+    h.angle = Math.abs(turn) < .001 ? target : h.angle + turn * (1 - Math.exp(-dt * 9));
+  }
   const giant = p.buffs?.full > 0,
     dango = p.mode === 'dango',
     wings = p.mode === 'habutae';
@@ -1422,8 +1421,8 @@ function gaitHero(h, p, t, dt, camera, state) {
   h.wrap.visible = p.buffs?.wrap > 0;
   const pull = response.pull;
   h.leaves.scale.set(1-.25*pull,1,1-.25*pull);
-  h.wrap.position.y = response.extension * .51;
-  h.wrap.scale.set(1.075-pull*.40,1+pull*.50,1.042-pull*.40);
+  h.wrap.position.set(.052*pull,response.extension*.22,.018*pull);
+  h.wrap.scale.set(1.075-.08*pull,1+.40*pull,1.042-.085*pull);
   if (dango && !riding && !sit) {
     if ((!p.grounded && p.airStretch > 0) || speed < .22)
       h.spin += shortest(h.spin,0) * (1-Math.exp(-dt*14));
@@ -1440,7 +1439,7 @@ function gaitHero(h, p, t, dt, camera, state) {
   for (let i = 0; i < 2; i++) {
     const s=i?1:-1;
     h.wingParts[i].visible = wings;
-    h.wingParts[i].position.set(s*(.65-.15*pull),.66+response.extension*.93,-.01);
+    h.wingParts[i].position.set(s*(.65+.015*pull)+.055*pull,.66+response.extension*.93,-.01);
     h.wingParts[i].rotation.z = s * (0.24 + Math.sin(t * (p.grounded ? 5 : 13)) * 0.47);
   }
   for (const key of ['read', 'drink', 'eat', 'tsukimi']) {
@@ -1616,7 +1615,7 @@ function within(entity, player, limit) {
   return wrapDelta(entity.x - player.x) ** 2 + wrapDelta(entity.z - player.z) ** 2 < limit * limit;
 }
 
-export function createActors(scene) {
+export function createActors(scene, renderer) {
   const root = group(scene, '旅の仲間');
   const h = makeHero();
   h.spin = 0;
@@ -1649,60 +1648,117 @@ export function createActors(scene) {
     spares = [];
   let processionView,beastView;
   const viewFrustum=new THREE.Frustum(), viewProjection=new THREE.Matrix4();
-  const actorBounds=new THREE.Sphere(new THREE.Vector3(),1.7), restingNpcs=new Map();
+  const actorBounds=new THREE.Sphere(), restingNpcs=new Map();
+  const slots=new WeakMap(), visible=[], selected=new Set();
+  const viewport=renderer?.domElement || document.getElementById('scene');
+  const byCoverage=(a,b)=>b.priority-a.priority;
+  const backToFront=(a,b)=>b.depth-a.depth;
+
+  function park(record) {
+    record.mesh.removeFromParent();
+    restingNpcs.set(record.entity.id,record);
+    if (restingNpcs.size>40) restingNpcs.delete(restingNpcs.keys().next().value);
+  }
+
+  // Each species/occupation template is shared by all its live skeletons.
+  // Prepare one of each and the ten tools while the loading screen is up.
+  // Moving to the next district then only needs a lightweight rig clone.
+  function* prepareRigs(state) {
+    const nearDistance=n=>wrapDelta(n.x-state.player.x)**2+wrapDelta(n.z-state.player.z)**2;
+    const nearest=[...state.npcs].sort((a,b)=>nearDistance(a)-nearDistance(b));
+    const bodies=new Set(), tools=new Set(), stage=new THREE.Group();
+    for (const n of nearest) {
+      if(n.atMortar) continue;
+      const key=n.type+'-'+(n.area?'artisan':n.role);
+      if(bodies.has(key) && (!n.area || tools.has(n.role))) continue;
+      bodies.add(key);
+      if(n.area) tools.add(n.role);
+      const rec=makeNPC(n,stage);rec.entity=n;
+      park(rec);
+      yield;
+    }
+  }
+  function* prepareTravellersAndItems(state) {
+    yield* prepareRigs(state);
+    const kinds = new Set();
+    for (const item of state.objects) {
+      const kind = item.grand ? 'snow-spring' : item.type;
+      if (!objectModels[item.type] || kinds.has(kind)) continue;
+      kinds.add(kind);
+      const record = makeObject(item, root);
+      record.mesh.visible = false;
+      objects.set(item.id, record);
+      yield;
+    }
+  }
+  function prepare(state) {
+    return Promise.all([preparePlates(renderer), finishInSlices(prepareTravellersAndItems(state))]);
+  }
+
   function update(state, dt, camera) {
     const p = state.player,
       t = state.time;
-    gaitHero(h, p, t, dt, camera, state);
+    gaitHero(h, p, t, dt, state);
     if (!processionView) processionView=distantProcession(root,shadowMap(),state.npcs.length);
     if (!beastView) beastView=distantProcession(root,shadowMap(),state.npcs.filter(n=>SPECIES[n.type]).length,true);
     processionView.begin(p);beastView.begin(p);
     viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
-    const visible=[], detailed=new Set();
+    const eye=camera.matrixWorldInverse.elements;
+    const focalPixels=(viewport?.height || window.innerHeight)*camera.projectionMatrix.elements[5]*.5;
+    visible.length=0; selected.clear();
     for (const n of state.nearbyNpcs) {
       if(n.mounted || n.atMortar) continue;
-      const distance=wrapDelta(n.x-p.x)**2+wrapDelta(n.z-p.z)**2;
-      if (n.type==='turtle') {
-        if (distance<68**2) detailed.add(n);
-      } else if ((n.type==='dragon' || n.type==='kirin') && distance<112**2) {
-        detailed.add(n);
-      } else if (distance<95**2) {
-        // A little hysteresis keeps two equally close travellers from
-        // exchanging their representation every time they take a step.
-        actorBounds.center.set(p.x+wrapDelta(n.x-p.x),n.y+1,p.z+wrapDelta(n.z-p.z));
-        actorBounds.radius=SPECIES[n.type] ? SPECIES[n.type].frame*(n.stature||1)*.65 : 1.7;
-        const onScreen=viewFrustum.intersectsSphere(actorBounds);
-        visible.push({n,priority:distance*(npcs.has(n.id) ? .88 : 1)*(onScreen ? 1 : 4)});
-      }
+      const dx=wrapDelta(n.x-p.x),dz=wrapDelta(n.z-p.z);
+      const distance=Math.hypot(dx,dz);
+      if(distance>=128) continue;
+      const x=p.x+dx,z=p.z+dz,spec=SPECIES[n.type],scale=n.stature||1;
+      const center=n.y+(spec?.center??(n.type==='turtle'?.78:VILLAGERS.center))*scale;
+      const span=(spec?beastFrame(n.type):VILLAGERS.frameY)*scale;
+      actorBounds.center.set(x,center,z);
+      actorBounds.radius=span*.65;
+      if (!viewFrustum.intersectsSphere(actorBounds)) continue;
+      let slot=slots.get(n);
+      if (!slot) {slot={n};slots.set(n,slot);}
+      const depth=-(eye[2]*x+eye[6]*center+eye[10]*z+eye[14]);
+      const pixels=span*focalPixels/Math.max(camera.near,depth);
+      // The depth of the focused camera subject and its framebuffer size are
+      // what determine whether an atlas cell would be visibly magnified.
+      slot.x=x;slot.z=z;slot.depth=depth;slot.fade=Math.min(1,(128-distance)/16);
+      slot.priority=n.type==='turtle' ? Infinity : pixels*(npcs.has(n.id)?1.23:1);
+      visible.push(slot);
     }
-    visible.sort((a,b)=>a.priority-b.priority);
-    for(let i=0;i<visible.length;i++){
-      const {n,priority}=visible[i];
-      if(i<5 && priority<24**2) detailed.add(n);
-      else if(SPECIES[n.type]) beastView.add(n,p,camera,t);
-      else processionView.add(n,p,camera,t);
-    }
-    processionView.end();beastView.end();
-    for (const [id,rec] of npcs) {
-      if (!detailed.has(rec.entity)) {
-        root.remove(rec.mesh);
-        npcs.delete(id);
-        restingNpcs.set(id,rec);
-        if (restingNpcs.size>12) restingNpcs.delete(restingNpcs.keys().next().value);
-      }
-    }
-    for(const n of detailed) {
+    visible.sort(byCoverage);
+    let fresh=0;
+    for(const slot of visible) {
+      if(slot.priority<89 || selected.size>=10) break;
+      const n=slot.n;
       let rec=npcs.get(n.id);
       if(!rec) {
         rec=restingNpcs.get(n.id);
-        if (rec) { restingNpcs.delete(n.id); root.add(rec.mesh); }
-        else { rec=makeNPC(n,root); rec.entity=n; }
+        if(rec) {restingNpcs.delete(n.id);root.add(rec.mesh);}
+        else {
+          // When a camera cut reveals a whole village, keep the native
+          // resolution plates visible while new meshes arrive over frames.
+          if(fresh>=1 && n.type!=='turtle') continue;
+          fresh++;
+          rec=makeNPC(n,root);rec.entity=n;
+        }
         npcs.set(n.id,rec);
       }
+      selected.add(n);
       animateNPC(rec,n,t);
-      rec.mesh.position.x=p.x+wrapDelta(n.x-p.x);
-      rec.mesh.position.z=p.z+wrapDelta(n.z-p.z);
+      rec.mesh.position.x=slot.x;rec.mesh.position.z=slot.z;
     }
+    for(const [id,rec] of npcs) if(!selected.has(rec.entity)) {
+      park(rec);npcs.delete(id);
+    }
+    // Antialiased coverage can blend at silhouettes of overlapping figures.
+    visible.sort(backToFront);
+    for(const {n,x,z,fade} of visible) {
+      if(selected.has(n) || n.type==='turtle') continue;
+      (SPECIES[n.type]?beastView:processionView).add(n,x,z,camera,t,fade);
+    }
+    processionView.end();beastView.end();
     for (const o of state.objects) {
       if (!objectModels[o.type]) continue;
       let rec = objects.get(o.id);
@@ -1752,5 +1808,5 @@ export function createActors(scene) {
         else root.remove(m);
       }
   }
-  return { update, hero: h.root };
+  return { update, prepare, hero: h.root };
 }

@@ -1,6 +1,6 @@
 import { noren } from './craftwork.js';
 import { pagodaPlan } from './architecture.js';
-import { createForest } from './forest.js';
+import { prepareForest } from './forest.js';
 import { furnishRoom } from './interiors.js';
 import * as THREE from './vendor/three.module.min.js';
 import { dressSeasonalPlaces, seasonalWeather } from './seasons.js';
@@ -91,7 +91,7 @@ function grain() {
     }),
   );
 }
-function landscape(scene, art) {
+function* landscape(scene, art) {
   const mat = meadowMaterial(art);
   const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
     '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd'].map(css);
@@ -137,6 +137,7 @@ function landscape(scene, art) {
     const land=new THREE.Mesh(ground,mat);
     land.receiveShadow=true;
     scene.add(land);
+    yield;
   }
 }
 function buildRoads(scene, art) {
@@ -743,7 +744,7 @@ class Painter {
     d.updateMatrix();
     this.record(square ? 'box' : 'pole', mat, color, d.matrix, d.position.x, d.position.z, shadow, chunk);
   }
-  finish() {
+  *finish() {
     const sprays=new Set(Object.values(this.sprays));
     for (const { shape, geo, mat, matrices, colors, shadow, extent } of this.groups.values()) {
       const m = new THREE.InstancedMesh(geo, mat, matrices.length);
@@ -762,12 +763,13 @@ class Painter {
       m.receiveShadow = true;
       this.scene.add(m);
       if (shape === 'leaf') this.closeDetails.push(m);
+      yield;
     }
     this.groups.clear();
   }
 }
-function woodland(p, art) {
-  plantInkTrees(p, art);
+function* woodland(p, art) {
+  yield* plantInkTrees(p, art);
   for (const tree of LANDMARK_TREES) {
     const { x, z, h: ht, kind } = tree,
       y = h(x, z) - 0.02,
@@ -1558,29 +1560,37 @@ function driftingLeaves(scene) {
   };
 }
 
-export function createWorld(scene) {
+export function* prepareWorld(scene) {
   const atmosphere = createAtmosphere(scene);
   const paper = grain(),
     art = loadPigments();
   const landGroup = new THREE.Group();
   scene.add(landGroup);
-  landscape(landGroup, art);
+  yield* landscape(landGroup, art);
   buildRoads(landGroup, art);
   const water = makeWater(scene, art, atmosphere.panorama);
   const painter = new Painter(landGroup, paper, art);
+  yield;
   for (const [i, g] of GATES.entries()) gate(painter, g, i);
   for (const b of BRIDGES) bridge(painter, b);
-  BUILDINGS.forEach((b, i) => building(painter, b, i));
+  for (const [i, b] of BUILDINGS.entries()) {
+    building(painter, b, i);
+    yield;
+  }
   paddies(painter);
   hillsideStairs(painter);
   stampStations(painter);
   details(painter);
-  woodland(painter, art);
-  const updateForest = createForest(scene, painter.sway);
+  yield;
+  yield* woodland(painter, art);
+  const updateForest = yield* prepareForest(scene, painter.sway);
   plantUnderstory(painter, art);
+  yield;
   dressPlaces(painter);
+  yield;
   dressSeasonalPlaces(painter);
-  painter.finish();
+  yield;
+  yield* painter.finish();
   // Each spatial batch lives in its nearest image of the repeating island.
   // Perspective and populated shorelines are preserved on crossing the ocean.
   const close = new Set(painter.closeDetails);
@@ -1591,11 +1601,13 @@ export function createWorld(scene) {
     return {mesh, x:bounds.center.x, z:bounds.center.z, radius:bounds.radius, range:close.has(mesh)?94:(mesh.userData.range||328)};
   });
   const powder = seasonalWeather(scene), festival=createMochiPounding(scene);
+  yield;
   festival.root.position.set(POUNDING.x,h(POUNDING.x,POUNDING.z)+.012,POUNDING.z);
   festival.root.rotation.y=POUNDING.yaw;
   water.uniforms.climate=atmosphere.climate;
   const leaves = driftingLeaves(scene);
   return {
+    textures: [...Object.values(art), atmosphere.panorama],
     update(time, player, camera) {
       water.update(time,player);
       painter.sway.value = time;
@@ -1619,4 +1631,11 @@ export function createWorld(scene) {
       leaves(time, player);
     },
   };
+}
+
+export function createWorld(scene) {
+  const steps = prepareWorld(scene);
+  let result;
+  do { result = steps.next(); } while (!result.done);
+  return result.value;
 }

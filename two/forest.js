@@ -12,7 +12,7 @@ function fade(shader, far) {
     'float transition=smoothstep('+NEAR+'.0,'+FAR+'.0,forestDistance);'+
     (far?'if(screenSeed >= transition) discard;':'if(screenSeed < transition) discard;'));
 }
-export function createForest(scene, clock) {
+export function* prepareForest(scene, clock) {
   const trees = TREES.filter(t=>t.form!==undefined);
   const totals = new Uint16Array(TREE_FORM_COUNT);
   const records = trees.map(t=>{
@@ -58,14 +58,16 @@ export function createForest(scene, clock) {
         #include <opaque_fragment>
       `);
   };
-  const near = Array.from({length:TREE_FORM_COUNT},(_,i)=>{
+  const near = [];
+  for (let i=0; i<TREE_FORM_COUNT; i++) {
     const mesh=new THREE.InstancedMesh(forestGeometry(i),denseMaterial,totals[i]);
     mesh.name='Grove • '+i;
     mesh.count=0;mesh.frustumCulled=false;mesh.receiveShadow=true;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(mesh);
-    return mesh;
-  });
+    near.push(mesh);
+    yield;
+  }
   // Two orthogonal baked views of each 3D crown occupy a single atlas. Each
   // far tree costs two triangles and samples the same local weather lighting.
   const geo = new THREE.InstancedBufferGeometry();
@@ -104,7 +106,7 @@ export function createForest(scene, clock) {
     const scale=player.buffs.full>0 ? 1.28 : 1;
     const ride=player.mount==='bike' ? .9 : player.mount==='turtle' ? .52 : 0;
     const pull=player.airStretch || 0;
-    const height=scale*(.84+.94*pull)*(player.activity==='sleep' ? .74 : 1);
+    const height=scale*(.84+.57*pull)*(player.activity==='sleep' ? .74 : 1);
     const y=player.y+ride+height-(player.activity==='bath' ? .45 : 0);
     heroView.value.set(eye.x+wrapDelta(player.x-eye.x),y,eye.z+wrapDelta(player.z-eye.z))
       .applyMatrix4(camera.matrixWorldInverse);

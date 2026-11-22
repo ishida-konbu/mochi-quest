@@ -76,15 +76,14 @@ export function createInkPass(renderer, camera) {
                    +occlusion(uv+stepUV*vec2(-.31,-.28),p,n);
           c*=exp(-mix(.235,.077,portrait)*occ*(1.-smoothstep(18.,48.,z)));
         }
-        // A small aperture effect isolates the face in portrait mode. Reject
-        // taps on the subject so ivory silhouettes do not bleed into the trees.
-        if (focus>0. && z>focus+.6) {
-          float blur=min(6.,7.1*(1.-(focus+.6)/z));
-          vec3 sum=c*2.; float count=2.;
-          for(int i=0;i<10;i++) {
-            float f=float(i)+.5, theta=f*2.399963;
-            vec2 tap=clamp(uv+pixel*blur*sqrt(f/10.)*vec2(cos(theta),sin(theta)),pixel,1.-pixel);
-            float accepted=smoothstep(focus+.35,focus+.8,meters(tap));
+        // The light portrait blur leaves small, distant ink silhouettes legible.
+        if (focus>0. && z>focus+1.) {
+          float blur=1.3*smoothstep(focus+1.,focus+16.,z);
+          vec3 sum=c*3.; float count=3.;
+          for(int i=0;i<4;i++) {
+            float theta=(float(i)+.5)*1.5707963;
+            vec2 tap=clamp(uv+pixel*blur*vec2(cos(theta),sin(theta)),pixel,1.-pixel);
+            float accepted=smoothstep(focus+.5,focus+1.,meters(tap));
             sum+=texture2D(painted,tap).rgb*accepted;
             count+=accepted;
           }
@@ -110,6 +109,18 @@ export function createInkPass(renderer, camera) {
   quad.frustumCulled = false;
   screen.add(quad);
   return {
+    prepare(scene) {
+      // Compile with the very same offscreen format, lights and camera as draw().
+      // This lets the driver link shaders while the CPU stages texture uploads.
+      renderer.setRenderTarget(target);
+      try {
+        const landscape = renderer.compileAsync(scene, camera);
+        renderer.setRenderTarget(null);
+        return Promise.all([landscape, renderer.compileAsync(screen, lens)]);
+      } finally {
+        renderer.setRenderTarget(null);
+      }
+    },
     resize() {
       renderer.getDrawingBufferSize(size);
       target.setSize(size.x, size.y);

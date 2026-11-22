@@ -6,7 +6,17 @@ const pigments = [
   ['snow', [226, 231, 229]], ['autumn', [213, 177, 133]],
   ['moon', [175, 176, 186]], ['dawn', [232, 200, 163]]
 ];
-let paper;
+let paper, paperRequest;
+
+// The terrain and roads are immutable. Player, delivery and port marks are drawn live.
+export function loadMapPaper() {
+  if (!paperRequest) {
+    const image = new Image();
+    image.src = new URL('./assets/world/journey-map.webp', import.meta.url).href;
+    paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
+  }
+  return paperRequest;
+}
 export function regionPort(state, id) {
   return state.objects.find(o => o.type === 'port' && REGIONS[regionAt(o.x, o.z)].id === id);
 }
@@ -35,8 +45,7 @@ function drawPort(g, x, y, bikes, large) {
   g.fillText('P', pinX, pinY + .5);
 }
 
-function baseMap() {
-  if (paper) return paper;
+export function paintMapPaper() {
   const c = document.createElement('canvas');
   c.width = c.height = SIZE;
   const g = c.getContext('2d'), step = 4;
@@ -75,8 +84,7 @@ function baseMap() {
     g.fillStyle = '#9b7954';
     g.fillRect(toX(b.x - b.halfWidth), toX(b.z - b.length / 2), b.halfWidth * 2 * adj, b.length * adj);
   }
-  paper = c;
-  return paper;
+  return c;
 }
 export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null) {
   const w = canvas.width,
@@ -92,11 +100,11 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   g.clearRect(0, 0, w, h);
   g.fillStyle = '#ece7d1';
   g.fillRect(0, 0, w, h);
-  const map = baseMap();
+  const map = paper;
   for (let u = -1; u <= 1; u++) for (let v = -1; v <= 1; v++) {
     const left = sx(u * SPAN - BOUND), top = sy(v * SPAN - BOUND);
     const side = SPAN * scale;
-    if (left < w && top < h && left + side > 0 && top + side > 0)
+    if (map && left < w && top < h && left + side > 0 && top + side > 0)
       g.drawImage(map, left, top, side, side);
   }
   for (const [i, r] of REGIONS.entries()) {

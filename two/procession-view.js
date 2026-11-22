@@ -1,37 +1,101 @@
-// Far travellers use eight views baked from the same inked rigs, including
-// each tool and haori dye. One cutout pass and one contact-shadow pass draw
-// the whole procession. Their facing, height and lighting track the 3D actors.
+// Each tile is an orthographic portrait of the actual articulated rig. The
+// six haori dyes share one portrait and a smaller cloth-coverage plate.
 import * as THREE from './vendor/three.module.min.js';
 import { DYES, TRADES } from './procession.js';
 import { SPECIES } from './bestiary.js';
-const fauna=Object.keys(SPECIES);
-import { seasonAt, wrapDelta } from './terrain.js';
-const oldRoles=['porter','wander','sumo'];
-const forms=oldRoles.length+TRADES.length*DYES.length;
+import { seasonAt } from './terrain.js';
+import { finishInSlices } from './preparation.js';
 
-const skyAt={};
+const roles=['porter','wander','sumo',...TRADES];
+const species=Object.keys(SPECIES);
+export const VILLAGERS={columns:16,rows:13,width:144,height:160,frameX:2.88,frameY:3.24,center:1.37};
+export const BEASTS={columns:8,rows:24,width:160,height:160};
+// Three-quarter and broadside views need room for the full brush tail,
+// wingtips and dragon whiskers, including a gutter at the coarsest mip.
+const paddedFrames={bird:4,fox:3.3,tiger:3.8,dragon:8};
+export const beastFrame=type=>paddedFrames[type]??SPECIES[type].frame;
+export const clothGround='#999999';
+const base=new THREE.Color(clothGround);
+const dyes=DYES.map(hex=>new THREE.Color(hex).multiplyScalar(1/base.r));
+const white=new THREE.Color(1,1,1);
+const roleIndex=new Map(roles.map((name,i)=>[name,i]));
+const kindIndex=new Map(species.map((name,i)=>[name,i]));
+const tau=Math.PI*2;
+
+// Sample the same gait cycle used by the live rig at quarter turns.
+export function gaitFrequency(type) {
+  return type==='bird' ? 4.35 : type==='dragon' ? 1.12 : type==='tiger' ? 2.8 : 3.8;
+}
+
+const plates=new Map();
+function plate(filename,color) {
+  if (!plates.has(filename)) {
+    let texture;
+    const ready=new Promise((resolve,reject)=>{
+      texture=new THREE.TextureLoader().load(new URL('./assets/residents/'+filename,import.meta.url).href,resolve,undefined,reject);
+    });
+    // Weight the RGB by coverage before generating mip levels, then unweight
+    // it in the shader. Transparent WebP texels otherwise introduce a black
+    // fringe in the middle of each fine ear, feather and brush stroke.
+    texture.premultiplyAlpha=color;
+    texture.colorSpace=THREE.NoColorSpace;
+    if (!color) texture.format=THREE.RedFormat;
+    texture.minFilter=THREE.LinearMipmapLinearFilter;
+    texture.magFilter=THREE.LinearFilter;
+    plates.set(filename,{texture,ready});
+  }
+  return plates.get(filename);
+}
+
+export async function preparePlates(renderer) {
+  const entries=[plate('procession.webp',true),plate('procession-dyes.webp',false),plate('beasts.webp',true)];
+  await Promise.all(entries.map(entry=>entry.ready));
+  function* upload() {
+    for (const {texture} of entries) {renderer?.initTexture(texture);yield;}
+  }
+  await finishInSlices(upload());
+}
+
 export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
-  const tileCols=beasts?8:32,tileRows=beasts?24:32,tileWidth=beasts?96:64,tileHeight=beasts?96:72;
+  const sheet=beasts ? BEASTS : VILLAGERS;
   const geometry=new THREE.PlaneGeometry(1,1);
-  const offsets=new THREE.InstancedBufferAttribute(new Float32Array(capacity*2),2);
-  offsets.setUsage(THREE.DynamicDrawUsage);
-  geometry.setAttribute('tileOffset',offsets);
-  const atlas=new THREE.TextureLoader().load(new URL(beasts?'./assets/residents/beasts.webp':'./assets/residents/procession.webp',import.meta.url).href);
-  atlas.colorSpace=THREE.SRGBColorSpace;
-  // Avoid sampling the feet of adjacent postures when the procession is tiny.
-  atlas.generateMipmaps=false;
-  atlas.minFilter=THREE.LinearFilter;
-  const material=new THREE.MeshBasicMaterial({map:atlas,alphaTest:.38});
+  const cells=new THREE.InstancedBufferAttribute(new Float32Array(capacity*3),3).setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('tileCell',cells);
+  const atlas=plate(beasts?'beasts.webp':'procession.webp',true).texture;
+  const cloth=beasts ? null : plate('procession-dyes.webp',false).texture;
+  const material=new THREE.MeshBasicMaterial({map:atlas,transparent:true,alphaTest:.035});
   material.onBeforeCompile=shader=>{
     shader.vertexShader=shader.vertexShader
-      .replace('#include <common>','#include <common>\nattribute vec2 tileOffset;')
+      .replace('#include <common>','#include <common>\nattribute vec3 tileCell; varying float presence;')
       .replace('#include <uv_vertex>', `#include <uv_vertex>
-        vMapUv=tileOffset+(vec2(${.5/tileWidth},${.5/tileHeight})+
-          vMapUv*vec2(${1-1/tileWidth},${1-1/tileHeight}))/vec2(${tileCols}.0,${tileRows}.0);`);
+        presence=tileCell.z; vMapUv=(tileCell.xy+vMapUv)/vec2(${sheet.columns}.0,${sheet.rows}.0);`);
+    // The full next cell starts beyond the transparent gutter. Limit the
+    // coarsest sample footprint before it can touch another animal's ink.
+    shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying float presence;');
+    const cellFilter=`
+      vec2 dx=dFdx(vMapUv), dy=dFdy(vMapUv);
+      vec2 plateSize=vec2(textureSize(map,0));
+      float footprint=max(length(dx*plateSize),length(dy*plateSize));
+      float gutter=min(1.0,16.0/max(footprint,1.0));
+      vec4 texel=textureGrad(map,vMapUv,dx*gutter,dy*gutter);
+      texel.rgb=sRGBTransferEOTF(vec4(texel.rgb/max(texel.a,.001),1.)).rgb;
+      diffuseColor*=texel;diffuseColor.a*=presence;`;
+    if (cloth) {
+      shader.uniforms.clothPlate={value:cloth};
+      shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nuniform sampler2D clothPlate;')
+        .replace('#include <map_fragment>',cellFilter)
+        .replace('#include <color_fragment>', 'diffuseColor.rgb*=mix(vec3(1.),vColor,textureGrad(clothPlate,vMapUv,dx*gutter,dy*gutter).r);');
+    } else {
+      shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',cellFilter);
+    }
   };
-  material.customProgramCacheKey=()=> 'scroll-atlas-'+tileCols+'x'+tileRows;
+  material.customProgramCacheKey=()=>beasts?'beast-plate':'haori-plate';
   const figures=new THREE.InstancedMesh(geometry,material,capacity);
   const shadows=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1),shadowMaterial,capacity);
+  if (cloth) {
+    figures.setColorAt(0,white);
+    figures.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  }
   figures.name=beasts?'鳥獣の絵巻・遠景':'街道の旅人・遠景';
   shadows.renderOrder=1;
   for(const batch of [figures,shadows]) {
@@ -40,28 +104,38 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
     batch.count=0;
     parent.add(batch);
   }
-  const transform=new THREE.Object3D(), shadow=new THREE.Object3D();
+  const transform=new THREE.Object3D(), shadow=new THREE.Object3D(), climate={};
+  const headings=new WeakMap();
+  transform.rotation.order='YXZ';
   shadow.rotation.x=-Math.PI/2;
   let count=0;
   function begin(player) {
     count=0;
-    const {moon,dawn,snow,autumn}=seasonAt(player.x,player.z,skyAt);
+    const {moon,dawn,snow,autumn}=seasonAt(player.x,player.z,climate);
     material.color.setRGB(1-.59*moon-.05*snow,1-.46*moon-.1*dawn-.035*autumn,1-.28*moon-.23*dawn-.075*autumn);
   }
-  function add(n,p,camera,time) {
-    const x=p.x+wrapDelta(n.x-p.x), z=p.z+wrapDelta(n.z-p.z);
-    const facing=Math.atan2(camera.position.x-x,camera.position.z-z);
-    const direction=(Math.round((facing-n.heading)*4/Math.PI)%8+8)%8;
-    const variant=beasts ? fauna.indexOf(n.type)*4+(Math.floor((time+n.phase)*(n.type==='bird'?3.3:2.4))%4)
-      : (n.area ? oldRoles.length+TRADES.indexOf(n.role)*DYES.length+n.dye : oldRoles.indexOf(n.role))+(n.type==='rabbit'?0:forms);
+  function add(n,x,z,camera,time,fade) {
+    const vx=camera.position.x-x, vz=camera.position.z-z;
+    const facing=Math.atan2(vx,vz);
+    const turn=(facing-(n.heading||0))*8/tau;
+    const last=headings.get(n);
+    // A small dead band straddles each sector boundary. Small back-and-forth
+    // head motions no longer flash between two drawings.
+    const drift=last===undefined ? Infinity : THREE.MathUtils.euclideanModulo(turn-last+4,8)-4;
+    const direction=Math.abs(drift)>.58 ? THREE.MathUtils.euclideanModulo(Math.round(turn),8) : last;
+    headings.set(n,direction);
+    const spec=SPECIES[n.type];
+    const frame=beasts ? THREE.MathUtils.euclideanModulo(Math.round((time+(n.phase||0))*gaitFrequency(n.type)*4/tau),4) : 0;
+    const variant=beasts ? kindIndex.get(n.type)*4+frame : roleIndex.get(n.role)+(n.type==='rabbit'?0:roles.length);
     const tile=variant*8+direction;
-    offsets.setXY(count,tile%tileCols/tileCols,1-(Math.floor(tile/tileCols)+1)/tileRows);
+    cells.setXYZ(count,tile%sheet.columns,sheet.rows-1-Math.floor(tile/sheet.columns),fade);
+    if (cloth) figures.setColorAt(count,n.area ? dyes[n.dye] : white);
     const scale=n.stature||1, build=n.build||1;
-    const pace=Math.sin(time*(n.role==='sumo'?2.65:3.12)+n.phase);
-    const beast=SPECIES[n.type];
-    transform.position.set(x,n.y+(beast?beast.center:1.37)*scale+.023*Math.abs(pace)*Math.min(1,n.speed+.09),z);
-    transform.rotation.set(0,facing,.017*pace);
-    transform.scale.set((beast?.frame||2.88)*scale*build,(beast?.frame||3.24)*scale,1);
+    const center=n.y+(spec?.center??VILLAGERS.center)*scale;
+    transform.position.set(x,center,z);
+    transform.rotation.set(-Math.atan2(camera.position.y-center,Math.hypot(vx,vz)),facing,0,'YXZ');
+    const span=spec ? beastFrame(n.type) : 0;
+    transform.scale.set((span||VILLAGERS.frameX)*scale*build,(span||VILLAGERS.frameY)*scale,1);
     transform.updateMatrix();figures.setMatrixAt(count,transform.matrix);
     shadow.position.set(x,n.y-(n.altitude||0)+.025,z);
     shadow.scale.set(1.12*scale*build,.85*scale,1);
@@ -70,9 +144,12 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   }
   function end() {
     figures.count=shadows.count=count;
-    if(count) {
-      offsets.needsUpdate=figures.instanceMatrix.needsUpdate=shadows.instanceMatrix.needsUpdate=true;
+    if (!count) return;
+    for(const attribute of [cells,figures.instanceMatrix,shadows.instanceMatrix,figures.instanceColor]) {
+      if (!attribute) continue;
+      attribute.clearUpdateRanges();attribute.addUpdateRange(0,count*attribute.itemSize);
+      attribute.needsUpdate=true;
     }
   }
-  return { begin,add,end };
+  return {begin,add,end};
 }

@@ -281,9 +281,12 @@ function inkTree(brush, p, t) {
     }
   }
 }
-export function plantInkTrees(p, art) {
+export function* plantInkTrees(p, art) {
   const brush = new BarkBrush(p.scene, art);
-  for (const tree of LANDMARK_TREES) if (tree.kind !== 'bamboo') inkTree(brush, p, tree);
+  for (const tree of LANDMARK_TREES) {
+    if (tree.kind !== 'bamboo') inkTree(brush, p, tree);
+    yield;
+  }
   brush.finish();
 }
 

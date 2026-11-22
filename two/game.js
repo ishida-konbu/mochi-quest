@@ -536,7 +536,7 @@ export function createGame(snapshot = null) {
       player.vy -= (player.vy > 0 ? RISE_GRAVITY : FALL_GRAVITY)*dt;
     }
     player.y += player.vy*dt;
-    const bodyHeight = (1.66 + player.airStretch * 1.65) * (player.buffs.full > 0 ? 1.28 : 1);
+    const bodyHeight = (1.66 + player.airStretch * 1.07) * (player.buffs.full > 0 ? 1.28 : 1);
     const seat = player.mount === 'turtle' ? 1.04 : player.mount === 'bike' ? .9 : 0;
     const headroom = Math.max(floor, ceiling - bodyHeight - seat);
     if (player.y > headroom && player.vy > 0) {

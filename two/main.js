@@ -1,7 +1,8 @@
 import * as THREE from './vendor/three.module.min.js';
 import { applyClimateLights } from './atmosphere.js';
 import { createWake } from './wake.js';
-import { createWorld } from './world.js';
+import { prepareWorld } from './world.js';
+import { finishInSlices, uploadSceneTextures } from './preparation.js';
 import { setRiverStones } from './scanned-stone.js';
 import { createBathReflection } from './spring-water.js';
 import { createInkPass } from './ink.js';
@@ -11,12 +12,13 @@ import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS
   transferURL, decodeTransfer, storeTransfer } from './journey-transfer.js';
 import { createGame } from './game.js';
 import { SPECIES } from './bestiary.js';
+import { preloadBeastCoats } from './beast-art.js';
 import { REGIONS, groundHeight, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
 import { createAudio } from '../sound.js';
 import { MODES, EMOTES, HELP, glyph, paintGlyphs, drawFace } from './interface.js';
-import { drawMap, mapHit, mapCoordinates, labels, regionPort } from './map.js';
+import { loadMapPaper, drawMap, mapHit, mapCoordinates, labels, regionPort } from './map.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('scene'),
@@ -107,7 +109,8 @@ let speechExpires = 0,
   toastExpires = 0,
   nextHUD = 0,
   lastSave = state.time;
-let previous = 0,
+let nextFrame = 0,
+  previous = 0,
   renderer,
   world,
   meadow,
@@ -136,7 +139,8 @@ const aim = new THREE.Vector3(),
   projected = new THREE.Vector3(),
   heroAt = new THREE.Vector3();
 const coarse = matchMedia('(pointer:coarse)').matches;
-let ratio = Math.min(devicePixelRatio || 1, coarse ? 1.35 : 1.65);
+const nativeRatio = Math.min(devicePixelRatio || 1, coarse ? 1.35 : 1.65);
+let ratio = nativeRatio;
 let frames = 0,
   workTime = 0,
   qualitySince = 0;
@@ -256,7 +260,7 @@ function togglePhoto() {
     photoTime = state.time;
     yaw = actors.hero.rotation.y;
     pitch = 0.105;
-    distance = (camera.aspect < 0.83 ? 3.48 : 2.95) * (1 + .94 * p.airStretch);
+    distance = (camera.aspect < 0.83 ? 3.48 : 2.95) * (1 + .64 * p.airStretch);
     p.emote = null;
     updateEmotes();
   } else {
@@ -448,7 +452,7 @@ function updateCamera(dt, snap = false) {
   // long flights, while a standing jump retains a visible point of departure.
   const rise = photoMode ? 0 : Math.min(p.h, 3.6) * 0.41;
   const resting = photoMode ? restingEyeHeightOffset[p.activity] || 0 : 0;
-  heroAt.set(p.x, p.y + ride + 0.9 * full + p.airStretch * (photoMode ? .97 : .65) - rise - resting, p.z);
+  heroAt.set(p.x, p.y + ride + 0.9 * full + p.airStretch * full * (photoMode ? .72 : .51) - rise - resting, p.z);
   if (snap || Math.abs(heroAt.x - focus.x) > BOUND || Math.abs(heroAt.z - focus.z) > BOUND) focus.copy(heroAt);
   else focus.lerp(heroAt, 1 - Math.exp(-dt * 13));
   const sx = Math.sin(yaw),
@@ -639,8 +643,8 @@ function journalDialog() {
       const sheetRow=Object.keys(SPECIES).indexOf(type)*4;
       print.style.backgroundImage="url('./assets/residents/beasts.webp')";
       // Crop each atlas cell to its ink silhouette; a crane and a long dragon fill the frame differently.
-      const [col, box, centerX, centerY]={monkey:[1,68,48,48], bird:[1,70,47,43], fox:[2,78,53,47],
-        tiger:[2,77,53,50], dragon:[2,62,52,42], kirin:[1,66,48,48]}[type];
+      const [col, box, centerX, centerY]={monkey:[1,63,44,50], bird:[1,61,54,43], fox:[2,72,54,49],
+        tiger:[2,73,54,50], dragon:[2,79,53,43], kirin:[1,65,52,53]}[type];
       print.style.backgroundSize=(768/box*100)+'% '+(2304/box*100)+'%';
       print.style.backgroundPosition=((col*96+centerX-box/2)/(768-box)*100)+'% '+((sheetRow*96+centerY-box/2)/(2304-box)*100)+'%';
     } else {
@@ -741,14 +745,18 @@ dialog.addEventListener('close', () => {
   dialogKind = '';
   (lastFocus?.tagName === 'BUTTON' ? lastFocus : canvas).focus({ preventScroll: true });
 });
-function resize() {
+let renderWidth = 0, renderHeight = 0;
+function resize(force = false) {
   if (!renderer) return;
   const w = canvas.clientWidth,
     h = canvas.clientHeight;
   if (!w || !h) return;
   const photoRatio = Math.min(coarse ? 1.65 : 2, Math.max(1.6, devicePixelRatio || 1), Math.sqrt(4200000/(w*h)));
-  renderer.setPixelRatio(photoMode ? photoRatio : ratio);
-  renderer.setSize(w, h, false);
+  const pixelRatio = photoMode ? photoRatio : ratio;
+  if (force !== true && renderWidth === w && renderHeight === h && pixelRatio === renderer.getPixelRatio()) return;
+  renderWidth = w;
+  renderHeight = h;
+  renderer.setDrawingBufferSize(w, h, pixelRatio);
   camera.aspect = w / h;
   camera.fov = w < h ? 65 : 57;
   camera.updateProjectionMatrix();
@@ -782,8 +790,13 @@ function frame(now) {
     previous = 0;
     return;
   }
+  // Carry the 60 Hz deadline forward: 75, 90 and 144 Hz screens must not
+  // lose a whole refresh each time the display clock falls either side of it.
+  const interval = 1000 / 60;
+  if (!previous || now >= nextFrame + interval) nextFrame = now;
+  if (now + .75 < nextFrame) return;
+  nextFrame += interval;
   const delta = previous ? Math.min((now - previous) / 1000, 0.09) : 1 / 60;
-  if (previous && now - previous < 1000 / 63) return;
   previous = now;
   const left = Number(keys.has('ArrowLeft') || keys.has('KeyA')),
     right = Number(keys.has('ArrowRight') || keys.has('KeyD'));
@@ -850,6 +863,10 @@ function frame(now) {
         ratio = Math.max(0.85, ratio * 0.82);
         resize();
         qualitySince = now;
+      } else if (workTime / frames < .019 && ratio < nativeRatio && now - qualitySince > 10000) {
+        ratio = Math.min(nativeRatio, ratio / .82);
+        resize();
+        qualitySince = now;
       }
       frames = 0;
       workTime = 0;
@@ -869,21 +886,28 @@ async function boot() {
     renderer.shadowMap.type = THREE.PCFShadowMap;
     ink = createInkPass(renderer, camera);
     settingsForLighting();
-    world = createWorld(scene);
+    resize();
+    updateCamera(1, true);
+    setRiverStones(scene, state.objects);
+    const [heroTextures, landscape, coats] = await Promise.all([
+      loadRiceModel(), finishInSlices(prepareWorld(scene)), preloadBeastCoats(), loadMapPaper(),
+    ]);
+    world = landscape;
     meadow = createMeadow(scene, state.objects, coarse);
     wake = createWake(scene);
     sun.target.position.set(p.x,p.y,p.z);
     applyClimateLights(hemisphere, sun, bounce, p);
     wake(p, state.time);
-    setRiverStones(scene, state.objects);
-    await loadRiceModel();
-    actors = createActors(scene);
+    actors = createActors(scene, renderer);
+    await actors.prepare(state);
     bathReflection = createBathReflection(renderer, scene, actors.hero);
-    resize();
-    updateCamera(1, true);
     actors.update(state, 0, camera);
     world.update(state.time, p, camera);
     meadow(state.time, p, camera);
+    await Promise.all([
+      ink.prepare(scene),
+      finishInSlices(uploadSceneTextures(renderer, scene, [...heroTextures, ...world.textures, ...coats])),
+    ]);
     drawScene();
     updateHUD();
     $('loading').hidden = true;
@@ -905,7 +929,7 @@ async function boot() {
     canvas.addEventListener('webglcontextrestored', () => {
       contextLost = false;
       previous = 0;
-      resize();
+      resize(true);
       $('loading').hidden = true;
     });
     requestAnimationFrame(frame);
