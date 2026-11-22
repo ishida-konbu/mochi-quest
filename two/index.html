@@ -108,7 +108,7 @@
           "./inari-rain.js": "./inari-rain.js?v=inari-rain-1",
           "./inari-weather.js": "./inari-weather.js?v=inari-rain-1",
           "./ink.js": "./ink.js?v=ryu-emaki-1",
-          "./interface.js": "./interface.js?v=kyoto-market-highways-1",
+          "./interface.js": "./interface.js?v=surface-jump-1",
           "./kagami-fern.js": "./kagami-fern.js?v=6.3",
           "./kagami-mochibana.js": "./kagami-mochibana.js?v=6.5",
           "./mochibana-rice.js": "./mochibana-rice.js?v=6.5",
@@ -248,14 +248,14 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=amimoto-yudono-1" />
+    <link rel="modulepreload" href="./main.js?v=surface-jump-1" />
   </head>
   <body>
     <main id="stage">
       <canvas
         id="scene"
         tabindex="0"
-        aria-label="3Dのゲーム画面。矢印で前後左右に移動、Spaceでジャンプ。泳ぐときは下キーで手前へ、Spaceと下キーで潜水、Spaceで浮上。ドラッグで周囲を見回す。"
+        aria-label="3Dのゲーム画面。矢印で前後左右に移動、Spaceでジャンプ。泳ぐときは下キーで手前へ、Spaceと下キーで潜水。Spaceだけで水中では浮上、水面ではジャンプ。ドラッグで周囲を見回す。"
       ></canvas>
       <header class="top">
         <div class="headleft">
@@ -358,7 +358,7 @@
         <div id="dialog-content"></div>
       </div>
     </dialog>
-    <script type="module" src="./main.js?v=amimoto-yudono-1"></script>
+    <script type="module" src="./main.js?v=surface-jump-1"></script>
     <noscript>JavaScript を有効にして遊んでください。</noscript>
   </body>
 </html>

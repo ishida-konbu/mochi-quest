@@ -134,6 +134,11 @@ const keys = new Set(),
   stick = { id: null, x: 0, y: 0 },
   look = { id: null, x: 0, y: 0 };
 const swimmingControls = () => !p.activity && !p.mount && p.inWater && (p.diveDepth>0 || canDiveAt(p.x,p.z,p.y));
+const backwardHeld = () => keys.has('ArrowDown') || keys.has('KeyS');
+// Allow the two dive keys to arrive in either order. A short Space tap
+// jumps on release, even when it falls entirely between animation frames.
+const diveChordWindowMs = 80;
+let surfaceJumpAt = Infinity;
 let jumpTouch = false, diveTouch = false,
   lastFace = '',
   lastMode = '',
@@ -254,6 +259,7 @@ function updateEmotes() {
 }
 function clearInput() {
   keys.clear();
+  surfaceJumpAt = Infinity;
   jumpTouch = diveTouch = false;
   stick.id = null;
   stick.x = stick.y = 0;
@@ -373,7 +379,7 @@ $('leap').onpointerdown = (e) => {
   e.preventDefault();
   e.currentTarget.setPointerCapture(e.pointerId);
   jumpTouch = true;
-  if(swimmingControls())unlock();else action('jump');
+  if (!diveTouch) action('jump');
 };
 $('leap').onlostpointercapture = () => {
   jumpTouch = false;
@@ -382,6 +388,7 @@ $('dive').onpointerdown = e => {
   if (dialog.open || photoMode) return;
   e.preventDefault();
   e.currentTarget.setPointerCapture(e.pointerId);
+  surfaceJumpAt = Infinity;
   diveTouch = true;
   unlock();
 };
@@ -435,6 +442,7 @@ document.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (!['KeyM','KeyH','KeyP','Escape'].includes(e.code)) unlock();
   keys.add(e.code);
+  if (backwardHeld()) surfaceJumpAt = Infinity;
   if (e.code === 'KeyC') {
     togglePhoto();
     return;
@@ -455,9 +463,18 @@ document.addEventListener('keydown', (e) => {
   if (/^Digit/.test(e.code)) action(MODES[+e.code.slice(-1)][0]);
   if (e.code === 'KeyZ') action('throw');
   if (e.code === 'KeyE') action('interact');
-  if (e.code === 'Space' && !swimmingControls()) action('jump');
+  if (e.code === 'Space') {
+    if (!swimmingControls()) action('jump');
+    else if (!p.diveDepth && !backwardHeld() && !diveTouch) surfaceJumpAt = performance.now() + diveChordWindowMs;
+  }
 });
-document.addEventListener('keyup', (e) => keys.delete(e.code));
+document.addEventListener('keyup', (e) => {
+  keys.delete(e.code);
+  if (e.code === 'Space' && Number.isFinite(surfaceJumpAt)) {
+    surfaceJumpAt = Infinity;
+    action('jump');
+  }
+});
 window.addEventListener('blur', () => {
   clearInput();
   save();
@@ -607,8 +624,8 @@ function updateHUD() {
   const effects = [];
   const swimming = swimmingControls();
   $('dive').hidden = !swimming;
-  $('leap').setAttribute('aria-label', swimming ? '長押しで浮上する' : 'ジャンプ');
-  $('space-hint').textContent = swimming ? '浮上・↓と同時で潜る' : '跳ぶ・連打で伸びる';
+  $('leap').setAttribute('aria-label', p.diveDepth ? '長押しで浮上する' : 'ジャンプ');
+  $('space-hint').textContent = p.diveDepth ? '浮上・↓と同時で潜る' : swimming ? '水面から跳ぶ・↓と同時で潜る' : '跳ぶ・連打で伸びる';
   if (swimming) {
     const depth = Math.max(1,Math.round(p.diveDepth));
     effects.push(p.diveDepth ? '水深 '+depth+' m' + (coarse ? ' ・ 跳ぶ長押しで浮上' : ' ・ Spaceで浮上') :
@@ -947,7 +964,11 @@ function frame(now) {
   previous = now;
   const left = Number(keys.has('ArrowLeft') || keys.has('KeyA')),
     right = Number(keys.has('ArrowRight') || keys.has('KeyD'));
-  const swimming=swimmingControls(), backward=keys.has('ArrowDown') || keys.has('KeyS');
+  if (now >= surfaceJumpAt) {
+    surfaceJumpAt = Infinity;
+    action('jump');
+  }
+  const swimming=swimmingControls(), backward=backwardHeld();
   const diveChord=swimming && keys.has('Space') && backward;
   const forward =
     Number(keys.has('ArrowUp') || keys.has('KeyW')) -
@@ -963,7 +984,7 @@ function frame(now) {
       z: -s * side - c * forward,
       rightX: c,
       rightZ: -s,
-      jump: (!swimming || p.diveDepth>0) && !diveChord && !diveTouch && (jumpTouch || keys.has('Space')),
+      jump: (!swimming || p.diveDepth>0 || !p.grounded) && !diveChord && !diveTouch && (jumpTouch || keys.has('Space')),
       dive: diveTouch || diveChord,
     });
     dispatchEvents();
