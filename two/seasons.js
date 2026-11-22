@@ -1,6 +1,7 @@
+import { dressSnowBath } from './snow-bath.js';
 import * as THREE from './vendor/three.module.min.js';
 import { snowDaruma } from './snow-daruma.js';
-import { terrainHeight as height, seeded, TREES, BUILDINGS, nearRoad } from './terrain.js';
+import { terrainHeight as height, seeded, TREES, BUILDINGS, nearRoad, TSUKIMI, springRadius } from './terrain.js';
 
 const tau = 2 * Math.PI;
 const { sin, cos } = Math;
@@ -40,7 +41,7 @@ function snowCapital(p, light) {
   for (let i = 0; i < 28; i++) {
     const x = -78 + (rng() - 0.5) * 90,
       z = -287 + (rng() - 0.5) * 70;
-    if (nearRoad(x, z, 1.0)) continue;
+    if (nearRoad(x, z, 1.0) || springRadius(x,z)<1.2) continue;
     const s = 0.9 + rng() * 1.6;
     p.part(
       'snowLump',
@@ -171,13 +172,8 @@ function moonField(p, light) {
     emissive: '#818477',
     emissiveIntensity: 0.37,
   });
-  const rice = new THREE.MeshStandardMaterial({
-    roughness: 0.63,
-    emissive: '#ada49b',
-    emissiveIntensity: 0.2,
-  });
   const rng = seeded(395),
-    f = frame(p, -51.7, 285.9, -0.15);
+    f = frame(p, TSUKIMI.x, TSUKIMI.z, TSUKIMI.yaw);
   // A sanbō has a folded rim and three open sides beneath its tray.
   f.part('box', 0, 0.066, 0, 1.54, 0.13, 1.2, '#72503b', p.wood);
   f.part('box', 0, 0.3, 0, 0.89, 0.43, 0.78, '#bd9868', p.wood);
@@ -191,14 +187,6 @@ function moonField(p, light) {
     f.part('box', 0, 0.658, side * 0.564, 1.28, 0.091, 0.039, '#ab8355', p.wood);
     f.part('box', side * 0.626, 0.658, 0, 0.039, 0.091, 1.16, '#ab8355', p.wood);
   }
-  const tones = ['#f1e6ce', '#fdedd0', '#f6e9d6', '#e9dbc1'];
-  for (let j = -1; j <= 1; j++)
-    for (let k = -1; k <= 1; k++)
-      f.part('dumpling', j * 0.32, 0.787, k * 0.315, 0.18, 0.171, 0.174, tones[(j + 2 * k + 4) % 4], rice);
-  for (let j of [-1, 1])
-    for (let k of [-1, 1])
-      f.part('dumpling', j * 0.157, 1.022, k * 0.151, 0.181, 0.169, 0.177, '#fff0d7', rice);
-  for (let k of [-1, 1]) f.part('dumpling', k * 0.155, 1.261, 0, 0.172, 0.171, 0.171, '#f5e9ce', rice);
   const vase = frame(p, -50.46, 285.68);
   vase.part('vase', 0, 0, 0, 0.3, 0.58, 0.3, '#817469', p.stone);
   vase.part('plumes', 0, 0.43, 0, 1, 1.44, 1, '#f9dfaa', silverSilk, 0, 0, 0, false);
@@ -398,19 +386,6 @@ function dawnShore(p) {
 }
 export function dressSeasonalPlaces(p) {
   p.shapes.snowLump = new THREE.SphereGeometry(1, 22, 14);
-  p.shapes.dumpling = lathe(
-    [
-      [0, -0.92],
-      [0.53, -0.88],
-      [0.85, -0.63],
-      [1, -0.2],
-      [0.98, 0.28],
-      [0.77, 0.69],
-      [0.43, 0.93],
-      [0, 1],
-    ],
-    22,
-  );
   p.shapes.muffler = lathe(
     [
       [0.87, -0.5],
@@ -455,6 +430,7 @@ export function dressSeasonalPlaces(p) {
   p.shapes.plumes = plumesGeometry();
   const light = new THREE.MeshBasicMaterial();
   snowCapital(p, light);
+  dressSnowBath(p,frame,light);
   moonField(p, light);
   mapleHollow(p);
   dawnShore(p);
@@ -464,7 +440,7 @@ export function seasonalWeather(scene) {
     rng = seeded(837);
   const pos = [],
     phase = [];
-  for (let i = 0; i < 390; i++) {
+  for (let i = 0; i < 1170; i++) {
     pos.push(rng() * 32, rng() * 17, rng() * 32);
     phase.push(rng());
   }

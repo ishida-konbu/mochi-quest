@@ -1055,3 +1055,101 @@ dialog::backdrop {
 .place {
   text-shadow: 0 1px 3px #fcf4d8;
 }
+
+/* Mounted washi, indigo silk borders and vermilion seals, shared with the atlas. */
+.hud-player, .mode-dock, #photo-dock, .sheet {
+  background-color: #f4ead2;
+  background-image: linear-gradient(102deg,#c4a47538,transparent 13%,#fff8df28 56%,#aa86572e),
+    url('../assets/ui/paper.png');
+}
+.hud-player, .mode-dock, #photo-dock {
+  border: 1px solid #6d644d;
+  box-shadow: inset 0 0 0 2px #fff3d982, 0 3px 7px #2e281e52;
+}
+.hud-player {
+  border-radius: 1px 3px 3px 1px;
+  border-inline-start: 5px solid #425d57;
+}
+#face {
+  background: radial-gradient(ellipse at 40% 35%, #fcf8de, #dfd0ac);
+  border: 1px solid #8b795b;
+  box-shadow: 0 0 0 2px #f7edcf;
+}
+.bar-row > span {
+  height: 7px; transform: none; background: #c8baa0;
+  border: 0; border-radius: 1px 35% 20% 1px / 1px 2px 2px 1px;
+  box-shadow: inset 0 1px 2px #67574168;
+}
+.bar-row span i {
+  background: linear-gradient(#aa5948,#923d30);
+  clip-path: polygon(0 4%,99% 0,100% 45%,98% 93%,0 100%);
+}
+.bar-row:nth-child(2) i { background: linear-gradient(#64867c,#3f685e); }
+.pockets { border-color:#a69b7c; }
+#journal {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:8px; width:100%; margin-top:5px; padding:3px 4px 2px 9px;
+  border-inline-start:3px solid #a44c36; color:#483b2e;
+  background:linear-gradient(90deg,#bb9c6e36,#bb9c6e10);
+  font:600 11px var(--min);
+}
+#journal strong {font:600 12px Georgia,serif; font-variant-numeric:tabular-nums;}
+.mode-dock { border-radius:2px; padding-inline:7px; }
+.dock-label { color:#783f30; }
+.mode { background:transparent; border:1px solid transparent; border-inline-start-color:#af99745c; }
+.mode[aria-pressed='true'] { border:1px solid #a45239; background-color:#e9cea9; box-shadow:inset 0 0 0 2px #f5e1bb; }
+.mode[aria-pressed='true'] span {color:#802e24;}
+.place > span {color:#763d2f;}
+.place i {height:9px;width:9px;background:#974232;transform:rotate(-5deg);box-shadow:inset 0 0 0 2px #eedbb9;border:1px solid #974232;}
+.top nav .circle, .headleft .circle, .sheet .circle, #mini-button {
+  background: #f6ecd6 url('../assets/ui/paper.png');
+  border-color:#74694e; box-shadow:inset 0 0 0 2px #f6ebd1, inset 0 0 0 3px #b4a583,0 2px 5px #453e2d3b;
+}
+#mini-button {padding:5px;}
+dialog {border:2px solid #526761;border-radius:2px;}
+.sheet {border-block:5px solid #526761;}
+.sheet header {position:relative;isolation:isolate;min-height:54px;border-bottom:2px solid #78694d;}
+.sheet header::before {
+  content:'';position:absolute;inset:-6px 44px 1px auto;width:86px;
+  background: url('../assets/actors/rabbit-porter.webp') center / contain no-repeat;
+  mix-blend-mode:multiply;z-index:-1;pointer-events:none;
+}
+.sheet h2 {letter-spacing:.12em;}
+#delivery-book {margin-block:18px 4px;}
+.ledger-head {display:flex;align-items:center;gap:15px;justify-content:space-between;margin-bottom:16px;}
+.ledger-head p {font:14px/1.7 var(--min);max-width:30em;}
+#ledger-count {flex:none;color:var(--red);font:700 20px Georgia,serif;}
+.ledger-animals {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid #aa987b;}
+.ledger-entry {
+  display:grid;grid-template-columns:58px 1fr;align-items:center;justify-items:start;column-gap:4px;
+  text-align:left;padding:9px 4px;border-bottom:1px solid #bdae91;color:#3d382b;
+}
+.ledger-entry:hover {background:#c0a16f30;}
+.ledger-entry:disabled {cursor:default;}
+.ledger-entry .animal-print {
+  grid-row:span 2; width:56px;height:56px;background-repeat:no-repeat;background-position:center;
+  background-size:contain;mix-blend-mode:multiply;
+}
+.ledger-entry b {font:700 15px var(--min);}
+.ledger-entry small {display:block;font:11px/1.5 var(--sans);color:#795e47;}
+.ledger-entry strong {font:600 13px Georgia,serif;color:#415e54;}
+@media(max-width:580px) {
+  .ledger-animals {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .ledger-entry {grid-template-columns:45px 1fr;min-height:61px;}
+  .ledger-entry .animal-print {width:42px;height:42px;}
+  .ledger-entry b {font-size:13px;}
+  .ledger-head p {font-size:12px;}
+}
+.map-hint {margin:9px 0 0;font:12px/1.6 var(--min);}
+#atlas[tabindex] {cursor:crosshair;}
+@media (min-width:621px) and (min-height:531px) { #effects {bottom:calc(clamp(45px, 6.2vh, 68px) + 112px);} }
+@media (max-width:620px) { #effects {top:221px;} .mode-dock {max-width:calc(100vw - 12px);} .mode {min-width:clamp(38px,11.5vw,48px);padding-inline:2px;} }
+@media (max-height:530px) and (orientation:landscape) { #effects {top:164px;} #journal {padding-block:0;margin-top:2px;} }
+@media (prefers-reduced-motion:no-preference) {
+  .bar-row span i {transition:width .12s linear;}
+}
+
+@media(max-width:580px) {
+  .sheet header::before {width:46px;inset-inline-end:43px;}
+  .sheet h2 {font-size:clamp(19px,5.3vw,25px);letter-spacing:.06em;max-width:calc(100% - 86px);}
+}

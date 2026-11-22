@@ -135,9 +135,11 @@ export function furnishRoom(p, b, index, part, local) {
       );
     part('box', 0, mid + screenHeight * 0.57, side * (depth * 0.5 - 0.12), width, 0.105, 0.13, wood, p.wood);
   }
+  if (b.kind !== 'pagoda') {
   part('box', 0, ceiling - 0.015, 0, width - 0.12, 0.08, depth - 0.12, '#bb9d7c', p.deck);
   for (let j = -1; j <= 1; j++)
     part('box', 0, ceiling - 0.1, j * depth * 0.32, width, 0.16, 0.17, deep, p.wood);
+  }
   const vaseX = -width * 0.19;
   part('ball', vaseX, floor + 0.43, back + 0.34, 0.18, 0.23, 0.17, '#637971');
   part('round', vaseX, floor + 0.62, back + 0.34, 0.099, 0.13, 0.099, '#55665e');

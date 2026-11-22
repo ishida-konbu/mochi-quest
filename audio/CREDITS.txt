@@ -59,3 +59,9 @@ https://freesound.org/people/JRWEntertainment/sounds/614137/
 杵と臼の打音、湯の泡、水しぶき、社の鈴、市の陶器、衣擦れなどは
 two/soundscape.js の Web Audio 合成です。このモジュールの合成・ミキサーコードは
 CC0 1.0 Universal で提供します。
+
+【四季十景の小品】
+十の地域のBGMは Mochi Quest 2 のためのオリジナル楽曲です。
+箏と三味線の撥弦、尺八風の息と揺り、鉦、太鼓を合成し、各曲を八小節で構成しています。
+曲・録音・生成コードを CC0 1.0 Universal で提供します。
+音源　audio/journey/score-*.mp3　楽譜と生成コード　tools/compose-journey.py

@@ -6,15 +6,17 @@ import { setRiverStones } from './scanned-stone.js';
 import { createBathReflection } from './spring-water.js';
 import { createInkPass } from './ink.js';
 import { createActors, getExpression } from './actors.js';
+import { loadRiceModel } from './mochi-model.js';
 import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS_KEY as settingsKey,
   transferURL, decodeTransfer, storeTransfer } from './journey-transfer.js';
 import { createGame } from './game.js';
+import { SPECIES } from './bestiary.js';
 import { REGIONS, groundHeight, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
 import { createAudio } from '../sound.js';
 import { MODES, EMOTES, HELP, glyph, paintGlyphs, drawFace } from './interface.js';
-import { drawMap, mapHit, labels, regionPort } from './map.js';
+import { drawMap, mapHit, mapCoordinates, labels, regionPort } from './map.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('scene'),
@@ -85,6 +87,17 @@ let pitch = 0.23,
   priorCamera = null,
   photoMode = false;
 let goal = REGIONS.some((r) => r.id === savedSettings.goal) ? savedSettings.goal : null;
+let trackedAnimal = null, jumpPin = null;
+const speciesNames = { frog:'蛙', rabbit:'兎', turtle:'ミツユビハコガメ', monkey:'猿', bird:'丹頂鶴', fox:'狐', tiger:'虎', dragon:'龍', kirin:'麒麟' };
+function nearestUndelivered(type) {
+  let result = null, best = Infinity;
+  for (const n of state.npcs) {
+    if (state.delivered.has(n.id) || (type && n.type!==type)) continue;
+    const d = wrapDelta(n.x-p.x)**2 + wrapDelta(n.z-p.z)**2 + (n.y-p.y)**2;
+    if (d < best) { best = d; result = n; }
+  }
+  return result;
+}
 let photoTime = state.time,
   active = false,
   dialogKind = '',
@@ -174,7 +187,7 @@ function dispatchEvents() {
 function action(name) {
   if (dialog.open || photoMode) return;
   unlock();
-  game.act(name);
+  game.act(name, name === 'throw' ? actors?.hero.rotation.y : undefined);
   dispatchEvents();
   updateHUD();
 }
@@ -374,6 +387,7 @@ const bindings = new Set([
   'Digit2',
   'Digit3',
   'Digit4',
+  'Digit5',
 ]);
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || !bindings.has(e.code)) return;
@@ -429,7 +443,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', () => { audio.setPaused(true); save(); });
 function updateCamera(dt, snap = false) {
   const full = p.buffs.full > 0 ? 1.26 : 1,
-    ride = p.mount === 'bike' ? 0.9 : p.mount === 'turtle' ? 0.48 : 0;
+    ride = p.mount === 'bike' ? 0.9 : p.mount === 'turtle' ? .99 : 0;
   // Let the body rise within the frame on takeoff. The camera catches up for
   // long flights, while a standing jump retains a visible point of departure.
   const rise = photoMode ? 0 : Math.min(p.h, 3.6) * 0.41;
@@ -471,6 +485,9 @@ function updateCamera(dt, snap = false) {
 }
 function updateHUD() {
   $('region').textContent = state.region;
+  $('delivered-count').textContent = (state.delivered?.size || 0) + ' / ' + (state.recipientTotal ?? state.npcs.length);
+  cards.get('kagami').hidden = !state.kagamiUnlocked;
+  if (trackedAnimal && state.delivered.has(trackedAnimal.id)) trackedAnimal = nearestUndelivered(trackedAnimal.type) || nearestUndelivered();
   $('score').textContent = state.score;
   $('visits').textContent = state.visited.length + '/' + REGIONS.length;
   for (const k of ['hp', 'mp']) {
@@ -515,7 +532,7 @@ function updateHUD() {
     el.classList.toggle('major', n % 3 === 0);
     el.firstElementChild.textContent = n % 3 === 0 ? directions[(((n / 3) % 8) + 8) % 8] : '';
   });
-  const dest = REGIONS.find((r) => r.id === goal);
+  const dest = trackedAnimal || REGIONS.find((r) => r.id === goal);
   $('target').hidden = !dest;
   if (dest) {
     const dx = wrapDelta(dest.x - p.x),
@@ -524,9 +541,9 @@ function updateHUD() {
     const pointer = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][
       ((Math.round(heading / (Math.PI / 4)) % 8) + 8) % 8
     ];
-    $('target').textContent = pointer + '　' + dest.name + '　' + Math.round(Math.hypot(dx, dz)) + ' m';
+    $('target').textContent = pointer + '　' + (trackedAnimal ? speciesNames[dest.type] : dest.name) + '　' + Math.round(Math.hypot(dx, dz)) + ' m' + (trackedAnimal && dest.y-p.y>2 ? '　↑ ' + Math.round(dest.y-p.y) + ' m' : '');
   }
-  if (!photoMode) drawMap($('minimap'), state, yaw, goal);
+  if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, trackedAnimal);
 }
 function openDialog(kind) {
   if (!renderer || dialog.open) return;
@@ -534,12 +551,14 @@ function openDialog(kind) {
   save();
   lastFocus = document.activeElement;
   dialogKind = kind;
-  $('dialog-title').textContent = kind === 'map' ? '十景の地図' : '旅の手引き';
+  $('dialog-title').textContent = kind === 'map' ? '十景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
   dialog.showModal();
   if (kind === 'map') {
     selectedPlace = goal || state.regionId;
+    jumpPin = null;
     mapDialog();
-  } else helpDialog('歩き方');
+  } else if (kind === 'journal') journalDialog();
+  else helpDialog('歩き方');
 }
 function mapDialog() {
   const body = $('dialog-content');
@@ -552,19 +571,49 @@ function mapDialog() {
     b.onclick = () => selectMap(r.id);
     body.querySelector('.map-places').append(b);
   }
-  $('atlas').onclick = (e) => {
-    const r = mapHit($('atlas'), e);
+  const caption = body.querySelector('.map-caption');
+  if (p.mode === 'kagami') {
+    const jump = document.createElement('button'); jump.className='jump-link'; jump.id='map-jump';
+    jump.textContent='この印へ瞬間移動';
+    const hint = document.createElement('p'); hint.className='map-hint';
+    hint.textContent='地図をタップして移動先を選べます。矢印キーでも印を動かせます。';
+    caption.append(hint); caption.querySelector('.actions').prepend(jump);
+    jump.onclick = () => {
+      const point = jumpPin || REGIONS.find(r=>r.id===selectedPlace);
+      if (!game.teleport(point.x,point.z)) { hint.textContent='近くに降りられる場所を選んでください。'; return; }
+      lastFocus=canvas; dialog.close(); updateCamera(0,true); dispatchEvents(); updateHUD(); save();
+    };
+    $('atlas').tabIndex=0;
+    $('atlas').onkeydown = e => {
+      const delta={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+      if (!delta) return;
+      e.preventDefault();
+      const point=jumpPin || REGIONS.find(r=>r.id===selectedPlace);
+      const step=e.shiftKey ? 1 : 8;
+      jumpPin={x:wrapDelta(point.x+delta[0]*step),z:wrapDelta(point.z+delta[1]*step)};
+      redrawAtlas();
+    };
+  }
+  $('atlas').onclick = e => {
+    const r = mapHit($('atlas'),e);
     if (r) selectMap(r.id);
+    if (p.mode==='kagami') { jumpPin=mapCoordinates($('atlas'),e); redrawAtlas(); }
   };
+  const bookLink=document.createElement('button');
+  bookLink.className='choice'; bookLink.textContent='配達帳を開く';
+  bookLink.onclick=()=>{dialogKind='journal';$('dialog-title').textContent='三条通知の配達帳';journalDialog();};
+  body.querySelector('.actions').append(bookLink);
   $('set-goal').onclick = () => {
+    trackedAnimal = null;
     goal = selectedPlace;
     lastFocus = canvas;
     persistSettings();
     dialog.close();
     updateHUD();
   };
-  $('clear-goal').hidden = !goal;
+  $('clear-goal').hidden = !goal && !trackedAnimal;
   $('clear-goal').onclick = () => {
+    trackedAnimal = null;
     goal = null;
     lastFocus = canvas;
     persistSettings();
@@ -573,8 +622,50 @@ function mapDialog() {
   };
   selectMap(selectedPlace);
 }
+function journalDialog() {
+  const body=$('dialog-content');
+  body.innerHTML='<div id="delivery-book"><div class="ledger-head"><p id="ledger-note"></p><span id="ledger-count"></span></div><div class="ledger-animals"></div></div>';
+  const count=state.delivered.size, total=state.recipientTotal;
+  $('ledger-count').textContent=count+' / '+total;
+  $('ledger-note').textContent=state.kagamiUnlocked ? '全員に配達しました。鏡餅で十景の旅をどうぞ。' : '動物を選ぶと、まだ届いていない一匹へご案内します。全員に届けると鏡餅が開きます。';
+  for (const [type,name] of Object.entries(speciesNames)) {
+    const group=state.npcs.filter(n=>n.type===type);
+    const number=group.filter(n=>state.delivered.has(n.id)).length;
+    const row=document.createElement('button'); row.className='ledger-entry';
+    row.dataset.species=type;
+    row.innerHTML='<i class="animal-print" aria-hidden="true"></i><span><b></b><small></small></span><strong></strong>';
+    const print=row.firstElementChild;
+    if (SPECIES[type]) {
+      const sheetRow=Object.keys(SPECIES).indexOf(type)*4;
+      print.style.backgroundImage="url('./assets/residents/beasts.webp')";
+      // Crop each atlas cell to its ink silhouette; a crane and a long dragon fill the frame differently.
+      const [col, box, centerX, centerY]={monkey:[1,68,48,48], bird:[1,70,47,43], fox:[2,78,53,47],
+        tiger:[2,77,53,50], dragon:[2,62,52,42], kirin:[1,66,48,48]}[type];
+      print.style.backgroundSize=(768/box*100)+'% '+(2304/box*100)+'%';
+      print.style.backgroundPosition=((col*96+centerX-box/2)/(768-box)*100)+'% '+((sheetRow*96+centerY-box/2)/(2304-box)*100)+'%';
+    } else {
+      const art=type==='turtle' ? 'turtle' : type+'-wander';
+      print.style.backgroundImage="url('../assets/actors/"+art+".webp')";
+    }
+    row.querySelector('b').textContent=name;
+    row.querySelector('small').textContent=(SPECIES[type]?.points || 10).toLocaleString('ja-JP')+' 点';
+    row.querySelector('strong').textContent=number+' / '+group.length;
+    row.disabled=number===group.length;
+    row.onclick=()=>{
+      trackedAnimal=nearestUndelivered(type);
+      goal=null;persistSettings();lastFocus=canvas;dialog.close();updateHUD();
+    };
+    body.querySelector('.ledger-animals').append(row);
+  }
+  dialog.scrollTop=0;
+}
+function redrawAtlas() {
+  const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
+  drawMap($('atlas'),state,yaw,selectedPlace,true,point,trackedAnimal);
+}
 function selectMap(id) {
   selectedPlace = id;
+  jumpPin = null;
   const r = REGIONS.find((r) => r.id === id);
   for (const b of document.querySelectorAll('.map-places button'))
     b.setAttribute('aria-pressed', String(b.dataset.id === id));
@@ -586,9 +677,9 @@ function selectMap(id) {
     ' m　 ·　 ' +
     (state.visited.includes(id) ? '御朱印を獲得済み' : '未訪問の名所');
   const landmarks = {
-    snow: '雪灯籠の灯る都。軒先に雪だるまが並ぶ。',
+    snow: '御朱印所の東に大きな露天風呂。雪だるまの並ぶ参道から湯気が見えます。',
     autumn: '楓の枝が重なる谷道。紅葉をくぐって峡へ。',
-    moon: '薄の穂越しに北の空を見上げると、十五夜の月。',
+    moon: '北の空には十五夜の月。薄のそばの三方に近づくと、月見団子を食べられます。',
     dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。'
   };
   if (landmarks[id]) detail.append(document.createElement('br'), landmarks[id]);
@@ -600,7 +691,7 @@ function selectMap(id) {
     const location = distance < 3 ? '足元' : '現在地から' + bearing + ' ' + distance + ' m';
     detail.append(document.createElement('br'), 'Ⓟ 電動自転車ポート　' + port.bikes + '台', document.createElement('br'), location);
   }
-  drawMap($('atlas'), state, yaw, selectedPlace, true);
+  redrawAtlas();
 }
 function helpDialog(tab) {
   const body = $('dialog-content');
@@ -638,6 +729,7 @@ function helpDialog(tab) {
   $('continue').onclick = () => { lastFocus = canvas; dialog.close(); };
 }
 $('map').onclick = $('mini-button').onclick = () => openDialog('map');
+$('journal').onclick = () => openDialog('journal');
 $('guide').onclick = () => openDialog('guide');
 $('dismiss').onclick = () => dialog.close();
 dialog.addEventListener('click', (e) => {
@@ -764,7 +856,7 @@ function frame(now) {
     }
   }
 }
-function boot() {
+async function boot() {
   try {
     renderer = new THREE.WebGLRenderer({
       canvas,
@@ -784,6 +876,7 @@ function boot() {
     applyClimateLights(hemisphere, sun, bounce, p);
     wake(p, state.time);
     setRiverStones(scene, state.objects);
+    await loadRiceModel();
     actors = createActors(scene);
     bathReflection = createBathReflection(renderer, scene, actors.hero);
     resize();

@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { BUILDINGS, LANDMARK_TREES, TREES, nearRoad, riverZ, riverHalfWidth, shoreDistance } from '../two/terrain.js';
 import { TREE_FORM_COUNT } from '../two/forest-forms.js';
 
-test('the thinned woodland preserves every landmark and crown form and leaves room for roads, entrances and swimming ashore', () => {
-  assert.equal(LANDMARK_TREES.length, 587);
-  assert.equal(TREES.length, 2935);
+test('the thinned woodland preserves bamboo groves and crown forms and leaves room for roads, entrances and swimming ashore', () => {
+  const bamboo=TREES.filter(t=>t.kind==='bamboo'||t.kind==='moso');
+  assert.equal(bamboo.length,139);
+  assert.equal(createHash('sha256').update(JSON.stringify(bamboo)).digest('hex'),'bf8b76abb9076a6bb02bf41f75ffd02fd14a7cbc0d8e526d8afee3c014eff6ae');
+  assert.equal(TREES.length-bamboo.length,1398);
   assert.deepEqual(TREES.slice(0,LANDMARK_TREES.length), LANDMARK_TREES);
   const groves = TREES.filter(tree => tree.form !== undefined);
   assert.equal(new Set(groves.map(tree => tree.form)).size, TREE_FORM_COUNT);

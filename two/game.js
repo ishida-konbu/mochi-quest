@@ -1,6 +1,8 @@
-import { groundHeight, constrainMove, overheadHeight, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, WATER_Y, seasonAt } from './terrain.js';
+import { groundHeight, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
+import { POUNDING, POUNDING_CREW } from './festival.js';
 import { procession } from './procession.js';
+import { SPECIES, wildlifeHomes, moveWildlife, recipientContact } from './bestiary.js';
 
 const MAX_VITAL = 100;
 const RISE_GRAVITY = 20;
@@ -10,26 +12,28 @@ const STRETCH_SPEED = 16.5;
 const FLIGHT_CLIMB = 5.6;
 const JUMP_BUFFER = .12;
 const LEDGE_GRACE = .085;
-const CEILING = 24;
-const SPEED = { foot: 6.4, dango: 23.6, turtle: 21, bike: 45.9, flight: 32 };
+const CEILING = 120;
+const SPEED = { foot: 6.4, dango: 23.6, turtle: 105, bike: 45.9, flight: 32, kagami: 19.2 };
 // Seconds to build from walking pace to cruising speed on open ground.
-const RUN_UP = { dango: 1.8, bike: 3.2, flight: 2.2 };
+const RUN_UP = { dango: 1.8, bike: 3.2, flight: 2.2, turtle: 3.4 };
 const SWIFT_FACTOR = 1.42;
-const MAX_TRAVEL_SPEED = SPEED.bike * SWIFT_FACTOR + .01;
+const MAX_TRAVEL_SPEED = SPEED.turtle * SWIFT_FACTOR + .01;
 const STAMP_RADIUS = 6;
 const SEASONAL_STOPS = {
   snow: ['onsen','sake'], autumn: ['manga','haramaki'], moon: ['sake','manga'], dawn: ['ramen','haramaki']
 };
-const MODE_COST = { normal: 0, dango: 7, kusa: 6, kinako: 6, habutae: 10 };
-const MODE_DRAIN = { normal: 0, dango: 2.1, kusa: 1.5, kinako: 1.75, habutae: 2.75 };
-const MODE_NAME = { normal: 'ふつうのお餅', dango: '団子モード', kusa: '草餅', kinako: 'きなこ餅', habutae: '羽二重餅' };
+const MODE_COST = { normal: 0, dango: 7, kusa: 6, kinako: 6, habutae: 10, kagami: 0 };
+const MODE_DRAIN = { normal: 0, dango: 2.1, kusa: 1.5, kinako: 1.75, habutae: 2.75, kagami: 0 };
+const MODE_NAME = { normal: 'ふつうのお餅', dango: '団子モード', kusa: '草餅', kinako: 'きなこ餅', habutae: '羽二重餅', kagami: '鏡餅' };
 const NOTICE_FORWARD = [0], NOTICE_FAN = [-.28, 0, .28];
-const KINAKO_RING = Array.from({ length: 8 }, (_, i) => i * Math.PI / 4);
+const ring = count => Array.from({ length: count }, (_, i) => i * (Math.PI * 2 / count));
+const EIGHT_NOTICES = ring(8), FULL_KINAKO = ring(24);
 const BUFF_TIME = { warm: 20, swift: 24, drunk: 18, full: 29, wrap: 24 };
 const PICKUP_ACTION = {
   manga: { activity: 'read', duration: 2.3, label: '漫画を読む' },
   sake: { activity: 'drink', duration: 2.2, label: '日本酒を飲む' },
   ramen: { activity: 'eat', duration: 2.8, label: '背脂ラーメンを食べる' },
+  tsukimi: { activity: 'tsukimi', duration: 2.6, label: '月見団子を食べる' },
   onsen: { activity: 'bath', duration: 3.5, label: '温泉に入る' },
   haramaki: { label: '腹巻きを巻く' }
 };
@@ -58,8 +62,17 @@ function makeWorld() {
       object(first, x - 13, z - 9);
       object(second, x + 6, z + 14);
       object('port', x + 12, z + 5);
-      npc('rabbit', 'wander', x - 7, z - 12, i + 1.4);
-      npc('frog', 'porter', x - 19, z + 5, i + 2.8);
+      if (id==='dawn') {
+        const c=Math.cos(POUNDING.yaw), s=Math.sin(POUNDING.yaw);
+        for (const member of POUNDING_CREW) {
+          npc(member.type, member.role, POUNDING.x+c*member.u+s*member.v, POUNDING.z-s*member.u+c*member.v, 0);
+          npcs.at(-1).atMortar=true;
+          npcs.at(-1).y=groundHeight(POUNDING.x,POUNDING.z)+.012;
+        }
+      } else {
+        npc('rabbit', 'wander', x - 7, z - 12, i + 1.4);
+        npc('frog', 'porter', x - 19, z + 5, i + 2.8);
+      }
       return;
     }
     const river = id === 'river';
@@ -78,10 +91,19 @@ function makeWorld() {
     npc('frog', 'porter', x-19, river ? 61 : z+5, i + 2.8);
   });
   npc('turtle', 'wander', -14, 54, 0);
+  object('onsen',SNOW_SPRING.x,SNOW_SPRING.z);
+  objects.at(-1).grand = true;
+  object('tsukimi',TSUKIMI.x,TSUKIMI.z,TSUKIMI.yaw);
   for (const visitor of procession(objects,npcs)) {
     const {type,role,x,z,phase} = visitor;
     npc(type,role,x,z,phase);
     Object.assign(npcs.at(-1), visitor, { heading:visitor.facing });
+  }
+  for (const visitor of wildlifeHomes([...objects,...npcs])) {
+    const {type,role,x,z,phase}=visitor;
+    npc(type,role,x,z,phase);
+    const n=Object.assign(npcs.at(-1),visitor);
+    moveWildlife(n,0);
   }
   return { objects, npcs };
 }
@@ -92,12 +114,13 @@ export function createGame(snapshot = null) {
   const player = {
     x: 0, z: 62, y: groundHeight(0,62), h: 0, vx: 0, vz: 0, vy: 0, speed: 0, heading: 0,
     grounded: true, hp: MAX_VITAL, mp: MAX_VITAL, mode: 'normal', mount: null, activity: null,
-    activityTime: 0, airStretch: 0, inWater: false, night: false, stretch: 0, landing: 0, impact: 0, throwTime: 0, invulnerable: 0,
+    activityTime: 0, idleTime: 0, airStretch: 0, inWater: false, night: false, stretch: 0, landing: 0, impact: 0, throwTime: 0, invulnerable: 0,
     buffs: { warm: 0, swift: 0, drunk: 0, full: 0, wrap: 0 }
   };
   const region = REGIONS[regionAt(player.x,player.z)];
   const state = {
     time: 0, player, npcs, nearbyNpcs: [], objects, shots: [], events: [], score: 0,
+    delivered: new Set(), recipientTotal:npcs.length, kagamiUnlocked:false,
     region: region.name, regionId: region.id, visited: [region.id]
   };
   const climate = {};
@@ -142,10 +165,11 @@ export function createGame(snapshot = null) {
       } else if (player.mount) {
         continue;
       } else if (target.type === 'turtle') {
-        label = 'カメに乗る'; radius = 2.45;
+        label = 'カメに乗る'; radius = 2.8;
       } else if (PICKUP_ACTION[target.type] && target !== lastBath) {
         label = PICKUP_ACTION[target.type].label;
-        radius = target.type === 'onsen' ? 3.1 : 2.2;
+        radius = target.grand ? (springRadius(player.x,player.z)<.88 ? SNOW_SPRING.rx : 0) : target.type === 'onsen' ? 3.1 : 2.2;
+        if(target.grand) label='雪見の大露天風呂につかる';
       } else {
         continue;
       }
@@ -163,9 +187,9 @@ export function createGame(snapshot = null) {
   function collect(target) {
     if (target.type === 'onsen') {
       lastBath = target;
-      player.x = target.x;
-      player.z = target.z;
-      player.y = target.y;
+      if (!target.grand) {
+        player.x = target.x; player.z = target.z; player.y = target.y;
+      }
       player.h = player.vy = 0;
       player.grounded = true;
       sound('bath');
@@ -180,7 +204,7 @@ export function createGame(snapshot = null) {
       message('腹巻きでぽかぽか。体力とモッチポイントを守る！');
     } else {
       beginActivity(pickup.activity, pickup.duration);
-      const lines = { bath: 'ほかほかの湯に、ひと休み。', read: '夢中で漫画を読んでいる。', drink: '日本酒をごくごく。', eat: '背脂ラーメンをもぐもぐ。' };
+      const lines = { tsukimi: '満月を眺めながら、月見団子をひとくち。', bath: 'ほかほかの湯に、ひと休み。', read: '夢中で漫画を読んでいる。', drink: '日本酒をごくごく。', eat: '背脂ラーメンをもぐもぐ。' };
       message(lines[pickup.activity]);
     }
   }
@@ -204,7 +228,12 @@ export function createGame(snapshot = null) {
         break;
       case 'eat':
         player.buffs.full = BUFF_TIME.full;
-        message(player.mode === 'kinako' ? '満腹！ しばらくMPの消費が止まる。三条通知は八方向へ！' : '満腹！ 三条通知が一度に三方向へ飛ぶ。');
+        message(player.mode === 'kinako' ? '満腹！ 三条通知が周囲二十四方向へ！' : player.mode === 'kagami' ? '満腹！ 鏡餅から八方へ福を届けよう。' : '満腹！ 三条通知が一度に三方向へ飛ぶ。');
+        break;
+      case 'tsukimi':
+        player.hp = Math.min(MAX_VITAL,player.hp+20);
+        player.mp = Math.min(MAX_VITAL,player.mp+35);
+        message('月見のひと休み。体力が20、モッチポイントが35回復！');
         break;
       case 'sleep':
         player.hp = MAX_VITAL;
@@ -292,14 +321,19 @@ export function createGame(snapshot = null) {
     sound('mount');
     return true;
   }
-  function throwNotice() {
+  function throwNotice(facing) {
     if (player.activity || throwCooldown > 0) return false;
     throwCooldown = .33;
     player.throwTime = .28;
-    const angles = player.mode === 'kinako' ? KINAKO_RING : player.buffs.full > 0 ? NOTICE_FAN : NOTICE_FORWARD;
-    const height = player.mount ? 1.45 : player.buffs.full > 0 ? 1.30 : .93;
+    // Use the orientation actually shown at the instant of the gesture, including turns.
+    const forward = Number.isFinite(facing) ? facing : player.heading;
+    const full = player.buffs.full > 0;
+    let angles = full ? NOTICE_FAN : NOTICE_FORWARD;
+    if (player.mode === 'kinako') angles = full ? FULL_KINAKO : EIGHT_NOTICES;
+    if (player.mode === 'kagami') angles = EIGHT_NOTICES;
+    const height = player.mount === 'turtle' ? 1.98 : player.mount ? 1.45 : player.buffs.full > 0 ? 1.30 : .93;
     for (const angle of angles) {
-      const heading = player.heading + angle;
+      const heading = forward + angle;
       state.shots.push({
         id: 'shot-' + (++shotId), type: 'notice', angle, heading,
         x: player.x + Math.sin(heading) * .65, z: player.z + Math.cos(heading) * .65,
@@ -309,13 +343,14 @@ export function createGame(snapshot = null) {
     say('三条通知！'); sound('throw');
     return true;
   }
-  function act(action) {
+  function act(action, facing) {
     if (action === 'jump') { heldJump = true; return jump(); }
-    if (action === 'throw') return throwNotice();
+    if (action === 'throw') return throwNotice(facing);
     if (action === 'dismount') return dismount();
     if (action === 'interact') return interact();
     if (!Object.hasOwn(MODE_COST, action) || player.activity) return false;
     if (player.mount) { message('変身するときは、乗り物から降りよう。'); return false; }
+    if (action === 'kagami' && !state.kagamiUnlocked) return false;
     if (action === player.mode) return true;
     if (!spendMP(MODE_COST[action])) {
       message('モッチポイントが回復するまで、ちょっとひと休み。'); return false;
@@ -348,28 +383,33 @@ export function createGame(snapshot = null) {
       return;
     }
     turtle.heading = Math.atan2(tx,tz);
-    const step = Math.min(length, .46 * dt);
+    const step = Math.min(length, Math.min(2.3, turtle.speed + 1.8 * dt) * dt);
     const at = constrainMove(turtle.x,turtle.z,turtle.x+tx/length*step,turtle.z+tz/length*step,0);
     turtle.speed = distance(turtle,at) / dt;
     turtle.x = at.x; turtle.z = at.z; turtle.y = groundHeight(at.x,at.z);
     if (turtle.speed < .015) { turtlePause = 5; turtleLeg = (turtleLeg+1) % route.length; }
   }
-  // Home ranges are at most seven metres. Rebuild the active list once per
-  // 32 m cell, retaining a margin for the view distance and wrapped edges.
+  // The dragon can range 30 m from home. Keep a margin around the current
+  // 32 m cell for both its flight path and the detailed view across a seam.
   let crowdCellX, crowdCellZ;
   function refreshCrowd() {
     const cx=Math.floor(player.x/32), cz=Math.floor(player.z/32);
     if (cx===crowdCellX && cz===crowdCellZ) return;
     crowdCellX=cx; crowdCellZ=cz;
     state.nearbyNpcs=npcs.filter(n=>n===turtle ||
-      (Math.abs(wrapDelta(n.homeX-(cx+.5)*32))<122 && Math.abs(wrapDelta(n.homeZ-(cz+.5)*32))<122));
+      (Math.abs(wrapDelta(n.homeX-(cx+.5)*32))<150 && Math.abs(wrapDelta(n.homeZ-(cz+.5)*32))<150));
   }
   function updateNPCs(dt) {
     moveTurtle(dt);
     refreshCrowd();
     for (const n of state.nearbyNpcs) {
-      if (n === turtle) continue;
       n.flash = Math.max(0, n.flash - dt);
+      if (n === turtle || n.atMortar) continue;
+      if (SPECIES[n.type]) {
+        const far=Math.abs(wrapDelta(n.x-player.x))+Math.abs(wrapDelta(n.z-player.z))>55;
+        if(!far || Math.floor((state.time+n.phase)*6)!==Math.floor((state.time+n.phase-dt)*6)) moveWildlife(n,state.time);
+        continue;
+      }
       // Stationary workers face the passers-by. A short sidestep keeps dancers
       // and field hands within the clear ground sampled for their workstation.
       if (n.area) {
@@ -414,19 +454,23 @@ export function createGame(snapshot = null) {
       let hit = null;
       let first = Infinity;
       for (const n of state.nearbyNpcs) {
-        if (n === turtle || shot.y < n.y-.1 || shot.y > n.y + 2.15) continue;
-        const rx = wrapDelta(n.x-shot.x), rz = wrapDelta(n.z-shot.z);
-        const along = clamp(rx*dx+rz*dz,0,length);
-        if (along < first && Math.hypot(rx-along*dx,rz-along*dz) < .8) {
-          first = along; hit = n;
-        }
+        if(n.mounted) continue;
+        const along=recipientContact(n,shot,dx,dz,length);
+        if(along<first) { first=along; hit=n; }
       }
       shot.x = wrapCoord(shot.x + dx*length); shot.z = wrapCoord(shot.z + dz*length);
       shot.age += dt; shot.life -= dt;
       if (hit) {
-        hit.flash = .58; state.score += 10;
-        emit('score', { value: 10, text: '+10', x: hit.x, z: hit.z, y: hit.y+2.1 });
+        const points=SPECIES[hit.type]?.points ?? 10;
+        hit.flash=.58; state.score+=points;
+        state.delivered.add(hit.id);
+        emit('score', { value:points, text:'+'+points, x:hit.x, z:hit.z, y:shot.y+1 });
         sound('score');
+        if (!state.kagamiUnlocked && state.delivered.size===state.recipientTotal) {
+          state.kagamiUnlocked=true;
+          message('全員に三条通知が届いた！ 鏡餅に変身できるようになった。');
+          sound('pickup');
+        }
       }
       if (hit || shot.life <= 0 || shot.y < groundHeight(shot.x,shot.z)-.15) state.shots.splice(i,1);
     }
@@ -449,7 +493,7 @@ export function createGame(snapshot = null) {
     const amount = Math.max(1,stick);
     dx /= amount; dz /= amount;
     let pace = player.mount || 'foot';
-    if (!player.mount && player.mode === 'dango') pace = 'dango';
+    if (!player.mount && ['dango','kagami'].includes(player.mode)) pace = player.mode;
     if (!player.mount && player.mode === 'habutae' && !player.grounded) pace = 'flight';
     const waterDrag = player.inWater && !player.mount ? .72 : 1;
     const modifier = waterDrag * (player.buffs.swift>0 ? SWIFT_FACTOR : 1) * (player.buffs.full>0 ? .81 : 1);
@@ -492,7 +536,9 @@ export function createGame(snapshot = null) {
       player.vy -= (player.vy > 0 ? RISE_GRAVITY : FALL_GRAVITY)*dt;
     }
     player.y += player.vy*dt;
-    const headroom = Math.max(floor, ceiling - (player.mount ? 2.15 : 1.58) - player.airStretch * .68);
+    const bodyHeight = (1.66 + player.airStretch * 1.65) * (player.buffs.full > 0 ? 1.28 : 1);
+    const seat = player.mount === 'turtle' ? 1.04 : player.mount === 'bike' ? .9 : 0;
+    const headroom = Math.max(floor, ceiling - bodyHeight - seat);
     if (player.y > headroom && player.vy > 0) {
       player.y = headroom;
       player.vy = 0;
@@ -516,15 +562,15 @@ export function createGame(snapshot = null) {
   function checkContact() {
     if (player.activity || player.h > 1.15) return;
     if (!player.mount && player.grounded) {
-      if (lastBath && gap(lastBath) > 3.35) lastBath = null;
+      if (lastBath && (lastBath.grand ? springRadius(player.x,player.z)>1 : gap(lastBath)>3.35)) lastBath=null;
       for (const o of objects) {
-        if (o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
+        if (!o.grand && o.type !== 'tsukimi' && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
             gap(o) <= (o.type === 'onsen' ? 1.55 : .83)) { collect(o); return; }
       }
     }
     if (player.invulnerable > 0 || player.mode === 'kusa') return;
     for (const n of state.nearbyNpcs) {
-      if (n.area || n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
+      if (n.area || n.atMortar || n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
       player.invulnerable = 2.1;
       if (!protectedVitals()) player.hp = Math.max(0,player.hp-7);
       if (player.hp === 0) {
@@ -546,14 +592,39 @@ export function createGame(snapshot = null) {
     const region = REGIONS[regionAt(player.x,player.z)];
     state.region = region.name; state.regionId = region.id;
     player.night = seasonAt(player.x,player.z,climate).moon > .48;
-    player.inWater = player.grounded && waterDepth(player.x,player.z) > .14 && player.y < WATER_Y - .08;
+    player.inWater = player.grounded && waterDepth(player.x,player.z) > .14 && player.y < waterSurfaceAt(player.x,player.z) - .08;
     if (!collectStamp || state.visited.includes(region.id) || distance(player,region)>STAMP_RADIUS || player.h>3) return;
     state.visited.push(region.id);
     const text = state.visited.length === REGIONS.length ? '十景踏破！ 旅の印がすべて揃った。' : region.name+'の旅の印をもらった。';
     emit('stamp',{ id:region.id, text }); message(text); sound('pickup');
   }
+  function teleport(x, z) {
+    if (!state.kagamiUnlocked || player.mode !== 'kagami' || player.activity || player.mount ||
+        !Number.isFinite(x) || !Number.isFinite(z)) return false;
+    x = wrapCoord(x); z = wrapCoord(z);
+    // If a pin lands on a wall, use the nearest open footing around the pin.
+    let destination = canLand(x,z) ? {x,z} : null;
+    for (let radius = .55; !destination && radius <= 16; radius += .55) {
+      for (let i = 0; i < 24; i++) {
+        const a = i * Math.PI / 12;
+        const nx = wrapCoord(x + radius * Math.sin(a)), nz = wrapCoord(z + radius * Math.cos(a));
+        if (canLand(nx,nz)) { destination = {x:nx,z:nz}; break; }
+      }
+    }
+    if (!destination) return false;
+    Object.assign(player, destination, {y:groundHeight(destination.x,destination.z), h:0, vx:0, vz:0, vy:0,
+      speed:0, grounded:true, airStretch:0, stretch:0, impact:0, landing:0, invulnerable:.8});
+    lastBath = null;
+    bufferedJump = ledgeGrace = 0;
+    refreshCrowd();
+    updateRegion(true);
+    sound('mode');
+    message('鏡餅が絵巻をひとっ飛び。');
+    return true;
+  }
   function advance(dt, input) {
     state.time += dt;
+    player.idleTime = player.grounded && player.speed < .22 && !player.activity ? Math.min(3, (player.idleTime || 0) + dt) : 0;
     for (const name of Object.keys(player.buffs)) player.buffs[name] = Math.max(0, player.buffs[name] - dt);
     if (bufferedJump > 0 && player.grounded) jump();
     bufferedJump = Math.max(0,bufferedJump-dt);
@@ -601,7 +672,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 3, time: state.time, score: state.score, visited: [...state.visited],
+      version: 3, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: objects.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -619,24 +690,24 @@ export function createGame(snapshot = null) {
     // stops start stocked even when an old journey resumes on a borrowed bike.
     const old = data.version === 2;
     const savedPorts = old ? 6 : ports.length;
-    const savedItems = old ? 36 : objects.length;
+    const validItemCounts = old ? [36] : [48,objects.length];
     if (!finite(data.time,0,1e9) || !Number.isSafeInteger(data.score) || data.score<0 ||
         !data.visited.every(id=>REGIONS.some(region=>region.id===id)) ||
         !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,200) ||
-        !finite(p.vx,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vz,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vy,-80,27) ||
+        !finite(p.vx,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vz,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vy,-135,27) ||
         !finite(p.speed,0,MAX_TRAVEL_SPEED) || !finite(p.heading,-Math.PI,Math.PI) || typeof p.grounded!=='boolean' ||
         !finite(p.hp,0,100) || !finite(p.mp,0,100) || !Object.hasOwn(MODE_COST,p.mode) ||
-        ![null,'turtle','bike'].includes(p.mount) || ![null,'fall','sleep','bath','read','drink','eat'].includes(p.activity) ||
+        ![null,'turtle','bike'].includes(p.mount) || ![null,'fall','sleep','bath','read','drink','eat','tsukimi'].includes(p.activity) ||
         !finite(p.activityTime,0,6) || !p.buffs || !Object.keys(BUFF_TIME).every(k=>finite(p.buffs[k],0,BUFF_TIME[k])) ||
         ![p.stretch,p.invulnerable,p.throwTime].every(n=>finite(n,0,3)) ||
-        !Array.isArray(data.items) || data.items.length!==savedItems || !data.items.every(n=>finite(n,0,65)) ||
+        !Array.isArray(data.items) || !validItemCounts.includes(data.items.length) || !data.items.every(n=>finite(n,0,65)) ||
         !Array.isArray(data.bikes) || data.bikes.length!==savedPorts ||
         !data.bikes.every(n=>Number.isInteger(n)&&finite(n,0,savedPorts*2)) ||
         data.bikes.reduce((total,n)=>total+n,p.mount==='bike'?1:0)!==savedPorts*2 ||
         !point(t.x,t.z) || !point(t.homeX,t.homeZ) || !finite(t.pause,0,12) ||
         !Number.isInteger(t.leg) || !finite(t.leg,0,3)) return;
     for (const key of Object.keys(player)) {
-      if (!['buffs','landing','impact','airStretch','night','inWater'].includes(key)) player[key]=p[key];
+      if (!['idleTime','buffs','landing','impact','airStretch','night','inWater'].includes(key)) player[key]=p[key];
     }
     // These short pose cues were added after the first version-two saves.
     player.airStretch = !player.grounded && finite(p.airStretch,0,1) ? p.airStretch : 0;
@@ -644,6 +715,11 @@ export function createGame(snapshot = null) {
     player.impact = finite(p.impact,0,1) ? p.impact : 0;
     for (const key of Object.keys(BUFF_TIME)) player.buffs[key]=p.buffs[key];
     player.y = groundHeight(player.x,player.z,p.y - p.h)+player.h;
+    // Older journals recorded points without identifying recipients. The score survives.
+    const ids=new Set(npcs.map(n=>n.id));
+    if(Array.isArray(data.delivered)) state.delivered=new Set(data.delivered.filter(id=>ids.has(id)));
+    state.kagamiUnlocked=state.delivered.size===state.recipientTotal;
+    if(player.mode==='kagami' && !state.kagamiUnlocked) player.mode='normal';
     state.score=data.score; state.time=data.time;
     state.visited=[...new Set(data.visited)];
     objects.forEach((o,i)=>{o.cooldown=data.items[i] ?? 0; o.active=o.cooldown===0;});
@@ -656,5 +732,5 @@ export function createGame(snapshot = null) {
   }
   const restored = restore(snapshot) === true;
   refreshCrowd();
-  return { state, act, step, nearest, save, restored };
+  return { state, act, step, nearest, teleport, save, restored };
 }

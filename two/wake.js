@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
-import { WATER_Y, wrapDelta } from './terrain.js';
+import { waterSurfaceAt, wrapDelta } from './terrain.js';
 
 export function createWake(scene) {
   // Rings stay where each stroke disturbed the water rather than following the feet.
@@ -21,7 +21,7 @@ export function createWake(scene) {
       next = (next + 1) % rings.length;
       ring.born = last = t;
       ring.strength = Math.min(1, 0.39 + p.speed * 0.12);
-      ring.mesh.position.set(p.x, WATER_Y + 0.029, p.z);
+      ring.mesh.position.set(p.x, waterSurfaceAt(p.x,p.z) + 0.029, p.z);
     }
     for (const { mesh, born, strength } of rings) {
       const age = (t - born) / 1.36;

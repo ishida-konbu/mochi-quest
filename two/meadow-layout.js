@@ -1,5 +1,5 @@
 // One repeatable planting plan per 26 m square. All coordinates here are canonical.
-import { BOUND, BUILDINGS, BRIDGES, MARKET_STALLS, ROCKS, REGIONS, WATER_Y,
+import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, MARKET_STALLS, ROCKS, REGIONS, WATER_Y,
   nearRoad, seeded, seasonAt, shoreDistance, riverZ, riverHalfWidth, terrainHeight } from './terrain.js';
 
 export const MEADOW_TILE = 26;
@@ -34,6 +34,7 @@ export function meadowExclusions(objects) {
       }
   };
   const circle = (x,z,r) => add(x,z,r,(u,v)=>(u-x)**2+(v-z)**2 < r*r);
+  add(SNOW_SPRING.x,SNOW_SPRING.z,17,(x,z)=>springRadius(x,z)<1.18);
   for (const b of BUILDINGS) add(b.x,b.z,hypot(b.w,b.d)*.65+5,(x,z)=>{
     const dx=x-b.x, dz=z-b.z;
     return abs(dx*b.cos-dz*b.sin)<b.w*.52+.45 && abs(dx*b.sin+dz*b.cos-.85)<b.d*.5+1.55;

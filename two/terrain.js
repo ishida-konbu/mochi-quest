@@ -1,5 +1,5 @@
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
-import { roomPlan } from './architecture.js';
+import { roomPlan, pagodaPlan } from './architecture.js';
 // Coordinates and dimensions are metres. Positive Z is south.
 export const BOUND = 416,
   WATER_Y = 0.38;
@@ -101,7 +101,7 @@ function ungradedHeight(x, z) {
 }
 // A building has a level earthen lot, feathered out into the hillside.
 const lotGrid = new Map();
-export function terrainHeight(x, z) {
+function landHeight(x, z) {
   x = wrapCoord(x); z = wrapCoord(z);
   const base = ungradedHeight(x,z);
   const nearby = lotGrid.get(Math.floor(x / 24) * 64 + Math.floor(z / 24));
@@ -114,6 +114,22 @@ export function terrainHeight(x, z) {
     if (blend > weight) { weight = blend; graded = base + (b.y-base)*blend; }
   }
   return graded;
+}
+// The baths sit in a hand-cut hollow; their waterline is independent of the sea.
+export const SNOW_SPRING = { x: -32, z: -292, rx: 13.6, rz: 8.8, level: naturalHeight(-32,-292)-.12 };
+export const TSUKIMI = { x: -51.7, z: 285.9, yaw: -.15 };
+export function springRadius(x,z) {
+  return hypot((x-SNOW_SPRING.x)/SNOW_SPRING.rx,(z-SNOW_SPRING.z)/SNOW_SPRING.rz);
+}
+export function terrainHeight(x,z) {
+  const native = landHeight(x,z);
+  if (abs(x-SNOW_SPRING.x)>23 || abs(z-SNOW_SPRING.z)>16) return native;
+  const r = springRadius(x,z);
+  const bed = SNOW_SPRING.level-.61+smooth(.70,1.03,r)*.87;
+  return bed+(native-bed)*smooth(1.08,1.60,r);
+}
+export function waterSurfaceAt(x,z) {
+  return abs(x-SNOW_SPRING.x)<15 && abs(z-SNOW_SPRING.z)<10 && springRadius(x,z)<1 ? SNOW_SPRING.level : WATER_Y;
 }
 export const BRIDGES = [-137, 0, 134].map((x) => ({
   x,
@@ -407,7 +423,7 @@ for (let n = 0; n < 1600; n++) {
   if (
     nearRoad(x, z, 2.1) ||
     safe(x, z, 4.3) ||
-    terrainHeight(x, z) < 1.8 ||
+    landHeight(x, z) < 1.8 ||
     rz < riverHalfWidth(x) + 3 ||
     BUILDINGS.some((b) => abs(x - b.x) < b.w * 0.65 + 3 && abs(z - b.z) < b.d * 0.65 + 3)
   )
@@ -435,7 +451,7 @@ for (let n = 0; n < 1600; n++) {
 const outerRandom = seeded(532151);
 for (let i=0; i<980; i++) {
   const x = outerRandom()*738-369, z = outerRandom()*748-374;
-  if (abs(x)<225 && abs(z)<224 || terrainHeight(x,z)<2.2 || nearRoad(x,z,2.65)) continue;
+  if (abs(x)<225 && abs(z)<224 || landHeight(x,z)<2.2 || nearRoad(x,z,2.65)) continue;
   if (safe(x,z,6) || BUILDINGS.some(b => hypot(x-b.x,z-b.z) < max(b.w,b.d)*.76+3)) continue;
   const {snow,autumn,moon,dawn} = seasonAt(x,z);
   if (moon>.4 && z<302 && x> -77 || dawn>.5 && x>298 || snow>.45 && abs(x+78)<19 && z < -260) continue;
@@ -450,12 +466,12 @@ for (const [x,z,hue] of [[271,-102,0],[279,-120,1],[289,-105,2],[283,-137,1],[30
 const fallRng = seeded(35444);
 for (let i=0;i<120;i++) {
   const x=284+(fallRng()-.5)*121, z=-116+(fallRng()-.5)*108;
-  if (terrainHeight(x,z)<2.1 || nearRoad(x,z,2.65) || safe(x,z,4.2) || hypot(x-285,z+115)<8 ||
+  if (landHeight(x,z)<2.1 || nearRoad(x,z,2.65) || safe(x,z,4.2) || hypot(x-285,z+115)<8 ||
       BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<max(b.w,b.d)*.8+3) ||
       trees.some(t=>(x-t.x)**2+(z-t.z)**2<32)) continue;
   trees.push({x,z,h:6.4+fallRng()*4.1,kind:'maple',seed:Math.floor(fallRng()*1e6),autumn:1});
 }
-export const LANDMARK_TREES = trees.slice();
+const landmarkCount = trees.length;
 
 // Plant the woods in drifts. There is always walking room between the trunks.
 // The open approach to each roadside scene continues well beyond its actors.
@@ -468,7 +484,7 @@ function populateForest() {
     spacing.get(key).push(tree);
   }
   trees.forEach(remember);
-  const target = LANDMARK_TREES.length * 5;
+  const target = landmarkCount * 5;
   for (let tried=0; trees.length<target && tried<250000; tried++) {
     const x=random()*628-253, z=random()*748-374;
     const riverBank=abs(z-riverZ(x))-riverHalfWidth(x);
@@ -483,7 +499,7 @@ function populateForest() {
     seasonAt(x,z,season);
     if (season.moon>.4 && x>-78 && z<307 || season.dawn>.48 && x>291 ||
         season.snow>.45 && abs(x+78)<18 && z< -260) continue;
-    if (terrainHeight(x,z)<1.9) continue;
+    if (landHeight(x,z)<1.9) continue;
     const wave = .5+.24*sin(x*.065+cos(z*.061))+.22*cos(z*.049+sin(x*.039));
     if (random() > .10+wave*.87) continue;
     const cx=Math.floor(x/6), cz=Math.floor(z/6), gap=3.8+(1-wave)*1.9;
@@ -500,14 +516,42 @@ function populateForest() {
   }
 }
 populateForest();
-export const TREES = trees;
+// Thin the old planting in place. Bamboo positions and growth habits stay stable
+// across saves, and all sixty crown forms remain represented.
+const isBamboo = t => t.kind === 'bamboo' || t.kind === 'moso';
+const regular = trees.filter(t => !isBamboo(t));
+const keep = new Set(trees.slice(0,10));
+const forms = new Set();
+for (const t of regular) {
+  if (t.form !== undefined && !forms.has(t.form) && springRadius(t.x,t.z)>1.4) {
+    forms.add(t.form); keep.add(t);
+  }
+}
+for (const t of regular.slice().sort((a,b)=>a.seed-b.seed)) {
+  if (keep.size >= Math.ceil(regular.length/2)) break;
+  if (springRadius(t.x,t.z)>1.4) keep.add(t);
+}
+export const TREES = trees.filter(t => isBamboo(t) || keep.has(t));
+export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
+// Individual stones leave real bathing entrances on the avenue, at the
+// south bank, and at the steps to the washing pavilion.
+export const SPRING_STONES = [];
+const springRng=seeded(82691);
+for(let i=0;i<75;i++) {
+  const a=i*Math.PI*2/75, dx=Math.cos(a), dz=Math.sin(a);
+  if (dx<-.91 && abs(dz)<.26 || dz>.88 && dx>-.1 && dx<.46 || dz<-.90 && abs(dx)<.26) continue;
+  const x=dx*SNOW_SPRING.rx*(.98+.024*springRng()),z=dz*SNOW_SPRING.rz*(.98+.025*springRng());
+  const w=.65+.55*springRng(),h=.44+.79*springRng(),d=.64+.45*springRng();
+  SPRING_STONES.push({x,z,w,h,d,yaw:-a+springRng()*.36,roll:springRng()*.2,index:i});
+}
+export const BATH_STEPS=Array.from({length:6},(_,i)=>({z:-4.70-i*.52,top:-.45+i*.197}));
 const cells = new Map();
 function cell(x, z) {
   return Math.floor(x / 16) + ',' + Math.floor(z / 16);
 }
-function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0) {
-  const item = { x, z, rx, rz, c: cos(yaw), s: sin(yaw), top, kind, support, roofRise };
+function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0, bottom = -Infinity) {
+  const item = { x, z, rx, rz, c: cos(yaw), s: sin(yaw), top, kind, support, roofRise, bottom };
   const r = hypot(rx, rz) + 1.0;
   for (let a = Math.floor((x - r) / 16); a <= Math.floor((x + r) / 16); a++)
     for (let b = Math.floor((z - r) / 16); b <= Math.floor((z + r) / 16); b++) {
@@ -515,13 +559,14 @@ function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0) {
       if (!cells.has(id)) cells.set(id, []);
       cells.get(id).push(item);
     }
+  return item;
 }
 for (const b of BUILDINGS) {
   const plan = roomPlan(b);
-  function localSolid(u, v, width, depth, height, kind, support) {
+  function localSolid(u, v, width, depth, height, kind, support, bottom=-Infinity) {
     const x = b.x + u * cos(b.yaw) + v * sin(b.yaw);
     const z = b.z - u * sin(b.yaw) + v * cos(b.yaw);
-    putSolid(x, z, width / 2, depth / 2, b.yaw, b.y + height, kind, support);
+    putSolid(x, z, width / 2, depth / 2, b.yaw, b.y + height, kind, support,0,b.y+bottom);
   }
   localSolid(0, 0, b.w + 1.1, b.d + 1.08, 0.42, 'floor', true);
   localSolid(0, 0, plan.width, plan.depth, plan.floor, 'floor', true);
@@ -529,20 +574,32 @@ for (const b of BUILDINGS) {
     localSolid(0, b.d / 2 + 0.48 + j * 0.39, b.w * 0.48, 0.46, 0.32 - j * 0.19, 'floor', true);
   for (const wall of plan.walls)
     localSolid(wall.u, wall.v, wall.width, wall.depth, plan.ceiling, 'wall', false);
-  localSolid(0, 0, b.w * 1.08, b.d * 1.08, plan.ceiling, 'ceiling', false);
-  // Roofs have an underside. A walker can pass beneath an eave while a
-  // falling or flying visitor can land on the same surface from above.
   if (b.kind === 'pagoda') {
-    let level = 0.36;
-    for (let j = 0; j < 4; j++) {
-      const k = 1 - j * 0.16, tier = 2.15 * k + 0.64, roof = 2.1 * k + 0.3;
-      putSolid(b.x, b.z, b.w * k * 0.70, b.d * k * 0.70, b.yaw, b.y + level + tier, 'roof', true, roof);
-      level += tier + roof - 0.5;
+    const tower=pagodaPlan(b);
+    for(const wall of tower.panels)
+      localSolid(wall.u,wall.v,wall.width,wall.depth,wall.y+2.50,'wall',false,wall.y);
+    for (const tread of tower.slabs)
+      localSolid(tread.u,tread.v,tread.w,tread.d,tread.top,'slab',true);
+    for (const [i,storey] of tower.storeys.entries()) {
+      const {y,w,d}=storey, eave=y+2.60, cap=i===4;
+      const outerW=w*1.33, outerD=d*1.33;
+      // The lower eaves shelter the outer gallery; the central well is open.
+      const roof=putSolid(b.x,b.z,outerW/2,outerD/2,b.yaw,b.y+eave,'pagodaEave',true,cap?2.05:1.19);
+      roof.aperture=cap?.052:.51;
+      localSolid(0,0,.19,1.9,y+2.66,'ceiling',false);
     }
   } else {
+    localSolid(0, 0, b.w * 1.08, b.d * 1.08, plan.ceiling, 'ceiling', false);
     putSolid(b.x, b.z, b.w * 0.61, b.d * 0.63, b.yaw, b.y + b.wall + 0.29, 'roof', true, b.roof);
   }
 }
+for(const stone of SPRING_STONES) {
+  putSolid(SNOW_SPRING.x+stone.x,SNOW_SPRING.z+stone.z,stone.w*.84,stone.d*.84,stone.yaw,
+    SNOW_SPRING.level+.18+stone.h,'oval',true);
+}
+for(const step of BATH_STEPS) putSolid(SNOW_SPRING.x,SNOW_SPRING.z+step.z,1.32,.265,0,
+  SNOW_SPRING.level+step.top,'floor',true);
+putSolid(SNOW_SPRING.x,SNOW_SPRING.z-8.9,3.90,1.55,0,SNOW_SPRING.level+.61,'floor',true);
 for (const [x, z, yaw] of MARKET_STALLS) {
   putSolid(x + 0.42 * sin(yaw), z + 0.42 * cos(yaw), 1.57, 0.42, yaw, terrainHeight(x, z) + 0.93, 'box', true);
 }
@@ -572,6 +629,13 @@ function surfaceHeight(s, x, z, pad) {
     b = dx * s.s + dz * s.c;
   if (s.kind === 'oval') return (a / (s.rx + pad)) ** 2 + (b / (s.rz + pad)) ** 2 <= 1 ? s.top : -Infinity;
   if (abs(a) > s.rx + pad || abs(b) > s.rz + pad) return -Infinity;
+  if (s.kind === 'pagodaEave') {
+    const x=abs(a)/s.rx,z=abs(b)/s.rz,r=max(x,z);
+    if (r<s.aperture) return -Infinity;
+    const t=sat((r-s.aperture)/(1-s.aperture));
+    const corner=min(x,z)/max(r,.001);
+    return s.top+s.roofRise*((1-t)**1.59+.17*corner**3.8*t**1.7);
+  }
   if (s.kind === 'roof') {
     const v = min(1, abs(b) / (s.rz * 1.12)),
       end = min(1, abs(a) / s.rx);
@@ -585,8 +649,9 @@ function highest(x, z, pad, feet, supportOnly) {
   let height = -Infinity;
   const items = cells.get(cell(x, z));
   if (items) for (const item of items) {
-    if (item.kind === 'ceiling' || (supportOnly && !item.support)) continue;
-    if (item.kind === 'roof') {
+    if (feet + 1.42 < item.bottom || item.kind === 'ceiling' || (supportOnly && !item.support)) continue;
+    if (item.kind === 'slab' && feet < item.top - .34) continue;
+    if (item.kind === 'roof' || item.kind === 'pagodaEave') {
       if (feet < item.top - 0.22) continue;
       if (supportOnly && surfaceHeight(item,x,z,pad) > feet + .34) continue;
     }
@@ -603,7 +668,7 @@ export function groundHeight(x, z, feet = -Infinity) {
   return max(onBridge ? deck : -Infinity, waterFloor, terrainHeight(x, z), highest(x, z, 0, feet, true));
 }
 export function waterDepth(x, z) {
-  return max(0, WATER_Y - terrainHeight(x, z));
+  return max(0, waterSurfaceAt(x,z) - terrainHeight(x, z));
 }
 export function overheadHeight(x, z, feet) {
   const bridge = bridgeAt(x, z);
@@ -611,6 +676,12 @@ export function overheadHeight(x, z, feet) {
   let ceiling = feet < deck - .36 ? deck - .17 : Infinity;
   const items = cells.get(cell(x, z));
   if (items) for (const item of items) {
+    if (item.kind === 'pagodaEave') {
+      const roof=surfaceHeight(item,x,z,0);
+      if (feet<roof-.55) ceiling=min(ceiling,roof-.08);
+    }
+    if (item.kind === 'slab' && feet < item.top - .55 && surfaceHeight(item,x,z,0) > -Infinity)
+      ceiling = min(ceiling,item.top-.10);
     if (item.kind === 'ceiling' && feet < item.top - 0.15 && surfaceHeight(item,x,z,0) > -Infinity)
       ceiling = min(ceiling, item.top);
   }

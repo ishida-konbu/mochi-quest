@@ -61,3 +61,17 @@ test('the cyclist smiles through acceleration and coasting, including in the moo
   player.speed = 0;
   assert.equal(getExpression(player), 'sleepy');
 });
+
+
+test('the Blender smile lingers after a stop, then settles into the open-eyed normal face', () => {
+  const game=createGame(), p=game.state.player;
+  assert.equal(getExpression(p),'joy');
+  for(let i=0;i<120;i++) game.step(1/60);
+  assert.equal(getExpression(p),'joy');
+  for(let i=0;i<48;i++) game.step(1/60);
+  assert.equal(getExpression(p),'curious');
+  for(let i=0;i<12;i++) game.step(1/60,{x:1});
+  assert.equal(getExpression(p),'joy');
+  for(let i=0;i<42;i++) game.step(1/60);
+  assert.equal(getExpression(p),'joy');
+});

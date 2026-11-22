@@ -78,7 +78,7 @@ function baseMap() {
   paper = c;
   return paper;
 }
-export function drawMap(canvas, state, cameraYaw, goal, large = false) {
+export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null) {
   const w = canvas.width,
     h = canvas.height,
     g = canvas.getContext('2d'),
@@ -139,6 +139,18 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false) {
     const y = h / 2 + wrapDelta(o.z - midZ) * scale;
     if (x >= 0 && x <= w && y >= 0 && y <= h) drawPort(g, x, y, o.bikes, large);
   }
+  if (recipient || pin) {
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (const [point, tint] of [[recipient, '#435e62'], [pin, '#ae452c']]) {
+      if (!point) continue;
+      const x = w/2+wrapDelta(point.x-midX)*scale, y = h/2+wrapDelta(point.z-midZ)*scale;
+      g.save(); g.translate(x,y); g.rotate(Math.PI/4);
+      g.strokeStyle = '#fff5db'; g.lineWidth=2; g.fillStyle=tint;
+      g.fillRect(-6,-6,12,12); g.strokeRect(-6,-6,12,12);
+      g.restore();
+      g.fillStyle='#fff8df'; g.fillRect(x-1.5,y-1.5,3,3);
+    }
+  }
   g.save();
   g.translate(sx(p.x), sy(p.z));
   g.rotate(-cameraYaw);
@@ -168,4 +180,9 @@ export function mapHit(canvas, e) {
   return REGIONS.find(
     (r) => Math.hypot(canvas.width / 2 + r.x * scale - x, canvas.height / 2 + r.z * scale - z) < 25,
   );
+}
+
+export function mapCoordinates(canvas, event) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: ((event.clientX-rect.left)/rect.width-.5)*SPAN, z: ((event.clientY-rect.top)/rect.height-.5)*SPAN };
 }

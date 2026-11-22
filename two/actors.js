@@ -1,4 +1,6 @@
-import { wrapDelta } from './terrain.js';
+import { addFlumes } from './snow-bath.js';
+import { porcelain, makeMoonCakes } from './craftwork.js';
+import { SNOW_SPRING, wrapDelta } from './terrain.js';
 import * as THREE from './vendor/three.module.min.js';
 import { buildPounding } from './mochi-pounding.js';
 import { addSpringSurface } from './spring-water.js';
@@ -6,6 +8,8 @@ import { finishResident, residentLimb, residentTorso } from './resident-art.js';
 import { inkVolume, sculptHead, scrollParasol, scrollShell, sculptTurtleHead } from './scroll-sculpt.js';
 import { DYES } from './procession.js';
 import { distantProcession } from './procession-view.js';
+import { SPECIES } from './bestiary.js';
+import { buildBeast, beastRig, poseBeast } from './beast-art.js';
 import { dressArtisan, poseArtisan } from './trade-tools.js';
 import { makeRiceModel, poseRice } from './mochi-model.js';
 
@@ -200,7 +204,7 @@ export function getExpression(p, time = 0) {
   if (p.activity === 'bath') return 'bath';
   if (p.activity === 'read') return 'joy';
   if (p.activity === 'drink') return 'blush';
-  if (p.activity === 'eat') return 'eating';
+  if (p.activity === 'eat' || p.activity === 'tsukimi') return 'eating';
   if (p.throwTime > 0) return 'calling';
   if (p.mount === 'bike' && p.speed > 0.25) return 'joy';
   if (p.mode === 'dango' && p.grounded && p.speed > 0.25) return 'joy';
@@ -211,9 +215,7 @@ export function getExpression(p, time = 0) {
   if (p.buffs?.drunk > 0) return 'blush';
   if (p.buffs?.warm > 0 || p.buffs?.wrap > 0) return 'calm';
   if (p.buffs?.full > 0) return 'eating';
-  if (p.speed > 0.55) return p.speed > 8 ? 'determined' : 'joy';
-  const phase = time % 15;
-  return phase < 6 ? 'curious' : phase < 12 ? 'joy' : 'calm';
+  return (p.idleTime || 0) >= 2.4 && p.speed < .22 ? 'curious' : 'joy';
 }
 
 // A folded two-sided blade with a raised midrib. The paper feathers and
@@ -847,15 +849,21 @@ function turtle(parent) {
   sculptTurtleHead(head);
 }
 function turtleGait(mesh, time, movement, resting) {
-  const phase=time*(movement>1?6.4:3.8);
+  const stride = Math.min(1, movement / 1.25);
+  const elapsed = Math.max(0, Math.min(.1, time - (mesh.userData.gaitTime ?? time)));
+  mesh.userData.gaitTime = time;
+  const phase = ((mesh.userData.gaitPhase || 0) + elapsed * (resting ? 0 : 25 * movement / (movement + 5))) % TAU;
+  mesh.userData.gaitPhase = phase;
   for(const part of mesh.children) {
     const diagonal=part.userData.stride;
     if(diagonal) {
-      const swing=diagonal*Math.sin(phase)*Math.min(1,movement);
-      part.rotation.y=swing*.27;
+      const swing=diagonal*Math.sin(phase)*stride;
+      part.rotation.y=swing*.32;
+      part.rotation.x=-swing*.27;
+      part.position.z=(part.name.endsWith(',1') ? .226 : -.226)+.068*swing;
       part.position.y=.178+.031*Math.max(0,swing);
     } else if(part.name==='turtleNeck'){
-      part.rotation.x=.025*Math.sin(phase)*(resting?.22:1);
+      part.rotation.x=.025*Math.sin(phase)*(resting ? .22 : stride);
       part.position.z=(resting?-.065:0)+.018*Math.cos(phase)*Math.min(1,movement);
     }
   }
@@ -1041,6 +1049,7 @@ function paintSakeCup(b, x, z) {
   b.ball(x, 0.098, z, 0.078, 0.005, 0.078, '#d1b986');
 }
 function sake(parent) {
+  porcelain(parent,'tokkuri',[[.136,.045],[.147,.1],[.146,.18],[.132,.21]],-.045);
   batch(parent, (b) => {
     const profile = [
       [0.09, 0],
@@ -1084,6 +1093,7 @@ function sake(parent) {
   });
 }
 function ramen(parent, restingChopsticks = true) {
+  porcelain(parent,'bowl',[[.16,.027],[.2,.07],[.3,.20],[.34,.296]]);
   batch(parent, (b) => {
     const g = new THREE.LatheGeometry(
       [
@@ -1260,7 +1270,7 @@ function bicyclePort(parent) {
     parent.add(m);
   }
 }
-const objectModels = { manga, sake, ramen, haramaki: cuff, onsen, port: bicyclePort };
+const objectModels = { manga, sake, ramen, tsukimi: makeMoonCakes, haramaki: cuff, onsen, port: bicyclePort };
 function accessory(item) {
   return model(item, objectModels[item]);
 }
@@ -1396,8 +1406,8 @@ function gaitHero(h, p, t, dt, camera, state) {
   const response=poseRice(h.rice,p,t,dt,mood);
   const g=giant?1.28:1;
   h.pose.scale.set(g*response.width,g*response.stretch,g*response.width);
-  const mountHeight = p.mount === 'bike' ? .90 : p.mount === 'turtle' ? .52 : 0;
-  h.pose.position.set(0,response.bob+mountHeight+(sit==='bath'?-.49+.018*Math.sin(t*2):0),riding?-.14:0);
+  const mountHeight = p.mount === 'bike' ? .90 : p.mount === 'turtle' ? 1.04 : 0;
+  h.pose.position.set(0,response.bob+mountHeight+(sit==='bath'?(p.inWater?-.12:-.49)+.018*Math.sin(t*2):0),riding?-.14:0);
   h.pose.rotation.set(response.pitch,0,response.lean);
   if(sit==='fall'){
     const fall=Math.sin(Math.min(1,(p.activityTime||.1)/.68)*PI);
@@ -1433,11 +1443,14 @@ function gaitHero(h, p, t, dt, camera, state) {
     h.wingParts[i].position.set(s*(.65-.15*pull),.66+response.extension*.93,-.01);
     h.wingParts[i].rotation.z = s * (0.24 + Math.sin(t * (p.grounded ? 5 : 13)) * 0.47);
   }
-  for (const key of ['read', 'drink', 'eat']) {
+  for (const key of ['read', 'drink', 'eat', 'tsukimi']) {
     const item = h.held[key];
     item.visible = sit === key;
     if (item.visible) {
-      if (key === 'drink') {
+      if (key==='tsukimi') {
+        const bite=.5+.5*Math.sin(t*3.7);
+        item.position.set(.34-.15*bite,.66+.37*bite,.91-.13*bite);
+      } else if (key === 'drink') {
         const sip = 0.5 + 0.5 * Math.sin(t * 4.3);
         item.position.set(0.203 - 0.068 * sip, 0.733 + 0.095 * sip, 0.879 - 0.035 * sip);
         item.rotation.set(-0.20 - sip * 0.57, 0, -0.12 - sip * 0.07);
@@ -1488,6 +1501,13 @@ function markerStand(parent) {
 const dyedCloth=new Map();
 export function makeNPC(entity, root) {
   const kind = entity.type;
+  if (SPECIES[kind]) {
+    const mesh=model('emaki-'+kind,p=>buildBeast(p,kind,{group,batch}));
+    root.add(mesh);
+    const limbs=beastRig(mesh,entity);
+    const shadowMesh=shadow(mesh,kind==='dragon'?2.4:1.1,kind==='dragon'?4.5:1.5);
+    return {mesh,limbs,shadow:shadowMesh};
+  }
   const role = kind === 'turtle' ? 'wander' : entity.area ? 'artisan' : entity.role;
   const mesh =
     kind === 'turtle' ? model('turtle', turtle) : model(kind + role, (p) => animal(p, kind, role));
@@ -1510,6 +1530,7 @@ export function makeNPC(entity, root) {
     dressArtisan(limbs,entity.role,model,batch);
     mesh.scale.set(entity.stature*entity.build,entity.stature,entity.stature);
   }
+  if (kind === 'turtle') mesh.scale.setScalar(2);
   const shadowMesh = shadow(mesh, kind === 'turtle' ? 1.19 : 1.2, kind === 'turtle' ? 1.32 : 1.0);
   return { mesh, limbs, shadow: shadowMesh };
 }
@@ -1519,10 +1540,15 @@ export function animateNPC(record, n, t) {
     sumo = n.role === 'sumo';
   mesh.position.set(n.x, n.y, n.z);
   mesh.rotation.y = n.heading || 0;
+  if (SPECIES[n.type]) {
+    poseBeast(limbs,n,t);
+    if(n.altitude)record.shadow.position.y=(.04-n.altitude)/mesh.scale.y;
+    return;
+  }
   if (isTurtle) {
     const rest = n.role === 'rest',
       step = rest ? 0 : Math.sin(t * 3.8);
-    turtleGait(mesh,t,rest ? 0 : (n.speed || 0)*2,rest);
+    turtleGait(mesh,t,rest ? 0 : (n.speed || 0),rest);
     mesh.rotation.z = step * 0.027;
     mesh.position.y += Math.abs(step) * 0.014;
     return;
@@ -1559,8 +1585,18 @@ export function animateNPC(record, n, t) {
   }
 }
 function makeObject(o, parent) {
-  let mesh, feature, steam;
-  if (o.type === 'port' || o.type === 'onsen') {
+  let mesh, feature, steam, flumes;
+  if(o.grand) {
+    mesh=new THREE.Group();
+    addSpringSurface(mesh,SNOW_SPRING.rx,SNOW_SPRING.rz,SNOW_SPRING.level-o.y);
+    steam=particles('steam',87);
+    steam.position.y=.54;
+    steam.scale.y=1.55;
+    mesh.add(steam);
+    flumes=addFlumes(mesh);
+  } else if(o.type==='tsukimi') {
+    mesh=accessory(o.type);
+  } else if (o.type === 'port' || o.type === 'onsen') {
     mesh = accessory(o.type);
     if (o.type === 'onsen') {
       steam = particles('steam', 19);
@@ -1574,7 +1610,7 @@ function makeObject(o, parent) {
     mesh.add(feature);
   }
   parent.add(mesh);
-  return { mesh, feature, steam };
+  return { mesh, feature, steam, flumes };
 }
 function within(entity, player, limit) {
   return wrapDelta(entity.x - player.x) ** 2 + wrapDelta(entity.z - player.z) ** 2 < limit * limit;
@@ -1587,6 +1623,7 @@ export function createActors(scene) {
   h.held = {
     read: accessory('manga'),
     drink: model('sipping-cup', (parent) => batch(parent, (b) => paintSakeCup(b, 0, 0))),
+    tsukimi: model('held-tsukimi', parent=>makeMoonCakes(parent,true)),
     eat: model('held-ramen', (parent) => ramen(parent, false)),
   };
   h.spoon = model('ramen-spoon', ramenSpoon);
@@ -1598,7 +1635,7 @@ export function createActors(scene) {
   }
   h.bicycle = model('bicycle', bike);
   h.ridingTurtle = model('turtle', turtle);
-  h.ridingTurtle.scale.setScalar(1.13);
+  h.ridingTurtle.scale.setScalar(2.26);
   h.root.add(h.bicycle, h.ridingTurtle);
   h.bicycle.visible = h.ridingTurtle.visible = false;
   h.shadow = shadow(h.root, 1.9, 1.6);
@@ -1610,7 +1647,7 @@ export function createActors(scene) {
     objects = new Map(),
     notices = new Map(),
     spares = [];
-  let processionView;
+  let processionView,beastView;
   const viewFrustum=new THREE.Frustum(), viewProjection=new THREE.Matrix4();
   const actorBounds=new THREE.Sphere(new THREE.Vector3(),1.7), restingNpcs=new Map();
   function update(state, dt, camera) {
@@ -1618,18 +1655,22 @@ export function createActors(scene) {
       t = state.time;
     gaitHero(h, p, t, dt, camera, state);
     if (!processionView) processionView=distantProcession(root,shadowMap(),state.npcs.length);
-    processionView.begin(p);
+    if (!beastView) beastView=distantProcession(root,shadowMap(),state.npcs.filter(n=>SPECIES[n.type]).length,true);
+    processionView.begin(p);beastView.begin(p);
     viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
     const visible=[], detailed=new Set();
     for (const n of state.nearbyNpcs) {
-      if(n.mounted) continue;
+      if(n.mounted || n.atMortar) continue;
       const distance=wrapDelta(n.x-p.x)**2+wrapDelta(n.z-p.z)**2;
       if (n.type==='turtle') {
         if (distance<68**2) detailed.add(n);
+      } else if ((n.type==='dragon' || n.type==='kirin') && distance<112**2) {
+        detailed.add(n);
       } else if (distance<95**2) {
         // A little hysteresis keeps two equally close travellers from
         // exchanging their representation every time they take a step.
         actorBounds.center.set(p.x+wrapDelta(n.x-p.x),n.y+1,p.z+wrapDelta(n.z-p.z));
+        actorBounds.radius=SPECIES[n.type] ? SPECIES[n.type].frame*(n.stature||1)*.65 : 1.7;
         const onScreen=viewFrustum.intersectsSphere(actorBounds);
         visible.push({n,priority:distance*(npcs.has(n.id) ? .88 : 1)*(onScreen ? 1 : 4)});
       }
@@ -1638,9 +1679,10 @@ export function createActors(scene) {
     for(let i=0;i<visible.length;i++){
       const {n,priority}=visible[i];
       if(i<5 && priority<24**2) detailed.add(n);
+      else if(SPECIES[n.type]) beastView.add(n,p,camera,t);
       else processionView.add(n,p,camera,t);
     }
-    processionView.end();
+    processionView.end();beastView.end();
     for (const [id,rec] of npcs) {
       if (!detailed.has(rec.entity)) {
         root.remove(rec.mesh);
@@ -1678,7 +1720,8 @@ export function createActors(scene) {
         rec.feature.position.y = 0.395 + 0.011 * Math.sin(t * 2 + o.x);
         rec.feature.rotation.y = 0.15 * Math.sin(t * 0.8 + o.z);
       }
-      if (rec.steam) mistAt(rec.steam, t + 0.01 * o.x, true, 1.65);
+      if (rec.steam) mistAt(rec.steam, t + 0.01 * o.x, true, o.grand ? 12.5 : 1.65);
+      if (rec.flumes) rec.flumes(t);
       if (o.type === 'port') {
         rec.mesh.getObjectByName('park0').visible = o.bikes > 0;
         rec.mesh.getObjectByName('park1').visible = o.bikes > 1;
@@ -1705,7 +1748,7 @@ export function createActors(scene) {
       if (!active.has(id)) {
         m.visible = false;
         notices.delete(id);
-        if (spares.length < 40) spares.push(m);
+        if (spares.length < 120) spares.push(m);
         else root.remove(m);
       }
   }

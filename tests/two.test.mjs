@@ -103,7 +103,7 @@ test('zero health sleeps on the spot and recovers while waiting',()=>{
 });
 
 test('one kinako throw sends eight notices radially, with one cooldown and one call',()=>{
-  for (const [mode, full, count] of [['kinako', 0, 8], ['kinako', 10, 8], ['normal', 10, 3], ['normal', 0, 1]]) {
+  for (const [mode, full, count] of [['kinako', 0, 8], ['kinako', 10, 24], ['normal', 10, 3], ['normal', 0, 1]]) {
     const game=createGame(), p=game.state.player;
     game.act(mode);
     p.heading=.91;
@@ -114,7 +114,7 @@ test('one kinako throw sends eight notices radially, with one cooldown and one c
     assert.equal(shots.length,count);
     assert.equal(new Set(shots.map(s=>s.id)).size,count);
     assert.equal(events.filter(e=>e.type==='say' && e.text==='三条通知！').length,1);
-    const angles=count===8 ? Array.from({length:8},(_,i)=>i*Math.PI/4) : count===3 ? [-.28,0,.28] : [0];
+    const angles=count>=8 ? Array.from({length:count},(_,i)=>i*(Math.PI*2/count)) : count===3 ? [-.28,0,.28] : [0];
     for (const [i,s] of shots.entries()) {
       assert.equal(s.age,0);
       assert.equal(s.heading,p.heading+angles[i]);
@@ -134,7 +134,7 @@ test('bath and belly wrap protect both vitals; manga speed and ramen size bonuse
   run(game,2.5);assert.ok(p.buffs.swift>22);moveTo(game,0,62);run(game,.5,{x:-1});assert.ok(p.speed>8);
   p.buffs.swift=0;collect(game,'ramen');assert.equal(p.activity,'eat');run(game,3);assert.ok(p.buffs.full>27);
   p.mp=1;game.act('kinako');run(game,.25);assert.equal(p.mp,1);
-  game.act('throw');assert.equal(game.state.shots.length,8);
+  game.act('throw');assert.equal(game.state.shots.length,24);
   moveTo(game,0,62);run(game,.5,{x:-1});assert.ok(p.speed>4.8 && p.speed<5.4);
   const turtle=get(game,'turtle');at(game,turtle);assert.equal(game.act('interact'),false);
   p.buffs.full=0;game.act('normal');
@@ -159,7 +159,7 @@ test('one slow turtle seeks shelter and becomes an agile mount, with a ground di
   for(let i=0;i<60*33;i++) { game.step(1/60); if(turtle.role==='rest'){rested=true;break;} }
   assert.ok(rested);
   at(game,turtle);assert.equal(game.nearest().target,turtle);assert.ok(game.act('interact'));
-  moveTo(game,0,62);run(game,.5,{x:1});assert.ok(p.speed>19);assert.equal(turtle.mounted,true);
+  moveTo(game,0,62);run(game,.5,{x:1});assert.ok(p.speed>10 && p.speed<24);assert.equal(turtle.mounted,true);
   assert.ok(game.act('dismount'));assert.equal(turtle.mounted,false);assert.equal(p.mount,null);
 });
 

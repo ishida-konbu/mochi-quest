@@ -1,3 +1,4 @@
+import { waterSurfaceAt } from './terrain.js';
 import * as T from './vendor/three.module.min.js';
 
 const poolLevel = 0.189;
@@ -9,7 +10,7 @@ const uniforms = {
   occupied: { value: 0 },
 };
 let poolMaterial, disc;
-export function addSpringSurface(parent) {
+export function addSpringSurface(parent, rx=1.96, rz=1.56, level=poolLevel) {
   if (!poolMaterial) {
     disc = new T.CircleGeometry(1, 80);
     disc.rotateX(-Math.PI / 2);
@@ -89,8 +90,8 @@ export function addSpringSurface(parent) {
     };
   }
   const surface = new T.Mesh(disc, poolMaterial);
-  surface.scale.set(1.96, 1, 1.56);
-  surface.position.y = poolLevel;
+  surface.scale.set(rx, 1, rz);
+  surface.position.y = level;
   surface.receiveShadow = true;
   parent.add(surface);
 }
@@ -117,7 +118,7 @@ export function createBathReflection(renderer, scene, hero) {
       target = new T.WebGLRenderTarget(384, 256, { minFilter: T.LinearFilter, magFilter: T.LinearFilter });
       uniforms.reflected.value = target.texture;
     }
-    const waterY = player.y + poolLevel;
+    const waterY = player.inWater ? waterSurfaceAt(player.x,player.z) : player.y + poolLevel;
     uniforms.poolCenter.value.set(player.x, player.z);
     const clearAlpha = renderer.getClearAlpha(),
       bg = scene.background;

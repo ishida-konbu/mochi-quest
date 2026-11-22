@@ -1,7 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { inkVolume } from './scroll-sculpt.js';
 
-import { POUNDING } from './festival.js';
+import { POUNDING, POUNDING_CREW } from './festival.js';
 
 const TAU = 2 * Math.PI;
 const smooth = (a, b, x) => THREE.MathUtils.smoothstep(x, a, b);
@@ -357,8 +357,8 @@ export function buildPounding(parent, { animal, batch, group, shadow }) {
     bucket(b);
   });
   shadow(root, 1.25, 1.25);
-  const rabbit = group(root, '杵を振るうさぎ', -0.89, 0, -0.63);
-  const frog = group(root, '手返しの蛙', 0.75, 0, 0.44);
+  const rabbit = group(root, '杵を振るうさぎ', POUNDING_CREW[0].u, 0, POUNDING_CREW[0].v);
+  const frog = group(root, '手返しの蛙', POUNDING_CREW[1].u, 0, POUNDING_CREW[1].v);
   rabbit.rotation.y = Math.atan2(0.89, 0.63);
   frog.rotation.y = Math.atan2(-0.75, -0.44);
   animal(rabbit, 'rabbit', 'pounder');

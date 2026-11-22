@@ -170,6 +170,7 @@ export function createAudio(makeWorldAudio) {
   function effect(name) {
     if (!context || context.state !== 'running') return;
     const now = context.currentTime + .003;
+    if (name === 'bath') worldAudio?.enterWater?.(.25);
     if (name === 'throw') {
       rustle(now, 1200, 5100, .15, .34);
     } else if (name === 'jump') {

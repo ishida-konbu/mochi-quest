@@ -62,6 +62,7 @@ export function createSoundscape(ctx, master) {
   outdoor.Q.value = .52;
   outdoor.connect(master);
   const layers = Object.keys(loops).map(name => ({ name, source: null, amp: null, level: 0, lastHeard: 0 }));
+  const scores = REGIONS.map(({id}) => ({ name: 'score-'+id, id, source:null, amp:null, level:0, lastHeard:0 }));
   const samples = new Map();
   const pending = new Set(), retries = new Map(), oneShots = new Set();
   const noise = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * .7), ctx.sampleRate);
@@ -101,19 +102,19 @@ export function createSoundscape(ctx, master) {
         layer.source.loop = true;
         // Both ends carry a quarter-second continuation of the loop. This keeps MP3
         // priming and padding outside the seam even on decoders that retain them.
-        layer.source.loopStart = .25;
-        layer.source.loopEnd = .25 + loops[layer.name];
+        layer.source.loopStart = layer.id ? 0 : .25;
+        layer.source.loopEnd = layer.id ? buffer.duration : .25 + loops[layer.name];
         layer.amp.gain.value = 0;
         layer.source.connect(layer.amp).connect(outdoor);
-        layer.source.start(0, .25 + now % loops[layer.name]);
+        layer.source.start(0, layer.id ? 0 : .25 + now % loops[layer.name]);
       }
     } else {
-      if (now - layer.lastHeard > 2.8) stopLayer(layer);
+      if (now - layer.lastHeard > (layer.id ? 6 : 2.8)) stopLayer(layer);
       if (now - layer.lastHeard > 36) samples.delete(layer.name);
       volume = 0;
     }
     if (layer.source && Math.abs(layer.level - volume) > .001) {
-      layer.amp.gain.setTargetAtTime(volume, now, .36);
+      layer.amp.gain.setTargetAtTime(volume, now, layer.id ? 1.05 : .36);
       layer.level = volume;
     }
   }
@@ -198,6 +199,7 @@ export function createSoundscape(ctx, master) {
       inside = roof;
     }
     for (const layer of layers) mixBed(layer, weights[layer.name] * (roof ? .4 : 1), now);
+    for (const score of scores) mixBed(score, score.id === state.regionId ? (roof ? .087 : .105) : 0, now);
     if (objectList !== state.objects) {
       objectList = state.objects;
       baths = objectList.filter(obj => obj.type === 'onsen');
@@ -264,12 +266,15 @@ export function createSoundscape(ctx, master) {
     if (!moving) lastBeat = null;
     landmarks(state, time, yaw, now);
     activity(p, yaw, now, photo);
+    const enteredWater = !photo && lastTime !== null && p.inWater && !wasWet;
+    if (enteredWater) enterWater(p.impact || 0);
     if (!photo && moving) {
       const distance = Math.hypot(wrapDelta(p.x - lastX), wrapDelta(p.z - lastZ));
       if (distance < 6 && p.grounded && !p.activity) {
         travelled += distance;
         const landing = !onGround && p.landing > 0;
-        if ((p.inWater && !wasWet) || landing) {
+        if (enteredWater) { travelled = 0; lastStep = now; }
+        else if (landing) {
           footfall(p, landing ? .28 + .37 * p.impact : .33);
           if (landing && !p.inWater) note(now + .003, 143, 70, .13, .075 * p.impact);
           travelled = 0; lastStep = now;
@@ -287,12 +292,23 @@ export function createSoundscape(ctx, master) {
     lastTime = time; lastX = p.x; lastZ = p.z; onGround = p.grounded; wasWet = p.inWater;
   }
 
+  function enterWater(impact = 0) {
+    const now = ctx.currentTime + .003, level = .53 + .28 * impact;
+    // A low slap, spreading spray, then separate drops, above the looping river.
+    brush(now, 1250, 190, .32, level, -.08);
+    note(now, 144, 58, .19, level*.32);
+    splash(now+.025, level*.86, .12);
+    for (let i=0; i<4; i++) {
+      const pitch = 370 + i*107;
+      note(now+.115+i*.061,pitch,pitch*1.55,.085,level*(.18-i*.03),i%2 ? .24 : -.22);
+    }
+  }
   function stop() {
-    for (const layer of layers) stopLayer(layer);
+    for (const layer of [...layers, ...scores]) stopLayer(layer);
     for (const source of oneShots) source.stop();
     lastTime = lastBeat = null;
     travelled = nextMix = 0;
   }
 
-  return { update, stop };
+  return { update, stop, enterWater };
 }
