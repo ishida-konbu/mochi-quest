@@ -273,16 +273,17 @@ function moonBed(s,flow){
 const works={sakura:flowerInlet,bamboo:bambooJets,sulfur:cliffBath,paddy:sluices,maple:neckFalls,susuki:moonBed};
 export function villageTreatmentGeometry(site){
   const fittings=sculpture(),flow=sculpture(),pools=villagePools(site);
+  let timberwork;
   if(site.kind==='earthen'){
     for(const [i,p] of pools.entries()){jarBody(fittings,p);jarFeed(fittings,flow,p,i);}
-  }else if(site.kind==='shore')matsuhamaWorks(fittings,flow,pools,waterRibbon);
+  }else if(site.kind==='shore')timberwork=matsuhamaWorks(fittings,flow,pools,waterRibbon);
   else works[site.kind](fittings,flow,pools);
   if(site.kind==='sulfur'){
     // Fine grooves running along the upper source remain dry on one bank.
     for(let i=0;i<4;i++)stroke(fittings,silver,t=>[-2.47+t*.57,.99+.075*cos(PI*t),-3.83+i*.045],.015,10);
   }
   finishWaterworks(fittings,site.kind,pools);
-  return {fittings:fittings.finish(),flow:flow.finish()};
+  return {fittings:fittings.finish(),flow:flow.finish(),timberwork};
 }
 // A kiln yard drains between the vessels. Clip the old brick's actual top
 // faces where the jar shoulders emerge; water can never show through an aisle.
@@ -336,7 +337,11 @@ function pottersCourt(site){
 }
 export function dressVillageBath(p,f,site){
   if(!isVillageWorkshop(site))return;
-  const {fittings,flow}=villageTreatmentGeometry(site);
+  const {fittings,flow,timberwork}=villageTreatmentGeometry(site);
+  if(timberwork){
+    p.shapes.harborTimbers=timberwork;
+    f.put('harborTimbers',0,0,0,1,1,1,'#fff',bathFinish('cedar'));
+  }
   if(site.kind==='earthen'){
     p.shapes.jarYard=pottersCourt(site);f.put('jarYard',0,0,0,1,1,1,'#fff',p.stems);
   }

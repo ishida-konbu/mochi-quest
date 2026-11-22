@@ -2,7 +2,7 @@ import * as T from './vendor/three.module.min.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { surface,rod,dab,turning } from './village-bath-figures.js';
 import { villageStations } from './village-bath-courses.js';
-import { rinseDipperAt } from './bath-gestures.js';
+import { rinseDipperAt,rinsingPalms } from './bath-gestures.js';
 
 const {PI,sin,cos}=Math,tau=2*PI,cedar='#93795b',inlay='#c5b695',water='#b0c2b0';
 function line(s,ink,at,r,n=20){
@@ -140,7 +140,10 @@ export function createVillageRinse(parent,site,r){
   if(!station)return;
   const mat=new T.MeshStandardMaterial({side:T.DoubleSide,roughness:.66,vertexColors:true});
   const head=new T.Mesh(rinseImplement(site.kind),mat);
-  head.castShadow=head.receiveShadow=true;parent.add(head);
+  head.name=station.name+'の汲み器';head.castShadow=head.receiveShadow=true;
+  // This tiny fitting is already culled with its room. A previous pose can
+  // place its provisional bounds outside the frustum after a camera cut.
+  head.frustumCulled=false;parent.add(head);
   const fluid=new T.MeshBasicMaterial({color:'#cfdfcd',transparent:true,opacity:.73,side:T.DoubleSide,depthWrite:false});
   const fillSize=site.kind==='earthen'?.160:site.kind==='shore'?.116:.12;
   const filling=new T.Mesh(new T.CircleGeometry(fillSize,24),fluid);
@@ -151,18 +154,40 @@ export function createVillageRinse(parent,site,r){
     const a=tau*u,width=.029-.013*t;return [width*cos(a)+.05*t,-.41*t*t-.15*t,width*sin(a)+.075*t];
   }),fluid);
   parent.add(stream);stream.visible=false;
-  const offset=new T.Vector3(),hand=station.berthV-r.v+1.92;
+  const hand=station.berthV-r.v+1.92;
+  // The little ceramic cup is lifted by its ear. The cedar dippers have a
+  // long shaft instead; grasp each at the centre of its actual wooden grip.
+  const grip=site.kind==='earthen'?new T.Vector3(.245,.056,0):
+    site.kind==='shore'?new T.Vector3(.006,.158,.425):new T.Vector3(.009,.139,.425);
+  const lip=new T.Vector3(.072,site.kind==='shore'?.164:.122,.069);
+  const planned=new T.Vector3(),localPalm=new T.Vector3(),handle=new T.Vector3();
+  let holder,hold=0;
+  function placeStream(){
+    stream.position.copy(lip).applyQuaternion(head.quaternion).add(head.position);
+    stream.updateWorldMatrix(true,false);
+  }
+  function fitHand(){
+    const palm=holder && rinsingPalms.get(holder);
+    if(!palm)return;
+    handle.copy(grip).applyQuaternion(head.quaternion);
+    parent.worldToLocal(localPalm.copy(palm)).sub(handle);
+    head.position.lerpVectors(planned,localPalm,hold);
+    head.updateWorldMatrix(true,true);
+    if(stream.visible)placeStream();
+  }
+  // The world updates its fittings before the skinned traveller is posed.
+  // Re-sample here once the mitt in this rendered frame has reached the handle.
+  head.onBeforeRender=fitHand;
   return player=>{
     const pose=player.activity==='bath'?player.bathPose:null;
-    const t=pose?.id===station.id?station.duration-player.activityTime:0;
-    const q=rinseDipperAt(t,!!player.buffs?.full);
-    head.position.set(station.berthU-r.u+q.u,q.y-.09,hand+q.v);
-    head.rotation.set(q.pitch,-.51,q.roll,'YXZ');
-    filling.visible=q.wet>.035;
-    filling.scale.set(q.wet,q.wet,1);
+    const washing=pose?.action==='rinse'&&pose.id===station.id;
+    const q=rinseDipperAt(washing?station.duration-player.activityTime:0,!!player.buffs?.full);
+    planned.set(station.berthU-r.u+q.u,q.y-.09,hand+q.v);
+    head.position.copy(planned);head.rotation.set(q.pitch,-.51,q.roll,'YXZ');
+    hold=washing?q.hold*pose.settle:0;holder=hold>.001?player:null;
+    filling.visible=q.wet>.035;filling.scale.set(q.wet,q.wet,1);
     stream.visible=q.pour>.028;
-    if(!stream.visible)return;
-    offset.set(.07,.11,.067).applyQuaternion(head.quaternion).add(head.position);
-    stream.position.copy(offset);stream.scale.set(q.pour,q.pour,q.pour);
+    if(stream.visible){stream.scale.setScalar(q.pour);placeStream();}
+    fitHand();
   };
 }

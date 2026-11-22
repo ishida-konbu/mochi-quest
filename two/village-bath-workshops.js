@@ -353,11 +353,11 @@ export function createVillageWorkshops(scene){
         if(site.kind==='shore')court.machinery=createMatsuhamaMachinery(court.details,room);
         court.details.add(painting);court.rinse=createVillageRinse(court.details,site,room);court.group.add(court.details);
       }
+      court.group.position.set(player.x+dx,court.y,player.z+dz);
       court.skyline.visible=!close;
       if(court.details)court.details.visible=close;
       if(close && court.machinery)court.machinery(time,player);
       if(close && court.rinse)court.rinse(player);
-      court.group.position.set(player.x+dx,court.y,player.z+dz);
       court.group.visible=true;
     }
   };

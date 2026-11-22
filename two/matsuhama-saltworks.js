@@ -280,13 +280,15 @@ function seine(s){
   }
 }
 export function matsuhamaWorks(s,flow,pools,pour){
-  for(const p of pools)vessel(s,p);
+  const timberwork=sculpture();
+  for(const p of pools)vessel(timberwork,p);
   for(const [v,h] of [[-.81,-.41],[-1.14,-.25],[-1.38,-.115],[-1.93,-.12],[-2.29,-.13],[-2.60,-.10]])
-    s.box(cedar,2.58,h-.045,v,1.33,.09,.37);
-  const mat=sculpture();wovenBed(mat);s.add(mat.finish(),'#fff',0,-.10,0);
-  pumpWorks(s,flow,pour);saltKiln(s,flow,pour);seine(s);
+    timberwork.box(cedar,2.58,h-.045,v,1.33,.09,.37);
+  const mat=sculpture();wovenBed(mat);timberwork.add(mat.finish(),'#fff',0,-.10,0);
+  pumpWorks(timberwork,flow,pour);saltKiln(s,flow,pour);seine(s);
   const pine=sculpture();matsuhamaPine(pine);
   s.add(pine.finish(),'#fff',5.43,.11,.78,1.22,1.22,1.22,0,-.36);
+  return timberwork.finish();
 }
 function driveWheel(){
   const s=sculpture(),r=.42;
