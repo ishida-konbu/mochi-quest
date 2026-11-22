@@ -1,5 +1,5 @@
 // The illustrated menagerie ranges through the same ten districts as the procession.
-import { REGIONS, groundHeight, waterDepth, solidHeightAt, terrainHeight, WATER_Y, seeded, wrapCoord, wrapDelta } from './terrain.js';
+import { ORIGINAL_REGIONS as REGIONS, groundHeight, waterDepth, solidHeightAt, terrainHeight, WATER_Y, seeded, wrapCoord, wrapDelta } from './terrain.js';
 
 import { canopyHeight, walkCircuit } from './village-paths.js';
 import { legendary, legendPath } from './legend-flight.js';
@@ -90,7 +90,9 @@ function courseHeight(n,time,out) {
   if(course.index!==i) {
     course.index=i;
     // Allow time to climb over mature woodland before the next sharp crown edge.
-    const reach=far?46:22, climb=n.type==='dragon'?7.6:n.type==='kirin'?5.4:2.35;
+    // The summit and sea floor can be close together on the expanded route.
+    // Look far enough ahead for a full ascent at the animal's climb rate.
+    const reach=far?152:22, climb=n.type==='dragon'?7.6:n.type==='kirin'?5.4:2.35;
     for(const k of course.samples.keys()) if(k<i-reach-1||k>i+reach+2)course.samples.delete(k);
     for(let k=i-reach-1;k<=i+reach+2;k++) if(!course.samples.has(k))course.samples.set(k,requiredHeight(n,k*spacing));
     for(let j=0;j<4;j++) {

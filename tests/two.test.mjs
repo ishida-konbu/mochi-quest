@@ -66,13 +66,17 @@ test('a spent flight settles on the river at the landing point and can swim asho
   assert.ok(swimmer.z > z+18);
 });
 
-test('ten distinct landmarks give their stamps on arrival, not on district boundary',()=>{
+test('fifteen distinct landmarks give their stamps on arrival, not on district boundary',()=>{
   const game=createGame();
   assert.deepEqual(game.state.visited,['river']);
   for(const region of REGIONS.slice(1)) {
     moveTo(game,region.x+20,region.z); game.step(1/60);
-    assert.equal(game.state.region,region.name); assert.ok(!game.state.visited.includes(region.id));
+    assert.equal(game.state.regionId,region.id); assert.ok(!game.state.visited.includes(region.id));
     moveTo(game,region.x,region.z);game.step(1/60);
+    if(region.id==='ryugu') {
+      assert.equal(game.state.visited.includes(region.id),false);
+      run(game,6,{dive:true});
+    }
     assert.ok(game.state.visited.includes(region.id),region.name);
   }
   assert.deepEqual(game.state.visited,REGIONS.map(r=>r.id));
@@ -333,7 +337,7 @@ test('version-two saves acquire new ports without losing an existing rental or s
   assert.deepEqual(resumed.state.visited,old.visited);
   assert.equal(resumed.state.player.mount,'bike');
   assert.equal(resumed.state.player.airStretch,0);
-  assert.deepEqual(resumed.save().bikes,[...old.bikes,2,2,2,2]);
+  assert.deepEqual(resumed.save().bikes,[...old.bikes,...Array(g.save().bikes.length-old.bikes.length).fill(2)]);
 });
 
 test('the outer roads reach all four seasonal landmarks and the coast from the maple valley', () => {

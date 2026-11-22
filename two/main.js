@@ -14,7 +14,8 @@ import { createGame } from './game.js';
 import { SPECIES } from './bestiary.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
 import { preloadBeastCoats } from './beast-art.js';
-import { REGIONS, groundHeight, landscapeFloor, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
+import { RYUGU, palaceSolid } from './ryugu-layout.js';
+import { REGIONS, WATER_Y, terrainHeight, shoreDistance, groundHeight, landscapeFloor, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
 import { createAudio } from '../sound.js';
@@ -124,7 +125,7 @@ let nextFrame = 0,
 const keys = new Set(),
   stick = { id: null, x: 0, y: 0 },
   look = { id: null, x: 0, y: 0 };
-let jumpTouch = false,
+let jumpTouch = false, diveTouch = false,
   lastFace = '',
   lastMode = '',
   lastEffects = '';
@@ -242,7 +243,7 @@ function updateEmotes() {
 }
 function clearInput() {
   keys.clear();
-  jumpTouch = false;
+  jumpTouch = diveTouch = false;
   stick.id = null;
   stick.x = stick.y = 0;
   look.id = null;
@@ -360,6 +361,14 @@ $('leap').onpointerdown = (e) => {
 $('leap').onlostpointercapture = () => {
   jumpTouch = false;
 };
+$('dive').onpointerdown = e => {
+  if (dialog.open || photoMode) return;
+  e.preventDefault();
+  e.currentTarget.setPointerCapture(e.pointerId);
+  diveTouch = true;
+  unlock();
+};
+$('dive').onlostpointercapture = () => { diveTouch = false; };
 $('send').onpointerdown = (e) => {
   e.preventDefault();
   action('throw');
@@ -464,12 +473,20 @@ function updateCamera(dt, snap = false) {
   let fraction = 1;
   // While the grass mochi is inside a trunk, start the camera ray on the
   // outward side of that trunk. A second wall still shortens the camera arm.
-  let emerging = p.mode === 'kusa' && solidHeightAt(focus.x,focus.z,.2,focus.y) + .19 > focus.y;
+  const diving = p.diveDepth > 0, palaceBed = diving ? terrainHeight(RYUGU.x,RYUGU.z) : 0;
+  let emerging = !diving && p.mode === 'kusa' && solidHeightAt(focus.x,focus.z,.2,focus.y) + .19 > focus.y;
   for (let i = 1, n = Math.ceil(d / 0.4); i <= n; i++) {
     const t = i / n,
       x = focus.x + dx * t,
       z = focus.z + dz * t,
       y = focus.y + dy * t;
+    if (diving) {
+      if (terrainHeight(x,z)+.2 > y || palaceSolid(x,z,y-.15,palaceBed,.3,.15)) {
+        fraction = Math.max(.12,(i-1)/n);
+        break;
+      }
+      continue;
+    }
     const solid = solidHeightAt(x,z,.2,y);
     if (emerging && solid + .19 <= y) emerging = false;
     const floor = emerging ? landscapeFloor(x,z) : Math.max(groundHeight(x,z,y),solid);
@@ -482,7 +499,11 @@ function updateCamera(dt, snap = false) {
   eye.x += dx * fraction;
   eye.y += dy * fraction;
   eye.z += dz * fraction;
-  const eyeFloor = emerging ? landscapeFloor(eye.x,eye.z) : groundHeight(eye.x,eye.z,eye.y);
+  if (diving && focus.y < WATER_Y - .24) {
+    // Pass through the waterline with the mochi even when the camera is tilted down.
+    eye.y=Math.min(eye.y, WATER_Y-.24);
+  }
+  const eyeFloor = diving ? terrainHeight(eye.x,eye.z) : emerging ? landscapeFloor(eye.x,eye.z) : groundHeight(eye.x,eye.z,eye.y);
   eye.y = Math.max(eye.y, eyeFloor + .2);
   camera.position.copy(eye);
   aim.copy(focus);
@@ -526,6 +547,14 @@ function updateHUD() {
     lastFace = faceKey;
   }
   const effects = [];
+  const openSea = p.inWater && !p.mount && shoreDistance(p.x,p.z) < 0;
+  $('dive').hidden = !openSea;
+  $('leap').setAttribute('aria-label', p.diveDepth ? '浮上する' : 'ジャンプ');
+  if (openSea) {
+    const depth = Math.max(1,Math.round(p.diveDepth));
+    effects.push(p.diveDepth ? '水深 '+depth+' m' + (coarse ? ' ・ 跳ぶ長押しで浮上' : ' ・ Spaceで浮上') :
+      (coarse ? '泳ぎ ・ 潜る長押し' : '泳ぎ ・ ↓で潜る'));
+  }
   if (p.mount) effects.push(p.mount === 'bike' ? '電動自転車' : 'カメに騎乗中');
   for (const [k, n] of Object.entries({
     warm: 'ほかほか',
@@ -563,7 +592,7 @@ function updateHUD() {
       ((Math.round(heading / (Math.PI / 4)) % 8) + 8) % 8
     ];
     const name = trackedAnimal ? speciesNames[dest.type] : dest.name;
-    const height = trackedAnimal ? trackedAnimal.y - p.y : 0;
+    const height = trackedAnimal ? trackedAnimal.y - p.y : dest.id === 'ryugu' ? Math.min(0,terrainHeight(dest.x,dest.z)+1-p.y) : 0;
     const elevation = Math.abs(height) > 2 ? '　' + (height > 0 ? '上 ' : '下 ') + Math.round(Math.abs(height)) + ' m' : '';
     $('target').textContent = pointer + '　' + name + '　' + Math.round(Math.hypot(dx, dz)) + ' m' + elevation;
   }
@@ -575,7 +604,7 @@ function openDialog(kind) {
   save();
   lastFocus = document.activeElement;
   dialogKind = kind;
-  $('dialog-title').textContent = kind === 'map' ? '十景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
+  $('dialog-title').textContent = kind === 'map' ? '十五景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
   dialog.showModal();
   if (kind === 'map') {
     selectedPlace = goal || state.regionId;
@@ -651,7 +680,7 @@ function journalDialog() {
   body.innerHTML='<div id="delivery-book"><div class="ledger-head"><p id="ledger-note"></p><span id="ledger-count"></span></div><div class="ledger-animals"></div></div>';
   const count=state.delivered.size, total=state.recipientTotal;
   $('ledger-count').textContent=count+' / '+total;
-  $('ledger-note').textContent=count===total ? '全員に配達しました。鏡餅で十景の旅をどうぞ。' : state.kagamiUnlocked ? '鏡餅が使えます。新しく加わった動物にも通知を届けてみましょう。' : '動物を選ぶと、まだ届いていない一匹へご案内します。全員に届けると鏡餅が開きます。';
+  $('ledger-note').textContent=count===total ? '全員に配達しました。鏡餅で十五景の旅をどうぞ。' : state.kagamiUnlocked ? '鏡餅が使えます。新しく加わった動物にも通知を届けてみましょう。' : '動物を選ぶと、まだ届いていない一匹へご案内します。全員に届けると鏡餅が開きます。';
   if (state.score >= 10000000) $('ledger-note').append('　通知点 ' + fullScore.format(state.score) + ' 点。');
   for (const [type,name] of Object.entries(speciesNames)) {
     const group=state.npcs.filter(n=>n.type===type);
@@ -691,7 +720,7 @@ function redrawAtlas() {
   const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
   const name = trackedAnimal ? speciesNames[trackedAnimal.type] : '';
   const atlas = $('atlas');
-  atlas.setAttribute('aria-label', '十の名所、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
+  atlas.setAttribute('aria-label', '十五の名所、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
   drawMap(atlas,state,yaw,selectedPlace,true,point,trackedAnimal,name);
 }
 function selectMap(id) {
@@ -711,7 +740,12 @@ function selectMap(id) {
     snow: '御朱印所の東に大きな露天風呂。雪だるまの並ぶ参道から湯気が見えます。',
     autumn: '楓の枝が重なる谷道。紅葉をくぐって峡へ。',
     moon: '北の空には十五夜の月。薄のそばの三方に近づくと、月見団子を食べられます。',
-    dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。'
+    dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。',
+    kyo: '舞妓餅が行き交う都。茶とみたらし団子は広場の店先で。夜は大通りから北の山に大の送り火が見えます。',
+    peach: '谷を囲む峰を抜けると、桃の花が一面に咲く里。',
+    ryugu: '海風の松原から西へ泳ぎ、海上で ↓ を長押しして潜ります。海底の真珠灯籠をたどり、楼門の先の御朱印所へ。Space 長押しで浮上。',
+    todaiji: '回廊の先に、蓮の座に鎮まる大餅仏。足元から仰いでみましょう。',
+    inari: '朱の鳥居をくぐって雲上の奥社へ。日が差す雨の参道には、狐の嫁入りの行列が現れます。'
   };
   if (landmarks[id]) detail.append(document.createElement('br'), landmarks[id]);
   const port = regionPort(state, id);
@@ -827,9 +861,10 @@ function frame(now) {
   previous = now;
   const left = Number(keys.has('ArrowLeft') || keys.has('KeyA')),
     right = Number(keys.has('ArrowRight') || keys.has('KeyD'));
+  const seaControls = p.inWater && !p.mount && shoreDistance(p.x,p.z) < 0;
   const forward =
     Number(keys.has('ArrowUp') || keys.has('KeyW')) -
-    Number(keys.has('ArrowDown') || keys.has('KeyS')) -
+    Number((!seaControls && keys.has('ArrowDown')) || keys.has('KeyS')) -
     stick.y;
   yaw += (Number(keys.has('KeyQ')) - Number(keys.has('KeyR'))) * delta * 1.65;
   if (!photoMode) {
@@ -842,12 +877,13 @@ function frame(now) {
       rightX: c,
       rightZ: -s,
       jump: jumpTouch || keys.has('Space'),
+      dive: diveTouch || (seaControls && keys.has('ArrowDown')),
     });
     dispatchEvents();
   } else photoTime += delta;
   updateCamera(delta);
   sun.target.position.set(p.x, p.y, p.z);
-  applyClimateLights(hemisphere, sun, bounce, p);
+  applyClimateLights(hemisphere, sun, bounce, p, photoMode ? photoTime : state.time);
   wake(p, photoMode ? photoTime : state.time);
   const sceneTime = photoMode ? photoTime : state.time;
   audio.updateWorld(state, sceneTime, yaw, photoMode);
@@ -923,7 +959,7 @@ async function boot() {
     meadow = createMeadow(scene, state.objects, coarse);
     wake = createWake(scene);
     sun.target.position.set(p.x,p.y,p.z);
-    applyClimateLights(hemisphere, sun, bounce, p);
+    applyClimateLights(hemisphere, sun, bounce, p, state.time);
     wake(p, state.time);
     actors = createActors(scene, renderer);
     await actors.prepare(state);

@@ -362,6 +362,8 @@ i svg {
   display: grid;
   place-items: center;
 }
+.hands [hidden] { display: none; }
+.hands #dive { font: bold 13px "Yu Mincho", serif; color: #34554e; }
 .hands #leap {
   width: 55px;
   height: 55px;
@@ -756,9 +758,13 @@ dialog::backdrop {
   }
 }
 
+dialog:has(.atlas-layout) {
+  width: min(970px,96vw);
+  max-width: 96vw;
+}
 .atlas-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.62fr) minmax(0, 0.84fr);
+  grid-template-columns: minmax(0,1.4fr) minmax(280px,1fr);
   gap: 15px;
   align-items: center;
   margin-top: 14px;
@@ -767,7 +773,7 @@ dialog::backdrop {
   margin: 0;
 }
 .atlas-layout .map-places {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2,minmax(0,1fr));
 }
 .atlas-layout .actions {
   gap: 4px;
@@ -778,7 +784,7 @@ dialog::backdrop {
 .map-canvas {
   background: #eae4cd url('../assets/ui/paper.png');
 }
-@media (max-width: 570px) {
+@media (max-width: 680px) {
   .atlas-layout {
     display: block;
   }

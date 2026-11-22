@@ -67,7 +67,7 @@ test('moon offerings can be eaten from the tray, restore vitals and return after
   assert.equal(tray.active,false);
   for(let i=0;i<660;i++)resumed.step(.1);
   assert.equal(tray.active,true);
-  saved.items.length=48;
+  saved.version=3; saved.items.length=48; saved.bikes.length=10;
   const legacy=createGame(saved);
   assert.ok(legacy.restored);assert.equal(legacy.state.objects.at(-1).active,true);
 });

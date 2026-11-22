@@ -1,6 +1,6 @@
-import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt } from './terrain.js';
+import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, seeded } from './terrain.js';
 const SIZE = 768, SPAN = 2 * BOUND, adj = SIZE / SPAN;
-export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾'];
+export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾', '十一', '十二', '十三', '十四', '十五'];
 const toX = (x) => SIZE / 2 + x * adj;
 const pigments = [
   ['snow', [226, 231, 229]], ['autumn', [213, 177, 133]],
@@ -12,7 +12,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=15', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -53,7 +53,8 @@ export function paintMapPaper() {
   for (let z = -BOUND; z < BOUND; z += step) for (let x = -BOUND; x < BOUND; x += step) {
     const a = terrainHeight(x, z), b = terrainHeight(x + step, z + step);
     if (a < WATER_Y) {
-      g.fillStyle = a < -1.1 ? '#97b7b6' : '#b0c7ba';
+      const depth = Math.min(1, Math.max(0, -a / 28));
+      g.fillStyle = 'rgb('+[169-79*depth,193-53*depth,183-40*depth].map(Math.round).join(',')+')';
     } else {
       let r = 228, g1 = 222, blue = 191;
       const weights = seasonAt(x, z);
@@ -61,6 +62,8 @@ export function paintMapPaper() {
         const k = weights[key];
         r += (rgb[0] - r) * k; g1 += (rgb[1] - g1) * k; blue += (rgb[2] - blue) * k;
       }
+      const blush = Math.max(0,1-Math.hypot((x+390)/78,(z+91)/60));
+      r+=(239-r)*blush; g1+=(182-g1)*blush; blue+=(181-blue)*blush;
       const relief = Math.min(26, a * .48) + Math.max(-10, Math.min(10, (b-a)*2));
       g.fillStyle = 'rgb(' + [r-relief,g1-relief*.85,blue-relief*.62].map(Math.round).join(',') + ')';
     }
@@ -84,6 +87,33 @@ export function paintMapPaper() {
     g.fillStyle = '#9b7954';
     g.fillRect(toX(b.x - b.halfWidth), toX(b.z - b.length / 2), b.halfWidth * 2 * adj, b.length * adj);
   }
+  // Inked roofs and a stippled orchard make the five new destinations readable
+  // even on the small travelling map. All footprints use the ground coordinates.
+  for (const b of BUILDINGS) {
+    g.save(); g.translate(toX(b.x),toX(b.z)); g.rotate(-b.yaw);
+    g.fillStyle=b.kind==='temple'||b.kind==='pagoda'?'#845645':'#8d8068';
+    g.fillRect(-b.w*adj/2,-b.d*adj/2,b.w*adj,b.d*adj);
+    g.strokeStyle='#ede0b9'; g.lineWidth=.85;
+    g.beginPath();g.moveTo(-b.w*adj*.40,0);g.lineTo(b.w*adj*.40,0);g.stroke();g.restore();
+  }
+  const random=seeded(190720);
+  for(let i=0;i<1700;i++) {
+    const x=(random()-.5)*SPAN,z=(random()-.5)*SPAN,y=terrainHeight(x,z);
+    const u=toX(x),v=toX(z);
+    if(y<-.6) {
+      const w=2+random()*3;
+      g.beginPath();g.moveTo(u-w,v);g.quadraticCurveTo(u-w*.54,v+.1,u,v-1.35);
+      g.quadraticCurveTo(u+w*.49,v+.1,u+w,v);g.strokeStyle='#517d8052';g.lineWidth=.75;g.stroke();
+    }
+  }
+  for(let i=0;i<125;i++) {
+    const x=-390+(random()-.5)*144,z=-91+(random()-.5)*115;
+    if(Math.hypot((x+390)/75,(z+91)/58)>1) continue;
+    g.fillStyle=i%3?'#be89868c':'#f5d2be'; g.beginPath();g.arc(toX(x),toX(z),.8+random()*1.6,0,2*Math.PI);g.fill();
+  }
+  // The bathymetric approach from the pine shore is marked as a dotted sea lane.
+  g.beginPath();g.moveTo(toX(-184),toX(112));g.bezierCurveTo(toX(-223),toX(118),toX(-275),toX(145),toX(-331),toX(135));
+  g.setLineDash([2.5,4]);g.strokeStyle='#537e80';g.lineWidth=1.6;g.stroke();g.setLineDash([]);
   return c;
 }
 export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null, recipientName = '') {
@@ -111,7 +141,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     const x = w / 2 + wrapDelta(r.x - midX) * scale,
       y = h / 2 + wrapDelta(r.z - midZ) * scale,
       on = state.visited.includes(r.id),
-      rad = large ? 11 : 6;
+      rad = large ? (i>=10 ? 12 : 10) : 6;
     if (goal === r.id) {
       g.strokeStyle = '#a14832';
       g.lineWidth = 2;

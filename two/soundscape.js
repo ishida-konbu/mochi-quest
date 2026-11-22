@@ -2,6 +2,7 @@
 // The field recordings and foley have separate credits in ../audio/CREDITS.txt.
 import { REGIONS, bridgeAt, nearRoad, overheadHeight, riverHalfWidth, riverZ, seasonAt,
   shoreDistance, wrapDelta } from './terrain.js';
+import { kyoNight, kyoInfluence } from './kyo-layout.js';
 import { POUNDING } from './festival.js';
 
 const places = Object.fromEntries(REGIONS.map(place => [place.id, place]));
@@ -192,14 +193,16 @@ export function createSoundscape(ctx, master) {
 
   function updateEnvironment(state, now) {
     const p = state.player;
-    const weights = landscapeMix(p);
+    const climate=seasonAt(p.x,p.z);
+    climate.moon=Math.max(climate.moon,kyoNight(state.time)*kyoInfluence(p.x,p.z));
+    const weights = landscapeMix(p,climate);
     const roof = Number.isFinite(overheadHeight(p.x, p.z, p.y));
-    if (inside !== roof) {
-      outdoor.frequency.setTargetAtTime(roof ? 1250 : 14000, now, .22);
-      inside = roof;
-    }
+    inside=roof;
+    const submerged=clamp((p.diveDepth||0)/4);
+    outdoor.frequency.setTargetAtTime((roof?1250:14000)*(1-submerged)+690*submerged,now,.22);
     for (const layer of layers) mixBed(layer, weights[layer.name] * (roof ? .4 : 1), now);
-    for (const score of scores) mixBed(score, score.id === state.regionId ? (roof ? .087 : .105) : 0, now);
+    const scoreId=state.regionId==='ryugu' && !p.diveDepth ? 'coast' : state.regionId;
+    for (const score of scores) mixBed(score, score.id === scoreId ? (roof ? .087 : .105) : 0, now);
     if (objectList !== state.objects) {
       objectList = state.objects;
       baths = objectList.filter(obj => obj.type === 'onsen');

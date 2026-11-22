@@ -2,8 +2,8 @@
 import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, MARKET_STALLS, ROCKS, REGIONS, WATER_Y,
   nearRoad, seeded, seasonAt, shoreDistance, riverZ, riverHalfWidth, terrainHeight } from './terrain.js';
 
-export const MEADOW_TILE = 26;
-export const MEADOW_TILES = 2 * BOUND / MEADOW_TILE;
+export const MEADOW_TILES = 45;
+export const MEADOW_TILE = 2 * BOUND / MEADOW_TILES;
 const rows = 29;
 const {abs, sin, cos, floor, hypot} = Math;
 

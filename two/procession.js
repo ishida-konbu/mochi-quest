@@ -1,6 +1,6 @@
 // Each village draws its own band of travellers from the ten occupations.
 // Feet stay off the graded road, so the original encounters and stamp routes stay open.
-import { REGIONS, ROADS, groundHeight, waterDepth, nearRoad, solidHeightAt, seeded } from './terrain.js';
+import { ORIGINAL_REGIONS as REGIONS, ROADS, groundHeight, waterDepth, nearRoad, solidHeightAt, seeded } from './terrain.js';
 
 export const TRADES = ['flute','fan','lantern','scribe','tea','rake','fisher','drum','flowers','broom'];
 export const DYES = ['#809897','#b47e66','#929a70','#a08a9d','#beaa78','#8296ac'];

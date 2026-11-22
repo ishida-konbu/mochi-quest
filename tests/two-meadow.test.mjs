@@ -6,7 +6,7 @@ import { meadowExclusions, visitMeadowTile, MEADOW_TILES, MEADOW_TILE } from '..
 
 test('the seeded meadows reach the density target while leaving water and the bath clear',()=>{
   const masks=meadowExclusions(createGame().state.objects), forms=new Set();
-  let total=0;
+  let total=0, outer=0;
   for(let i=0;i<MEADOW_TILES;i++)for(let j=0;j<MEADOW_TILES;j++){
     total+=visitMeadowTile(i,j,masks,(x,y,z,w,h,a,form)=>{
       assert.ok(y>WATER_Y);
@@ -14,10 +14,13 @@ test('the seeded meadows reach the density target while leaving water and the ba
       assert.ok(x>=i*MEADOW_TILE-BOUND && x<(i+1)*MEADOW_TILE-BOUND);
       assert.ok(z>=j*MEADOW_TILE-BOUND && z<(j+1)*MEADOW_TILE-BOUND);
       forms.add(form);
+      if(Math.max(Math.abs(x),Math.abs(z))>416) outer++;
     });
   }
   const earlierRoots=7667;
-  assert.ok(total+earlierRoots>=earlierRoots*49 && total+earlierRoots<=earlierRoots*51);
+  assert.ok(total-outer >= earlierRoots*48);
+  assert.ok(outer>90000 && outer<130000);
+  assert.ok(Math.abs(MEADOW_TILES*MEADOW_TILE-2*BOUND)<1e-8);
   assert.equal(forms.size,60);
   const sample=()=>{const roots=[];visitMeadowTile(16,18,masks,(...p)=>roots.push(p));return roots;};
   assert.deepEqual(sample(),sample());

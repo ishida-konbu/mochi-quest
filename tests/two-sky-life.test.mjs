@@ -4,11 +4,11 @@ import {createGame} from '../two/game.js';
 import {moveWildlife, legendFlight} from '../two/bestiary.js';
 import {canopyHeight} from '../two/village-paths.js';
 import {dragonPitch, dragonWave, walkingScore} from '../two/animal-motion.js';
-import {terrainHeight, groundHeight, WATER_Y, REGIONS, BOUND, wrapDelta, regionAt, waterDepth, solidHeightAt} from '../two/terrain.js';
+import {terrainHeight, groundHeight, WATER_Y, REGIONS, ORIGINAL_REGIONS, BOUND, wrapDelta, regionAt, waterDepth, solidHeightAt} from '../two/terrain.js';
 
 test('flight strata span each district and a distant crane moves on every tick',()=>{
   const game=createGame(), cranes=game.state.npcs.filter(n=>n.type==='bird');
-  for(const place of REGIONS) {
+  for(const place of ORIGINAL_REGIONS) {
     const heights=cranes.filter(n=>n.habitat===place.id).map(n=>n.altitude);
     assert.equal(heights.length,4);
     assert.ok(Math.max(...heights)-Math.min(...heights)>45,place.id);
@@ -41,7 +41,7 @@ test('each legend traverses all 25 sectors, changing altitude above sea, ridges 
   const journey={...createGame().save(),flightSeed:32495}, game=createGame(journey);
   for(const type of ['dragon','kirin']) {
     const n=game.state.npcs.find(n=>n.type===type), step=type==='dragon'?24:33;
-    const samples=step*25*4, cells=new Set(), districts=new Set(), previous={};
+    const samples=step*25*4*2, cells=new Set(), districts=new Set(), previous={};
     let low=Infinity,high=-Infinity,sea=0,mountain=0,ascending=0,descending=0;
     const section=delta=>(Math.round(wrapDelta(delta)/(2*BOUND/5))+5)%5;
     for(let i=0;i<samples;i++) {
@@ -108,16 +108,21 @@ test('the flight velocity follows the drawn curve across route and altitude samp
       assert.ok(Math.hypot(vx(a)-vx(c),vz(a)-vz(c))<.025);
     }
   }
-  // During this sharp climb the tail hangs 6.25 m behind the body centre.
-  // Cover its swept, scaled width as it passes a tree crown below the ridge.
+  // Survey the actual trees along the enlarged tour, including steep climbs
+  // where the six-metre tail hangs below the dragon's centre.
   const dragon=game.state.npcs.find(n=>n.type==='dragon');
-  const p=legendFlight(dragon,1105.765,{}), pitch=dragonPitch(p);
-  assert.ok(pitch<-.3);
-  const offset=-6.25*Math.cos(pitch)+1.42*Math.sin(pitch);
-  const crown=canopyHeight(p.x+Math.sin(p.heading)*offset,p.z+Math.cos(p.heading)*offset,3.6);
-  assert.ok(Number.isFinite(crown));
-  const belly=p.y-.35*Math.cos(pitch)+6.5*Math.sin(pitch);
-  assert.ok(belly>crown+.5,'pitched tail clears the crown');
+  let crossings=0;
+  for(let time=0;time<1200;time+=.25) {
+    const p=legendFlight(dragon,time,{}), pitch=dragonPitch(p);
+    if(pitch>=-.3) continue;
+    const offset=-6.25*Math.cos(pitch)+1.42*Math.sin(pitch);
+    const crown=canopyHeight(p.x+Math.sin(p.heading)*offset,p.z+Math.cos(p.heading)*offset,3.6);
+    if(!Number.isFinite(crown))continue;
+    crossings++;
+    const belly=p.y-.35*Math.cos(pitch)+6.5*Math.sin(pitch);
+    assert.ok(belly>crown+.5,'pitched tail clears the crown at '+time);
+  }
+  assert.ok(crossings>15);
 });
 
 test('wing flight can reach the high route and the dragon’s tail sweeps with its body',()=>{

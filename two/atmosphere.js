@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { HDRLoader } from './vendor/HDRLoader.js';
+import { kyoNight, kyoInfluence } from './kyo-layout.js';
 import { seasonAt } from './terrain.js';
 
 const asset = (name) => new URL('./assets/world/' + name, import.meta.url).href;
@@ -22,8 +23,13 @@ const palette = {
   dawnFog: color('#f5c3a3'),
 };
 const lighting = {};
-export function applyClimateLights(hemisphere, sun, bounce, player) {
-  const { snow, autumn, moon, dawn } = seasonAt(player.x, player.z, lighting);
+function climateAtTime(player,time,out) {
+  const climate=seasonAt(player.x,player.z,out);
+  climate.moon=Math.max(climate.moon,kyoNight(time)*kyoInfluence(player.x,player.z));
+  return climate;
+}
+export function applyClimateLights(hemisphere, sun, bounce, player,time=0) {
+  const { snow, autumn, moon, dawn } = climateAtTime(player,time,lighting);
   sun.color
     .copy(palette.sun)
     .lerp(palette.snow, snow)
@@ -161,7 +167,7 @@ export function createAtmosphere(scene) {
     panorama,
     climate: dome.material.uniforms.climate,
     update(time, player, camera) {
-      const s = seasonAt(player.x, player.z, region);
+      const s = climateAtTime(player,time,region);
       dome.position.copy(camera.position);
       dome.material.uniforms.clock.value = time;
       dome.material.uniforms.climate.value.set(s.snow, s.autumn, s.moon, s.dawn);

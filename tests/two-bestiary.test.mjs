@@ -7,9 +7,9 @@ import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { Euler, Vector3 } from '../two/vendor/three.module.min.js';
 import { dragonPitch, dragonWave } from '../two/animal-motion.js';
 
-test('the recipient ledger covers all 675 individuals and gives the two legends a hundredfold score',()=>{
+test('the recipient ledger covers the original individuals and the Kyoto residents and gives the two legends a hundredfold score',()=>{
   const {state}=createGame();
-  assert.equal(state.recipientTotal,675);
+  assert.equal(state.recipientTotal,691);
   assert.equal(new Set(state.npcs.map(n=>n.id)).size,state.recipientTotal);
   assert.deepEqual(Object.fromEntries(Object.keys(SPECIES).map(type=>[type,state.npcs.filter(n=>n.type===type).length])),
     {monkey:90,bird:40,fox:40,tiger:10,dragon:1,kirin:1,deer:32,boar:18,shishi:2});
@@ -51,7 +51,7 @@ test('delivery to the last turtle unlocks Kagami once; duplicate and unknown IDs
   snap.delivered=base.state.npcs.filter(n=>n!==t).map(n=>n.id);
   snap.delivered.push(snap.delivered[0],'not-an-animal');
   const game=createGame(snap),p=game.state.player;
-  assert.equal(game.state.delivered.size,674);assert.equal(game.state.kagamiUnlocked,false);
+  assert.equal(game.state.delivered.size,game.state.recipientTotal-1);assert.equal(game.state.kagamiUnlocked,false);
   Object.assign(p,{x:t.x,z:t.z-1.45,y:t.y,h:0,heading:0});
   assert.ok(game.act('throw'));for(let i=0;i<15;i++)game.step(1/60);
   assert.ok(game.state.delivered.has(t.id));assert.ok(game.state.kagamiUnlocked);
@@ -62,6 +62,7 @@ test('delivery to the last turtle unlocks Kagami once; duplicate and unknown IDs
 test('a completed historic delivery book retains the earned Kagami mode across new saves', () => {
   const game=createGame(), legacy=game.save();
   legacy.version=3;
+  legacy.items.length=48; legacy.bikes.length=10;
   delete legacy.kagamiUnlocked;
   legacy.player.mode='kagami';
   legacy.delivered=game.state.npcs.slice(0,623).map(n=>n.id);

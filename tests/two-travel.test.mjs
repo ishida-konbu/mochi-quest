@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
-import { BUILDINGS, REGIONS, canLand, groundHeight, regionAt } from '../two/terrain.js';
+import { BOUND, BUILDINGS, REGIONS, canLand, groundHeight, regionAt } from '../two/terrain.js';
 import { regionPort } from '../two/map.js';
 
 function stand(game, x, z) {
@@ -65,7 +65,7 @@ test('repeated brief habutae taps alone sustain flight after full extension, the
 test('each district has a reachable working bicycle port with independent stock',()=>{
   const game=createGame();
   const ports=game.state.objects.filter(o=>o.type==='port');
-  assert.deepEqual(ports.map(p=>REGIONS[regionAt(p.x,p.z)].id), REGIONS.map(r=>r.id));
+  assert.deepEqual(ports.map(p=>REGIONS[regionAt(p.x,p.z)].id), REGIONS.filter(r=>r.id!=='ryugu').map(r=>r.id));
   for (const port of ports) {
     const district = REGIONS[regionAt(port.x,port.z)].id;
     assert.equal(regionPort(game.state,district),port);
@@ -82,7 +82,7 @@ test('each district has a reachable working bicycle port with independent stock'
 test('a speed-boosted rental crosses the wrap, resumes at full speed and stops at a thin wall',()=>{
   const game=createGame(), p=game.state.player;
   rent(game);
-  stand(game,380,0);
+  stand(game,BOUND-36,0);
   p.buffs.swift=20;
   for(let i=0;i<40;i++) game.step(.1,{x:1});
   assert.ok(p.x<0);

@@ -1,11 +1,15 @@
+import { KYO_BUILDINGS, KYO_ROADS } from './kyo-layout.js';
+import { INARI_ROUTE, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
+import { TRADE_ROADS } from './trade-routes.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
 import { roomPlan, pagodaPlan, roofForm, hipHeight } from './architecture.js';
 // Coordinates and dimensions are metres. Positive Z is south.
-export const BOUND = 416,
+const ORIGINAL_BOUND = 416;
+export const BOUND = ORIGINAL_BOUND * Math.SQRT2,
   WATER_Y = 0.38;
 export const wrapCoord = (v) => v >= -BOUND && v < BOUND ? v : ((v + BOUND) % (2 * BOUND) + 2 * BOUND) % (2 * BOUND) - BOUND;
 export const wrapDelta = wrapCoord;
-export const REGIONS = [
+export const ORIGINAL_REGIONS = [
   { id: 'river', name: '桜川の渡し', x: 0, z: 59 },
   { id: 'shrine', name: '竹隠れの社', x: -153, z: -85 },
   { id: 'market', name: '蔵町の市', x: 17, z: -64 },
@@ -17,18 +21,26 @@ export const REGIONS = [
   { id: 'moon', name: '十五夜の薄野', x: -55, z: 290 },
   { id: 'dawn', name: '初日の出の浦', x: 302, z: 175 },
 ];
-export const regionAt = (x, z) => {
-  let best = 0,
-    d = Infinity;
-  REGIONS.forEach((r, i) => {
-    const v = wrapDelta(x - r.x) ** 2 + wrapDelta(z - r.z) ** 2;
-    if (v < d) {
-      d = v;
-      best = i;
-    }
-  });
+export const REGIONS = [
+  ...ORIGINAL_REGIONS,
+  { id: 'kyo', name: '花の京', x: 120, z: -424, port:[137,-417] },
+  { id: 'peach', name: '深山の桃源郷', x: -390, z: -91 },
+  { id: 'ryugu', name: '海底の竜宮城', x: -331, z: 135 },
+  { id: 'todaiji', name: '東大寺の大餅仏', x: 215, z: 425 },
+  { id: 'inari', name: '伏見稲荷', x: -153, z: -535, district: [-213,-445], port: [-148,-376] },
+];
+function nearestRegion(x, z, regions, halfSpan) {
+  let best = 0, distance = Infinity;
+  for (let i=0; i<regions.length; i++) {
+    const place=regions[i];
+    const dx=Math.abs(x-(place.district?.[0] ?? place.x)), dz=Math.abs(z-(place.district?.[1] ?? place.z));
+    const squared=Math.min(dx,2*halfSpan-dx)**2 + Math.min(dz,2*halfSpan-dz)**2;
+    if (squared < distance) { distance=squared; best=i; }
+  }
   return best;
-};
+}
+export const regionAt = (x,z) => nearestRegion(wrapCoord(x),wrapCoord(z),REGIONS,BOUND);
+const originalRegionAt = (x,z) => nearestRegion(x,z,ORIGINAL_REGIONS,ORIGINAL_BOUND);
 const { sin, cos, exp, abs, min, max, hypot } = Math;
 const sat = (t) => max(0, min(1, t));
 const smooth = (a, b, x) => {
@@ -36,26 +48,68 @@ const smooth = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 // Regional colour and weather follow a broad transition around each landmark.
-function climate(x, z, cx, cz, rx, rz) {
-  const a = wrapDelta(x - cx) / rx, b = wrapDelta(z - cz) / rz;
-  return 1 - smooth(0.40, 1.02, a*a + b*b);
-}
-export function seasonAt(x, z, out = {}) {
-  out.snow = climate(x,z,-78,-293,174,119);
-  out.autumn = climate(x,z,292,-122,116,139);
-  out.moon = climate(x,z,-55,300,162,116);
-  out.dawn = climate(x,z,305,178,107,129);
+function seasonalFields(x,z,out,delta) {
+  function weight(cx,cz,rx,rz) {
+    const a=delta(x-cx)/rx, b=delta(z-cz)/rz;
+    return 1-smooth(.40,1.02,a*a+b*b);
+  }
+  out.snow=weight(-78,-293,174,119);
+  out.autumn=weight(292,-122,116,139);
+  out.moon=weight(-55,300,162,116);
+  out.dawn=weight(305,178,107,129);
   return out;
 }
+export const seasonAt = (x,z,out={}) => seasonalFields(x,z,out,wrapDelta);
+// The seed fields of established woodland use the dimensions of the original island.
+const originalDelta = v => v > ORIGINAL_BOUND ? v-2*ORIGINAL_BOUND : v < -ORIGINAL_BOUND ? v+2*ORIGINAL_BOUND : v;
+const originalSeasonAt = (x,z,out={}) => seasonalFields(x,z,out,originalDelta);
 const hill = (x, z, cx, cz, rx, rz) => exp(-(((x - cx) / rx) ** 2 + ((z - cz) / rz) ** 2));
 export const riverZ = (x) => 18 + 9 * sin(x / 51) + 3.3 * sin(x / 25);
 export const riverHalfWidth = (x) => 8.6 + 1.9 * sin(x / 38 + 0.35) + 0.95 * sin(x / 14);
 export const coastX = (z) => -250 + 64 * exp(-(((z - 112) / 75) ** 2)) + 5.5 * sin(z / 23);
 export const eastCoastX = (z) => 374 - 48 * exp(-(((z-176)/99)**2)) + 7 * sin(z/36);
-export function shoreDistance(x, z) {
+function originalShore(x, z) {
   // Four gently curving beaches meet a shared, level seabed before each seam.
   const ends = 375 + 7*sin(x/41) + 4*cos(x/22);
   return min(x-coastX(z), eastCoastX(z)-x, ends-abs(z));
+}
+// Signed shore distances unite the original coast with three peninsulas. The
+// western bay remains open to the sea between the peach valley and the temple.
+export const PENINSULAS = [
+  [-53,-388,337,180], [121,-460,127,107], [-193,-456,111,109],
+  [-306,-93,205,105], [170,351,185,176],
+];
+export function shoreDistance(x,z) {
+  let shore=originalShore(x,z);
+  for(const [cx,cz,rx,rz] of PENINSULAS) {
+    const margin=(1-hypot((x-cx)/rx,(z-cz)/rz))*min(rx,rz);
+    shore=max(shore,margin);
+  }
+  return shore;
+}
+function outerHeight(x,z,base) {
+  if (z > -305 && z < 311 && x > -180 && x < 310) return base;
+  const shore=shoreDistance(x,z);
+  let ground=base;
+  if (originalShore(x,z)<22 && shore> -3.3) {
+    const hills=4.6 + .9*sin(x*.034)*cos(z*.037)
+      + 37*hill(x,z,122,-536,68,33)
+      + 18*hill(x,z,19,-452,52,55) + 17*hill(x,z,245,485,59,33);
+    const newLand=-1.8+(hills+1.8)*smooth(-3.3,11,shore);
+    ground=base+(max(base,newLand)-base)*(1-smooth(11,22,originalShore(x,z)));
+  }
+  ground=pilgrimageHeight(x,z,ground);
+  if (shore < 0) {
+    // Offshore shoals gradually give way to open water. A sandy terrace
+    // holds the palace and its gate at the bottom of the western bay.
+    ground-=7*smooth(1,37,-shore);
+    const palace=hypot(x+331,z-135);
+    ground+=(-28-ground)*(1-smooth(35,99,palace));
+    // The two sides of every ocean seam meet on a common deep shelf.
+    const edge=BOUND-max(abs(x),abs(z));
+    ground=-8.8+(ground+8.8)*smooth(0,18,edge);
+  }
+  return ground;
 }
 const mapleStreamZ = x => -130 + 3.3*sin((x-292)/15);
 function naturalHeight(x, z) {
@@ -85,7 +139,7 @@ function naturalHeight(x, z) {
     const banks=smooth(.15,10.5,bed);
     land += (-1.15-land)*(1-banks)*opening;
   }
-  const shore = shoreDistance(x,z);
+  const shore = originalShore(x,z);
   return -1.8 + (land + 1.8) * smooth(-3.3, 11, shore);
 }
 // This stone bathing pool was cut into the hillside on a level terrace.
@@ -101,9 +155,10 @@ function ungradedHeight(x, z) {
 }
 // A building has a level earthen lot, feathered out into the hillside.
 const lotGrid = new Map();
-function landHeight(x, z) {
+function landHeight(x, z, expanded = true) {
   x = wrapCoord(x); z = wrapCoord(z);
-  const base = ungradedHeight(x,z);
+  const native = ungradedHeight(x,z);
+  const base = expanded ? outerHeight(x,z,native) : native;
   const nearby = lotGrid.get(Math.floor(x / 24) * 64 + Math.floor(z / 24));
   if (!nearby) return base;
   let weight = 0, graded = base;
@@ -277,7 +332,7 @@ ROADS.push(
 );
 const roadCells = new Map();
 let widestRoad = 0;
-for (const {width, points} of ROADS) {
+function indexRoad({width,points}) {
   widestRoad = max(widestRoad, width);
   for (let i=0; i<points.length; i+=2) {
     const [x,z] = points[i], key = Math.floor(x/16)*128+Math.floor(z/16);
@@ -285,6 +340,7 @@ for (const {width, points} of ROADS) {
     roadCells.get(key).push({x,z,width});
   }
 }
+ROADS.forEach(indexRoad);
 export function nearRoad(x, z, extra = 0) {
   const reach = widestRoad/2 + abs(extra);
   for (let i=Math.floor((x-reach)/16); i<=Math.floor((x+reach)/16); i++) {
@@ -302,7 +358,7 @@ export function nearRoad(x, z, extra = 0) {
 
 const structures = [];
 function house(x, z, w, d, wall, roof, yaw = 0, kind = 'cottage', craft) {
-  const b = { x, z, w, d, wall, roof, yaw, kind, craft, y: ungradedHeight(x, z), cos: cos(yaw), sin: sin(yaw), snow: z < -240 };
+  const b = { x, z, w, d, wall, roof, yaw, kind, craft, y: outerHeight(x,z,ungradedHeight(x,z)), cos: cos(yaw), sin: sin(yaw), snow: seasonAt(x,z).snow > .55 };
   structures.push(b);
   const extent = hypot(w/2+5,d/2+6);
   for (let i = Math.floor((x-extent)/24); i <= Math.floor((x+extent)/24); i++)
@@ -398,7 +454,7 @@ const clearings = [
   [10, 40],
   [0, 62],
 ];
-for (const r of REGIONS.slice(1)) for (const [dx, dz] of safeOffsets) clearings.push([r.x + dx, r.z + dz]);
+for (const r of ORIGINAL_REGIONS.slice(1)) for (const [dx, dz] of safeOffsets) clearings.push([r.x + dx, r.z + dz]);
 const safe = (x, z, r) => clearings.some((p) => (p[0] - x) ** 2 + (p[1] - z) ** 2 < r * r);
 export function seeded(seed) {
   return () => (seed = (Math.imul(1664525, seed) + 1013904223) >>> 0) / 4294967296;
@@ -423,13 +479,13 @@ for (let n = 0; n < 1600; n++) {
   if (
     nearRoad(x, z, 2.1) ||
     safe(x, z, 4.3) ||
-    landHeight(x, z) < 1.8 ||
+    landHeight(x,z,false) < 1.8 ||
     rz < riverHalfWidth(x) + 3 ||
     BUILDINGS.some((b) => abs(x - b.x) < b.w * 0.65 + 3 && abs(z - b.z) < b.d * 0.65 + 3)
   )
     continue;
   if (trees.some((t) => (x - t.x) ** 2 + (z - t.z) ** 2 < 21)) continue;
-  const region = regionAt(x, z);
+  const region = originalRegionAt(x, z);
   const grove = 0.42 + 0.25 * sin(x * 0.068 + cos(z * 0.032)) + 0.26 * sin(z * 0.079 + x * 0.041);
   if (rng() > grove * (region === 4 ? 0.37 : region === 2 ? 0.48 : 1)) continue;
   const pick = rng(),
@@ -451,9 +507,9 @@ for (let n = 0; n < 1600; n++) {
 const outerRandom = seeded(532151);
 for (let i=0; i<980; i++) {
   const x = outerRandom()*738-369, z = outerRandom()*748-374;
-  if (abs(x)<225 && abs(z)<224 || landHeight(x,z)<2.2 || nearRoad(x,z,2.65)) continue;
+  if (abs(x)<225 && abs(z)<224 || landHeight(x,z,false)<2.2 || nearRoad(x,z,2.65)) continue;
   if (safe(x,z,6) || BUILDINGS.some(b => hypot(x-b.x,z-b.z) < max(b.w,b.d)*.76+3)) continue;
-  const {snow,autumn,moon,dawn} = seasonAt(x,z);
+  const {snow,autumn,moon,dawn} = originalSeasonAt(x,z);
   if (moon>.4 && z<302 && x> -77 || dawn>.5 && x>298 || snow>.45 && abs(x+78)<19 && z < -260) continue;
   const density = .14 + .44*autumn+.19*snow+.015*moon+.12*dawn;
   if (outerRandom()>density || trees.some(t => (t.x-x)**2+(t.z-z)**2<33)) continue;
@@ -466,7 +522,7 @@ for (const [x,z,hue] of [[271,-102,0],[279,-120,1],[289,-105,2],[283,-137,1],[30
 const fallRng = seeded(35444);
 for (let i=0;i<120;i++) {
   const x=284+(fallRng()-.5)*121, z=-116+(fallRng()-.5)*108;
-  if (landHeight(x,z)<2.1 || nearRoad(x,z,2.65) || safe(x,z,4.2) || hypot(x-285,z+115)<8 ||
+  if (landHeight(x,z,false)<2.1 || nearRoad(x,z,2.65) || safe(x,z,4.2) || hypot(x-285,z+115)<8 ||
       BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<max(b.w,b.d)*.8+3) ||
       trees.some(t=>(x-t.x)**2+(z-t.z)**2<32)) continue;
   trees.push({x,z,h:6.4+fallRng()*4.1,kind:'maple',seed:Math.floor(fallRng()*1e6),autumn:1});
@@ -488,18 +544,18 @@ function populateForest() {
   for (let tried=0; trees.length<target && tried<250000; tried++) {
     const x=random()*628-253, z=random()*748-374;
     const riverBank=abs(z-riverZ(x))-riverHalfWidth(x);
-    if (shoreDistance(x,z)<9 || riverBank<10.5 || nearRoad(x,z,2.7)) continue;
-    const region=regionAt(x,z), place=REGIONS[region];
+    if (originalShore(x,z)<9 || riverBank<10.5 || nearRoad(x,z,2.7)) continue;
+    const region=originalRegionAt(x,z), place=REGIONS[region];
     if (hypot(x-place.x,z-place.z)<20 || safe(x,z,5.8)) continue;
     if (BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4)) continue;
     if (BRIDGES.some(b=>abs(x-b.x)<b.halfWidth+4 && abs(z-b.z)<b.length/2+4)) continue;
     if (GATES.some(g=>hypot(x-g.x,z-g.z)<g.w*.75)) continue;
     // Rice plots, bathing pool, the moon-viewing meadow and sunrise festival.
     if ((x>122 && x<184 && z>79 && z<135) || (x>125 && x<169 && z> -123 && z< -80)) continue;
-    seasonAt(x,z,season);
+    originalSeasonAt(x,z,season);
     if (season.moon>.4 && x>-78 && z<307 || season.dawn>.48 && x>291 ||
         season.snow>.45 && abs(x+78)<18 && z< -260) continue;
-    if (landHeight(x,z)<1.9) continue;
+    if (landHeight(x,z,false)<1.9) continue;
     const wave = .5+.24*sin(x*.065+cos(z*.061))+.22*cos(z*.049+sin(x*.039));
     if (random() > .10+wave*.87) continue;
     const cx=Math.floor(x/6), cz=Math.floor(z/6), gap=3.8+(1-wave)*1.9;
@@ -538,7 +594,7 @@ export function hasAutumnLeaves(tree) {
 // Replant the original clear sites in the maple valley. Roads, landing places
 // and bamboo elsewhere keep the same spacing as the original planting.
 const valley = trees.filter(t => REGIONS[regionAt(t.x,t.z)].id === 'autumn');
-let autumnNeeded = valley.filter(t => keep.has(t) && hasAutumnLeaves(t)).length;
+let autumnNeeded = 400 - valley.filter(t => keep.has(t) && hasAutumnLeaves(t)).length;
 const emptySites = valley.filter(t => !keep.has(t) && !isBamboo(t));
 const mapleFamily = TREE_FAMILIES.findIndex(f => f[0] === 'maple');
 for (const t of emptySites.filter(hasAutumnLeaves)) {
@@ -554,7 +610,47 @@ for (const t of emptySites) {
   keep.add(t);
   autumnNeeded--;
 }
-export const TREES = trees.filter(t => isBamboo(t) || keep.has(t));
+// Add new roads after laying out the established groves. Clear only the
+// actual verges of the connecting roads, preserving old woodland elsewhere.
+export const CONNECTING_ROADS = TRADE_ROADS.map(({width,knots,destination,origin})=>({
+  ...road(width,knots),destination,origin,
+}));
+const extensions = [...CONNECTING_ROADS, ...KYO_ROADS.map(([width,knots,paved])=>({...road(width,knots),paved})), {width:3.7,points:INARI_ROUTE}];
+for (const avenue of extensions) { ROADS.push(avenue); indexRoad(avenue); }
+for (const args of KYO_BUILDINGS) house(...args);
+export const TREES = trees.filter(t => (isBamboo(t) || keep.has(t)) &&
+  (t.form === undefined || !nearRoad(t.x,t.z,2.7)));
+// Fill the boundary of the maple district and line the new country roads with
+// loose stands of cedar, zelkova and red pine. Keep all gates and views open.
+const saplings = seeded(0x5c311);
+function transplant(x,z,family) {
+  if (shoreDistance(x,z)<10 || landHeight(x,z)<2 || nearRoad(x,z,3.1) ||
+      abs(z-riverZ(x))-riverHalfWidth(x)<11 || safe(x,z,6) ||
+      BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4.5) ||
+      TREES.some(t=>(t.x-x)**2+(t.z-z)**2<24)) return false;
+  TREES.push({x,z,kind:TREE_FAMILIES[family][0], form:family*TREE_FORMS_PER_FAMILY+Math.floor(saplings()*4),
+    h:5.6+saplings()*6,seed:Math.floor(saplings()*1e6)});
+  return true;
+}
+for(let i=0;autumnNeeded>0 && i<3000;i++) {
+  const x=225+saplings()*103,z=-195+saplings()*123;
+  if(REGIONS[regionAt(x,z)].id==='autumn' && transplant(x,z,mapleFamily)) autumnNeeded--;
+}
+for(const avenue of CONNECTING_ROADS) {
+  for(let i=5;i<avenue.points.length;i+=3) {
+    const [ax,az]=avenue.points[i];
+    for(let k=0;k<4;k++) {
+      const x=ax+(saplings()-.5)*58,z=az+(saplings()-.5)*58;
+      if(originalShore(x,z)>14 || hypot(x-120,z+424)<88 || hypot(x-215,z-408)<52 ||
+        hypot(x+390,z+91)<106 || x< -144 && z< -374) continue;
+      transplant(x,z,[1,2,3,12,13][Math.floor(saplings()*5)]);
+    }
+  }
+}
+for(let i=0;i<205;i++) {
+  const x=122+(saplings()-.5)*176, z=-528+(saplings()-.5)*56;
+  if(z< -539 || abs(x-122)>21) transplant(x,z,Math.floor(saplings()*4));
+}
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
 // The shrine's small bamboo stands are planted individually between its
@@ -649,6 +745,7 @@ for (const b of BUILDINGS) {
     }
   }
 }
+pilgrimageSolids(terrainHeight,putSolid);
 for(const stone of SPRING_STONES) {
   putSolid(SNOW_SPRING.x+stone.x,SNOW_SPRING.z+stone.z,stone.w*.84,stone.d*.84,stone.yaw,
     SNOW_SPRING.level+.18+stone.h,'oval',true);

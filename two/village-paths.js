@@ -97,6 +97,7 @@ function seatWorkers(npcs) {
     const workers=npcs.filter(n=>n.area===REGIONS[regionAt(b.x,b.z)].id && n.room===undefined);
     const preference=n=>(n.role===style[0]?0:1000)+Math.hypot(n.x-b.x,n.z-b.z);
     workers.sort((a,c)=>preference(a)-preference(c));
+    if (!workers.length) continue;
     const n=workers[0], plan=roomPlan(b), bench=plan.workbench;
     // The working paw is on the doorway side, above the near vat,
     // writing paper or net frame. This leaves the demonstration in profile.

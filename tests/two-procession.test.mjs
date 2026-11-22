@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
-import { BUILDINGS, REGIONS, groundHeight, nearRoad, waterDepth, solidHeightAt } from '../two/terrain.js';
+import { BUILDINGS, ORIGINAL_REGIONS as REGIONS, regionAt, groundHeight, nearRoad, waterDepth, solidHeightAt } from '../two/terrain.js';
 import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { roomPlan } from '../two/architecture.js';
 import { DYES, TRADES } from '../two/procession.js';
@@ -9,7 +9,7 @@ import { DYES, TRADES } from '../two/procession.js';
 test('the ten villages support ten times the original hares and frogs, with varied trades and clear roads',()=>{
   const game=createGame(), {npcs,objects}=game.state;
   for(const [species,count] of [['rabbit',190],['frog',250]]) {
-    const residents=npcs.filter(n=>n.type===species);
+    const residents=npcs.slice(0,675).filter(n=>n.type===species);
     assert.equal(residents.length,count);
     const workers=residents.filter(n=>n.area);
     assert.deepEqual(new Set(workers.map(n=>n.role)),new Set(TRADES));
@@ -39,7 +39,7 @@ test('the ten villages support ten times the original hares and frogs, with vari
     }
   }
   const rooms=npcs.filter(n=>n.room!==undefined).map(n=>BUILDINGS[n.room]);
-  assert.deepEqual(new Set(rooms),new Set(BUILDINGS.filter(b=>b.kind!=='pagoda')));
+  assert.deepEqual(new Set(rooms),new Set(BUILDINGS.filter(b=>b.kind!=='pagoda' && regionAt(b.x,b.z)<REGIONS.length)));
   assert.equal(npcs.filter(n=>n.type==='turtle').length,1);
 });
 

@@ -16,7 +16,7 @@ export function createWake(scene) {
   let next = 0,
     last = -Infinity;
   return (p, t) => {
-    if (p.inWater && (t < last || t - last > (p.speed > 0.3 ? 0.27 : 1.12))) {
+    if (p.inWater && !p.diveDepth && (t < last || t - last > (p.speed > 0.3 ? 0.27 : 1.12))) {
       const ring = rings[next];
       next = (next + 1) % rings.length;
       ring.born = last = t;

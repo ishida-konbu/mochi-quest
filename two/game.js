@@ -1,5 +1,7 @@
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
-import { groundHeight, landscapeFloor, solidHeightAt, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
+import { KYO_FOOD, KYO_ANIMALS, kyoNight, kyoInfluence } from './kyo-layout.js';
+import { RYUGU, palaceSolid } from './ryugu-layout.js';
+import { ORIGINAL_REGIONS, terrainHeight, shoreDistance, WATER_Y, groundHeight, landscapeFloor, solidHeightAt, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
 import { POUNDING, POUNDING_CREW } from './festival.js';
 import { prepareVillageRoutes, animalRadius, openGround, walkCircuit } from './village-paths.js';
@@ -37,6 +39,8 @@ const PICKUP_ACTION = {
   manga: { activity: 'read', duration: 2.3, label: '漫画を読む' },
   sake: { activity: 'drink', duration: 2.2, label: '日本酒を飲む' },
   ramen: { activity: 'eat', duration: 2.8, label: '背脂ラーメンを食べる' },
+  kyoTea: { activity: 'tea', duration: 2.2, label: '宇治茶をいただく' },
+  mitarashi: { activity: 'mitarashi', duration: 2.5, label: 'みたらし団子を食べる' },
   tsukimi: { activity: 'tsukimi', duration: 2.6, label: '月見団子を食べる' },
   onsen: { activity: 'bath', duration: 3.5, label: '温泉に入る' },
   haramaki: { label: '腹巻きを巻く' }
@@ -60,7 +64,7 @@ function makeWorld() {
       phase, side, heading, speed: 0, flash: 0, mounted: false
     });
   }
-  REGIONS.forEach(({ id, x, z }, i) => {
+  ORIGINAL_REGIONS.forEach(({ id, x, z }, i) => {
     if (SEASONAL_STOPS[id]) {
       const [first, second] = SEASONAL_STOPS[id];
       object(first, x - 13, z - 9);
@@ -108,6 +112,19 @@ function makeWorld() {
     npc(type,role,x,z,phase);
     Object.assign(npcs.at(-1),visitor);
   }
+  // New entries follow both historical inventories so imported item and recipient IDs stay stable.
+  for (const r of REGIONS.slice(ORIGINAL_REGIONS.length)) {
+    if (r.id !== 'ryugu') {
+      const [x,z]=r.port || [r.x+12,r.z+5];
+      object('port',x,z);
+      objects.at(-1).region = r.id;
+    }
+  }
+  for (const stop of KYO_FOOD) object(stop.type, stop.x, stop.z, stop.yaw);
+  for (const resident of KYO_ANIMALS) {
+    const { type, role, x, z, phase } = resident;
+    npc(type,role,x,z,phase);
+  }
   prepareVillageRoutes(npcs,objects);
   return { objects, npcs };
 }
@@ -119,7 +136,7 @@ export function createGame(snapshot = null) {
   const player = {
     x: 0, z: 62, y: groundHeight(0,62), h: 0, vx: 0, vz: 0, vy: 0, speed: 0, heading: 0,
     grounded: true, hp: MAX_VITAL, mp: MAX_VITAL, mode: 'normal', mount: null, activity: null,
-    activityTime: 0, idleTime: 0, airStretch: 0, inWater: false, night: false, stretch: 0, landing: 0, impact: 0, throwTime: 0, invulnerable: 0,
+    activityTime: 0, idleTime: 0, airStretch: 0, diveDepth: 0, inWater: false, night: false, stretch: 0, landing: 0, impact: 0, throwTime: 0, invulnerable: 0,
     buffs: { warm: 0, swift: 0, drunk: 0, full: 0, wrap: 0 }
   };
   const region = REGIONS[regionAt(player.x,player.z)];
@@ -209,7 +226,7 @@ export function createGame(snapshot = null) {
       message('腹巻きでぽかぽか。体力とモッチポイントを守る！');
     } else {
       beginActivity(pickup.activity, pickup.duration);
-      const lines = { tsukimi: '満月を眺めながら、月見団子をひとくち。', bath: 'ほかほかの湯に、ひと休み。', read: '夢中で漫画を読んでいる。', drink: '日本酒をごくごく。', eat: '背脂ラーメンをもぐもぐ。' };
+      const lines = { tea: '香ばしいお茶を、両手でひと口。', mitarashi: '炙った団子に、とろりと甘いみたらしのたれ。', tsukimi: '満月を眺めながら、月見団子をひとくち。', bath: 'ほかほかの湯に、ひと休み。', read: '夢中で漫画を読んでいる。', drink: '日本酒をごくごく。', eat: '背脂ラーメンをもぐもぐ。' };
       message(lines[pickup.activity]);
     }
   }
@@ -235,6 +252,15 @@ export function createGame(snapshot = null) {
         player.buffs.full = BUFF_TIME.full;
         message(player.mode === 'kinako' ? '満腹！ 三条通知が周囲二十四方向へ！' : player.mode === 'kagami' ? '満腹！ 鏡餅から八方へ福を届けよう。' : '満腹！ 三条通知が一度に三方向へ飛ぶ。');
         break;
+      case 'tea':
+        player.mp = Math.min(MAX_VITAL,player.mp+32);
+        message('宇治茶を飲んで、モッチポイントが32回復。');
+        break;
+      case 'mitarashi':
+        player.hp = Math.min(MAX_VITAL,player.hp+26);
+        player.buffs.full = BUFF_TIME.full;
+        message('みたらし団子で体力が26回復。お腹もいっぱい！');
+        break;
       case 'tsukimi':
         player.hp = Math.min(MAX_VITAL,player.hp+20);
         player.mp = Math.min(MAX_VITAL,player.mp+35);
@@ -249,6 +275,7 @@ export function createGame(snapshot = null) {
   }
   function jump() {
     if (player.activity) return false;
+    if (player.diveDepth > 0) return true; // Space strokes upward while submerged.
     const footLaunch = player.grounded || ledgeGrace > 0;
     if (!footLaunch) {
       // Each fresh press pulls out more dough. A wingbeat still lifts the
@@ -352,6 +379,19 @@ export function createGame(snapshot = null) {
     const leavingGrass = player.mode === 'kusa';
     player.mode = mode;
     if (!leavingGrass && mode !== 'kusa') return;
+    if (player.diveDepth > 0) {
+      // A swimmer may have phased inside a hall. Leave the solid by the
+      // shortest upward stroke when the grass transformation wears off.
+      if (leavingGrass) {
+        const bed=terrainHeight(RYUGU.x,RYUGU.z);
+        while (palaceSolid(player.x,player.z,player.y,bed) && player.diveDepth > 0) {
+          player.diveDepth=Math.max(0,player.diveDepth-.15);
+          player.y=WATER_Y-.57-player.diveDepth;
+        }
+        player.grounded=player.diveDepth===0;
+      }
+      return;
+    }
     if (leavingGrass) {
       // Find room for the whole mochi if the last point of MP expires inside a trunk or wall.
       const fits = (x,z) => {
@@ -522,7 +562,7 @@ export function createGame(snapshot = null) {
           sound('pickup');
         }
       }
-      if (hit || shot.life <= 0 || shot.y < groundHeight(shot.x,shot.z)-.15) state.shots.splice(i,1);
+      if (hit || shot.life <= 0 || shot.y < (player.diveDepth ? terrainHeight(shot.x,shot.z) : groundHeight(shot.x,shot.z))-.15) state.shots.splice(i,1);
     }
   }
   function updateMotion(dt, input) {
@@ -570,6 +610,31 @@ export function createGame(snapshot = null) {
     if (Math.abs(player.vz)<.002) player.vz = 0;
     const x = player.x+player.vx*dt, z = player.z+player.vz*dt;
     const phasing = player.mode === 'kusa';
+    // In the sea, the waterline is the resting swimming height. A diver holds
+    // the chosen depth until the next stroke or a rising seabed lifts them.
+    const swimStroke = player.diveDepth > 0 || (input.dive && player.grounded && player.inWater);
+    if (swimStroke && !player.mount && !player.activity && shoreDistance(player.x,player.z) < 0) {
+      const line = WATER_Y - .57, rate = (input.jump ? -1 : input.dive ? 1 : 0) * 5.4;
+      const bed = terrainHeight(RYUGU.x,RYUGU.z);
+      const free = (xx,zz,yy) => phasing || !palaceSolid(xx,zz,yy,bed);
+      let nx = wrapCoord(x), nz = wrapCoord(z);
+      if (!free(nx,nz,player.y)) {
+        if (free(nx,player.z,player.y)) nz = player.z;
+        else if (free(player.x,nz,player.y)) nx = player.x;
+        else { nx=player.x; nz=player.z; }
+      }
+      const limit = Math.max(0,line - terrainHeight(nx,nz) - .16);
+      let depth = clamp(player.diveDepth + rate*dt, 0, limit);
+      if (!free(nx,nz,line-depth)) depth = Math.min(limit,player.diveDepth);
+      if (depth > 0 || player.diveDepth > 0) {
+        player.vx=wrapDelta(nx-player.x)/dt; player.vz=wrapDelta(nz-player.z)/dt;
+        player.x=nx; player.z=nz; player.y=Math.max(line-depth,terrainHeight(nx,nz));
+        player.diveDepth=depth; player.inWater=true; player.speed=Math.hypot(player.vx,player.vz);
+        player.grounded=depth===0; player.airStretch=player.h=player.vy=0;
+        return;
+      }
+    }
+    player.diveDepth=0;
     const at = phasing ? { x:wrapCoord(x), z:wrapCoord(z) } : constrainMove(player.x,player.z,x,z,player.h,player.y,player.mount==='turtle' ? animalRadius(turtle) : undefined);
     player.vx = wrapDelta(at.x-player.x)/dt;
     player.vz = wrapDelta(at.z-player.z)/dt;
@@ -616,7 +681,7 @@ export function createGame(snapshot = null) {
     if (player.activity || player.h > 1.15 || player.mode === 'kusa') return;
     if (!player.mount && player.grounded) {
       for (const o of objects) {
-        if (!o.grand && o.type !== 'tsukimi' && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
+        if (!o.grand && !['tsukimi','kyoTea','mitarashi'].includes(o.type) && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
             gap(o) <= (o.type === 'onsen' ? 1.55 : .83)) { collect(o); return; }
       }
     }
@@ -642,12 +707,14 @@ export function createGame(snapshot = null) {
   }
   function updateRegion(collectStamp) {
     const region = REGIONS[regionAt(player.x,player.z)];
-    state.region = region.name; state.regionId = region.id;
-    player.night = seasonAt(player.x,player.z,climate).moon > .48;
-    player.inWater = player.grounded && waterDepth(player.x,player.z) > .14 && player.y < waterSurfaceAt(player.x,player.z) - .08;
+    const offshore = region.id === 'ryugu' && (player.diveDepth < 1 || player.y > terrainHeight(region.x,region.z) + 8);
+    state.region = offshore ? '竜宮沖' : region.name; state.regionId = region.id;
+    player.night = Math.max(seasonAt(player.x,player.z,climate).moon,kyoNight(state.time)*kyoInfluence(player.x,player.z)) > .48;
+    player.inWater = player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z) > .14 && player.y < waterSurfaceAt(player.x,player.z) - .08;
+    if (region.id === 'ryugu' && (offshore || player.y > terrainHeight(region.x,region.z) + 3)) return;
     if (!collectStamp || state.visited.includes(region.id) || distance(player,region)>STAMP_RADIUS || player.h>3) return;
     state.visited.push(region.id);
-    const text = state.visited.length === REGIONS.length ? '十景踏破！ 旅の印がすべて揃った。' : region.name+'の旅の印をもらった。';
+    const text = state.visited.length === REGIONS.length ? '十五景踏破！ 旅の印がすべて揃った。' : region.name+'の旅の印をもらった。';
     emit('stamp',{ id:region.id, text }); message(text); sound('pickup');
   }
   function teleport(x, z) {
@@ -665,7 +732,7 @@ export function createGame(snapshot = null) {
     }
     if (!destination) return false;
     Object.assign(player, destination, {y:groundHeight(destination.x,destination.z), h:0, vx:0, vz:0, vy:0,
-      speed:0, grounded:true, airStretch:0, stretch:0, impact:0, landing:0, invulnerable:.8});
+      speed:0, grounded:true, diveDepth:0, airStretch:0, stretch:0, impact:0, landing:0, invulnerable:.8});
     lastBath = null;
     bufferedJump = ledgeGrace = 0;
     refreshCrowd();
@@ -724,7 +791,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 4, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 5, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: objects.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -735,21 +802,21 @@ export function createGame(snapshot = null) {
   function restore(data) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
     const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
-    if (!data || ![2,3,4].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    if (!data || ![2,3,4,5].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
     const p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
     // The original six districts occupy the prefix of the inventory. New
     // stops start stocked even when an old journey resumes on a borrowed bike.
     const old = data.version === 2;
-    const savedPorts = old ? 6 : ports.length;
-    const validItemCounts = old ? [36] : [48,objects.length];
+    const savedPorts = old ? 6 : data.version <= 4 ? 10 : ports.length;
+    const validItemCounts = old ? [36] : data.version <= 4 ? [48,50] : [objects.length];
     if (!finite(data.time,0,1e9) || !Number.isSafeInteger(data.score) || data.score<0 ||
         !data.visited.every(id=>REGIONS.some(region=>region.id===id)) ||
-        !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,200) ||
+        !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,CEILING+160) ||
         !finite(p.vx,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vz,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vy,-135,27) ||
         !finite(p.speed,0,MAX_TRAVEL_SPEED) || !finite(p.heading,-Math.PI,Math.PI) || typeof p.grounded!=='boolean' ||
         !finite(p.hp,0,100) || !finite(p.mp,0,100) || !Object.hasOwn(MODE_COST,p.mode) ||
-        ![null,'turtle','bike'].includes(p.mount) || ![null,'fall','sleep','bath','read','drink','eat','tsukimi'].includes(p.activity) ||
+        ![null,'turtle','bike'].includes(p.mount) || ![null,'fall','sleep','bath','read','drink','eat','tsukimi','tea','mitarashi'].includes(p.activity) ||
         !finite(p.activityTime,0,6) || !p.buffs || !Object.keys(BUFF_TIME).every(k=>finite(p.buffs[k],0,BUFF_TIME[k])) ||
         ![p.stretch,p.invulnerable,p.throwTime].every(n=>finite(n,0,3)) ||
         !Array.isArray(data.items) || !validItemCounts.includes(data.items.length) || !data.items.every(n=>finite(n,0,65)) ||
@@ -759,7 +826,7 @@ export function createGame(snapshot = null) {
         !point(t.x,t.z) || !point(t.homeX,t.homeZ) || !finite(t.pause,0,12) ||
         !Number.isInteger(t.leg) || !finite(t.leg,0,3)) return;
     for (const key of Object.keys(player)) {
-      if (!['idleTime','buffs','landing','impact','airStretch','night','inWater'].includes(key)) player[key]=p[key];
+      if (!['idleTime','buffs','landing','impact','airStretch','night','inWater','diveDepth'].includes(key)) player[key]=p[key];
     }
     // These short pose cues were added after the first version-two saves.
     player.airStretch = !player.grounded && finite(p.airStretch,0,1) ? p.airStretch : 0;
@@ -773,6 +840,12 @@ export function createGame(snapshot = null) {
       player.y = floor+player.h;
       player.grounded = player.h <= .001 && player.vy <= 0;
     } else player.y = groundHeight(player.x,player.z,p.y - p.h)+player.h;
+    if (data.version >= 5 && finite(p.diveDepth, .000001, 100) && !p.mount && shoreDistance(p.x,p.z) < 0) {
+      const line=WATER_Y-.57;
+      player.diveDepth=clamp(p.diveDepth,0,Math.max(0,line-terrainHeight(p.x,p.z)-.16));
+      player.y=line-player.diveDepth; player.grounded=player.diveDepth===0;
+      player.vy=player.h=player.airStretch=0;
+    }
     // Older journals recorded points without identifying recipients. The score survives.
     const ids=new Set(npcs.map(n=>n.id));
     if(Array.isArray(data.delivered)) state.delivered=new Set(data.delivered.filter(id=>ids.has(id)));
@@ -780,7 +853,8 @@ export function createGame(snapshot = null) {
     // Keep an earned transformation when that traveller opens the new pages.
     const previousReward = (data.version === 3 || data.kagamiUnlocked === true) &&
       npcs.slice(0,623).every(n => state.delivered.has(n.id));
-    state.kagamiUnlocked = state.delivered.size === state.recipientTotal || previousReward;
+    const completeFourthEdition = data.version === 4 && npcs.slice(0,675).every(n=>state.delivered.has(n.id));
+    state.kagamiUnlocked = state.delivered.size === state.recipientTotal || previousReward || completeFourthEdition;
     if(player.mode==='kagami' && !state.kagamiUnlocked) player.mode='normal';
     state.score=data.score; state.time=data.time;
     state.visited=[...new Set(data.visited)];

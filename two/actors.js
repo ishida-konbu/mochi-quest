@@ -158,6 +158,7 @@ function batch(parent, fn, name, position) {
   parent.add(m);
   return m;
 }
+export { batch as batchActorParts };
 function group(parent, name, x = 0, y = 0, z = 0) {
   const part = new THREE.Group();
   part.name = name;
@@ -207,9 +208,9 @@ export function getExpression(p, time = 0) {
   if (p.activity === 'fall') return 'hurt';
   if (p.activity === 'sleep') return 'sleepy';
   if (p.activity === 'bath') return 'bath';
-  if (p.activity === 'read') return 'joy';
+  if (p.activity === 'read' || p.activity === 'tea') return 'joy';
   if (p.activity === 'drink') return 'blush';
-  if (p.activity === 'eat' || p.activity === 'tsukimi') return 'eating';
+  if (p.activity === 'eat' || p.activity === 'tsukimi' || p.activity === 'mitarashi') return 'eating';
   if (!p.grounded && p.airStretch > 0) return 'joy';
   if (p.throwTime > 0) return 'calling';
   if (p.mount === 'bike' && p.speed > 0.25) return 'joy';
@@ -1396,6 +1397,12 @@ function gaitHero(h, p, t, dt, state) {
   const mountHeight = p.mount === 'bike' ? .90 : p.mount === 'turtle' ? 1.04 : 0;
   h.pose.position.set(0,response.bob+mountHeight+(sit==='bath'?(p.inWater?-.12:-.49)+.018*Math.sin(t*2):0),riding?-.14:0);
   h.pose.rotation.set(response.pitch,0,response.lean);
+  if (p.inWater && !riding && !sit) {
+    const stroke=Math.min(1,speed/3),cycle=t*(2.3+stroke*1.9);
+    h.pose.rotation.x+=.08+.35*stroke;
+    h.pose.rotation.z+=.085*Math.sin(cycle)*stroke;
+    h.pose.position.y+=.055*Math.cos(cycle*2);
+  }
   if(sit==='fall'){
     const fall=Math.sin(Math.min(1,(p.activityTime||.1)/.68)*PI);
     h.pose.rotation.z+=fall*.93;
@@ -1430,14 +1437,14 @@ function gaitHero(h, p, t, dt, state) {
     h.wingParts[i].position.set(s*(.65+.015*pull)+.055*pull,.66+response.extension*.93,-.01);
     h.wingParts[i].rotation.z = s * (0.24 + Math.sin(t * (p.grounded ? 5 : 13)) * 0.47);
   }
-  for (const key of ['read', 'drink', 'eat', 'tsukimi']) {
+  for (const key of ['read', 'drink', 'eat', 'tsukimi','tea','mitarashi']) {
     const item = h.held[key];
     item.visible = sit === key;
     if (item.visible) {
-      if (key==='tsukimi') {
+      if (key==='tsukimi' || key==='mitarashi') {
         const bite=.5+.5*Math.sin(t*3.7);
         item.position.set(.34-.15*bite,.66+.37*bite,.91-.13*bite);
-      } else if (key === 'drink') {
+      } else if (key === 'drink' || key === 'tea') {
         const sip = 0.5 + 0.5 * Math.sin(t * 4.3);
         item.position.set(0.203 - 0.068 * sip, 0.733 + 0.095 * sip, 0.879 - 0.035 * sip);
         item.rotation.set(-0.20 - sip * 0.57, 0, -0.12 - sip * 0.07);
@@ -1463,6 +1470,7 @@ function gaitHero(h, p, t, dt, state) {
   if(h.ridingTurtle.visible) turtleGait(h.ridingTurtle,t,speed,false);
   const shadowScale = Math.max(0.25, 1 - (p.h || 0) * 0.1);
   h.shadow.scale.set(1.91 * shadowScale * g, 1.6 * shadowScale * g, 1);
+  h.shadow.visible = !p.inWater;
   h.shadow.position.y = 0.036 - (p.h || 0);
   h.dust.visible = false;
   if (p.mode === 'kinako' && speed > 0.12) mistAt(h.dust, t, false, 1);
@@ -1656,6 +1664,20 @@ export function createActors(scene, renderer) {
   h.spin = 0;
   h.held = {
     read: accessory('manga'),
+    tea: model('held-uji-tea', parent=>batch(parent,b=>{
+      b.rod([0,-.15,0],[0,.052,0],.088,'#b5bba1',.151);
+      b.loop(0,.055,0,.151,.151,.009,'#ece4cc');
+      b.ball(0,.051,0,.135,.01,.135,'#879542');
+      b.loop(0,-.15,0,.073,.073,.011,'#697769');
+    })),
+    mitarashi: model('held-mitarashi',parent=>batch(parent,b=>{
+      b.rod([-.17,-.19,0],[.14,.16,0],.011,'#bd975f');
+      for(let i=0;i<3;i++){
+        const x=-.052+i*.087,y=-.047+i*.098;
+        b.ball(x,y,0,.082,.077,.076,'#d2934c');
+        b.ball(x,y+.04,.038,.067,.043,.046,'#9e592f');
+      }
+    })),
     drink: model('sipping-cup', (parent) => batch(parent, (b) => paintSakeCup(b, 0, 0))),
     tsukimi: model('held-tsukimi', parent=>makeMoonCakes(parent,true)),
     eat: model('held-ramen', (parent) => ramen(parent, false)),

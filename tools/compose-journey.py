@@ -1,4 +1,4 @@
-"""Render the ten original Mochi Quest 2 chamber pieces (CC0). Requires NumPy and ffmpeg."""
+"""Render the original Mochi Quest 2 chamber pieces (CC0). Requires NumPy and ffmpeg."""
 from pathlib import Path
 import subprocess
 import numpy as np
@@ -18,6 +18,11 @@ PIECES = {
     "autumn": ("in", 65, 86, "shamisen", "5.43.2-1 2..1..0- 4.32.1-0 1..2..-- 6.54.3-2 4..31.2- 3.21.-10 0....---"),
     "moon": ("in", 57, 56, "flute", "2.....-- 4...3.-- 1..2.... 0....--- 4.....5. 3...2.-- 1...2.1. 0....---"),
     "dawn": ("ritsu", 62, 74, "flute", "0...2.3. 4....--- 2..34... 5..4.2-- 3..45..6 7...5.-- 4.32.1.. 0....---"),
+    "kyo": ("yo", 64, 97, "shamisen", "2-342.10 1.23-24. 5.423.21 2.10-.-- 3-453.21 0.21-24. 5432.1-2 0...0---"),
+    "peach": ("ritsu", 67, 63, "flute", "3...4.5. 7...6.-- 4..32.4. 2....--- 5.6.7... 4...3.-- 2..12.3. 0....---"),
+    "ryugu": ("minyo", 56, 60, "bell", "0...2.-- 5...4.3. 2.....-- 1...0--- 4...6.-- 7..54... 3..2..1. 0....---"),
+    "todaiji": ("ritsu", 52, 56, "bell", "0.....-- 2...3.-- 4...2... 0.....-- 5...4.2. 3....--- 1..2..1. 0.....--"),
+    "inari": ("in", 66, 88, "flute", "0.12-12. 4.3.2.1. 2-345.4. 2...1--- 3.45-65. 4..3.21. 2-1.20.1 0....---"),
 }
 SCALES = {"yo": [0,2,5,7,9], "in": [0,1,5,7,8], "minyo": [0,3,5,7,10], "ritsu": [0,2,5,7,10]}
 def voice(kind, hz, sustain, rng):
@@ -77,7 +82,7 @@ def render(name, spec, seed):
         note(i*8, bass,3,"koto",.48,.22)
         if i%2==0 or lead=="shamisen":
             note(i*8+4.1,bass+2,2,"koto",.34,.32)
-        if name in ("market","dawn","autumn"):
+        if name in ("market","dawn","autumn","kyo","inari"):
             note(i*8+4, -13, .24, "drum", .25 if name=="market" else .15,-.15)
         if lead in ("koto","shamisen") and i%2==1:
             note(i*8+4.5, [2,1,3,0][i//2],2.5,"flute",.18,.25)

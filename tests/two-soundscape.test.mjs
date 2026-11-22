@@ -41,10 +41,10 @@ test('all outdoor beds and footsteps are packaged locally and credited', async (
   }
 });
 
-test('all ten destinations have distinct, locally playable musical recordings', async () => {
+test('all destinations have distinct, locally playable musical recordings', async () => {
   const tracks = await Promise.all(REGIONS.map(r =>
     readFile(new URL('../audio/journey/score-' + r.id + '.mp3', import.meta.url))));
-  assert.equal(new Set(tracks.map(b => b.toString('base64', 2048, 15360))).size, 10);
+  assert.equal(new Set(tracks.map(b => b.toString('base64', 2048, 15360))).size, REGIONS.length);
   for (const recording of tracks) {
     assert.equal(recording.subarray(0,3).toString(),'ID3');
     assert.ok(recording.length > 100000);

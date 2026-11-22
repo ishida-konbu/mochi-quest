@@ -1,3 +1,7 @@
+import { createKyo, kyoPavingMaterial } from './kyo.js';
+import { dressPilgrimage, pilgrimageLife } from './pilgrimage.js';
+import { dressRyugu, createRyuguLife } from './ryugu.js';
+import { createTravellers } from './travelling-merchants.js';
 import { noren } from './craftwork.js';
 import { pagodaPlan, roomPlan, roofForm } from './architecture.js';
 import { hipRoof, tradeFacade } from './workshops.js';
@@ -17,7 +21,7 @@ import {
   BOUND,
   wrapDelta,
   seasonAt,
-  shoreDistance,
+  shoreDistance, PENINSULAS, CONNECTING_ROADS,
   BUILDINGS,
   GATES,
   TREES,
@@ -97,7 +101,7 @@ function grain() {
 function* landscape(scene, art) {
   const mat = meadowMaterial(art);
   const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
-    '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd'].map(css);
+    '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd','#e4d5b5','#efd5ce','#a9c1b3','#e1d8bb','#dbd6bb'].map(css);
   const soil = css('#efeadc'), stone = css('#d5d4c6'), c = new THREE.Color(), season = {};
   const bins = new Map();
   for (const tree of TREES) {
@@ -109,7 +113,7 @@ function* landscape(scene, art) {
         bins.get(key).push(tree);
       }
   }
-  const grid=40, tiles=8, span=2*BOUND/tiles;
+  const grid=40, tiles=12, span=2*BOUND/tiles;
   for (let row=0; row<tiles; row++) for (let column=0; column<tiles; column++) {
     const p=[], ix=[], uv=[], col=[], surface=[], seasons=[];
     for (let j=0; j<=grid; j++) for (let i=0; i<=grid; i++) {
@@ -144,7 +148,7 @@ function* landscape(scene, art) {
   }
 }
 function buildRoads(scene, art) {
-  const material = trailMaterial(art), climate={};
+  const material = trailMaterial(art), paving=kyoPavingMaterial(), climate={};
   for (const road of ROADS) {
     const p=[], uv=[], ix=[], snow=[];
     let travel=0;
@@ -152,12 +156,15 @@ function buildRoads(scene, art) {
       const [x,z]=road.points[i], prev=road.points[max(0,i-1)], next=road.points[min(i+1,road.points.length-1)];
       const dx=next[0]-prev[0], dz=next[1]-prev[1], l=Math.hypot(dx,dz)||1;
       travel+=Math.hypot(x-prev[0],z-prev[1]);
-      const width=road.width*(1+.045*sin(x*1.2+z*.7)+.035*sin(z*1.8));
+      const width=road.paved ? road.width : road.width*(1+.045*sin(x*1.2+z*.7)+.035*sin(z*1.8));
       const snowAmount=seasonAt(x,z,climate).snow;
       const underDeck=BRIDGES.some(b=>abs(x-b.x)<b.halfWidth+.5 && abs(z-b.z)<b.length*.5-.4);
       for(let j=0;j<=4;j++) {
         const across=(j/4-.5)*width, xx=x+(dz/l)*across, zz=z-(dx/l)*across;
-        p.push(xx,h(xx,zz)+.08,zz); uv.push(j/4,travel/4.8); snow.push(snowAmount);
+        p.push(xx,h(xx,zz)+.08,zz);
+        if(road.paved) uv.push(xx/7.6,zz/5.12);
+        else uv.push(j/4,travel/4.8);
+        snow.push(snowAmount);
         if(!underDeck && i<road.points.length-1 && j<4) {
           const k=i*5+j;
           ix.push(k,k+1,k+5,k+1,k+6,k+5);
@@ -166,8 +173,8 @@ function buildRoads(scene, art) {
     }
     const geo=geometry(p,ix,uv);
     geo.setAttribute('snowAmount',new THREE.Float32BufferAttribute(snow,1));
-    const mesh=new THREE.Mesh(geo,material);
-    mesh.receiveShadow=true;mesh.renderOrder=1;scene.add(mesh);
+    const mesh=new THREE.Mesh(geo,road.paved?paving:material);
+    mesh.receiveShadow=true;mesh.renderOrder=road.paved?2:1;scene.add(mesh);
   }
 }
 function makeWater(scene, art, panorama) {
@@ -192,7 +199,7 @@ function makeWater(scene, art, panorama) {
       ${waterWaveGLSL}
       #include <fog_pars_vertex>
       void main(){vec4 wp=modelMatrix*vec4(position,1.);
-        vec2 q=mod(wp.xz+416.,832.)-416.;
+        vec2 q=mod(wp.xz+${BOUND},${2*BOUND})-${BOUND};
         wp.y+=waveHeight(q,clock);
         vWorld=wp.xyz;
         vec4 mvPosition=viewMatrix*wp;gl_Position=projectionMatrix*mvPosition;
@@ -216,7 +223,7 @@ function makeWater(scene, art, panorama) {
         return line*smoothstep(.31,.78,hash(cell+2.03));
       }
       void main(){
-        vec2 p=mod(vWorld.xz+416.,832.)-416.;float t=clock;
+        vec2 p=mod(vWorld.xz+${BOUND},${2*BOUND})-${BOUND};float t=clock;
         float margin=hullMargin(p,(vWorld.y-${WATER_Y - HULL_DRAFT})/${HULL_HEIGHT});
         if(margin<0.)discard;
         float river=18.+9.*sin(p.x/51.)+3.3*sin(p.x/25.);
@@ -224,7 +231,10 @@ function makeWater(scene, art, panorama) {
         float coastBand=(p.y-112.)/75.;float shoreX=-250.+64.*exp(-coastBand*coastBand)+5.5*sin(p.y/23.);
         float eastBand=(p.y-176.)/99.;float eastX=374.-48.*exp(-eastBand*eastBand)+7.*sin(p.y/36.);
         float end=375.+7.*sin(p.x/41.)+4.*cos(p.x/22.);
-        float inside=max(max(halfBank-abs(p.y-river), shoreX-p.x),max(p.x-eastX,abs(p.y)-end));
+        float shoreDist=min(min(p.x-shoreX,eastX-p.x),end-abs(p.y));
+        ${PENINSULAS.map(([x,z,rx,rz]) =>
+          `shoreDist=max(shoreDist,(1.-length((p-vec2(${x}.,${z}.))/vec2(${rx}.,${rz}.)))*${Math.min(rx,rz)}.);`).join('\n')}
+        float inside=max(halfBank-abs(p.y-river),-shoreDist);
         if (p.x>278. && p.y < -104. && p.y > -152.) inside=max(inside,3.1-abs(p.y+130.-3.3*sin((p.x-292.)/15.)));
         float depth=smoothstep(-1.8,6.8,inside);
         vec2 along=normalize(vec2(1.,(9./51.)*cos(p.x/51.)+(3.3/25.)*cos(p.x/25.)));
@@ -281,6 +291,13 @@ function makeWater(scene, art, panorama) {
         // gravel. Deep channels and grazing-angle reflections close the wash.
         float opacity=mix(.51,.995,smoothstep(-.8,5.3,inside));
         opacity=mix(opacity,1.,clamp(fresnel*.79+glint*.24+shore*.20,0.,1.));
+        if (!gl_FrontFacing) {
+          // From below, moving folds of light replace the reflected mountains.
+          float zenith=clamp(eye.y,0.,1.);
+          col=mix(vec3(.066,.215,.23),vec3(.47,.72,.65),pow(zenith,2.1));
+          col+=vec3(.18,.22,.14)*(glint*.8+hair*.32+.10*choppy)*zenith;
+          opacity=1.;
+        }
         gl_FragColor=vec4(col,opacity);
         #include <fog_fragment>
         #include <tonemapping_fragment>
@@ -1492,6 +1509,29 @@ function wayMarker(p, x, z, glyph, angle = 0) {
     p.signs[glyph],
   );
 }
+function roadsideInscriptions(p) {
+  for (const road of CONNECTING_ROADS) {
+    const mark=road.points[6], before=road.points[5], after=road.points[7];
+    const angle=Math.atan2(after[0]-before[0],after[1]-before[1]);
+    const verge=road.width*.5+1.25;
+    const x=mark[0]+cos(angle)*verge, z=mark[1]-sin(angle)*verge, y=h(x,z);
+    p.part('rock',x,y+.08,z,.48,.23,.45,'#898777');
+    p.part('box',x,y+1.12,z,.12,2.31,.14,'#68583e',angle,0,0,p.wood);
+    p.part('box',x,y+1.73,z,2.13,.73,.13,'#735d42',angle,0,0,p.wood);
+    for(const [face,label] of [[angle+PI,road.destination],[angle,road.origin]]) {
+      const writing=canvasTexture(352,112,(c,w,h)=>{
+        c.fillStyle='#dbc69c';c.fillRect(0,0,w,h);
+        c.lineWidth=2;c.strokeStyle='#927a51';c.strokeRect(5,5,w-10,h-10);
+        c.font='bold 51px "Hiragino Mincho ProN","Yu Mincho",serif';
+        c.fillStyle='#443d32';c.textBaseline='middle';c.textAlign='center';
+        c.fillText(label+'ヘ',w*.49,h*.53,w*.85);
+        c.fillStyle='#a55b40';c.fillRect(w*.92,h*.67,9,11);
+      });
+      const ink=new THREE.MeshLambertMaterial({map:writing});
+      p.part('plane',x+.073*sin(face),y+1.73,z+.073*cos(face),2.07,.666,1,'#fff',face,0,0,ink,false);
+    }
+  }
+}
 function hillsideStairs(p) {
   for (const gate of GATES) {
     for (const dir of [-1, 1])
@@ -1652,6 +1692,7 @@ export function* prepareWorld(scene) {
   }
   paddies(painter);
   hillsideStairs(painter);
+  roadsideInscriptions(painter);
   stampStations(painter);
   details(painter);
   yield;
@@ -1663,6 +1704,13 @@ export function* prepareWorld(scene) {
   yield;
   dressSeasonalPlaces(painter);
   yield;
+  const updateKyo=createKyo(scene,painter);
+  yield;
+  yield* dressPilgrimage(painter);
+  dressRyugu(painter);
+  yield;
+  const updateShrines=pilgrimageLife(scene), updatePalace=createRyuguLife(scene);
+  const updateTrade=createTravellers(scene);
   yield* painter.finish();
   // Each spatial batch lives in its nearest image of the repeating island.
   // Perspective and populated shorelines are preserved on crossing the ocean.
@@ -1686,6 +1734,10 @@ export function* prepareWorld(scene) {
       painter.sway.value = time;
       if (camera) {
         atmosphere.update(time, player, camera);
+        updateKyo(time,player,camera);
+        updateShrines(time,player,camera);
+        updateTrade(time,player);
+        updatePalace(time,player,camera);
         updateForest(camera, player);
         for (const b of batches) {
           const dx=wrapDelta(b.x-camera.position.x), dz=wrapDelta(b.z-camera.position.z);
