@@ -5,6 +5,7 @@ import { KIYOMIZU, onMountOtowa, kiyomizuClearing } from './kiyomizu-layout.js';
 import { createPickupContacts } from './pickup-contacts.js';
 import { createAmbientContacts } from './ambient-contacts.js';
 import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
+import { lakeRadius, snowPoint } from './snow-country.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
 import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
 import { SEAPORTS,relocateOldQuay } from './seaport-layout.js';
@@ -237,6 +238,29 @@ function restoreGateVisitor(p,edition) {
       return {...p,z:RASHOMON.z+wall.z+(v<wall.z?-1:1)*(wall.d/2+.34)};
   }
   return p;
+}
+
+// Walkers, bathers and roof climbers travel with their old neighbourhood.
+function restoreSnowVisitor(p) {
+  const dx=p.x-36.08,dz=p.z+328.20;
+  if(Math.hypot(dx,dz)<6) {
+    const pool=RETREATS.find(s=>s.id==='snow-nagoriyuki');
+    // Carry the visitor's local position and bearing around the rotated pool.
+    const angle=pool.yaw-4.0083, c=Math.cos(angle), s=Math.sin(angle);
+    const x=pool.x+dx*c+dz*s, z=pool.z-dx*s+dz*c;
+    if(p.y===undefined)return {x,z};
+    return {...p,x,z,y:p.y+waterSurfaceAt(pool.x,pool.z)-27.5800905,
+      vx:p.vx*c+p.vz*s,vz:p.vz*c-p.vx*s,heading:Math.atan2(Math.sin(p.heading+angle),Math.cos(p.heading+angle))};
+  }
+  // The footprint follows the old streets, pagoda yard and eastern bath.
+  if(p.z < -338 || p.z > -248 || p.x < -123 || p.x > -15)return p;
+  const [x,z]=snowPoint(p.x,p.z);
+  if(p.y===undefined)return {x,z};
+  const building=BUILDINGS.find(b=>b.oldY!==undefined &&
+    Math.abs((x-b.x)*b.cos-(z-b.z)*b.sin)<b.w*.5+2.1 &&
+    Math.abs((x-b.x)*b.sin+(z-b.z)*b.cos)<b.d*.5+2.1);
+  const y=building ? p.y+building.y-building.oldY : groundHeight(x,z)+p.h;
+  return {...p,x,z,y};
 }
 
 export function createGame(snapshot = null) {
@@ -1087,6 +1111,7 @@ export function createGame(snapshot = null) {
     const offshore = region.id === 'ryugu' && (player.diveDepth < 1 || player.y > terrainHeight(region.x,region.z) + 8);
     state.region = offshore ? '竜宮沖' : otowa && kiyomizuClearing(player.x,player.z) ? KIYOMIZU.name : region.name;
     state.regionId = region.id;
+    state.onLake = lakeRadius(player.x,player.z)<1.29;
     player.night = Math.max(seasonAt(player.x,player.z,climate).moon,kyoNight(state.time,player)*kyoInfluence(player.x,player.z)) > .48;
     player.inWater = player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z) > .14 && player.y < waterSurfaceAt(player.x,player.z) - .08;
     if (region.id === 'ryugu' && (offshore || player.y > terrainHeight(region.x,region.z) + 3)) return;
@@ -1178,7 +1203,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 11, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 12, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: inventory.map(o => o?.cooldown ?? 0),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -1189,7 +1214,7 @@ export function createGame(snapshot = null) {
   function restore(data) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
     const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
-    if (!data || ![2,3,4,5,6,7,8,9,10,11].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    if (!data || ![2,3,4,5,6,7,8,9,10,11,12].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
     let p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
     // The original six districts occupy the prefix of the inventory. New
@@ -1236,6 +1261,11 @@ export function createGame(snapshot = null) {
       t={...t,x,z,homeX,homeZ};
     }
     visitor=restoreGateVisitor(visitor,data.version);
+    if(data.version<12) {
+      visitor=restoreSnowVisitor(visitor);
+      const position=restoreSnowVisitor(t), home=restoreSnowVisitor({x:t.homeX,z:t.homeZ});
+      t={...t,x:position.x,z:position.z,homeX:home.x,homeZ:home.z};
+    }
     if(visitor!==p && p.mount==='turtle')t={...t,x:visitor.x,z:visitor.z,homeX:visitor.x,homeZ:visitor.z};
     p=visitor;
     for (const key of Object.keys(player)) {

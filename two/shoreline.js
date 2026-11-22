@@ -1,9 +1,13 @@
 import { coastX } from './terrain.js';
+import { SNOW_TOWN } from './snow-country.js';
+
+export const WINTER_SKIFF = { x:SNOW_TOWN.x+32, z:SNOW_TOWN.z-157, yaw:1.27, length:6.3, width:1.65 };
 
 export const BOATS = [
   { x: -11.9, z: 18.2, yaw: -.92, length: 4.55, width: 1.2 },
   { x: coastX(110)-8.9, z: 110, yaw: -.44, length: 5.4, width: 1.48, sail: true, mooring: 1 },
   { x: coastX(124)-5.3, z: 124, yaw: .76, length: 4.65, width: 1.18, mooring: -1 },
+  WINTER_SKIFF,
 ];
 export const HULL_HEIGHT = .76, HULL_DRAFT = .16;
 export const halfBreadth = t => Math.max(.012,.5*(1-Math.abs(t)**2.45));

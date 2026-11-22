@@ -28,7 +28,7 @@ function wayside(id, fraction, offset) {
 // Keep the two retired peach approach numbers vacant.
 const springSurvey=[];
 export const RETREATS=[
-  {...wayside('capital-road',.50,16),name:'杉木立の湯',kind:'cedar',region:'inari',rx:3.22,rz:2.52},
+  {x:74.10411390313025,z:-553.7422990856945,yaw:1.0957855705297996,name:'杉木立の湯',kind:'cedar',region:'inari',rx:3.22,rz:2.52},
   {...wayside('temple-road',.56,-16),name:'薄明の湯',kind:'reed',region:'todaiji',rx:3.50,rz:2.49},
   {x:560,z:-484,yaw:-1.5440,name:'雲間の湯',kind:'slate',region:'inari',rx:3.30,rz:2.51},
   {x:-127,z:146,yaw:2.42,name:'潮待ちの湯',kind:'coast',region:'coast',rx:3.4,rz:2.53},

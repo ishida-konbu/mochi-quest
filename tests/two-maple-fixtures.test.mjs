@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {createGame} from '../two/game.js';
 import {MAPLE_ROCK_GROUPS} from '../two/seasons.js';
 import {SOURCE_STONES} from '../two/mountain-streams.js';
-import {BUILDINGS, GATES, TREES, gateFooting, groundHeight, nearRoad, staticVolumeAt, terrainMeshHeight, waterSurfaceAt} from '../two/terrain.js';
+import {BUILDINGS, GATES, REGIONS, TREES, regionAt, gateFooting, groundHeight, nearRoad, staticVolumeAt, terrainMeshHeight, waterSurfaceAt} from '../two/terrain.js';
 
 test('the maple torii straddles the road with its sockets and both lanterns seated on the hillside',()=>{
-  const gate=GATES.find(g=>g.x>200);
+  const gate=GATES.find(g=>REGIONS[regionAt(g.x,g.z)].id==='autumn');
   const lamps=[];
   for(const side of [-1,1]){
     for(const lamp of [false,true]){

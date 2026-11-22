@@ -175,7 +175,7 @@ test('an original v11 inventory and an in-progress Goemon bath retain their mean
   const game=createGame(),snap=game.save(),hut=game.state.objects.find(o=>o.id==='onsen-71');
   assert.equal(historicIds.length,72);
   assert.ok(hut.goemon);
-  assert.equal(snap.version,11);
+  snap.version=11;
   assert.equal(snap.items.length,historicIds.length);
   const originalItems=historicTypes.map((t,i)=>['sake','ramen','manga','haramaki'].includes(t)?i*.65+.5:0);
   snap.items=originalItems.slice();snap.score=2130;snap.lastBath=hut.id;

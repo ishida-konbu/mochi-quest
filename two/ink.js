@@ -25,6 +25,7 @@ export function createInkPass(renderer, camera) {
       clip: { value: new THREE.Vector2(camera.near, camera.far) },
       focus: { value: 0 },
       scroll: { value: 0 },
+      inkFogDensity: { value: 0 },
     },
     vertexShader: `
       varying vec2 paperUV;
@@ -33,7 +34,7 @@ export function createInkPass(renderer, camera) {
       varying vec2 paperUV;
       uniform sampler2D painted,depthMap;
       uniform vec2 pixel,lens,clip;
-      uniform float focus,scroll;
+      uniform float focus,scroll,inkFogDensity;
       ${peachHazeShader}
       float meters(vec2 uv) {
         float d = texture2D(depthMap,uv).r;
@@ -96,7 +97,11 @@ export function createInkPass(renderer, camera) {
           vec3 lampblack=mix(vec3(l)*vec3(1.025,1.,.958),c,.68+.27*smoothstep(.05,.43,chroma));
           vec3 lifted=lampblack+vec3(.076,.066,.049)*lit*(1.-smoothstep(.55,.95,l));
           float line=max(ridge*.91,brush*.66)*(1.-smoothstep(36.,168.,z));
-          c=mix(c,lifted*(1.-.64*line*inkVisibility),scroll);
+          // Distance fog has already mixed the surface into the sky.
+          // Lift only its surviving pigment, or fully fogged water cuts a
+          // straight, pale strip across the sky at the far clipping plane.
+          float fogPath=inkFogDensity*z;
+          c=mix(c,lifted*(1.-.64*line*inkVisibility),scroll*exp(-fogPath*fogPath));
         }
         // The light portrait blur leaves small, distant ink silhouettes legible.
         if (focus>0. && z>focus+1.) {
@@ -156,6 +161,7 @@ export function createInkPass(renderer, camera) {
       camera.updateWorldMatrix(true,false);
       updatePeachHaze(material.uniforms,camera,scene.fog,time);
       material.uniforms.scroll.value = scroll;
+      material.uniforms.inkFogDensity.value = scene.fog?.density || 0;
       material.uniforms.focus.value = focusDistance;
       renderer.setRenderTarget(target);
       renderer.render(scene, camera);

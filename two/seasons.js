@@ -1,6 +1,8 @@
 import { dressSnowBath } from './snow-bath.js';
 import * as THREE from './vendor/three.module.min.js';
 import { snowDaruma } from './snow-daruma.js';
+import { SNOW_TOWN } from './snow-country.js';
+import { dressWinterCoast } from './winter-coast.js';
 import { KADOMATSU } from './festival.js';
 import { terrainHeight as height, seeded, TREES, BUILDINGS, nearRoad, TSUKIMI, springRadius } from './terrain.js';
 
@@ -30,18 +32,19 @@ function frame(p, x, z, yaw = 0, base = height(x, z)) {
   };
 }
 
-function snowCapital(p, light) {
+function snowTown(p, light) {
+  const town = SNOW_TOWN;
   const rng = seeded(238247), daruma = snowDaruma(p);
   // A family made by the townspeople lines the approach to the snow pagoda.
   const family = [
-    [-74, -293, 1.02, -.48, false, false], [-72.6, -293.2, .65, -.7, true, true],
-    [-82.3, -277, .83, .49, false, true], [-61, -290, .66, .91, true, false],
-    [-86, -309, .93, .54, false, false],
+    [4, -3, 1.02, -.48, false, false], [5.4, -3.2, .65, -.7, true, true],
+    [-4.3, 13, .83, .49, false, true], [17, 0, .66, .91, true, false],
+    [-8, -19, .93, .54, false, false],
   ];
-  for (const [x, z, scale, yaw, child, indigo] of family) daruma(frame(p,x,z,yaw),scale,child,indigo);
+  for (const [x, z, scale, yaw, child, indigo] of family) daruma(frame(p,town.x+x,town.z+z,yaw),scale,child,indigo);
   for (let i = 0; i < 28; i++) {
-    const x = -78 + (rng() - 0.5) * 90,
-      z = -287 + (rng() - 0.5) * 70;
+    const x = town.x + (rng() - 0.5) * 90,
+      z = town.z + 3 + (rng() - 0.5) * 70;
     if (nearRoad(x, z, 1.0) || springRadius(x,z)<1.2) continue;
     const s = 0.9 + rng() * 1.6;
     p.part(
@@ -64,10 +67,10 @@ function snowCapital(p, light) {
   // Small snow lanterns have cut-in niches, rounded roofs and an amber candle set back inside.
   for (let i = 0; i < 7; i++)
     for (const side of [-1, 1]) {
-      const z = -278 - i * 4.9,
-        x = -78 + side * (4.2 + 0.27 * cos(i));
+      const z = 12 - i * 4.9,
+        x = side * (4.2 + 0.27 * cos(i));
       if (family.some(([dx,dz,scale]) => Math.hypot(x-dx,z-dz) < .98*scale+.61)) continue;
-      const f = frame(p, x, z, side * -0.41);
+      const f = frame(p, town.x+x, town.z+z, side * -0.41);
       f.part('snowLump', 0, 0.38, 0, 0.5, 0.51, 0.47, '#d8e1e8');
       f.part('snowLump', 0, 0.49, 0.345, 0.228, 0.303, 0.092, '#7a858b');
       f.part('snowLump', 0, 0.458, 0.406, 0.168, 0.242, 0.05, '#e9ab61', light);
@@ -424,7 +427,8 @@ export function dressSeasonalPlaces(p) {
   p.shapes.rush = bladeGeometry();
   p.shapes.plumes = plumesGeometry();
   const light = new THREE.MeshBasicMaterial();
-  snowCapital(p, light);
+  snowTown(p, light);
+  dressWinterCoast(p);
   dressSnowBath(p,frame,light);
   moonField(p, light);
   mapleHollow(p);

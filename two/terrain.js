@@ -1,3 +1,6 @@
+import { SNOW_TOWN, FOREST_LAKE, SNOW_PASS, snowPoint, lakeRadius, lakePoint } from './snow-country.js';
+import { LAKE_WILLOWS, LAKE_ANIMALS } from './lake-grove-layout.js';
+import { WINTER_REEFS } from './winter-reefs.js';
 import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
 import { SOURCE_STONES, mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
 import { MAPLE_BRIDGE, mapleDeckHeight, mapleApproachHeight, mapleBridgeFootings } from './maple-crossing.js';
@@ -29,7 +32,7 @@ export const ORIGINAL_REGIONS = [
   { id: 'spring', name: '湯けむり峠', x: 144, z: -107 },
   { id: 'terraces', name: '月見の棚田', x: 156, z: 105 },
   { id: 'coast', name: '海風の松原', x: -149, z: 111 },
-  { id: 'snow', name: '雪灯りの都', x: -78, z: -290 },
+  { id: 'snow', name: '雪灯りの街', ...SNOW_TOWN, districtScaleX:1.38 },
   { id: 'autumn', name: '錦秋の楓峡', x: 285, z: -115 },
   { id: 'moon', name: '十五夜の薄野', x: -55, z: 290 },
   { id: 'dawn', name: '初日の出の浦', x: 302, z: 175, port:[304,180] },
@@ -51,13 +54,14 @@ function nearestRegion(x, z, regions, halfSpan) {
   for (let i=0; i<regions.length; i++) {
     const place=regions[i];
     const dx=Math.abs(x-(place.district?.[0] ?? place.x)), dz=Math.abs(z-(place.district?.[1] ?? place.z));
-    const squared=Math.min(dx,2*halfSpan-dx)**2 + Math.min(dz,2*halfSpan-dz)**2;
+    const squared=(Math.min(dx,2*halfSpan-dx)*(place.districtScaleX ?? 1))**2 + Math.min(dz,2*halfSpan-dz)**2;
     if (squared < distance) { distance=squared; best=i; }
   }
   return best;
 }
 export const regionAt = (x,z) => nearestRegion(wrapCoord(x),wrapCoord(z),REGIONS,BOUND);
-const originalRegionAt = (x,z) => nearestRegion(x,z,ORIGINAL_REGIONS,ORIGINAL_BOUND);
+const plantingRegions = ORIGINAL_REGIONS.map(r=>r.id==='snow' ? FOREST_LAKE : r);
+const originalRegionAt = (x,z) => nearestRegion(x,z,plantingRegions,ORIGINAL_BOUND);
 const { sin, cos, exp, abs, min, max, hypot } = Math;
 const sat = (t) => max(0, min(1, t));
 const smooth = (a, b, x) => {
@@ -65,21 +69,59 @@ const smooth = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 // Regional colour and weather follow a broad transition around each landmark.
-function seasonalFields(x,z,out,delta) {
+function seasonalFields(x,z,out,delta,snow) {
   function weight(cx,cz,rx,rz) {
     const a=delta(x-cx)/rx, b=delta(z-cz)/rz;
     return 1-smooth(.40,1.02,a*a+b*b);
   }
-  out.snow=weight(-78,-293,174,119);
+  out.snow=weight(snow.x,snow.z-3,174,119);
   out.autumn=weight(292,-122,116,139);
   out.moon=weight(-55,300,162,116);
   out.dawn=weight(305,178,107,129);
   return out;
 }
-export const seasonAt = (x,z,out={}) => seasonalFields(x,z,out,wrapDelta);
+export const seasonAt = (x,z,out={}) => seasonalFields(x,z,out,wrapDelta,SNOW_TOWN);
 // The seed fields of established woodland use the dimensions of the original island.
 const originalDelta = v => v > ORIGINAL_BOUND ? v-2*ORIGINAL_BOUND : v < -ORIGINAL_BOUND ? v+2*ORIGINAL_BOUND : v;
-const originalSeasonAt = (x,z,out={}) => seasonalFields(x,z,out,originalDelta);
+const originalSeasonAt = (x,z,out={}) => seasonalFields(x,z,out,originalDelta,FOREST_LAKE);
+// Survey the same cubic bends in plan and elevation. A short cut into each
+// spur keeps the cart road on a walkable grade, with feathered earth banks.
+const passCells=new Map();
+const passPoints=road(5.3,SNOW_PASS).points;
+for(let i=1;i<passPoints.length;i++){
+  const a=passPoints[i-1],b=passPoints[i];
+  const dx=b[0]-a[0],dz=b[1]-a[1],length=hypot(dx,dz);
+  const segment={x:a[0],z:a[1],base:a[2],dx,dz,rise:b[2]-a[2],length,inverse:1/(length*length)};
+  for(let u=Math.floor((min(a[0],b[0])-15)/24);u<=Math.floor((max(a[0],b[0])+15)/24);u++)
+    for(let v=Math.floor((min(a[1],b[1])-15)/24);v<=Math.floor((max(a[1],b[1])+15)/24);v++){
+      const key=u*256+v;
+      if(!passCells.has(key))passCells.set(key,[]);
+      passCells.get(key).push(segment);
+    }
+}
+function passHeight(x,z,ground) {
+  if(x<350 || x>689 || z< -1133 || z> -929)return ground;
+  const arcs=passCells.get(Math.floor(x/24)*256+Math.floor(z/24));
+  if(!arcs)return ground;
+  let best=225,elevation=0,weights=0,nearest=ground;
+  for(const s of arcs) {
+    const t=sat(((x-s.x)*s.dx+(z-s.z)*s.dz)*s.inverse);
+    const distance=(x-s.x-s.dx*t)**2+(z-s.z-s.dz*t)**2;
+    if(distance>=225)continue;
+    const y=s.base+s.rise*t;
+    if(distance<best){best=distance;nearest=y;}
+    // Along the inside of a hairpin both branches shape the same bank.
+    // Blend their cuttings by distance to leave one continuous earth slope.
+    const taper=1-distance/225;
+    const weight=s.length*taper*taper/(3+distance);
+    weights+=weight;
+    elevation+=weight*y;
+  }
+  if(!weights)return ground;
+  const level=nearest+(elevation/weights-nearest)*smooth(.65,2.8,Math.sqrt(best));
+  const blend=(1-smooth(4.5,15,Math.sqrt(best)))*smooth(350,366,x)*(1-smooth(670,689,x));
+  return ground+(level-ground)*blend;
+}
 const hill = (x, z, cx, cz, rx, rz) => exp(-(((x - cx) / rx) ** 2 + ((z - cz) / rz) ** 2));
 export const riverZ = (x) => 18 + 9 * sin(x / 51) + 3.3 * sin(x / 25);
 export const riverHalfWidth = (x) => 8.6 + 1.9 * sin(x / 38 + 0.35) + 0.95 * sin(x / 14);
@@ -163,7 +205,15 @@ function outerHeight(x,z,base) {
     const edge=BOUND-max(abs(x),abs(z));
     ground=-8.8+(ground+8.8)*smooth(0,18,edge);
   }
-  return ground;
+  // A low coastal bluff carries the pagoda. Its northern lip drops away to
+  // the existing beach and its inland slopes meet the forested mountain pass.
+  const u=x-SNOW_TOWN.x,v=z-SNOW_TOWN.z;
+  if(abs(u)<102 && abs(v)<74 && shore>0){
+    const terrace=(8.8-.088*v+.75*sin(u*.037))*smooth(0,15,shore);
+    const blend=(1-smooth(51,102,abs(u)))*(1-smooth(42,74,abs(v)));
+    ground+=(max(ground,terrace)-ground)*blend;
+  }
+  return passHeight(x,z,ground);
 }
 const mapleStreamZ = x => -130 + 3.3*sin((x-292)/15);
 function estuaryTerrain(x,z,native) {
@@ -242,12 +292,22 @@ function landHeight(x, z, expanded = true) {
   return graded;
 }
 // The baths sit in a hand-cut hollow; their waterline is independent of the sea.
-export const SNOW_SPRING = { name:'雪見の大露天風呂', region:'snow', rank:'main', x: -32, z: -292, rx: 13.6, rz: 8.8, level: naturalHeight(-32,-292)-.12 };
+const [bathX,bathZ]=snowPoint(-32,-292);
+export const SNOW_SPRING = { name:'雪見の大露天風呂', region:'snow', rank:'main', x:bathX, z:bathZ, rx:13.6, rz:8.8, level:landHeight(bathX,bathZ)-.12 };
 export const TSUKIMI = { x: -51.7, z: 285.9, yaw: -.15 };
 export function springRadius(x,z) {
   return hypot((x-SNOW_SPRING.x)/SNOW_SPRING.rx,(z-SNOW_SPRING.z)/SNOW_SPRING.rz);
 }
 function groundBeforeBath(x,z) {
+  // The littoral shelf makes a walkable, continuous transition from the
+  // hills through the reed beds into deep swimming water at sea level.
+  if(abs(x-FOREST_LAKE.x)<123 && abs(z-FOREST_LAKE.z)<83) {
+    const r=lakeRadius(x,z);
+    if(r<1.4){
+      const shelf=WATER_Y-7.2*(1-smooth(.17,1,r)) + max(0,r-1)*12;
+      return shelf+(landHeight(x,z)-shelf)*smooth(1.06,1.40,r);
+    }
+  }
   const base=portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight));
   return estuaryTerrain(x,z,kiyomizuTerrain(x,z,mountainStreamTerrain(x,z,mapleApproachHeight(x,z,base))));
 }
@@ -337,8 +397,8 @@ function road(width, knots) {
         tt = t * t,
         ttt = tt * t;
       points.push(
-        [0, 1].map(
-          (k) =>
+        b.map(
+          (_,k) =>
             0.5 *
             (2 * b[k] +
               (-a[k] + c[k]) * t +
@@ -488,6 +548,7 @@ function house(x, z, w, d, wall, roof, yaw = 0, kind = 'cottage', craft) {
       if (!lotGrid.has(key)) lotGrid.set(key,[]);
       lotGrid.get(key).push(b);
     }
+  return b;
 }
 // The inhabited squares remain open around each region's center.
 house(-15, -15, 9, 7, 3.2, 2.8, 0.15, 'cottage', 'tea');
@@ -510,15 +571,21 @@ house(-179, 139, 8, 6.8, 3, 2.6, 0.3, 'cottage', 'net');
 house(-120, 124, 7, 6, 3.2, 2.6, 0.09, 'cottage', 'net');
 house(-34, 49, 6.8, 6, 3.1, 2.5, 0.2, 'shop', 'tea');
 house(35, 61, 8, 6.4, 3, 2.7, -0.3, 'cottage', 'net');
-// The snow capital has a processional avenue, a side market and a pagoda at its head.
-house(-80,-323,13,12,4.4,14.5,.06,'pagoda');
-house(-93,-306,10,8,3.9,3.6,.15,'temple');
-house(-63,-305,9,8,3.6,3.1,-.12,'shop', 'brew');
-house(-99,-281,9.5,7,3.4,3.3,.14,'inn');
-house(-59,-277,9,7.6,3.5,3.3,-.28,'shop', 'dye');
-house(-96,-264,7.6,7,3.2,3.2,.27, 'cottage', 'rice');
-house(-69,-258,8.8,7.5,3.4,3.3,-.24,'shop', 'tea');
-house(-114,-303,8.8,7.5,3.4,3.1,.1, 'cottage', 'ink');
+// Keep the original lot survey for the seeded island woods. Only the new
+// village lots enter the live foundation and collision grids.
+function snowHouse(x,z,...plan) {
+  const b=house(...snowPoint(x,z),...plan);
+  b.oldY=ungradedHeight(x,z);
+  plantingLots.push({...b,x,z,y:b.oldY});
+}
+snowHouse(-80,-323,13,12,4.4,14.5,.06,'pagoda');
+snowHouse(-93,-306,10,8,3.9,3.6,.15,'temple');
+snowHouse(-63,-305,9,8,3.6,3.1,-.12,'shop', 'brew');
+snowHouse(-99,-281,9.5,7,3.4,3.3,.14,'inn');
+snowHouse(-59,-277,9,7.6,3.5,3.3,-.28,'shop', 'dye');
+snowHouse(-96,-264,7.6,7,3.2,3.2,.27, 'cottage', 'rice');
+snowHouse(-69,-258,8.8,7.5,3.4,3.3,-.24,'shop', 'tea');
+snowHouse(-114,-303,8.8,7.5,3.4,3.1,.1, 'cottage', 'ink');
 house(-69,282,7.8,6.6,3.2,2.6,-.34,'temple');
 house(288,160,8.6,6.6,3.3,2.7,.3,'inn');
 export const BUILDINGS = structures;
@@ -590,7 +657,7 @@ const clearings = [
   [10, 40],
   [0, 62],
 ];
-for (const r of ORIGINAL_REGIONS.slice(1)) for (const [dx, dz] of safeOffsets) clearings.push([r.x + dx, r.z + dz]);
+for (const r of plantingRegions.slice(1)) for (const [dx, dz] of safeOffsets) clearings.push([r.x + dx, r.z + dz]);
 const safe = (x, z, r) => clearings.some((p) => (p[0] - x) ** 2 + (p[1] - z) ** 2 < r * r);
 export function seeded(seed) {
   return () => (seed = (Math.imul(1664525, seed) + 1013904223) >>> 0) / 4294967296;
@@ -681,7 +748,7 @@ function populateForest() {
     const x=random()*628-253, z=random()*748-374;
     const riverBank=abs(z-riverZ(x))-riverHalfWidth(x);
     if (originalShore(x,z)<9 || riverBank<10.5 || nearRoad(x,z,2.7)) continue;
-    const region=originalRegionAt(x,z), place=REGIONS[region];
+    const region=originalRegionAt(x,z), place=plantingRegions[region];
     if (hypot(x-place.x,z-place.z)<20 || safe(x,z,5.8)) continue;
     if (plantingLots.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4)) continue;
     if (BRIDGES.some(b=>abs(x-b.x)<b.halfWidth+4 && abs(z-b.z)<b.length/2+4)) continue;
@@ -710,18 +777,19 @@ function populateForest() {
 populateForest();
 // Thin the old planting in place. Bamboo positions and growth habits stay stable
 // across saves, and all sixty crown forms remain represented.
+const originalSpringRadius = (x,z)=>hypot((x+32)/13.6,(z+292)/8.8);
 const isBamboo = t => t.kind === 'bamboo' || t.kind === 'moso';
 const regular = trees.filter(t => !isBamboo(t));
 const keep = new Set(trees.slice(0,10));
 const forms = new Set();
 for (const t of regular) {
-  if (t.form !== undefined && !forms.has(t.form) && springRadius(t.x,t.z)>1.4) {
+  if (t.form !== undefined && !forms.has(t.form) && originalSpringRadius(t.x,t.z)>1.4) {
     forms.add(t.form); keep.add(t);
   }
 }
 for (const t of regular.slice().sort((a,b)=>a.seed-b.seed)) {
   if (keep.size >= Math.ceil(regular.length/2)) break;
-  if (springRadius(t.x,t.z)>1.4) keep.add(t);
+  if (originalSpringRadius(t.x,t.z)>1.4) keep.add(t);
 }
 export function hasAutumnLeaves(tree) {
   return tree.kind === 'ginkgo' || tree.kind === 'larch' ||
@@ -751,6 +819,20 @@ for (const t of emptySites) {
 export const CONNECTING_ROADS = TRADE_ROADS.map(({id,width,knots,destination,origin})=>({
   ...road(width,knots),id,destination,origin,
 }));
+// Retire the old streets after the forest survey. The market road now meets
+// the new lakeside trail; only these walkable paths reach the painter and atlas.
+const lakesideApproach=road(4.1,[[-21,-107],[-36,-104],[-39,-119],[-37,-135],[-58,-150],
+  [-74,-194],[-99,-213],lakePoint(1.96,1.18)]);
+const villageAvenue=road(5.4,[[-78,-250],[-78,-271],[-78,-290],[-78,-308],[-79,-316]].map(([x,z])=>snowPoint(x,z)));
+const bathLane=road(4.1,[[-78,-290],[-62,-290],[-49,-286],[-43,-285]].map(([x,z])=>snowPoint(x,z)));
+villageAvenue.id='snow-avenue';
+bathLane.id='snow-bath-lane';
+lakesideApproach.id='lakeside-approach';
+ROADS.splice(8,2,villageAvenue,bathLane);
+ROADS.push(lakesideApproach);
+roadCells.clear();
+ROADS.forEach(indexRoad);
+[GATES[4].x,GATES[4].z]=snowPoint(GATES[4].x,GATES[4].z);
 const extensions = [...CONNECTING_ROADS, ...KYO_ROADS.map(([width,knots,paved])=>({...road(width,knots),paved})), {width:3.7,points:INARI_ROUTE}];
 for (const avenue of extensions) { ROADS.push(avenue); indexRoad(avenue); }
 for (const args of KYO_BUILDINGS) house(...args);
@@ -804,15 +886,18 @@ function wildTree(x,z) {
   const family=highland ? mountainFamily : lowlandFamily;
   transplant(x,z,family[Math.floor(saplings()*family.length)]);
 }
+// Each transplant consumes a variable number of seed draws. Resume each
+// existing road's survey so rerouting the snow road cannot move other groves.
+const avenueSeeds={'temple-road':0x9b6fcd3e,'peach-pass':0xc3454d7a,'inari-road':0xdcf1d981,
+  'tsuruga-road':0x3cabd4d5,'sakai-road':0x48e975d7};
 for(const avenue of CONNECTING_ROADS) {
-  // Each successful transplant draws its own size and form. Resume the
-  // published survey after the peach road so pruning it cannot move a shrine tree.
-  if(avenue.id==='inari-road')saplings=seeded(0xdcf1d981);
+  if(avenueSeeds[avenue.id])saplings=seeded(avenueSeeds[avenue.id]);
   for(let i=5;i<avenue.points.length;i+=4) {
     const [ax,az]=avenue.points[i];
     for(let k=0;k<5;k++) wildTree(ax+(saplings()-.5)*92,az+(saplings()-.5)*92);
   }
 }
+saplings=seeded(0x76e798de);
 // Woodland masses off the roads follow the aspect of each slope. Broken
 // clusters create openings across the valleys and a distinct high timberline.
 for (const headland of PENINSULAS) {
@@ -941,7 +1026,8 @@ for(const s of RETREATS){
       h:(s.kind==='cedar'?9.3:s.kind==='slate'?4.4:5.7)+i*.54});
   }
 }
-ROCKS.push(...offshoreReefs(terrainHeight,shoreDistance,seeded(0x687063)));
+ROCKS.push(...offshoreReefs(terrainHeight,shoreDistance,seeded(0x687063)),
+  ...WINTER_REEFS.map(r=>({...r,h:r.top-terrainHeight(r.x,r.z)})));
 // Respect the same surveyed yards whatever the seeded planting sequence.
 // Cut after planting so a cleared trunk does not reshuffle distant woods.
 export const KIYOMIZU_ROAD={...road(3.85,KIYOMIZU_APPROACH),paved:true};
@@ -1082,6 +1168,39 @@ for(let i=TREES.length-1;i>=0;i--){
   const t=TREES[i],{x,z}=t;
   if(kiyomizuClearing(x,z) || onTempleApproach(x,z,5.3) || hidesValley(t) ||
     x>=350 && x<=491 && z< -693 && z> -847 && kiyomizuViewTree(x,z,terrainHeight(x,z)+t.h))TREES.splice(i,1);
+}
+// The shoreline replaces the old village clearing. On the coastal terrace,
+// keep the inhabited lots open and leave a window to sea behind the pagoda.
+function inSnowSquare(x,z) {
+  const u=x-SNOW_TOWN.x,v=z-SNOW_TOWN.z;
+  return u> -47 && u<65 && v> -45 && v<41 ||
+    v< -30 && v> -86 && abs(u+2)<18+.24*(-v-30);
+}
+function inLakeBed(x,z) {
+  return abs(x-FOREST_LAKE.x)<100 && abs(z-FOREST_LAKE.z)<63 && lakeRadius(x,z)<1.055;
+}
+for(let i=TREES.length-1;i>=0;i--){
+  const t=TREES[i];
+  if(inLakeBed(t.x,t.z) || inSnowSquare(t.x,t.z))TREES.splice(i,1);
+  else if(t.snow) t.snow=seasonAt(t.x,t.z).snow;
+}
+for(let i=ROCKS.length-1;i>=0;i--){
+  const r=ROCKS[i];
+  const hut=nearbyHut(r.x,r.z);
+  if(inLakeBed(r.x,r.z) || inSnowSquare(r.x,r.z) && !r.winterReef ||
+     hut && clearingWeight(hut,r.x,r.z)>.05)ROCKS.splice(i,1);
+}
+// Wind-pruned pines shelter the outer lanes and frame the winter bay. They
+// use the established pine canopy and its snow-laden branch painting.
+const winterPines=seeded(0x796b69);
+for(let i=0;i<145;i++){
+  const x=SNOW_TOWN.x+(winterPines()-.5)*186,z=SNOW_TOWN.z+(winterPines()-.5)*135;
+  const u=x-SNOW_TOWN.x,v=z-SNOW_TOWN.z;
+  if(inSnowSquare(x,z) || shoreDistance(x,z)<10 || nearRoad(x,z,4.5) || reservedScenery(x,z) ||
+     Math.sin(u*.10+v*.046)+Math.cos(v*.085-u*.039)<-.4 || TREES.some(t=>hypot(x-t.x,z-t.z)<6.7))continue;
+  const tree={x,z,h:4.4+winterPines()*4.3,kind:'pine',snow:seasonAt(x,z).snow,seed:Math.floor(winterPines()*1e6)};
+  // Insert among the original individually-drawn trees, before the instanced groves.
+  TREES.splice(TREES.findIndex(t=>t.form!==undefined),0,tree);
 }
 // Count only the sites left after opening the stage and summit sightlines.
 growNishiyamaBamboo(TREES);
@@ -1279,6 +1398,8 @@ for(const {x,z,yaw} of KYO_FOOD) {
 }
 putSolid(-161.7,-90.6,1.84,.44,1.18,terrainHeight(-161.7,-90.6)+2.08,'roof',true,.44);
 putSolid(-161.7, -90.6, 1.65, 0.24, 1.18, terrainHeight(-161.7, -90.6) + 1.93, 'box', false);
+for(const {x,z,radius,height} of [...LAKE_WILLOWS,...LAKE_ANIMALS])
+  putSolid(x,z,radius,radius,0,terrainMeshHeight(x,z)+height,'oval',false);
 for (const r of ROCKS) putSolid(r.x, r.z, r.rx, r.rz, r.yaw || 0, terrainHeight(r.x, r.z) + r.h, 'oval', true);
 for (const t of TREES)
   putSolid(

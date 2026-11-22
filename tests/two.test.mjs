@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
-import { REGIONS, canLand, groundHeight, BOUND, WATER_Y, ROADS, riverZ, waterDepth, BUILDINGS, wrapDelta } from '../two/terrain.js';
+import { REGIONS, canLand, groundHeight, BOUND, WATER_Y, ROADS, CONNECTING_ROADS, riverZ, waterDepth, BUILDINGS, wrapDelta } from '../two/terrain.js';
 
 function run(game, seconds, input = {}) {
   for (let frame=0; frame<Math.ceil(seconds*60); frame++) game.step(1/60,input);
@@ -343,8 +343,12 @@ test('version-two saves acquire new ports without losing an existing rental or s
 });
 
 test('the outer roads reach all four seasonal landmarks and the coast from the maple valley', () => {
-  for (const [index, required] of [[8,'snow'],[10,'autumn'],[11,'moon'],[12,'dawn'],[13,'autumn']]) {
-    const game = createGame(), p = game.state.player, points = ROADS[index].points;
+  const pass=CONNECTING_ROADS.find(r=>r.id==='capital-road');
+  for (const [points,required] of [
+    [pass.points.slice().reverse(),'snow'],[ROADS[10].points,'autumn'],[ROADS[11].points,'moon'],
+    [ROADS[12].points,'dawn'],[ROADS[13].points,'autumn']
+  ]) {
+    const game = createGame(), p = game.state.player;
     moveTo(game,...points[0]);game.act('kusa');
     for (const [x,z] of points) {
       for (let frame=0;frame<110;frame++) {

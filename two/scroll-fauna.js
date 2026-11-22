@@ -42,9 +42,11 @@ function reachableBough(tree) {
   // A low lateral limb may grow into an adjacent cliff. Reserve the ones
   // with space for the talons and a clear, outward launch above the slope.
   let clear=true;
-  for(let d=0;d<=14;d+=2){
+  // Pad each sounding by half its spacing to cover the swept launch path.
+  const step=.5, radius=.48+step/2;
+  for(let d=0;d<=14;d+=step){
     const x=a.x+sin(a.yaw)*d,z=a.z+cos(a.yaw)*d;
-    if(Math.max(terrainHeight(x,z),solidHeightAt(x,z,.48))+.59>a.y+.58*d){clear=false;break;}
+    if(Math.max(terrainHeight(x,z),solidHeightAt(x,z,radius))+.59>a.y+.58*d){clear=false;break;}
   }
   perchCache.set(tree,clear?a:null);
   return clear?a:null;

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createGame } from '../two/game.js';
-import { BUILDINGS, REGIONS, terrainHeight } from '../two/terrain.js';
+import { BUILDINGS, REGIONS, SNOW_SPRING, groundHeight, terrainHeight } from '../two/terrain.js';
+import { FOREST_LAKE, snowPoint } from '../two/snow-country.js';
 import { COURT } from '../two/retreat-layout.js';
 import { PAGES_ORIGIN, WORKER_ORIGIN, SAVE_KEY, SETTINGS_KEY, decodeTransfer, storeTransfer, transferURL } from '../two/journey-transfer.js';
 
@@ -30,7 +31,7 @@ test('historical six-district saves retain their stamps and acquire stocked new 
   const old=createGame().save();
   old.version=2; old.items.length=36;old.bikes.length=6;old.visited.push('market');
   const loaded=decode(encode(old).hash).game.save();
-  assert.equal(loaded.version,11);
+  assert.equal(loaded.version,12);
   assert.deepEqual(loaded.visited,old.visited);
   assert.equal(loaded.bikes.length,16);
 });
@@ -61,7 +62,7 @@ test('older travellers keep their place inside the relocated court and both shop
     const game=createGame(snap);
     assert.ok(game.restored);
     const next=game.save();
-    assert.equal(next.version,11);
+    assert.equal(next.version,12);
     const reloaded=createGame(next).save().player;
     for(const key of ['x','y','z','heading'])close(reloaded[key],next.player[key]);
     return next.player;
@@ -81,4 +82,40 @@ test('older travellers keep their place inside the relocated court and both shop
   snap.version=6;snap.items.length=62;snap.bikes.length=14;
   const firstHall=resume(162,-867,4.06465+1.05);
   close(firstHall.x,COURT.x);close(firstHall.z,COURT.z+5);
+});
+
+test('a v11 traveller on the snow pagoda resumes on the same roof facing the winter sea',()=>{
+  const tower=BUILDINGS.find(b=>b.snow && b.kind==='pagoda');
+  const [x,z]=snowPoint(-78.8,-322);
+  const roof=groundHeight(x,z,Infinity);
+  const journal=createGame().save();
+  journal.version=11;
+  Object.assign(journal.player,{x:-78.8,z:-322,y:roof-tower.y+7.73876478562608,h:0,heading:.14});
+  journal.visited.push('snow');
+  const game=createGame(journal);
+  assert.ok(game.restored);
+  assert.deepEqual([game.state.player.x,game.state.player.z],[x,z]);
+  assert.ok(Math.abs(game.state.player.y-roof)<1e-8);
+  assert.equal(game.state.player.heading,.14);
+  assert.deepEqual(game.state.visited,journal.visited);
+  assert.deepEqual(createGame(game.save()).save().player,game.save().player);
+});
+
+test('the old snow bath carries its bather, while a new journey at the lake stays in the water',()=>{
+  const journal=createGame().save();
+  journal.version=11;
+  journal.lastBath='onsen-48';
+  Object.assign(journal.player,{x:-32,z:-292,y:8.353011637113925,h:0,activity:'bath',activityTime:2});
+  const moved=createGame(journal);
+  assert.equal(moved.save().lastBath,journal.lastBath);
+  assert.deepEqual([moved.state.player.x,moved.state.player.z],[SNOW_SPRING.x,SNOW_SPRING.z]);
+  assert.equal(moved.state.player.activity,'bath');
+
+  const lakeJournal=createGame().save(),{x,z}=FOREST_LAKE;
+  Object.assign(lakeJournal.player,{x,z,h:0,y:groundHeight(x,z),grounded:true});
+  const lake=createGame(lakeJournal);
+  assert.equal(lake.state.onLake,true);
+  assert.equal(lake.state.player.inWater,true);
+  assert.deepEqual([lake.state.player.x,lake.state.player.z],[x,z]);
+  assert.deepEqual(lake.state.visited,lakeJournal.visited);
 });

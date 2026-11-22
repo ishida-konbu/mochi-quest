@@ -5,7 +5,7 @@ export function wrapWorld(value, bound=WORLD_BOUND) {
   return value >= -bound && value < bound ? value : ((value+bound)%(2*bound)+2*bound)%(2*bound)-bound;
 }
 
-// The first ten sights retain their surveyed coordinates. The five outer districts
+// The five outer districts
 // keep their streets and doorways at walking scale while their centres move apart.
 export const FIFTH_EDITION_CENTRES = Object.freeze({
   kyo:     { x: 120, z: -424 },

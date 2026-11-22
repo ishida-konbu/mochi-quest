@@ -129,12 +129,20 @@ function mountainSky(scene, panorama) {
         float relief=smoothstep(.46,.70,maria);
         vec3 lunarColor=mix(vec3(1.30,1.20,.9),vec3(.83,.79,.66),relief*.77);
         sky=mix(sky,lunarColor,(1.-smoothstep(radius-.001,radius+.001,moonDist))*night);
-        sky=mix(sky,mix(vec3(1.12,.60,.30),vec3(1.48,1.15,.69),dawn),
+        vec3 dayDisk=mix(vec3(1.12,.60,.30),vec3(1.18,1.15,1.025),snow);
+        sky=mix(sky,mix(dayDisk,vec3(1.48,1.15,.69),dawn),
                     (1.-smoothstep(.028,.030,sunDist))*(1.-night));
-        // Low distant mountains dissolve toward the open east-facing sea.
-        float seaOpening=dawn*smoothstep(.18,.83,ray.x);
+        // A low bank of cold cloud meets the horizon out beyond the northern bay.
+        float winterOpening=snow*smoothstep(.08,.69,dot(ray.xz,vec2(.16,-.987)));
+        float seaOpening=max(winterOpening,dawn*smoothstep(.18,.83,ray.x));
         float v=.20+elevation*(3.30+seaOpening*13.);
         float u=angle/3.14159265+.095;
+        // Long, low cloud banks run offshore. A nearly level underside and
+        // torn upper edge give them the uneven dry brush of a distant wash.
+        vec2 wind=vec2(ray.x*4.2+ray.z*1.9+clock*.0018,elevation*26.);
+        float stratus=.55*noise2(wind)+.32*noise2(wind*vec2(2.7,1.9))+.13*noise2(wind*5.2);
+        float band=smoothstep(.036,.089,elevation)*(1.-smoothstep(.125,.251,elevation));
+        sky=mix(sky,vec3(.48,.596,.68),winterOpening*band*smoothstep(.35,.75,stratus)*.29);
         vec3 scan=texture2D(ridges,vec2(u,clamp(v,.006,.995))).rgb;
         float value=dot(scan,vec3(.28,.56,.16));
         float ridge=smoothstep(.08,.87,1.-value/.61)*(1.-smoothstep(.87,1.02,v));
@@ -217,7 +225,9 @@ export function createAtmosphere(scene) {
       dome.material.uniforms.horizonInk.value=1-Math.max(.70*peachAir,.42*clearAir,.42*hillView);
       const openAir=.0057-Math.max(.0025*clearAir,.00415*hillView);
       const valleyAir=.0062-.0016*THREE.MathUtils.smoothstep(player.y,28,90);
-      scene.fog.density = THREE.MathUtils.lerp(openAir,valleyAir,peachAir) + .003*s.snow - .0008*s.dawn;
+      // Clear salt air leaves the fishing sail and ink-coloured reefs legible
+      // from the pagoda. Snow is still visible on the inland approach.
+      scene.fog.density = THREE.MathUtils.lerp(THREE.MathUtils.lerp(openAir,valleyAir,peachAir),.0048,s.snow) - .0008*s.dawn;
       scene.environmentIntensity = 0.67 - 0.51 * s.moon;
       return valleyView;
     },

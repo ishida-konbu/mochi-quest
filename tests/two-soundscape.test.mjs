@@ -36,7 +36,7 @@ test('footfall surfaces follow water, bridge decks and snow', () => {
   const b = BRIDGES[1], deck = here(b.x, riverZ(b.x));
   assert.equal(footSurface(deck), 'wood');
   assert.equal(footSurface({ ...deck, inWater: true }), 'water');
-  const snow = here(-80, -293);
+  const snow = region('snow');
   assert.equal(seasonAt(snow.x, snow.z).snow, 1);
   assert.equal(footSurface(snow), 'snow');
 });

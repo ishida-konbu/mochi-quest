@@ -1,4 +1,5 @@
 import { MOUNTAIN_STREAMS } from './mountain-streams.js';
+import { FOREST_LAKE, lakePoint, lakeRadius } from './snow-country.js';
 import { isNishiyamaTree } from './mountain-woodland.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { DAIBUTSU, INARI_SANCTUARY, PEACH_TREES } from './pilgrimage-layout.js';
@@ -25,7 +26,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=sakuragawa-yumeguri', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=winter-coast', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -75,6 +76,50 @@ function stampOtowa(g){
   g.restore();
 }
 
+// Two broken hairlines pick out the shallows. Leave a wide reserve of
+// unmarked paper-water between the reed beds, even on the travelling map.
+function paintLake(g) {
+  g.save();
+  g.lineCap='round';
+  const x=toX(FOREST_LAKE.x),z=toX(FOREST_LAKE.z);
+  // Print the shoreline at the atlas resolution. Using the four-metre
+  // contour cells for its edge would leave square notches in the small map.
+  g.save();
+  g.translate(x,z);g.scale(FOREST_LAKE.rx*adj,FOREST_LAKE.rz*adj);
+  const wash=g.createRadialGradient(-.08,.10,.09,0,0,1.13);
+  wash.addColorStop(0,'#8eaead');wash.addColorStop(.68,'#9dbaaf');wash.addColorStop(1,'#b9cbb5');
+  g.beginPath();
+  for(let i=0;i<160;i++){
+    const [u,v]=lakePoint(Math.PI*i/80);
+    const dx=(u-FOREST_LAKE.x)/FOREST_LAKE.rx,dz=(v-FOREST_LAKE.z)/FOREST_LAKE.rz;
+    if(i===0)g.moveTo(dx,dz);else g.lineTo(dx,dz);
+  }
+  g.closePath();g.fillStyle=wash;g.fill();
+  g.restore();
+  g.strokeStyle='#829d8aab';g.lineWidth=.8;g.stroke();
+  for(const [start,end,radius,tint] of [
+    [.14,1.09,.94,'#dfdfc580'],[1.22,2.03,.93,'#e4e5ce9c'],
+    [2.32,3.01,.95,'#65817a84'],[3.19,4.05,.91,'#e0e5ce80'],
+    [4.20,5.35,.96,'#70867a94'],[5.6,5.92,.87,'#e0e5ce80']
+  ]) {
+    g.beginPath();
+    for(let i=0;i<=32;i++){
+      const [x,z]=lakePoint(start+(end-start)*i/32,radius);
+      if(i===0)g.moveTo(toX(x),toX(z));else g.lineTo(toX(x),toX(z));
+    }
+    g.lineWidth=.85;g.strokeStyle=tint;g.stroke();
+  }
+  const rng=seeded(241061);
+  for(let i=0;i<14;i++){
+    const [x,z]=lakePoint(rng()*Math.PI*2,.18+.6*rng());
+    const u=toX(x),v=toX(z),w=1.1+2.1*rng();
+    g.beginPath();g.moveTo(u-w,v);
+    g.quadraticCurveTo(u-.34*w,v+.6,u+w,v-.2);
+    g.strokeStyle=i%3?'#dde0c980':'#53797b75';g.lineWidth=.8;g.stroke();
+  }
+  g.restore();
+}
+
 export function paintMapPaper() {
   const c = document.createElement('canvas');
   c.width = c.height = SIZE;
@@ -91,7 +136,7 @@ export function paintMapPaper() {
     const inRanges=westRidgeHeight(x,z)>3 || (x>peach.west && x<peach.east && z>peach.north && z<peach.south) ||
       z<DISTRICTS.kyo.z+140 && (Math.abs(x-KITAYAMA.x)<380 && z<DISTRICTS.kyo.z-75 ||
       Math.abs(z-HIGASHIYAMA.z)<320 && x>DISTRICTS.kyo.x+115);
-    if (a < WATER_Y) {
+    if (a < WATER_Y && lakeRadius(x,z)>1.3) {
       const depth = Math.min(1, Math.max(0, -a / 28));
       g.fillStyle = 'rgb('+[169-79*depth,193-53*depth,183-40*depth].map(Math.round).join(',')+')';
     } else {
@@ -128,6 +173,7 @@ export function paintMapPaper() {
     }
   }
   g.lineWidth=.9;g.strokeStyle='#726d5275';g.stroke(contours);
+  paintLake(g);
   // Tiny tapering ink strokes pick out real stands of trees at atlas scale.
   // The ground survey supplies the facing of the dry-brush marks on rock.
   const culms=new Path2D('M-.14,0 Q-.10,-.50 -.21,-.96 M.13,0 Q.15,-.48 .32,-1.10');
@@ -327,7 +373,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   // their labels out into the margins on short callouts.
   const callouts=[
     [4,30,'center'],[-18,-3,'right'],[-7,-24,'right'],[4,-30,'center'],
-    [17,-10,'left'],[-15,9,'right'],[-8,-17,'center'],[19,-2,'left'],
+    [17,-10,'left'],[-15,9,'right'],[14,-20,'left'],[19,-2,'left'],
     [-2,23,'center'],[17,9,'left'],
     [14,-20,'left'],[-5,29,'center'],[0,22,'center'],[0,22,'center'],[17,0,'left'],[18,0,'left'],[-16,0,'right'],
   ];

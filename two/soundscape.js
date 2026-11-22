@@ -1,5 +1,6 @@
 // The original synthesis and mixer in this module are released under CC0-1.0.
 // The field recordings and foley have separate credits in ../audio/CREDITS.txt.
+import { FOREST_LAKE, lakeRadius } from './snow-country.js';
 import { REGIONS, bridgeAt, nearRoad, overheadHeight, riverHalfWidth, riverZ, seasonAt,
   shoreDistance, wrapDelta } from './terrain.js';
 import { kyoNight, kyoInfluence } from './kyo-layout.js';
@@ -30,6 +31,7 @@ export function landscapeMix(p, season = seasonAt(p.x, p.z)) {
   const coast = reach(Math.max(0, shoreDistance(p.x, p.z)), 78);
   const bank = Math.max(0, Math.abs(p.z - riverZ(p.x)) - riverHalfWidth(p.x));
   const river = reach(bank, 64) * (1 - coast);
+  const lakeshore = reach(Math.abs(lakeRadius(p.x,p.z)-1)*FOREST_LAKE.rz,26);
   const creek = proximity(p, places.autumn, 44) * reach(Math.abs(p.z + 130 - 3.3 * Math.sin((p.x - 292) / 15)), 23);
   let falls=0;
   for(const {fall} of MOUNTAIN_STREAMS){
@@ -42,7 +44,7 @@ export function landscapeMix(p, season = seasonAt(p.x, p.z)) {
   const high = reach(Math.max(0, p.h - 2), 38);
   return {
     bamboo: (.27 + .13 * proximity(p, places.shrine, 95)) * hush * (1 - .75 * coast) * high,
-    river: Math.max(.40 * Math.max(river, creek) * high, .76 * falls),
+    river: Math.max(.40 * Math.max(river, creek, .44*lakeshore) * high, .76 * falls),
     wind: .045 + .32 * season.snow + .16 * season.autumn + .09 * coast + .15 * (1 - high),
     crickets: (.29 * season.moon + .075 * season.autumn) * high,
     shore: .53 * coast * (.45 + .55 * high),

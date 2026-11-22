@@ -82,7 +82,7 @@ export function meadowMaterial(art) {
         ground=mix(ground,vec3(.25,.27,.148)*(.56+1.7*luma),vSeasons.z*.65);
         float snowCover=smoothstep(.035,.96,vSeasons.x+(luma-.24)*.20);
         vec3 snow=mix(vec3(.65,.77,.85),vec3(.94,.96,.98),wash*.47+clamp(luma,0.,.53));
-        ground=mix(ground,snow,snowCover);
+
         vec3 mark=vec3(0.);
         if(vScroll>.001 || vRidge>.001) mark=readGround(impressions,stamps,dx,dy,.83);
         if(vScroll>.001) {
@@ -143,6 +143,11 @@ export function meadowMaterial(art) {
           vec3 hillside=painting*mix(1.,bristle,close)*(1.-close*fineInk*.68);
           ground=mix(ground,hillside,vRidge*(1.-.18*close));
         }
+        // Snow catches on broad shelves. A little dry ink shows through
+        // its paper-white wash on wind-scoured ledges and steep rock faces.
+        float ledge=smoothstep(.14,.55,incline);
+        snow*=1.-ledge*(.13+.29*mark.g)-.044*mark.r;
+        ground=mix(ground,snow,snowCover*(1.-.39*ledge));
         diffuseColor.rgb *= ground;
       `,
       );

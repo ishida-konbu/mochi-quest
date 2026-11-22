@@ -3,7 +3,7 @@ import { sitePoint } from './retreat-layout.js';
 
 const clearings=[
   ['peach-hearth','charcoal','桃山道の炭焼き小屋',-305,-140,-.319],
-  ['snow-hearth','charcoal','雪街道の炭焼き小屋',-132,-217,1.856,65],
+  ['snow-hearth','charcoal','湖畔の炭焼き小屋',-132,-217,1.856,65],
   ['capital-hearth','charcoal','京へ上る炭焼き小屋',187,-690,-2.312,66],
   ['temple-hearth','charcoal','大仏道の炭焼き小屋',216,548,2.218,67],
   ['west-beach','fisher','西浜の漁師小屋',-235,-10,-.795,68],
@@ -28,7 +28,7 @@ export const WAYSIDE_HUTS=clearings.map(([id,kind,name,x,z,yaw,inventorySlot,ban
 // Surveyed from the painted road centrelines, with the bench facing passing travellers.
 export const CHAYA_SITES=[
   ['川風の団子茶屋',65.65,94.54,2.8259,'桜団子','桜葉茶','#efb4a9'],
-  ['雪解けの団子茶屋',47.85,-366.70,-1.8649,'きなこ団子','ほうじ茶','#d6ab70'],
+  ['峠口の団子茶屋',47.85,-366.70,-1.8649,'きなこ団子','ほうじ茶','#d6ab70'],
   ['薄野の団子茶屋',105.94,336.96,-.5265,'月見団子','番茶','#f7e4b5'],
   ['桃山の団子茶屋',-368.68,-121.03,.3754,'よもぎ団子','山茶','#a0b685'],
   ['稲荷道の団子茶屋',365,-696.22,2.4075,'みたらし団子','煎茶','#c5894b'],

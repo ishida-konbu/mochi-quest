@@ -474,8 +474,16 @@ function updateCamera(dt, snap = false) {
   const orbitPitch = photoMode ? pitch : Math.max(0, pitch);
   const shoulder=scenery*Math.min(1,camera.aspect)*Math.min(1,d/5);
   const dx = sx * Math.cos(orbitPitch) * d + sz*1.58*shoulder,
-    dy = Math.sin(orbitPitch) * d + (photoMode ? 0.1 : 0.62),
     dz = sz * Math.cos(orbitPitch) * d - sx*1.58*shoulder;
+  let dy = Math.sin(orbitPitch) * d + (photoMode ? 0.1 : 0.62);
+  // Looking across the lake puts the camera uphill from the traveller.
+  // Lift the arm to clear the bank before testing it against trunks or walls.
+  if (state.onLake && !photoMode && !p.diveDepth) {
+    for(const t of [.25,.5,.75,1]){
+      const bank=landscapeFloor(focus.x+t*dx,focus.z+t*dz);
+      dy=Math.max(dy,Math.min(d,(bank+.45-focus.y)/t));
+    }
+  }
   let fraction = 1;
   // While the grass mochi is inside a trunk, start the camera ray on the
   // outward side of that trunk. A second wall still shortens the camera arm.
@@ -533,6 +541,7 @@ const shortScore = new Intl.NumberFormat('ja-JP', { notation:'compact', maximumF
 let lastScore = -1;
 function updateHUD() {
   $('region').textContent = state.region;
+  $('region').parentElement.hidden = !!state.onLake;
   $('delivered-count').textContent = (state.delivered?.size || 0) + ' / ' + (state.recipientTotal ?? state.npcs.length);
   cards.get('kagami').hidden = !state.kagamiUnlocked;
   if(trackedAnimal && state.delivered.has(trackedAnimal.id)) {
@@ -722,7 +731,7 @@ function journalDialog() {
       print.style.backgroundSize='contain';
     } else if (SPECIES[type]) {
       const drawing = beastDrawing(type);
-      print.style.backgroundImage="url('./assets/residents/beasts.webp')";
+      print.style.backgroundImage="url('./assets/residents/"+BEASTS.atlas+"')";
       const [angle,box,cx,cy] = {
         monkey:[1,63,44,50], bird:[1,61,54,43], fox:[2,72,54,49], tiger:[2,73,54,50],
         dragon:[2,80,52,43], kirin:[1,67,52,53], deer:[1,73,46,46], boar:[2,73,46,53], shishi:[1,68,47,48],
@@ -772,7 +781,7 @@ function selectMap(id) {
     ' m　 ·　 ' +
     (state.visited.includes(id) ? '御朱印を獲得済み' : '未訪問の名所');
   const landmarks = {
-    snow: '御朱印所の東に大きな露天風呂。雪だるまの並ぶ参道から湯気が見えます。',
+    snow: '花の京から北東の峠を越えると、雪灯りの街です。参道の五重塔に登り、北を向くと冬の海。御朱印所の東には雪見の大露天風呂があります。',
     autumn: '楓の枝が重なる谷道。紅葉をくぐって峡へ。',
     moon: '北の空には十五夜の月。薄のそばの三方に近づくと、月見団子を食べられます。',
     dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。',

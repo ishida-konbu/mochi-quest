@@ -7,14 +7,14 @@ const tigerRanges = {
   spring:   [175, -226, 5.8, .85],
   terraces: [105, 217, 6.5, -.38],
   coast:    [-131, 212, 7.2, .55],
-  snow:     [-187, -297, 5.8, .31],
+  snow:     [764, -1009, 5.8, .31],
   autumn:   [217, -207, 6.5, -.74],
   moon:     [-150, 337, 7.2, .48],
   dawn:     [240, 245, 5.8, -.53],
 };
-// The two shishi guard separate wooded ridges beyond the snow capital and
+// The two shishi guard separate wooded ridges beyond the winter town and
 // upstream of the maple gorge. Neither shares a courtyard or shrine gate.
-const shishiRanges = [[47, -309, 5.4, -.27], [296, -239, 5.4, .45]];
+const shishiRanges = [[627, -1150, 5.4, -.27], [296, -239, 5.4, .45]];
 
 export function predatorRange(n) {
   const entry = n.type === 'shishi' ? shishiRanges[n.variant] : tigerRanges[n.habitat];

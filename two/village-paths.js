@@ -1,6 +1,6 @@
 // Plan the whole trip before an animal sets out. A traveller can be streamed
 // out or restored at any point on the circuit without jumping across a trunk.
-import { BUILDINGS, BRIDGES, GATES, MARKET_STALLS, REGIONS, TREES, SHRINE_BAMBOO, gateFooting, regionAt, solidHeightAt, terrainHeight, waterDepth, groundHeight, nearRoad } from './terrain.js';
+import { SNOW_SPRING, BUILDINGS, BRIDGES, GATES, MARKET_STALLS, REGIONS, TREES, SHRINE_BAMBOO, gateFooting, regionAt, solidHeightAt, terrainHeight, waterDepth, groundHeight, nearRoad } from './terrain.js';
 import { buildingCraft, roomPlan } from './architecture.js';
 import { KADOMATSU, POUNDING } from './festival.js';
 import { predatorRange, patrolAt } from './predator-trails.js';
@@ -59,7 +59,12 @@ export function canopyHeight(x,z,pad) {
 }
 function registerVillageObjects(objects) {
   for(const o of objects) {
-    if(o.grand) continue;
+    if(o.grand){
+      // Reserve the bathing hollow and the walk in from its western lane.
+      for(const offset of [-.59,0,.59])
+        indexDisc(fixtures,o.x+SNOW_SPRING.rx*offset,o.z,SNOW_SPRING.rz+1.25);
+      continue;
+    }
     indexDisc(fixtures,o.x,o.z,o.type==='onsen'?2.65:o.type==='tsukimi'?1.55:o.type==='port'?1.42:.61);
   }
 }

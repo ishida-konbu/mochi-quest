@@ -9,6 +9,7 @@ import { dressSeaports } from './seaports.js';
 import { createOceanShips } from './ocean-ship-art.js';
 import { dressWardShop } from './kyo-market.js';
 import { createMountainWaterfalls } from './mountain-waterfalls.js';
+import { createLakeShore } from './lake-shore.js';
 import { dressOutcrops } from './outcrops.js';
 import { DISTRICTS,TERRAIN_TILES,TERRAIN_SUBDIVISIONS } from './geography.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
@@ -28,8 +29,11 @@ import { roofShell, atticWalls, timberLining } from './roof-shell.js';
 import { wetStone } from './stone-water.js';
 import { prepareForest } from './forest.js';
 import { furnishRoom } from './interiors.js';
+import { FOREST_LAKE, SNOW_PASS, lakeRadius, lakeRadiusGLSL } from './snow-country.js';
 import * as THREE from './vendor/three.module.min.js';
 import { dressSeasonalPlaces, seasonalWeather } from './seasons.js';
+import { winterSurfGLSL } from './winter-surf.js';
+import { winterPagodaRoof } from './winter-coast.js';
 import { POUNDING } from './festival.js';
 import { createMochiPounding } from './actors.js';
 import { dressPlaces } from './places.js';
@@ -210,7 +214,8 @@ function* landscape(scene, art) {
         const radius=tree.h*.67+2.3;
         canopy=max(canopy,1-((x-tree.x)**2+(z-tree.z)**2)/(radius*radius));
       }
-      surface.push(canopy,max(max(0,1-abs(river-.2)/7.3),max(0,min(1,(7.6-coast)/8.2))));
+      const lakeBank=max(0,1-abs(lakeRadius(x,z)-1)*FOREST_LAKE.rz/4.8);
+      surface.push(canopy,max(lakeBank,max(0,1-abs(river-.2)/7.3),max(0,min(1,(7.6-coast)/8.2))));
       scroll.push(scrollCoverage(x,z));
       seasonAt(x,z,season);
       seasons.push(season.snow,season.autumn,season.moon, season.dawn*max(0,min(1,(30-coast)/23)));
@@ -346,6 +351,7 @@ function makeWater(scene, art, panorama) {
       uniform vec4 skiffPlacement[${RIVER_SKIFFS.length}];
       varying vec3 vWorld;
       ${hullWaterGLSL}
+      ${lakeRadiusGLSL}
       #include <fog_pars_fragment>
       float hash(vec2 v){return fract(sin(dot(v,vec2(41.23,73.11)))*21314.5);}
       float curl(vec2 at,float phase){
@@ -360,6 +366,7 @@ function makeWater(scene, art, panorama) {
         float line=(1.-smoothstep(width,width+antialias,abs(edge)))*(1.-smoothstep(.64,1.,abs(tip)));
         return line*smoothstep(.31,.78,hash(cell+2.03));
       }
+      ${winterSurfGLSL}
       void main(){
         vec2 p=mod(vWorld.xz+float(${BOUND}),float(${2*BOUND}))-float(${BOUND});float t=clock;
         float margin=hullMargin(p,(vWorld.y-${WATER_Y - HULL_DRAFT})/${HULL_HEIGHT});
@@ -381,6 +388,11 @@ function makeWater(scene, art, panorama) {
             }}`).join('\n')}
         float inside=max(halfBank-abs(p.y-river),-shoreDist);
         if (p.x>278. && p.y < -104. && p.y > -152.) inside=max(inside,3.1+3.8*tide-abs(p.y+130.-3.3*sin((p.x-292.)/15.)));
+        float lake=2.;
+        if(all(lessThan(abs(p-vec2(${FOREST_LAKE.x}.,${FOREST_LAKE.z}.)),vec2(${FOREST_LAKE.rx*2}.,${FOREST_LAKE.rz*2}.)))){
+          lake=lakeRadius(p);
+          inside=max(inside,(1.-lake)*${FOREST_LAKE.rz}.);
+        }
         float depth=smoothstep(-1.8,6.8,inside);
         vec2 along=normalize(vec2(1.,(9./51.)*cos(p.x/51.)+(3.3/25.)*cos(p.x/25.)));
         vec2 uv=vec2(dot(p,along),p.y-river);
@@ -438,6 +450,7 @@ function makeWater(scene, art, panorama) {
         col=mix(col,foam,.25*(1.-smoothstep(.012,.059,abs(margin-.086+.013*slow)))*(.52+.41*sidle));
         float under=(1.-smoothstep(3.5,5.1,abs(p.x+.4*sidle)))*smoothstep(-.4,2.,inside);
         col*=1.-under*.19;
+        col=winterWater(col,p,shoreDist,depth,glint,fresnel,t);
         vec3 nightWater=mix(vec3(.015,.035,.075),vec3(.080,.12,.19),fresnel+glint*.17);
         col=mix(col,nightWater,climate.z);
         vec3 dawnWater=mix(vec3(.075,.183,.221),vec3(.52,.355,.32),fresnel*1.18);
@@ -453,6 +466,34 @@ function makeWater(scene, art, panorama) {
         // gravel. Deep channels and grazing-angle reflections close the wash.
         float opacity=mix(.51,.995,smoothstep(-.8,5.3,inside));
         opacity=mix(opacity,1.,clamp(fresnel*.79+glint*.24+shore*.20,0.,1.));
+        if(lake<1.06){
+          // Freshwater retains the pale paper of the sky between wind lanes.
+          // The shallow ochre shelf gives way to celadon and then blue ink.
+          float shoal=smoothstep(.4,9.,inside);
+          float stroke=curl((p+vec2(t*.12,.22*slow))*vec2(.18,1.37),t*.33);
+          float wash=.5+.5*sin(p.y*.10+.76*sin(p.x*.064)+.10*slow);
+          // Low banks reflect well into a horizontal view. Seen from above,
+          // the same reach opens up to show deep blue-green pigment.
+          vec2 lakeAxes=vec2(${FOREST_LAKE.rx}.,${FOREST_LAKE.rz}.);
+          vec2 basin=(p-vec2(${FOREST_LAKE.x}.,${FOREST_LAKE.z}.))/lakeAxes;
+          vec2 ray=heading/lakeAxes;
+          float r=clamp(length(basin)/max(.001,lake),.84,1.2);
+          float b=dot(ray,basin),a=dot(ray,ray);
+          float bankRange=(sqrt(max(0.,b*b+a*(r*r-dot(basin,basin))))-b)/max(.00001,a);
+          vec2 beyond=p+heading*bankRange;
+          float bankTop=5.+2.8*sin(beyond.x*.082+beyond.y*.064);
+          float bankWash=(1.-smoothstep(0.,bankTop,max(0.,bankRange)*-eye.y/max(.09,length(eye.xz))))*shoal;
+          vec3 quiet=mix(bed*vec3(.92,1.02,.91),mix(vec3(.058,.145,.147),vec3(.122,.245,.207),wash*.78),shoal*.90);
+          quiet=mix(quiet,vec3(.074,.120,.101),bankWash*.38);
+          quiet=mix(quiet,mirror*vec3(.51,.61,.60),.056+fresnel*.22);
+          quiet+=vec3(.063,.079,.073)*(hair*.16+glint*.23+stroke*.85);
+          float littoral=abs(inside-1.18-.18*sidle);
+          float rim=(1.-smoothstep(.045,.18+min(.35,fwidth(inside)),littoral))
+            *smoothstep(-.1,.84,sin(p.x*.58+p.y*.33)+.35*slow);
+          quiet*=1.-.16*rim;
+          col=mix(quiet,foam,shore*.26);
+          opacity=mix(.10,.984,shoal)+.014*fresnel;
+        }
         if (!gl_FrontFacing) {
           // From below, moving folds of light replace the reflected mountains.
           float zenith=clamp(eye.y,0.,1.);
@@ -1364,7 +1405,7 @@ function building(p, b, index) {
       part(top?'pagodaCrownWalls':j?'pagodaWalls':'pagodaFootWalls',0,eave,0,r.width,r.rise/tower.scale,r.depth,
         '#c7b79a',p.workshopArt.clay);
       part(top?'pagodaCrown':'pagodaRoof',0,eave,0,r.width,r.rise/tower.scale,r.depth,
-        b.snow?'#e6f0ef':'#7b8079',b.snow?p.solid:p.roofs);
+        b.snow?'#e6f0ef':'#7b8079',b.snow?winterPagodaRoof(p):p.roofs);
     }
     const apex=tower.storeys[4].y+4.64;
     part('round',0,apex+1.61,0,.088,3.38,.088,'#565747',p.bronze);
@@ -1661,8 +1702,20 @@ function touchesPaving(x, z, radius) {
     return along >= -radius && along <= s.length + radius && abs(across) <= s.half + radius;
   });
 }
-export function dressRoadGravel(p, r) {
+// Existing lanes share a seeded print. Reserve the six draws per dry stone
+// from the old street surveys, then give each rerouted lane its own print.
+const formerGravelSites=new Map([
+  ['snow-avenue',30],['snow-bath-lane',10],['capital-road',81],
+  ['lakeside-approach',0],['inland-road',0],
+]);
+export function dressRoadGravel(p, originalRoll) {
   for (const road of ROADS) {
+    let r=originalRoll;
+    if(formerGravelSites.has(road.id)){
+      for(let draws=formerGravelSites.get(road.id)*6;draws>0;draws--)originalRoll();
+      const [x,z]=road.points[0];
+      r=seeded(Math.round(x*823+z*163));
+    }
     for (let i = 2; i < road.points.length; i += 4) {
       const [x, z] = road.points[i],
         q = road.points[i - 1],
@@ -1712,8 +1765,8 @@ function wayMarker(p, x, z, glyph, angle = 0) {
   );
 }
 function roadsideInscriptions(p) {
-  for (const road of CONNECTING_ROADS) {
-    const mark=road.points[6], before=road.points[5], after=road.points[7];
+  function sign(road,i) {
+    const mark=road.points[i], before=road.points[i-1], after=road.points[i+1];
     const angle=Math.atan2(after[0]-before[0],after[1]-before[1]);
     const verge=road.width*.5+1.25;
     const x=mark[0]+cos(angle)*verge, z=mark[1]-sin(angle)*verge, y=h(x,z);
@@ -1726,11 +1779,21 @@ function roadsideInscriptions(p) {
         c.lineWidth=2;c.strokeStyle='#927a51';c.strokeRect(5,5,w-10,h-10);
         c.font='bold 51px "Hiragino Mincho ProN","Yu Mincho",serif';
         c.fillStyle='#443d32';c.textBaseline='middle';c.textAlign='center';
-        c.fillText(label+'ヘ',w*.49,h*.53,w*.85);
+        c.fillText(label+'へ',w*.49,h*.53,w*.85);
         c.fillStyle='#a55b40';c.fillRect(w*.92,h*.67,9,11);
       });
       const ink=new THREE.MeshLambertMaterial({map:writing});
       p.part('plane',x+.073*sin(face),y+1.73,z+.073*cos(face),2.07,.666,1,'#fff',face,0,0,ink,false);
+    }
+  }
+  for (const road of CONNECTING_ROADS) {
+    sign(road,6);
+    if(road.id==='capital-road'){
+      // Travellers coming out of Kyoto see the name of the snowy street on
+      // the near face at the fork; the reverse directs arrivals to the city.
+      const [u,v]=SNOW_PASS.at(-1);
+      const fork=road.points.findIndex(([x,z])=>x===u && z===v);
+      if(fork>0 && fork<road.points.length-1)sign(road,fork);
     }
   }
 }
@@ -1951,6 +2014,7 @@ export function* prepareWorld(scene) {
   dressRyugu(painter);
   yield;
   const updateWaterfalls=createMountainWaterfalls(scene);
+  const updateLake=createLakeShore(scene);
   const updateShrines=pilgrimageLife(scene), updatePalace=createRyuguLife(scene);
   const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene), updateHuts=createWaysideHuts(scene);
   const updateLamps=painter.lamps.finish(scene,landGroup);
@@ -1985,6 +2049,7 @@ export function* prepareWorld(scene) {
         updateTrade(time,player,camera);
         updateHuts(player);
         updateWaterfalls(time,player,camera);
+        updateLake(time,player);
         updateOcean(voyageTime,player);
         updatePalace(time,player,camera,voyageTime);
         updateForest(camera, player);
