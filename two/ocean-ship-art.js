@@ -2,7 +2,7 @@ import { dressedRiceFace } from './mochi-model.js';
 import { traveller } from './travelling-merchants.js';
 import * as T from './vendor/three.module.min.js';
 import { FLEET,vesselPose,hullWidth,hatch,stairTops,stepDepth } from './ocean-voyage.js';
-import { SEAPORTS,portPoint,DECK_Y,HOLD_Y,QUAY_Y } from './seaport-layout.js';
+import { QUAY_MERCHANTS,DECK_Y,HOLD_Y } from './seaport-layout.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { brushWash } from './scroll-sculpt.js';
 import { wrapDelta } from './terrain.js';
@@ -301,11 +301,11 @@ function shipScene(ship,L){
 export function createOceanShips(scene){
   library??=buildLibrary();
   const ships=FLEET.map(ship=>{const model=shipScene(ship,library);scene.add(model.root);return {...model,ship,pose:{}};});
-  const hands=SEAPORTS.flatMap(port=>[[-8.4,4.8],[16.6,-6.5],[-25.3,23.5]].map(([u,v],i)=>{
-    const hand=deckhand(library.deckhand),[x,z]=portPoint(port,u,v);scene.add(hand);
-    hand.scale.setScalar(i===1?.79:.91);hand.name=port.name+'・荷改めの商人';
-    return {hand,x,z,i,y:v>20?DECK_Y:QUAY_Y,yaw:port.yaw+i*1.57};
-  }));
+  const hands=QUAY_MERCHANTS.map(merchant=>{
+    const hand=deckhand(library.deckhand);scene.add(hand);
+    hand.scale.setScalar(merchant.size);hand.name=merchant.name;
+    return {...merchant,hand};
+  });
   return (time,player)=>{
     for(const {hand,x,z,i,y,yaw} of hands){
       const dx=wrapDelta(x-player.x),dz=wrapDelta(z-player.z);

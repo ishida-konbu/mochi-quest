@@ -1,5 +1,8 @@
 import * as THREE from './vendor/three.module.min.js';
 import { terrainHeight, WATER_Y, seeded, wrapDelta } from './terrain.js';
+import { InkForm, pigment } from './ryugu-ink.js';
+import { brushWash } from './scroll-sculpt.js';
+import { skin, profile, membrane, brush, eye } from './ryugu-sculpt.js';
 import { reefFans } from './reef-garden.js';
 import { prepareSeaOrnaments } from './ryugu-architecture.js';
 import { RYUGU, HALLS, GATE_V, PALACE_APPROACH } from './ryugu-layout.js';
@@ -236,34 +239,30 @@ export function dressRyugu(p) {
 
 // Tiny silver fry drift above the performers, tapering to pale bellies beneath an inked ridge.
 function silverFry() {
-  const pos=[],color=[],ix=[];
-  const vertex=(x,y,z,tint)=>{pos.push(x,y,z);const c=new THREE.Color(tint);color.push(c.r,c.g,c.b);return pos.length/3-1;};
-  const sections=[[-.61,.08,.04],[-.40,.19,.09],[-.13,.33,.17],[.17,.32,.18],[.42,.22,.14],[.55,.045,.055]],sides=12;
-  for(const [x,h,d] of sections)for(let j=0;j<sides;j++){
-    const a=PI*2*j/sides;
-    vertex(x,h*cos(a),d*sin(a),cos(a)>.73?'#647367':cos(a)<-.27?'#e6dfc8':'#a1aa94');
+  const f=new InkForm(),tail=-.59,nose=.53;
+  const body=profile([[tail,.023,.036,.006],[-.46,.040,.055,.007],[-.27,.090,.13,.012],
+    [-.03,.124,.168,.009],[.18,.118,.154,.012],[.34,.086,.106,.019],[.46,.051,.052,.019],[nose,.003,.009,.024]]);
+  function surface(x,a,lift=0){
+    const [w,h,center]=body(x);
+    return [x,center+(h+lift)*cos(a),(w+lift)*sin(a)];
   }
-  for(let i=0;i<sections.length-1;i++)for(let j=0;j<sides;j++){
-    const a=i*sides+j,b=i*sides+(j+1)%sides;ix.push(a,b,a+sides,b,b+sides,a+sides);
+  skin(f,28,20,(u,v)=>{
+    const x=tail+(nose-tail)*v,a=2*PI*u,p=surface(x,a);
+    return [...p,v,.51+p[1]*2.55];
+  },'#eeeade','scales',false,true);
+  const tip=u=>[-.85+.16*(1-Math.abs(2*u-1))**1.7,.211*(2*u-1),.016*sin(PI*2*u)];
+  membrane(f,u=>[-.55,.031*(2*u-1),0],tip,6,'#c9c9ae');
+  membrane(f,u=>surface(-.34+.49*u,0),u=>[-.36+.50*u,.17+.09*sin(PI*u)-.023*cos(PI*12*u),0],6,'#b9b8a4');
+  for(const side of [-1,1]){
+    const cheek=(x,y,lift=0)=>{
+      const [w,h,center]=body(x);
+      return [x,y,side*(lift+w*Math.sqrt(Math.max(0,1-((y-center)/h)**2)))];
+    };
+    eye(f,(u,v,l)=>cheek(.325+.050*u,.057+.060*v,l*.44));
+    brush(f,[[.263,.093],[.236,.040],[.223,-.027],[.260,-.067]].map(([x,y])=>cheek(x,y,.003)),[.001,.007,.005,.001],'#504e40');
+    membrane(f,u=>cheek(.12+.065*u,-.030+.031*u),u=>[-.14+.12*u,-.12+.05*u,side*(.18+.028*sin(PI*u))],4,'#c8c6b3');
   }
-  function fin(a,b,c,t='#838e7d') {ix.push(vertex(...a,t),vertex(...b,t),vertex(...c,t));}
-  fin([-.57,.045,0],[-.90,.30,0],[-.81,.015,0]);fin([-.57,.06,0],[-.81,.02,0],[-.57,-.065,0]);
-  fin([-.57,-.065,0],[-.81,.02,0],[-.89,-.26,0]);
-  for(let i=0;i<6;i++)fin([-.38+i*.096,.16+.13*sin((i+1)*.43),0],[-.39+i*.095,.28+.12*sin((i+1)*.43),0],[-.28+i*.093,.22+.11*sin((i+1)*.43),0]);
-  for(const s of [-1,1]) {
-    fin([.15,-.01,s*.16],[-.15,-.13,s*.32],[-.025,-.17,s*.265],'#a6a38c');
-    for(const [cx,cy,r,tint] of [[.345,.065,.060,'#e6d7a6'],[.355,.067,.041,'#342f29'],[.366,.083,.014,'#fbf1c9']]){
-      for(let j=0;j<8;j++) { const a=j*PI/4,b=(j+1)*PI/4;
-        const z=s*(.164+(tint==='#342f29'?.003:tint==='#fbf1c9'?.006:0));
-        fin([cx,cy,z],[cx+r*cos(a),cy+r*sin(a),z],[cx+r*cos(b),cy+r*sin(b),z],tint);
-      }
-    }
-    for(let i=0;i<3;i++)for(let j=0;j<2;j++) {
-      const x=-.22+i*.13+j*.023,y=.002+j*.10,z=s*(.17-.009*j);
-      fin([x,y,z],[x+.042,y+.027,z],[x+.016,y+.02,z],'#ecd6ac');
-    }
-  }
-  const geo=new THREE.BufferGeometry();geo.setIndex(ix);geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));geo.setAttribute('color',new THREE.Float32BufferAttribute(color,3));geo.computeVertexNormals();return geo;
+  return f.geometry();
 }
 function bubbleTexture() {
   const c=document.createElement('canvas');c.width=c.height=48;const g=c.getContext('2d');
@@ -297,7 +296,20 @@ function tideLight(bed,clock) {
 }
 export function createRyuguLife(scene) {
   const rng=seeded(16251),group=new THREE.Group(),dum=new THREE.Object3D();
-  const fish=new THREE.InstancedMesh(silverFry(),new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide}),30);
+  const clock={value:0},bed=terrainHeight(RYUGU.x,RYUGU.z);
+  const silver=brushWash(new THREE.MeshLambertMaterial({map:pigment().map,vertexColors:true,side:THREE.DoubleSide}),.58);
+  const inkShader=silver.onBeforeCompile;
+  silver.onBeforeCompile=function(shader,renderer){
+    inkShader.call(this,shader,renderer);
+    shader.uniforms.swimTime=clock;
+    shader.vertexShader='uniform float swimTime;\n'+shader.vertexShader.replace('#include <begin_vertex>',`
+      #include <begin_vertex>
+      float tail=1.-smoothstep(-.85,.15,position.x);
+      transformed.z+=.115*tail*sin(swimTime*6.5+instanceMatrix[3].z+position.x*4.7);
+    `);
+  };
+  silver.customProgramCacheKey=()=>'ryugu-silver-fry';
+  const fish=new THREE.InstancedMesh(silverFry(),silver,20);
   fish.frustumCulled=false;fish.instanceMatrix.setUsage(THREE.DynamicDrawUsage);group.add(fish);
   const schools=[[-4,-5,8.5,13],[8,8,7,7],[-9,2,12,17],[17,-8,5.6,8],[28,0,10.5,7],[39,5,4,8]];
   const shoal=Array.from({length:fish.count},(_,i)=>({ home:schools[i%schools.length],offset:rng()*3,
@@ -307,7 +319,6 @@ export function createRyuguLife(scene) {
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',buff);
   const points=new THREE.Points(geometry,new THREE.PointsMaterial({map:bubbleTexture(),size:.19,transparent:true,opacity:.78,depthWrite:false}));
   points.frustumCulled=false;group.add(points);
-  const clock={value:0},bed=terrainHeight(RYUGU.x,RYUGU.z);
   group.add(tideLight(bed,clock));
   const lightwash=new THREE.ShaderMaterial({
     transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
@@ -346,6 +357,17 @@ export function createRyuguLife(scene) {
       const [x,z,y,r]=home,a=time*.13+phase*.12+offset*.1+x*.3;
       dum.position.set(x+cos(a)*r+cos(phase)*offset,y+depth+.48*sin(a+phase),z+sin(a)*r*.65+sin(phase)*offset);
       dum.rotation.set(0,Math.atan2(-cos(a)*.65,-sin(a))+.065*sin(time*5+phase),.065*sin(time*1.4+phase));
+      // A swimmer parts the school. Keep the response continuous as the fry
+      // return to their own orbits and pass the swimmer on either side.
+      const ax=dum.position.x+dx,az=dum.position.z+dz,ay=bed+dum.position.y-player.y-.5;
+      const dist=Math.hypot(ax,ay,az),scatter=1-THREE.MathUtils.smoothstep(dist,.4,2.6);
+      if(scatter>0){
+        const length=Math.hypot(ax,az),sx=length>.01?ax/length:cos(phase),sz=length>.01?az/length:sin(phase);
+        dum.position.x+=sx*scatter*1.4;dum.position.z+=sz*scatter*1.4;
+        dum.position.y+=scatter*.35*(ay>=0?1:-1);
+        const turn=Math.atan2(-sz,sx)-dum.rotation.y;
+        dum.rotation.y+=scatter*Math.atan2(sin(turn),cos(turn));
+      }
       dum.scale.setScalar(size);dum.updateMatrix();fish.setMatrixAt(i,dum.matrix);
     });fish.instanceMatrix.needsUpdate=true;
     streams.forEach(({x,z,phase,pace},i)=>{

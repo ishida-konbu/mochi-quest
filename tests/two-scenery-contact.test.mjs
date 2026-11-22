@@ -1,0 +1,55 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { BUILDINGS, BRIDGES, GATES, bridgeHeight, canOccupy, constrainMove,
+  groundHeight, overheadHeight, solidHeightAt, staticVolumeAt, terrainHeight } from '../two/terrain.js';
+import { roofProfile } from '../two/architecture.js';
+import { RYUGU, GATE_V, palaceSolid } from '../two/ryugu-layout.js';
+import { DAIBUTSU } from '../two/pilgrimage-layout.js';
+
+test('a rotated shop eave stops ascent outside the room and supports descent on the same pitch',()=>{
+  const b=BUILDINGS.find(b=>b.x===-34 && b.z===49);
+  const u=.40*b.w,v=.62*b.d;
+  const x=b.x+b.cos*u+b.sin*v,z=b.z-b.sin*u+b.cos*v;
+  const top=b.y+b.wall+.29+b.roof*roofProfile('gable',u/(b.w*.62),v/(b.d*.64));
+  assert.ok(Math.abs(overheadHeight(x,z,b.y)-(top-.10))<.001);
+  assert.ok(staticVolumeAt(x,z,top-.07,.03,.10));
+  assert.ok(!staticVolumeAt(x,z,top-.50,.03,.15));
+  assert.ok(!staticVolumeAt(x,z,top+.01,.03,.15));
+  assert.ok(Math.abs(groundHeight(x,z,top+.30)-top)<.001);
+  assert.equal(canOccupy(x,z,top-2,.08,1.50),true);
+  assert.equal(canOccupy(x,z,top-2,.08,2.15),false);
+});
+
+test('the bridge rail stops a fast lateral stride and the passage under the torii stays open',()=>{
+  const bridge=BRIDGES[1],z=bridge.z,deck=bridgeHeight(bridge,z);
+  const stopped=constrainMove(bridge.x,z,bridge.x+8,z,0,deck);
+  assert.ok(stopped.x>bridge.x+bridge.halfWidth-1 && stopped.x<bridge.x+bridge.halfWidth);
+  assert.ok(staticVolumeAt(bridge.x+bridge.halfWidth-.13,z,deck+.4,.05,.40));
+  const g=GATES[0],y=terrainHeight(g.x,g.z);
+  assert.ok(!staticVolumeAt(g.x,g.z,y+.02,.16,1.66));
+  assert.ok(staticVolumeAt(g.x,g.z,y+.725*g.h,.05,.08));
+  assert.ok(staticVolumeAt(g.x,g.z,y+.93*g.h,.04,.10));
+});
+
+test('the upper Todaiji roof has its own high ridge and the underwater gallery is open below its roof',()=>{
+  const {x,z}=DAIBUTSU,base=terrainHeight(x,z);
+  assert.ok(solidHeightAt(x,z-.7)>base+32);
+  const bed=terrainHeight(RYUGU.x,RYUGU.z);
+  const solid=(u,v,y,body=.25)=>palaceSolid(RYUGU.x+v,RYUGU.z-u,bed+y,bed,body,.10);
+  assert.ok(!solid(0,GATE_V,.3,1.66));
+  assert.ok(solid(0,GATE_V,4.66));
+  assert.ok(solid(0,GATE_V,9.99));
+  assert.ok(!solid(10.3,-11.2,1.5));
+  assert.ok(solid(10.3,-11.2,4.22));
+});
+
+test('a stride can clear an initial corner overlap while the back wall stays solid',()=>{
+  const b=BUILDINGS.find(b=>b.x===210 && b.z===-815);
+  const x=b.x,z=b.z-b.d/2-2.5,y=groundHeight(x,z);
+  let at={x,z};
+  for(let n=0;n<150;n++) at=constrainMove(at.x,at.z,at.x,at.z+.02,0,y,.26,1.66);
+  assert.ok(at.z>z+2.90);
+  const wall=b.z+b.d/2;
+  const stopped=constrainMove(b.x,b.z,b.x,wall+1,0,b.y+.48);
+  assert.ok(stopped.z<wall && stopped.z>wall-1);
+});

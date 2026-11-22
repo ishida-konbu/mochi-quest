@@ -39,6 +39,11 @@ export const WEDDING_SITES=[
   {x:-211,z:-445,rx:12,rz:2.13},
   {x:-218,z:-503.6,rx:21,rz:2.04},
 ].map(site => ({...site,x:site.x+DISTRICT_SHIFT.inari.x,z:site.z+DISTRICT_SHIFT.inari.z}));
+export const WEDDING_ROLES=['lantern','groom','bride','parasol','flute'];
+export function weddingWalkerPose(siteIndex,roleIndex,time) {
+  const site=WEDDING_SITES[siteIndex];
+  return weddingPoint(site,time*.82+(site.rx-site.rz)*1.04+siteIndex*2.2-roleIndex*1.70);
+}
 export function weddingPoint(q,walked) {
   const straight=2*(q.rx-q.rz), half=straight+PI*q.rz, full=half*2;
   const lap=((walked%full)+full)%full;
@@ -252,7 +257,10 @@ export const CEDAR_GROVES=[];
 export const INARI_SANCTUARY = {x:inari.x,z:inari.z-7};
 export function pilgrimageSolids(height, putSolid) {
   for(const {x,z,width,yaw,height:h} of INARI_GATES) {
-    putSolid(x,z,width*.45,.13,yaw,height(x,z)+h*.722,'ceiling',false);
+    const base=height(x,z);
+    putSolid(x,z,width*.456,width*.026,yaw,base+h*.769,'slab',true,0,base+h*.721);
+    const crown=putSolid(x,z,width*.541,width*.06,yaw,base+h*.974,'toriiCrown',true,h*.065);
+    crown.thickness=h*.094;
     for(const side of [-1,1]){
       const dx=side*width*.36;
       putSolid(x+dx*cos(yaw),z-dx*sin(yaw),.17,.17,0,height(x,z)+h,'oval',false);
@@ -264,6 +272,7 @@ export function pilgrimageSolids(height, putSolid) {
   putSolid(MOON_GATE.x-.82,MOON_GATE.z-5.65,.60,.63,0,height(MOON_GATE.x,MOON_GATE.z)+4.83,'oval',false);
   for(const side of [-1,1]) putSolid(MOON_GATE.x,MOON_GATE.z+side*3.23,.31,1.42,0,
     height(MOON_GATE.x,MOON_GATE.z)+4.8,'wall',false);
+  putSolid(MOON_GATE.x,MOON_GATE.z,5.085,.685,PI/2,height(MOON_GATE.x,MOON_GATE.z)+4.63,'roof',true,.72).form='hip';
   const {x,z}=DAIBUTSU, base=height(x,z);
   // Follow the seated knees and the narrower, forward-tilted head as the
   // player or camera rises alongside the statue.
@@ -276,6 +285,9 @@ export function pilgrimageSolids(height, putSolid) {
   putSolid(x,z-11.4,16,.45,0,base+20.2,'wall',false);
   putSolid(x,z,18,12.9,0,base+21.8,'ceiling',false);
   const hallRoof=putSolid(x,z,19.75,14.7,0,base+21.8,'roof',true,5.8); hallRoof.form='hip';
+  putSolid(x,z-.7,10.4,4.95,0,base+26.78,'wall',false,0,base+23.78);
+  putSolid(x,z-.7,14.4,8.2,0,base+26.24,'roof',true,5.85).form='hip';
+  putSolid(x,z-.7,7.05,.255,0,base+32.33,'slab',true,0,base+31.91);
   for(const side of [-1,1]){
     for(let j=0;j<8;j++)for(const u of [-1.74,1.74]) putSolid(x+side*22+u,z-4.8+j*4,.18,.18,0,base+4.12,'oval',false);
     for(const rz of [13.6,22.5,31.6]) putSolid(x+side*7.1,z+rz,.54,.54,0,base+3.22,'oval',false);
@@ -285,5 +297,8 @@ export function pilgrimageSolids(height, putSolid) {
   for(const side of [-1,1])putSolid(shrine.x+side*5,shrine.z+3.9,.48,.48,0,
     height(shrine.x,shrine.z)+2.61,'oval',false);
   putSolid(shrine.x,shrine.z+3.52,.99,.50,0,height(shrine.x,shrine.z)+1.09,'box',true);
+  const ground=height(shrine.x,shrine.z);
+  putSolid(shrine.x,shrine.z,4.55,3.84,0,ground+3.97,'roof',true,3.37).form='hip';
+  putSolid(shrine.x,shrine.z+2.70,2.82,1.705,0,ground+3.34,'roof',true,1.44).form='hip';
   putSolid(shrine.x,shrine.z,3.3,2.62,0,height(shrine.x,shrine.z)+4.4,'box',false);
 }

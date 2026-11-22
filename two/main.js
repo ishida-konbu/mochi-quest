@@ -18,8 +18,7 @@ import { SEA_SPECIES } from './ryugu-residents.js';
 import { seaPortrait } from './ryugu-performers.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
 import { preloadBeastCoats } from './beast-art.js';
-import { RYUGU, palaceSolid } from './ryugu-layout.js';
-import { REGIONS, WATER_Y, terrainHeight, shoreDistance, groundHeight, landscapeFloor, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
+import { REGIONS, WATER_Y, terrainHeight, shoreDistance, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
 import { createAudio } from '../sound.js';
@@ -479,15 +478,15 @@ function updateCamera(dt, snap = false) {
   let fraction = 1;
   // While the grass mochi is inside a trunk, start the camera ray on the
   // outward side of that trunk. A second wall still shortens the camera arm.
-  const diving = p.diveDepth > 0, palaceBed = diving ? terrainHeight(RYUGU.x,RYUGU.z) : 0;
-  let emerging = !diving && p.mode === 'kusa' && solidHeightAt(focus.x,focus.z,.2,focus.y) + .19 > focus.y;
-  for (let i = 1, n = Math.ceil(Math.hypot(dx,dy,dz) / 0.4); i <= n; i++) {
+  const diving = p.diveDepth > 0;
+  let emerging = !diving && p.mode === 'kusa' && staticVolumeAt(focus.x,focus.z,focus.y-.15,.15,.30);
+  for (let i = 1, n = Math.ceil(Math.hypot(dx,dy,dz) / .25); i <= n; i++) {
     const t = i / n,
       x = focus.x + dx * t,
       z = focus.z + dz * t,
       y = focus.y + dy * t;
     if (diving) {
-      if (terrainHeight(x,z)+.2 > y || palaceSolid(x,z,y-.15,palaceBed,.3,.15)) {
+      if (staticVolumeAt(x,z,y-.15,.15,.30)) {
         fraction = Math.max(.12,(i-1)/n);
         break;
       }
@@ -497,10 +496,10 @@ function updateCamera(dt, snap = false) {
     if (hull && focus.y<hull.ceiling && y+.18>hull.ceiling) {
       fraction=Math.max(.16,(i-1)/n);break;
     }
-    const solid = Math.max(solidHeightAt(x,z,.2,y),hull?.solid ?? -Infinity,hull?.floor ?? -Infinity);
-    if (emerging && solid + .19 <= y) emerging = false;
-    const floor = emerging ? landscapeFloor(x,z) : Math.max(groundHeight(x,z,y),solid);
-    if (floor + .19 > y) {
+    const blocked = staticVolumeAt(x,z,y-.16,.16,.32);
+    if (emerging && !blocked) emerging = false;
+    const floor = Math.max(landscapeFloor(x,z),hull?.solid ?? -Infinity,hull?.floor ?? -Infinity);
+    if (floor + .16 > y || !emerging && blocked) {
       fraction = Math.max(0.16, (i - 1) / n);
       break;
     }

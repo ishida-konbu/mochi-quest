@@ -9,7 +9,7 @@ import { dragonPitch, dragonWave } from '../two/animal-motion.js';
 
 test('the expanded recipient ledger preserves the original 691 entries and the two legends’ hundredfold score',()=>{
   const {state}=createGame();
-  assert.equal(state.recipientTotal,876);
+  assert.equal(state.recipientTotal,861);
   const original=state.npcs.slice(0,691);
   assert.ok(original.every((n,i)=>n.id===n.type+'-'+i));
   assert.equal(new Set(state.npcs.map(n=>n.id)).size,state.recipientTotal);

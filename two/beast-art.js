@@ -1,7 +1,7 @@
 // Scroll silhouettes are lofted through painted cross-sections. A single atlas per
 // pelt wraps continuously across both flanks; the mane, joints and toes retain volume.
 import { prepareDragon, poseDragon } from './dragon-flight.js';
-import { kirinFrequency, hoofPhase, poseKirinLeg, poseKirinTrunk } from './animal-motion.js';
+import { craneWingbeat, kirinFrequency, hoofPhase, poseKirinLeg, poseKirinTrunk } from './animal-motion.js';
 import * as THREE from './vendor/three.module.min.js';
 import { buildScrollBeast, buildQuadrupedTrunk, bindScrollSkin } from './handscroll-beasts.js';
 import { inkVolume, brushWash, brushContour, surfaceGrain } from './scroll-sculpt.js';
@@ -929,6 +929,7 @@ export function beastRig(mesh,n) {
   mesh.scale.setScalar(n.stature||SPECIES[n.type].stature);
   return joints;
 }
+const cranePose={};
 const brushTarget=new THREE.Vector3(), brushGrip=new THREE.Vector3(), brushUp=new THREE.Vector3(0,1,0);
 const brushRest=new THREE.Quaternion().setFromEuler(new THREE.Euler(-.16,0,-.18)), brushAngle=new THREE.Quaternion();
 export function poseBeast(j,n,time) {
@@ -937,9 +938,7 @@ export function poseBeast(j,n,time) {
   const hold=n.gesture||0, variation=n.variation||0;
   if(n.type==='dragon') {poseDragon(j,n,time);return;}
   if(n.type==='bird') {
-    const flap=t*4.35, thermal=.5+.5*Math.cos(t*.51);
-    const amplitude=.18+.82*thermal*thermal;
-    const stroke=amplitude*(.79*Math.sin(flap)+.21*Math.sin(2*flap-.32));
+    const {flap,amplitude,stroke,bank}=craneWingbeat(t,cranePose);
     for(const s of [-1,1]){
       j['wing'+s].rotation.z=s*(.15+stroke*.69);
       j['wing'+s].rotation.y=s*(.05+amplitude*.13*Math.cos(flap-.39));
@@ -950,7 +949,7 @@ export function poseBeast(j,n,time) {
         wrist.rotation.y=s*amplitude*(.075+.16*Math.cos(flap-.42));
       }
     }
-    g.rotation.z=.11+.19*Math.sin(t*.53);
+    g.rotation.z=bank;
     g.position.y=.045*amplitude*Math.cos(flap-.3);
     head.rotation.x=-.055*amplitude*Math.cos(flap-.63);
     head.rotation.y=.05*Math.sin(t*.62);return;

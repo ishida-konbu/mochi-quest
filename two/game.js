@@ -1,3 +1,6 @@
+import { planTurtleLeg } from './turtle-trail.js';
+import { createPickupContacts } from './pickup-contacts.js';
+import { createAmbientContacts } from './ambient-contacts.js';
 import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
 import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
@@ -6,16 +9,16 @@ import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
 import { RASHOMON, GATE_STONE, GATE_WING, GATE_LEAF, KYO_FOOD, KYO_ANIMALS, KYO_DAY_SECONDS, kyoNight, kyoInfluence } from './kyo-layout.js';
 import { makeScrollResidents, updateScrollResident } from './scroll-encounters.js';
 import { SCROLL_FAUNA, makeScrollFauna, moveScrollFauna } from './scroll-fauna.js';
-import { SEA_SPECIES, makeRyuguResidents, updateRyuguResident } from './ryugu-residents.js';
-import { RYUGU, palaceSolid } from './ryugu-layout.js';
-import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, shoreDistance, WATER_Y, groundHeight, landscapeFloor, solidHeightAt, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
+import { SEA_SPECIES, retiredSeaIds, makeRyuguResidents, updateRyuguResident } from './ryugu-residents.js';
+import { RYUGU } from './ryugu-layout.js';
+import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, shoreDistance, WATER_Y, groundHeight, landscapeFloor, solidHeightAt, constrainMove, canOccupy, staticVolumeAt, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
 import { POUNDING, POUNDING_CREW } from './festival.js';
 import { prepareVillageRoutes, animalRadius, openGround, walkCircuit } from './village-paths.js';
 import { procession } from './procession.js';
 import { walkingScore } from './animal-motion.js';
 import { legendary } from './legend-flight.js';
-import { SPECIES, wildlifeHomes, moveWildlife, recipientContact } from './bestiary.js';
+import { SPECIES, wildlifeHomes, moveWildlife, sweepResident } from './bestiary.js';
 
 const MAX_VITAL = 100;
 const RISE_GRAVITY = 20;
@@ -32,6 +35,8 @@ const SPEED = { foot: 6.4, dango: 23.6, turtle: 105, bike: 45.9, flight: 32, kag
 const RUN_UP = { dango: 1.8, bike: 3.2, flight: 2.2, turtle: 3.4 };
 const SWIFT_FACTOR = 1.42;
 const MAX_TRAVEL_SPEED = SPEED.turtle * SWIFT_FACTOR + .01;
+// Longitudinal offset, radius, height. The rider occupies the central span.
+const TURTLE_SPANS = [[0,.92,0],[-.68,.62,1.18],[1.23,.37,1.13]];
 const STAMP_RADIUS = 6;
 const SEASONAL_STOPS = {
   snow: ['onsen','sake'], autumn: ['manga','haramaki'], moon: ['sake','manga'], dawn: ['ramen','haramaki']
@@ -223,6 +228,50 @@ export function createGame(snapshot = null) {
   let throwCooldown = 0;
   let turtlePause = 0;
   let turtleLeg = 0;
+  let turtlePath = null, recoverRider = false;
+  const ambientContact = createAmbientContacts(), pickupContact=createPickupContacts(objects);
+  function propOverlap(x,z,y,height,radius) {
+    return Math.max(pickupContact(x,z,y,height,radius),Number(ambientContact(x,z,y,height,radius,state.time,player,true)));
+  }
+  let bumped = null;
+  const contactNormal={}, hitNormal={}, fromBody={};
+  const bodyRadius = () => player.mount==='turtle' ? .92 : player.mount==='bike' ? .42 : player.buffs.full>0 ? .33 : .26;
+  const bodyHeight = () => (1.66+player.airStretch*1.07)*(player.buffs.full>0?1.28:1)
+    +(player.mount==='turtle'?1.04:player.mount==='bike'?.90:0);
+
+  function shipFits(x,z,y,radius,height) {
+    const q=voyage.sample(x,z,y,radius,height);
+    return !q || q.solid<=y+.34 && q.ceiling>=y+height && q.floor<=y+.36;
+  }
+  function turtleFits(x,z,y,radius,height) {
+    return canOccupy(x,z,y,radius,height) && shipFits(x,z,y,radius,height)
+      && !propOverlap(x,z,y,height,radius);
+  }
+  function turtleFooting(x,z,feet,margin=0) {
+    const floor=Math.max(groundHeight(x,z,feet),voyage.sample(x,z,feet)?.floor ?? -Infinity);
+    if(Math.abs(floor-feet)>.36 || !turtleFits(x,z,floor,animalRadius(turtle)+margin,1.15))return NaN;
+    return floor;
+  }
+  // The rider's torso and shell occupy different heights. Check the ends of
+  // the shell along its facing instead of sweeping a 3.3 m wide circle.
+  function rideFits(x,z,y,heading,tall,fixtures=true) {
+    const s=Math.sin(heading),c=Math.cos(heading);
+    for(const [offset,r,h] of TURTLE_SPANS) {
+      const px=wrapCoord(x+offset*s),pz=wrapCoord(z+offset*c),height=h||tall;
+      if(!canOccupy(px,pz,y,r,height) || !shipFits(px,pz,y,r,height) || fixtures && propOverlap(px,pz,y,height,r))return false;
+    }
+    return true;
+  }
+  function nearbyFooting(x,z,y,heading,rings,accept) {
+    for(let ring=0;ring<=rings;ring++) {
+      const count=Math.max(1,Math.ceil(2*Math.PI*ring));
+      for(let i=0;i<count;i++) {
+        const a=heading+i*2*Math.PI/count, nx=wrapCoord(x+.4*ring*Math.sin(a)),nz=wrapCoord(z+.4*ring*Math.cos(a));
+        const floor=Math.max(groundHeight(nx,nz,y),voyage.sample(nx,nz,y)?.floor ?? -Infinity);
+        if(Math.abs(floor-y)<=.56 && accept(nx,nz,floor))return {x:nx,z:nz,y:floor};
+      }
+    }
+  }
 
   function emit(type, data) {
     if (state.events.length >= 160) state.events.shift();
@@ -397,13 +446,18 @@ export function createGame(snapshot = null) {
       port.target.bikes++;
       message('電動自転車を返した。');
     } else {
-      turtle.mounted = false;
-      const position = constrainMove(player.x, player.z, player.x - Math.sin(player.heading), player.z - Math.cos(player.heading), 0, player.y,animalRadius(turtle));
-      turtle.x = turtle.homeX = position.x;
-      turtle.z = turtle.homeZ = position.z;
-      turtle.y = groundHeight(turtle.x,turtle.z);
-      turtleLeg = 0;
-      turtlePause = 1.5;
+      // Leave the turtle on connected footing. When a wall covers one side
+      // of its shell the rider can step down on the other side.
+      const origin={x:player.x,y:player.y,z:player.z};
+      const side=nearbyFooting(origin.x,origin.z,origin.y,player.heading+Math.PI/2,7,(x,z,y)=>{
+        if(Math.hypot(wrapDelta(x-origin.x),wrapDelta(z-origin.z))<1.55 || !turtleFits(x,z,y,.26,1.66))return false;
+        const at=constrainMove(origin.x,origin.z,x,z,0,origin.y,.26,1.66);
+        return distance(at,{x,z})<.015;
+      });
+      if(!side){message('少し開けた場所でカメから降りよう。');return false;}
+      Object.assign(turtle,origin,{homeX:origin.x,homeZ:origin.z,mounted:false,speed:0,heading:player.heading});
+      Object.assign(player,side);
+      turtlePath=null; turtleLeg=0; turtlePause=1.5;
       message('カメからそっと降りた。');
     }
     player.mount = null;
@@ -420,6 +474,10 @@ export function createGame(snapshot = null) {
       if (player.buffs.full > 0) {
         message('カメが首を引っ込めた。満腹のお餅はちょっと重い。'); return false;
       }
+      const seat=nearbyFooting(turtle.x,turtle.z,turtle.y,turtle.heading,4,
+        (x,z,y)=>rideFits(x,z,y,turtle.heading,2.70));
+      if(!seat){message('カメの背に乗れる広さのある場所で待とう。');return false;}
+      Object.assign(player,seat,{h:0,vx:0,vy:0,vz:0,speed:0,heading:turtle.heading,grounded:true});
       player.mount = 'turtle';
       turtle.mounted = true;
       message('ミツユビハコガメに乗った！');
@@ -467,8 +525,7 @@ export function createGame(snapshot = null) {
       // A swimmer may have phased inside a hall. Leave the solid by the
       // shortest upward stroke when the grass transformation wears off.
       if (leavingGrass) {
-        const bed=terrainHeight(RYUGU.x,RYUGU.z);
-        while (palaceSolid(player.x,player.z,player.y,bed) && player.diveDepth > 0) {
+        while (staticVolumeAt(player.x,player.z,player.y,bodyRadius(),1.25) && player.diveDepth > 0) {
           player.diveDepth=Math.max(0,player.diveDepth-.15);
           player.y=WATER_Y-.57-player.diveDepth;
         }
@@ -531,44 +588,67 @@ export function createGame(snapshot = null) {
       turtle.role = 'rest'; turtle.speed = 0;
       return;
     }
-    // Its first stop is the sheltered nook between the two riverbank rocks.
-    const route = [[-5,-4],[-3,-7],[2,-4],[0,0]];
-    const [dx,dz] = route[turtleLeg];
-    const tx = wrapDelta(turtle.homeX + dx - turtle.x), tz = wrapDelta(turtle.homeZ + dz - turtle.z);
-    const length = Math.hypot(tx,tz);
-    turtle.role = 'wander';
-    if (length < .16) {
-      turtlePause = turtleLeg === 0 ? 11 : 2.5;
-      turtleLeg = (turtleLeg + 1) % route.length;
+    if(!turtlePath) {
+      // Recover old journeys left inside a fixture (or on the old terrain).
+      if(!Number.isFinite(turtleFooting(turtle.x,turtle.z,turtle.y))){
+        const safe=nearbyFooting(turtle.x,turtle.z,turtle.y,turtle.heading,30,
+          (x,z,y)=>Number.isFinite(turtleFooting(x,z,y)));
+        if(safe)Object.assign(turtle,safe,{homeX:safe.x,homeZ:safe.z});
+      }
+      turtlePath=planTurtleLeg(turtle,turtleLeg,turtleFooting);
+    }
+    turtle.role='wander';
+    const target=turtlePath[0];
+    if(!target){
+      turtlePause=turtleLeg===0?11:2.5;
+      turtleLeg=(turtleLeg+1)%4; turtlePath=null; turtle.speed=0;
       return;
     }
-    turtle.heading = Math.atan2(tx,tz);
-    const step = Math.min(length, Math.min(2.3, turtle.speed + 1.8 * dt) * dt);
-    const x=turtle.x+tx/length*step, z=turtle.z+tz/length*step;
-    const at=openGround(x,z,animalRadius(turtle)) ? {x,z} : turtle;
-    turtle.speed = distance(turtle,at) / dt;
-    turtle.x = at.x; turtle.z = at.z; turtle.y = groundHeight(at.x,at.z);
-    if (turtle.speed < .015) { turtlePause = 5; turtleLeg = (turtleLeg+1) % route.length; }
+    const dx=wrapDelta(target.x-turtle.x),dz=wrapDelta(target.z-turtle.z);
+    const length=Math.hypot(dx,dz);
+    if(length<.035){turtlePath.shift();return;}
+    turtle.heading=Math.atan2(dx,dz);
+    const step=Math.min(length,Math.min(2.3,turtle.speed+1.8*dt)*dt);
+    const x=wrapCoord(turtle.x+dx/length*step), z=wrapCoord(turtle.z+dz/length*step);
+    const y=turtleFooting(x,z,turtle.y);
+    if(!Number.isFinite(y)){turtlePath=null;turtle.speed=0;turtlePause=.28;return;}
+    Object.assign(turtle,{x,y,z,speed:step/dt});
+
   }
   // Include both the width of a cell and the roaming range around each home.
-  let crowdCellX, crowdCellZ;
+  let crowdCellX, crowdCellZ, priorLetterCells;
   function refreshCrowd() {
     const cx=Math.floor(player.x/32), cz=Math.floor(player.z/32);
-    if (cx===crowdCellX && cz===crowdCellZ) return;
-    crowdCellX=cx; crowdCellZ=cz;
+    // A swift mount or a map jump can leave a letter in another district.
+    // Keep the recipients around it active until the delivery resolves.
+    const distant=[];
+    let letterCells='';
+    for(const shot of state.shots) {
+      if(Math.abs(wrapDelta(shot.x-player.x))<90 && Math.abs(wrapDelta(shot.z-player.z))<90)continue;
+      const ix=Math.floor(shot.x/32),iz=Math.floor(shot.z/32),key='|'+ix+','+iz+'|';
+      if(letterCells.includes(key))continue;
+      letterCells+=key;distant.push([(ix+.5)*32,(iz+.5)*32]);
+    }
+    if (cx===crowdCellX && cz===crowdCellZ && priorLetterCells===letterCells) return;
+    crowdCellX=cx; crowdCellZ=cz; priorLetterCells=letterCells;
     const cellX=(cx+.5)*32, cellZ=(cz+.5)*32;
     state.nearbyNpcs=npcs.filter(n=>{
       if(n===turtle || n.type==='hawk' || legendary(n.type))return true;
       // A crane's ellipse can swing two radii away from its original perch.
       // Stream the whole route before its edge reaches the 128 m view radius.
       const reach=n.type==='bird' ? 128+16+2*n.radius : 150;
-      return Math.abs(wrapDelta(n.homeX-cellX))<reach && Math.abs(wrapDelta(n.homeZ-cellZ))<reach;
+      if(Math.abs(wrapDelta(n.homeX-cellX))<reach && Math.abs(wrapDelta(n.homeZ-cellZ))<reach)return true;
+      const reachLetter=24+2*(n.radius||0);
+      return distant.some(([x,z])=>Math.abs(wrapDelta(n.homeX-x))<reachLetter && Math.abs(wrapDelta(n.homeZ-z))<reachLetter);
     });
   }
   const streetScore={};
   function updateNPCs(dt) {
-    moveTurtle(dt);
     refreshCrowd();
+    for(const n of state.nearbyNpcs){
+      n.contactX=n.x; n.contactY=n.y; n.contactZ=n.z;
+    }
+    moveTurtle(dt);
     for (const n of state.nearbyNpcs) {
       n.flash = Math.max(0, n.flash - dt);
       if (n === turtle || n.atMortar || n.ridesDeer) continue;
@@ -622,20 +702,41 @@ export function createGame(snapshot = null) {
       n.x=x; n.z=z; n.y=groundHeight(x,z);
     }
     updateHareRider(riverRider, state.time);
+    for(const n of state.nearbyNpcs) {
+      // Streamed-in residents may have missed several minutes. Their return
+      // to the current pose must not sweep through the intervening district.
+      if(Math.abs(wrapDelta(n.x-n.contactX))+Math.abs(wrapDelta(n.z-n.contactZ))+Math.abs(n.y-n.contactY)>3) {
+        n.contactX=n.x;n.contactY=n.y;n.contactZ=n.z;
+      }
+    }
   }
   function updateShots(dt) {
     for (let i=state.shots.length-1;i>=0;i--) {
       const shot = state.shots[i];
       const dx = Math.sin(shot.heading), dz = Math.cos(shot.heading);
-      const length = 18 * dt;
+      // The first sweep starts at the throwing hand, including the short
+      // muzzle offset at which the flying letter first appears.
+      const launch=shot.age===0?.65:0, length=18*dt+launch;
+      const start={x:wrapCoord(shot.x-dx*launch),z:wrapCoord(shot.z-dz*launch),y:shot.y};
       let hit = null;
       let first = Infinity;
       for (const n of state.nearbyNpcs) {
         if(n.mounted) continue;
-        const along=recipientContact(n,shot,dx,dz,length);
+        const along=sweepResident(n,start,dx*length,0,dz*length,.105,.14,true)*length;
         if(along<first) { first=along; hit=n; }
       }
-      shot.x = wrapCoord(shot.x + dx*length); shot.z = wrapCoord(shot.z + dz*length);
+      const travel=Math.min(first,length), samples=Math.max(1,Math.ceil(travel/.08));
+      let stopped=false;
+      for(let j=0;j<=samples;j++){
+        const t=travel*j/samples, x=wrapCoord(start.x+dx*t), z=wrapCoord(start.z+dz*t);
+        const feet=shot.y-.045;
+        const ship=voyage.sample(x,z,feet,.045,.09);
+        if(staticVolumeAt(x,z,feet,.045,.09) || propOverlap(x,z,feet,.09,.045) || ship &&
+          (ship.solid>feet || ship.floor>=feet && ship.floor<=feet+.09 || ship.ceiling<=feet+.09)) {
+          stopped=true;hit=null;break;
+        }
+      }
+      shot.x=wrapCoord(start.x+dx*travel);shot.z=wrapCoord(start.z+dz*travel);
       shot.age += dt; shot.life -= dt;
       if (hit) {
         const points=(SPECIES[hit.type] || SEA_SPECIES[hit.type] || SCROLL_FAUNA[hit.type])?.points ?? 10;
@@ -649,8 +750,62 @@ export function createGame(snapshot = null) {
           sound('pickup');
         }
       }
-      if (hit || shot.life <= 0 || shot.y < (player.diveDepth ? terrainHeight(shot.x,shot.z) : groundHeight(shot.x,shot.z))-.15) state.shots.splice(i,1);
+      if (hit || stopped || shot.life <= 0) state.shots.splice(i,1);
     }
+  }
+  function residentSweep(x,y,z,dx,dy,dz,radius,halfHeight,moving) {
+    Object.assign(fromBody,{x,y:y+halfHeight,z});
+    let first=Infinity, hit;
+    for(const n of state.nearbyNpcs){
+      if(n.mounted)continue;
+      const t=sweepResident(n,fromBody,dx,dy,dz,radius,halfHeight,moving,contactNormal);
+      if(t<first){
+        first=t;hit=n;Object.assign(hitNormal,contactNormal);
+        hitNormal.travelX=moving?wrapDelta(n.x-(n.contactX??n.x)):0;
+        hitNormal.travelZ=moving?wrapDelta(n.z-(n.contactZ??n.z)):0;
+      }
+    }
+    if(hit && !bumped && !hit.area && !hit.encounter && !hit.scrollFauna &&
+        !hit.seaResident && !hit.atMortar && hit!==turtle)bumped=hit;
+    return first;
+  }
+  function crowdMove(x,z,dx,dz,height,radius) {
+    // Stop at the first surface, then sweep the remaining motion along its
+    // tangent. The second sweep keeps a pair of adjacent actors solid.
+    const r=player.mount ? radius : radius+.16;
+    const first=residentSweep(x,player.y,z,dx,0,dz,r,height*.5,true);
+    if(first<1 && (dx || dz || hitNormal.travelX || hitNormal.travelZ)) {
+      const inside=Math.min(0,(dx-hitNormal.travelX)*hitNormal.x+(dz-hitNormal.travelZ)*hitNormal.z);
+      const horizontal=hitNormal.x**2+hitNormal.z**2;
+      const f=Math.max(0,first-.002/Math.max(.002,Math.hypot(dx,dz)));
+      const rx=(1-f)*(horizontal>.0001?dx-inside*hitNormal.x/horizontal:0);
+      const rz=(1-f)*(horizontal>.0001?dz-inside*hitNormal.z/horizontal:0);
+      x=wrapCoord(x+f*dx);z=wrapCoord(z+f*dz);
+      // A tangential second query starts just outside the first surface. If
+      // an old save already overlaps it, its outward normal still permits exit.
+      const k=rx || rz ? Math.min(1,residentSweep(x,player.y,z,rx,0,rz,r,height*.5,false)) : 0;
+      dx=rx*k;dz=rz*k;
+    }
+    const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.38));
+    for(let j=0;j<steps;j++){
+      const nx=wrapCoord(x+dx/steps),nz=wrapCoord(z+dz/steps);
+      const penetration=propOverlap(x,z,player.y,height,radius);
+      const free=(a,b)=>{
+        const next=propOverlap(a,b,player.y,height,radius);
+        return next===0 || next<penetration;
+      };
+      if(free(nx,nz)){x=nx;z=nz;}
+      else if(free(nx,z))x=nx;
+      else if(free(x,nz))z=nz;
+    }
+    return {x,z};
+  }
+  function crowdLift(x,z,y,dy,height,radius) {
+    if(!dy)return dy;
+    const t=residentSweep(x,y,z,0,dy,0,radius,height*.5,false);
+    const lifted=dy*Math.min(1,t);
+    const next=propOverlap(x,z,y+lifted,height,radius);
+    return next && next>propOverlap(x,z,y,height,radius)?0:lifted;
   }
   function updateMotion(dt, input) {
     if (player.activity && player.activity !== 'fall') return;
@@ -675,7 +830,29 @@ export function createGame(snapshot = null) {
     const waterDrag = player.inWater && !player.mount ? .72 : 1;
     const modifier = waterDrag * (player.buffs.swift>0 ? SWIFT_FACTOR : 1) * (player.buffs.full>0 ? .81 : 1);
     const speed = SPEED[pace] * modifier;
-    if (dx || dz) player.heading = Math.atan2(dx,dz);
+    if(recoverRider){
+      recoverRider=false;
+      if(player.mount==='turtle' && !rideFits(player.x,player.z,player.y,player.heading,bodyHeight(),false)){
+        const safe=nearbyFooting(player.x,player.z,player.y,player.heading,32,
+          (x,z,y)=>rideFits(x,z,y,player.heading,bodyHeight()));
+        if(safe)Object.assign(player,safe,{vx:0,vz:0,speed:0});
+      }
+    }
+    if (dx || dz) {
+      const heading=Math.atan2(dx,dz);
+      if(player.mount!=='turtle')player.heading=heading;
+      else{
+        // A shell can turn in a narrow passage without swinging its nose
+        // through a post. The rider can still back out while facing the wall.
+        const turn=Math.atan2(Math.sin(heading-player.heading),Math.cos(heading-player.heading));
+        const steps=Math.max(1,Math.ceil(Math.abs(turn)/.22));
+        for(let i=0;i<steps;i++){
+          const next=player.heading+turn/steps;
+          if(!rideFits(player.x,player.z,player.y,next,bodyHeight(),false))break;
+          player.heading=Math.atan2(Math.sin(next),Math.cos(next));
+        }
+      }
+    }
     const traction = player.activity==='fall' ? 4 : player.mode==='dango' ? 6 : 13;
     const ease = 1 - Math.exp(-dt*traction);
     player.vx += (dx*speed-player.vx)*ease;
@@ -695,15 +872,17 @@ export function createGame(snapshot = null) {
     }
     if (Math.abs(player.vx)<.002) player.vx = 0;
     if (Math.abs(player.vz)<.002) player.vz = 0;
-    const x = player.x+player.vx*dt, z = player.z+player.vz*dt;
     const phasing = player.mode === 'kusa';
+    const tall=bodyHeight(), radius=bodyRadius();
+    const {x,z}=phasing ? {x:player.x+player.vx*dt,z:player.z+player.vz*dt}
+      : crowdMove(player.x,player.z,player.vx*dt,player.vz*dt,player.diveDepth?1.25:tall,radius);
     // In the sea, the waterline is the resting swimming height. A diver holds
     // the chosen depth until the next stroke or a rising seabed lifts them.
     const swimStroke = player.diveDepth > 0 || (input.dive && player.grounded && player.inWater);
     if (swimStroke && !player.mount && !player.activity && shoreDistance(player.x,player.z) < 0) {
       const line = WATER_Y - .57, rate = (input.jump ? -1 : input.dive ? 1 : 0) * 5.4;
-      const bed = terrainHeight(RYUGU.x,RYUGU.z);
-      const free = (xx,zz,yy) => phasing || !palaceSolid(xx,zz,yy,bed);
+      const free = (xx,zz,yy) => phasing || !staticVolumeAt(xx,zz,yy,radius,1.25) &&
+        shipFits(xx,zz,yy,radius,1.25);
       let nx = wrapCoord(x), nz = wrapCoord(z);
       if (!free(nx,nz,player.y)) {
         if (free(nx,player.z,player.y)) nz = player.z;
@@ -711,7 +890,8 @@ export function createGame(snapshot = null) {
         else { nx=player.x; nz=player.z; }
       }
       const limit = Math.max(0,line - terrainHeight(nx,nz) - .16);
-      let depth = clamp(player.diveDepth + rate*dt, 0, limit);
+      const stroke=phasing?-rate*dt:crowdLift(nx,nz,player.y,-rate*dt,1.25,radius);
+      let depth = clamp(player.diveDepth - stroke, 0, limit);
       if (!free(nx,nz,line-depth)) depth = Math.min(limit,player.diveDepth);
       if (depth > 0 || player.diveDepth > 0) {
         player.vx=wrapDelta(nx-player.x)/dt; player.vz=wrapDelta(nz-player.z)/dt;
@@ -722,15 +902,42 @@ export function createGame(snapshot = null) {
       }
     }
     player.diveDepth=0;
-    const land = phasing ? {x:wrapCoord(x),z:wrapCoord(z)} : constrainMove(player.x,player.z,x,z,player.h,player.y,player.mount==='turtle' ? animalRadius(turtle) : undefined);
-    const at = phasing ? land : voyage.move(player.x,player.z,land.x,land.z,player.y);
+    let land;
+    if(phasing)land={x:wrapCoord(x),z:wrapCoord(z)};
+    else if(player.mount==='turtle'){
+      const dx=wrapDelta(x-player.x),dz=wrapDelta(z-player.z);
+      const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.32));
+      let nx=player.x,nz=player.z,feet=player.y;
+      for(let i=0;i<steps;i++){
+        const tx=wrapCoord(nx+dx/steps),tz=wrapCoord(nz+dz/steps);
+        const fits=(a,b)=>rideFits(a,b,feet,player.heading,tall,false);
+        if(fits(tx,tz)){nx=tx;nz=tz;}
+        else {
+          // Project a blocked stride along the face touching any part of the
+          // turtle. A post at its nose can otherwise pin a clear shell.
+          let ax=tx,az=tz;
+          for(const [offset,r,h] of TURTLE_SPANS){
+            const ox=offset*Math.sin(player.heading),oz=offset*Math.cos(player.heading);
+            const at=constrainMove(wrapCoord(nx+ox),wrapCoord(nz+oz),wrapCoord(ax+ox),wrapCoord(az+oz),0,feet,r,h||tall);
+            ax=wrapCoord(at.x-ox);az=wrapCoord(at.z-oz);
+          }
+          if(fits(ax,az)){nx=ax;nz=az;}
+          else if(fits(tx,nz))nx=tx;
+          else if(fits(nx,tz))nz=tz;
+          else break;
+        }
+        feet=Math.max(player.y,groundHeight(nx,nz,feet));
+      }
+      land={x:nx,z:nz};
+    } else land=constrainMove(player.x,player.z,x,z,player.h,player.y,radius,tall);
+    const at = phasing ? land : voyage.move(player.x,player.z,land.x,land.z,player.y,radius,tall);
     player.vx = wrapDelta(at.x-player.x)/dt;
     player.vz = wrapDelta(at.z-player.z)/dt;
     player.speed = Math.hypot(player.vx,player.vz);
     player.x = at.x; player.z = at.z;
     const ship = phasing ? null : voyage.sample(at.x,at.z,player.y);
     const floor = phasing ? landscapeFloor(at.x,at.z) : Math.max(groundHeight(at.x,at.z,player.y),ship?.floor ?? -Infinity);
-    const ceiling = phasing ? Infinity : Math.min(overheadHeight(at.x,at.z,player.y),ship?.ceiling ?? Infinity);
+    const ceiling = phasing ? Infinity : Math.min(overheadHeight(at.x,at.z,player.y,radius),ship?.ceiling ?? Infinity);
     const wasGrounded = player.grounded;
     if (player.grounded && floor >= player.y-.32 && player.vy<=0) player.y = floor;
     if (canFly() && input.jump && !player.activity) {
@@ -742,10 +949,11 @@ export function createGame(snapshot = null) {
     } else {
       player.vy -= (player.vy > 0 ? RISE_GRAVITY : FALL_GRAVITY)*dt;
     }
-    player.y += player.vy*dt;
-    const bodyHeight = (1.66 + player.airStretch * 1.07) * (player.buffs.full > 0 ? 1.28 : 1);
-    const seat = player.mount === 'turtle' ? 1.04 : player.mount === 'bike' ? .9 : 0;
-    const headroom = Math.max(floor, ceiling - bodyHeight - seat);
+    const dy=player.vy*dt;
+    const lift=phasing || player.grounded && dy<0 ? dy : crowdLift(at.x,at.z,player.y,dy,tall,radius);
+    player.y+=lift;
+    if(lift!==dy)player.vy=0;
+    const headroom = Math.max(floor, ceiling - tall);
     if (player.y > headroom && player.vy > 0) {
       player.y = headroom;
       player.vy = 0;
@@ -769,31 +977,28 @@ export function createGame(snapshot = null) {
   }
   function checkContact() {
     if (lastBath && !insideBath(lastBath, true)) lastBath = null;
-    if (player.activity || player.h > 1.15 || player.mode === 'kusa') return;
+    if (player.activity || player.mode === 'kusa') return;
     if (!player.mount && player.grounded) {
       for (const o of objects) {
         if (!o.grand && !o.retreat && !['tsukimi','kyoTea','mitarashi'].includes(o.type) && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
             gap(o) <= (o.type === 'onsen' ? 1.55 : .83)) { collect(o); return; }
       }
     }
-    if (player.invulnerable > 0) return;
-    for (const n of state.nearbyNpcs) {
-      if (n.area || n.encounter || n.scrollFauna || n.seaResident || n.atMortar || n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
-      player.invulnerable = 2.1;
-      if (!protectedVitals()) player.hp = Math.max(0,player.hp-7);
-      if (player.hp === 0) {
-        player.mode = 'normal'; player.grounded = true; player.h = player.vy = 0;
-        player.y = groundHeight(player.x,player.z,player.y);
-        beginActivity('sleep',5);
-        message('お餅はその場で、すやすや眠った。'); sound('sleep');
-      } else {
-        const dx = player.x-n.x, dz = player.z-n.z;
-        const length = Math.hypot(dx,dz);
-        player.vx = (length ? dx/length : -Math.sin(player.heading))*3.6;
-        player.vz = (length ? dz/length : -Math.cos(player.heading))*3.6;
-        beginActivity('fall',.68); sound('bump');
-      }
-      break;
+    const n=bumped;
+    if (!n || player.invulnerable>0 || player.h>1.15 || player.diveDepth>0) return;
+    player.invulnerable = 2.1;
+    if (!protectedVitals()) player.hp = Math.max(0,player.hp-7);
+    if (player.hp === 0) {
+      player.mode = 'normal'; player.grounded = true; player.h = player.vy = 0;
+      player.y = groundHeight(player.x,player.z,player.y);
+      beginActivity('sleep',5);
+      message('お餅はその場で、すやすや眠った。'); sound('sleep');
+    } else {
+      const dx=wrapDelta(player.x-n.x),dz=wrapDelta(player.z-n.z);
+      const length = Math.hypot(dx,dz);
+      player.vx = (length ? dx/length : -Math.sin(player.heading))*3.6;
+      player.vz = (length ? dz/length : -Math.cos(player.heading))*3.6;
+      beginActivity('fall',.68); sound('bump');
     }
   }
   function updateRegion(collectStamp) {
@@ -864,8 +1069,10 @@ export function createGame(snapshot = null) {
       }
       if (player.activityTime <= 0) finishActivity();
     }
-    updateMotion(dt, input);
+    bumped=null;
     updateNPCs(dt);
+    updateMotion(dt,input);
+    if(turtle.mounted)moveTurtle(dt);
     updateShots(dt);
     checkContact();
     updateRegion(true);
@@ -982,7 +1189,8 @@ export function createGame(snapshot = null) {
     const previousReward = (data.version === 3 || data.kagamiUnlocked === true) &&
       npcs.slice(0,623).every(n => state.delivered.has(n.id));
     const completeFourthEdition = data.version === 4 && npcs.slice(0,675).every(n=>state.delivered.has(n.id));
-    const completeFifthEdition = data.version === 5 && npcs.slice(0,794).every(n=>state.delivered.has(n.id));
+    const completeFifthEdition = data.version === 5 && npcs.every(n=>n.scrollFauna || state.delivered.has(n.id)) &&
+      retiredSeaIds.every(id=>data.delivered?.includes(id));
     state.kagamiUnlocked = state.delivered.size === state.recipientTotal || previousReward || completeFourthEdition || completeFifthEdition;
     if(player.mode==='kagami' && !state.kagamiUnlocked) player.mode='normal';
     state.score=data.score; state.time=data.time;
@@ -990,7 +1198,7 @@ export function createGame(snapshot = null) {
     objects.forEach((o,i)=>{o.cooldown=data.items[i] ?? 0; o.active=o.cooldown===0;});
     ports.forEach((o,i)=>{o.bikes=data.bikes[i] ?? 2;});
     Object.assign(turtle, {x:t.x,z:t.z,homeX:t.homeX,homeZ:t.homeZ,y:groundHeight(t.x,t.z),mounted:p.mount==='turtle'});
-    turtlePause=t.pause; turtleLeg=t.leg;
+    turtlePause=t.pause; turtleLeg=t.leg; recoverRider=turtle.mounted;
     lastBath=objects.find(o=>o.type==='onsen' && o.id===data.lastBath)??null;
     updateRegion(false);
     return true;

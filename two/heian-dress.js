@@ -4,7 +4,7 @@ import { foldMark } from './emaki-costume.js';
 import { brushStroke } from './pilgrimage-pigment.js';
 
 const tau=2*Math.PI,{sin,cos,abs,pow}=Math;
-export const TOWNSFOLK=['壺装束の旅餅','文使いの餅','市女の餅','荷担ぎの餅','薬売りの餅'];
+export { TOWNSFOLK } from './city-walkers.js';
 const styles=[
   ['#a6473d','#b88060','#d1ac69','#c45840',0],
   ['#626f80','#586270','#ad9871','#50485a',1],

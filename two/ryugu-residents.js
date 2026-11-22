@@ -14,17 +14,18 @@ export const SEA_SPECIES = {
 
 // East from the audience hall, the pearl lamps trace two shoals and the
 // gate. The side gardens have their own small ensembles outside the galleries.
+// The first number belongs to the original delivery book. It also anchors
+// that trio's pose and position when an old journey is reopened.
 const seats = [
-  [75, 1, 2.0], [49,-3,2.7], [32,4,2.8], [21,0,1.5],
-  [8.4,-5.8,1.1], [2.2,2.8,.35], [-3.8,-3.9,.55], [4,12.2,1.1],
-  [1,-14.2,.68], [-16,22.7,.64], [-17,-23.5,.77], [-26,4,1.3],
+  [0,75,1,2], [1,49,-3,2.7], [2,32,4,2.8], [4,7.9,-5.8,1.1],
+  [6,-4.8,-3.9,.55], [7,4,12.2,1.1], [9,-16,22.7,.64], [10,-15,-23.5,.77],
 ];
+export const retiredSeaIds=[3,5,8,11].flatMap(seat=>Object.keys(SEA_SPECIES).map(type=>'ryugu-'+type+'-'+seat));
 const kinds=Object.keys(SEA_SPECIES),tau=2*Math.PI;
 export const SEA_ENSEMBLES=seats.length;
 export function makeRyuguResidents() {
   const visitors=[];
-  for (let seat=0;seat<seats.length;seat++) {
-    const [along,across,height]=seats[seat];
+  for (const [seat,along,across,height] of seats) {
     for(let part=0;part<kinds.length;part++) {
       const type=kinds[(seat+part)%kinds.length],a=part*tau/3+seat*.7;
       const x=RYUGU.x+along+Math.cos(a)*2, z=RYUGU.z+across+Math.sin(a)*2.35;

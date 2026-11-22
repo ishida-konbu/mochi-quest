@@ -5,7 +5,7 @@ import { SCROLL_FAUNA } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { canopyHeight, walkCircuit } from './village-paths.js';
 import { legendary, legendPath } from './legend-flight.js';
-import { dragonWave, dragonPhase, dragonPitch, maxDragonPitch, walkingScore } from './animal-motion.js';
+import { craneWingbeat, dragonWave, dragonPhase, dragonPitch, maxDragonPitch, walkingScore } from './animal-motion.js';
 
 export const SPECIES = Object.freeze({
   monkey: { count:90, points:30, label:'猿', stature:1, frame:2.7, center:.88 },
@@ -119,6 +119,7 @@ export function legendFlight(n,time,out) {
 }
 
 export function moveWildlife(n,time) {
+  n.poseTime=time;
   if(legendary(n.type)) {
     legendFlight(n,time,n);
     if(n.type==='dragon') n.wavePhase=dragonPhase(time,n);
@@ -148,7 +149,7 @@ export function moveWildlife(n,time) {
 // Separate ellipsoids follow the crane wings and the dragon's curved body.
 const bodyVolumes = {
   monkey:[[0,.9,0,.45,.88,.39]], fox:[[0,.68,.1,.29,.48,.63],[0,1.05,.56,.22,.26,.34]],
-  bird:[[0,.11,0,.32,.24,.76],[-.59,.13,-.09,.55,.31,.37],[.59,.13,-.09,.55,.31,.37],[0,.32,.72,.14,.18,.38]],
+  bird:[[0,.11,0,.21,.19,.63],[0,.32,.74,.12,.13,.43]],
   tiger:[[0,.81,.04,.39,.49,.9],[0,1.13,.74,.33,.34,.36]],
   kirin:[[0,1.16,-.07,.35,.53,.95],[0,1.8,.60,.28,.65,.39],[0,2.34,.82,.26,.3,.41]],
   dragon:[[-.59,.60,-2.86,.32,.55,.53],[-.25,.35,-2.27,.33,.39,.64],[-.09,.92,-1.66,.41,.38,.59],
@@ -157,8 +158,38 @@ const bodyVolumes = {
   deer:[[0,.88,0,.31,.53,.79],[0,1.39,.56,.23,.44,.31],[0,1.73,.72,.24,.23,.34]],
   boar:[[0,.72,-.05,.4,.49,.83],[0,.58,.72,.28,.30,.44]],
   shishi:[[0,.96,-.08,.53,.64,1.1],[0,1.39,.69,.47,.51,.51]],
-  turtle:[[0,.4,.07,.58,.55,.69]],
+  // The free turtle's ink rig is displayed at twice the sculpt's scale.
+  turtle:[[0,.67,-.105,.79,.48,1.03],[0,.61,.84,.18,.18,.34],[0,.82,1.29,.21,.19,.28]],
+  rabbit:[[0,.38,-.06,.28,.37,.31],[0,.94,.01,.29,.54,.28],[0,1.51,.15,.24,.26,.33],
+    [-.28,1.82,-.26,.16,.16,.33],[.28,1.87,-.25,.16,.19,.33]],
+  frog:[[0,.29,-.04,.40,.28,.32],[0,.79,.01,.35,.48,.29],[0,1.27,.13,.33,.22,.36]],
 };
+// Four separate lower limbs preserve the space between a large animal's
+// legs when a paper notice travels underneath its belly.
+for(const [kind,x,rear,fore,height,width] of [
+  ['fox',.15,-.32,.23,.29,.075],['tiger',.266,-.44,.31,.42,.12],
+  ['kirin',.217,-.47,.35,.61,.10],['deer',.147,-.54,.33,.47,.09],
+  ['boar',.219,-.49,.34,.31,.105],['shishi',.225,-.55,.41,.44,.13],
+])for(const side of [-1,1])for(const z of [rear,fore])
+  bodyVolumes[kind].push([side*x,height,z,width,height,width+.035]);
+
+const craneTargets=[...bodyVolumes.bird,...Array.from({length:4},()=>[0,0,-.14,0,0,.29])],craneFlight={};
+function craneContact(n) {
+  const {flap,amplitude,stroke,bank}=craneWingbeat((n.poseTime||0)+(n.phase||0),craneFlight);
+  let i=bodyVolumes.bird.length;
+  for(const side of [-1,1]){
+    const wing=side*(.15+stroke*.69)+bank;
+    const tip=wing+side*amplitude*(.22*Math.sin(flap-.92)-.10);
+    const rootX=side*.075,rootY=.175+.045*amplitude*Math.cos(flap-.3);
+    for(const [span,angle] of [[.39,wing],[.39,tip]]){
+      const outer=i%2===1,target=craneTargets[i++];
+      const x=rootX+(outer?side*.77*Math.cos(wing):0),y=rootY+(outer?side*.77*Math.sin(wing):0);
+      target[0]=x+side*span*Math.cos(angle);target[1]=y+side*span*Math.sin(angle);
+      target[3]=.46*Math.abs(Math.cos(angle))+.055;target[4]=.09+.46*Math.abs(Math.sin(angle));
+    }
+  }
+  return craneTargets;
+}
 // The seated hare's feet straddle the deer. Aim at its chest to reach it
 // independently from the flank below the saddle.
 const seatedHareVolumes=[[0,1.03,.03,.32,.38,.31],[0,1.52,.06,.24,.24,.26]];
@@ -173,35 +204,62 @@ function hawkContact(n) {
   }
   return hawkTargets;
 }
-export function recipientContact(n,shot,dx,dz,length) {
-  const rx=wrapDelta(shot.x-n.x),rz=wrapDelta(shot.z-n.z);
-  const volumes=n.ridesDeer ? seatedHareVolumes : n.type==='hawk'?hawkContact(n):bodyVolumes[n.type] || SEA_SPECIES[n.type]?.volumes || SCROLL_FAUNA[n.type]?.volumes;
-  if (!volumes) {
-    if(shot.y<n.y-.1 || shot.y>n.y+2.15) return Infinity;
-    const along=Math.max(0,Math.min(length,-rx*dx-rz*dz));
-    return (rx+along*dx)**2+(rz+along*dz)**2<.64 ? along : Infinity;
-  }
-  const scale=n.stature||1, extent=((SPECIES[n.type] || SEA_SPECIES[n.type] || SCROLL_FAUNA[n.type])?.frame || 2)*scale;
-  if(Math.abs(rx)>extent+length || Math.abs(rz)>extent+length || Math.abs(shot.y-n.y)>extent) return Infinity;
+// Sweep the relative displacement of both participants during this simulation
+// step. Distances and padding are in world metres, including on scaled rigs.
+export function sweepResident(n, origin, dx, dy, dz, radius, halfHeight, moving = false, normal = null) {
+  const startX=moving ? n.contactX ?? n.x : n.x, startY=moving ? n.contactY ?? n.y : n.y;
+  const startZ=moving ? n.contactZ ?? n.z : n.z;
+  const rx=wrapDelta(origin.x-startX), rz=wrapDelta(origin.z-startZ), ry=origin.y-startY;
+  dx-=wrapDelta(n.x-startX); dy-=n.y-startY; dz-=wrapDelta(n.z-startZ);
+  const scale=n.stature||1, width=scale*(n.area || n.encounter ? n.build || 1 : 1);
+  const spec=SPECIES[n.type] || SEA_SPECIES[n.type] || SCROLL_FAUNA[n.type];
+  const extent=(spec?.frame || 2.6)*Math.max(scale,width);
+  if(Math.abs(rx)>extent+radius+Math.abs(dx) || Math.abs(rz)>extent+radius+Math.abs(dz) ||
+      Math.abs(ry)>extent+halfHeight+Math.abs(dy)) return Infinity;
+  const volumes=n.ridesDeer ? seatedHareVolumes : n.type==='hawk' ? hawkContact(n) : n.type==='bird' ? craneContact(n) : bodyVolumes[n.type] || spec?.volumes;
+  if(!volumes)return Infinity;
   const c=Math.cos(n.heading),s=Math.sin(n.heading);
   const dragon=n.type==='dragon', pitch=dragon ? dragonPitch(n) : 0;
   const cp=Math.cos(pitch),sp=Math.sin(pitch);
-  const forward=(rx*s+rz*c)/scale, height=(shot.y-n.y)/scale;
-  const x=(rx*c-rz*s)/scale, y=height*cp+forward*sp, z=forward*cp-height*sp;
-  const advance=(dx*s+dz*c)/scale, vx=(dx*c-dz*s)/scale, vy=advance*sp, vz=advance*cp;
+  const forward=rx*s+rz*c, along=dx*s+dz*c;
+  const x=rx*c-rz*s, y=ry*cp+forward*sp, z=forward*cp-ry*sp;
+  const vx=dx*c-dz*s, vy=dy*cp+along*sp, vz=along*cp-dy*sp;
   let first=Infinity;
-  for(const [cx,cy,cz,w,h,d] of volumes) {
-    // The sheet itself has width and a little flutter at its leading edge.
+  for(const volume of volumes) {
+    let [cx,cy,cz,w,h,d]=volume;
+    if(n.type==='deer' && cy>1.3) {
+      // The muzzle swings about the shoulder when browsing or bowing.
+      const gesture=n.gesture||0,graze=n.variation===1?0:gesture,bow=n.encounter==='bow'?gesture:0;
+      const angle=1.34*graze+1.08*bow, c=Math.cos(angle),s=Math.sin(angle);
+      const height=cy-1.015,forward=cz-.31;
+      cy=1.015-.07*graze+height*c-forward*s;cz=.31+.035*graze+height*s+forward*c;
+      const tall=Math.hypot(h*c,d*s);d=Math.hypot(d*c,h*s);h=tall;
+    }
     if(dragon) dragonWave(cz,n.wavePhase||0,wave);
-    const a=w+.105,b=h+.14,e=d+.105, up=(y-cy-(dragon?wave.y:0))/b;
-    if(!vy && Math.abs(up)>1) continue;
-    const xx=(x-cx-(dragon?wave.x:0))/a,zz=(z-cz)/e,ux=vx/a,uy=vy/b,uz=vz/e;
-    const C=xx*xx+zz*zz+up*up-1;
-    if(C<=0) return 0;
-    const A=ux*ux+uy*uy+uz*uz,B=xx*ux+up*uy+zz*uz,D=B*B-A*C;
-    if(D<0 || B>=0) continue;
-    const enter=(-B-Math.sqrt(D))/A;
-    if(enter>=0 && enter<=length && enter<first) first=enter;
+    const a=w*width+radius,b=h*scale+halfHeight,e=d*scale+radius;
+    const xx=(x-(cx+(dragon?wave.x:0))*width)/a;
+    const yy=(y-(cy+(dragon?wave.y:0))*scale)/b, zz=(z-cz*scale)/e;
+    const ux=vx/a,uy=vy/b,uz=vz/e;
+    const C=xx*xx+yy*yy+zz*zz-1, B=xx*ux+yy*uy+zz*uz;
+    let t=0;
+    if(C>0) {
+      if(B>=0)continue;
+      const A=ux*ux+uy*uy+uz*uz, D=B*B-A*C;
+      if(D<0)continue;
+      t=C/(-B+Math.sqrt(D));
+    } else if(normal && B>1e-8) continue; // allow travel out of an old overlap
+    if(t>1 || t>=first) continue;
+    first=t;
+    if(!normal)continue;
+    const lx=(xx+t*ux)/a,ly=(yy+t*uy)/b,lz=(zz+t*uz)/e;
+    const fwd=ly*sp+lz*cp;
+    normal.x=lx*c+fwd*s; normal.z=-lx*s+fwd*c; normal.y=ly*cp-lz*sp;
+    const len=Math.hypot(normal.x,normal.y,normal.z)||1;
+    normal.x/=len;normal.y/=len;normal.z/=len;
   }
   return first;
+}
+export function recipientContact(n,shot,dx,dz,length) {
+  const t=sweepResident(n,shot,dx*length,0,dz*length,.105,.14);
+  return Number.isFinite(t) ? t*length : Infinity;
 }

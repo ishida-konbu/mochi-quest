@@ -11,10 +11,10 @@ import { animalRadius, openGround } from '../two/village-paths.js';
 import { Triangle, Vector3 } from '../two/vendor/three.module.min.js';
 import { forestGeometry } from '../two/forest-mesh.js';
 
-test('all eighty-two new recipients remain inside their own habitats throughout a circuit',()=>{
-  const {state}=createGame(),newcomers=state.npcs.slice(794);
+test('all new recipients remain inside their own habitats throughout a circuit',()=>{
+  const {state}=createGame(),newcomers=state.npcs.filter(n=>n.scrollFauna);
   assert.deepEqual(Object.fromEntries(Object.entries(Object.groupBy(newcomers,n=>n.type)).map(([type,ns])=>[type,ns.length])),
-    {elephant:2,baku:10,hawk:10,ox:10,chicken:40,fishfolk:10});
+    {elephant:2,baku:10,hawk:10,ox:10,chicken:40,fishfolk:7});
   const musicians=state.npcs.filter(n=>n.seaResident);
   for(const n of newcomers)for(let t=0;t<85;t+=1.7){
     moveScrollFauna(n,t);
@@ -108,11 +108,15 @@ test('notices reach each of the six new animals through the live game and journa
 test('the complete fifth-edition scroll retains Kagami when opened with the new animals',()=>{
   const game=createGame(),snap=game.save();
   snap.version=5;snap.items.length=56;snap.bikes.length=14;
-  snap.delivered=game.state.npcs.slice(0,794).map(n=>n.id);
+  snap.delivered=game.state.npcs.filter(n=>!n.scrollFauna).map(n=>n.id);
+  const retired=[3,5,8,11].flatMap(i=>['seaTurtle','bream','octopus'].map(type=>'ryugu-'+type+'-'+i));
+  snap.delivered.push(...retired);
+  assert.equal(snap.delivered.length,794);
   delete snap.kagamiUnlocked;
   const restored=createGame(snap);
   assert.ok(restored.restored);
   assert.ok(restored.state.kagamiUnlocked);
-  assert.equal(restored.state.delivered.size,794);
+  assert.equal(restored.state.delivered.size,782);
   assert.equal(createGame({...snap,delivered:snap.delivered.slice(1)}).state.kagamiUnlocked,false);
+  assert.equal(createGame({...snap,delivered:snap.delivered.slice(0,-1)}).state.kagamiUnlocked,false);
 });

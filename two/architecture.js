@@ -49,7 +49,9 @@ export function roomPlan(b) {
 export function pagodaPlan(b) {
   const scale=b.roof/14.5, floor=.48, rise=3.52*scale, run=3.68, stairWidth=1.42, lane=.85, steps=Math.ceil(10*scale);
   const slabs=[], storeys=[], posts=[], panels=[];
-  const slab=(u,v,w,d,top,kind)=>slabs.push({u,v,w,d,top,kind});
+  // The half landings bridge the ground-floor passage. Their thinner
+  // planks leave a full standing clearance underneath.
+  const slab=(u,v,w,d,top,kind)=>slabs.push({u,v,w,d,top,kind,thickness:kind==='landing'?.085:.13});
   for(let n=0;n<5;n++) {
     const y=floor+rise*n, scale=1-n*.085;
     const w=b.w*scale, d=b.d*scale, shaftW=2*(lane+stairWidth/2), shaftD=run+1.5;
@@ -90,4 +92,27 @@ export function pagodaPlan(b) {
     }
   }
   return {slabs,storeys,posts,panels,rise,scale};
+}
+
+// Both the painted roof and the contact surface use local eave coordinates
+// (-1 to 1). The gable ridge is narrower than its eaves; the pagoda has a
+// real opening above the stairs. Outside the sheet there is no surface.
+export function roofProfile(form, x, z, aperture = .51, padX = 0, padZ = 0) {
+  x = Math.abs(x);
+  if (x > 1 + padX || Math.abs(z) > 1 + padZ) return -Infinity;
+  if (form === 'leanTo') return Math.max(0,Math.min(1,.5-.5*z));
+  z = Math.abs(z);
+  if (form === 'hip') return hipHeight(x,z);
+  if (form === 'pagoda') {
+    const r = Math.max(x,z);
+    if (x + padX < aperture && z + padZ < aperture) return -Infinity;
+    const t = Math.min(1, Math.max(0, (r - aperture) / (1 - aperture)));
+    const corner = Math.min(x,z) / Math.max(.001,r);
+    return (1-t)**1.59 + .17*corner**3.8*t**1.7;
+  }
+  const v = Math.min(1,z);
+  const width = .86 + .14*v;
+  if (x > width + padX) return -Infinity;
+  const end = Math.min(1,x/width);
+  return (1-v)**1.62 + end**5*(.045 + .12*v);
 }

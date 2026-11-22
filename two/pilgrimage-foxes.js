@@ -2,7 +2,7 @@
 // between the lantern, tall cap, white hood, paper parasol and horizontal flute.
 import * as T from './vendor/three.module.min.js';
 import { terrainHeight, wrapDelta } from './terrain.js';
-import { WEDDING_SITES, weddingPoint } from './pilgrimage-layout.js';
+import { WEDDING_SITES, WEDDING_ROLES as roles, weddingWalkerPose } from './pilgrimage-layout.js';
 import { brushWash, surfaceGrain } from './scroll-sculpt.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { costumeDistance } from './costume-distance.js';
@@ -13,7 +13,7 @@ import { weddingVisage } from './wedding-visages.js';
 
 const {sin,cos,PI}=Math, tau=2*PI;
 const soot='#37352e', silk='#eee5cb', cord='#ae4c39';
-const roles=['lantern','groom','bride','parasol','flute'];
+
 
 function panel(rows,columns,point) {
   const xyz=[], faces=[];
@@ -308,8 +308,7 @@ export function foxParties(scene){
     for(const m of all) m.count=0;
     if(active) for(const [i,site] of WEDDING_SITES.entries()){
       for(const [j,role] of roles.entries()){
-        const walked=time*.82+(site.rx-site.rz)*1.04+i*2.2-j*1.70;
-        const q=weddingPoint(site,walked), dx=wrapDelta(q.x-player.x),dz=wrapDelta(q.z-player.z);
+        const q=weddingWalkerPose(i,j,time), dx=wrapDelta(q.x-player.x),dz=wrapDelta(q.z-player.z);
         if(dx*dx+dz*dz>95**2)continue;
         const x=player.x+dx,z=player.z+dz,size=role==='lantern'?1.045:role==='groom'?1.12:1.075;
         const phase=time*3.52+j*.87+i*.6,stride=sin(phase),sway=.024*stride;

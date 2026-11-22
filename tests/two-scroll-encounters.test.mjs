@@ -12,7 +12,8 @@ test('the five new districts have playable encounters on clear ground and at swi
   const {state}=createGame();
   const cast=state.npcs.filter(n=>n.encounter || n.seaResident);
   assert.deepEqual(Object.fromEntries(Object.entries(Object.groupBy(cast,n=>n.habitat)).map(([k,v])=>[k,v.length])),
-    {kyo:8,peach:16,todaiji:15,inari:28,ryugu:36});
+    {kyo:8,peach:16,todaiji:15,inari:28,ryugu:24});
+  for(const type of Object.keys(SEA_SPECIES)) assert.equal(cast.filter(n=>n.type===type).length,8);
   for(const n of cast) {
     for(let t=0;t<36;t+=.75) {
       if(n.seaResident) {
