@@ -39,8 +39,8 @@ export function rimSection(s,a){
   if(type==='ledge'||type==='bund')h+=.095*Math.sin(3*a+.5)+.07*Math.sin(7*a-.65);
   if(type==='fan')h+=.10*Math.max(0,-Math.sin(a))*(.3+.7*wave);
   if(type==='leaf')h+=.13*Math.cos(2*a);
-  // Widen the inkstone's grinding land towards the back, where the animal
-  // calligrapher works. Leave the side facing the crossroads low and narrow.
+  // Widen the inkstone's grinding land towards the inlet. Leave the side
+  // facing the crossroads low and narrow.
   const extra=type==='slab'?.69*Math.max(0,-Math.sin(a))**2:0;
   return {u,v,top:-.14+bank*(.14+h),width:width+extra,bank,wave};
 }
@@ -59,18 +59,16 @@ export function addMainRimSolids(s,add){
   }
 }
 
-// View the tableau across the water on the right shoulder, clear of the
-// inlet and front threshold. The city screen remains visible just behind it.
+// Inari's fox stands beyond the rim on the right-hand side of the torii path.
 function surveyTableau(s){
-  const angle=(s.kind==='inari'?-.025:-.21)*Math.PI,[x,z]=rimPoint(s,angle);
+  const [x,z]=rimPoint(s,-.025*Math.PI);
   const length=Math.hypot(x,z);
-  const setback=s.kind==='inari'?1.38:1.13;
-  return {u:x+setback*x/length,v:z+setback*z/length,yaw:-.60,scale:s.kind==='capital'?1.04:1};
+  return {u:x+1.38*x/length,v:z+1.38*z/length,yaw:-.60,scale:1};
 }
 
 const tableaus=new WeakMap();
 export function bathTableau(s){
-  if(s.rank!=='main'||(s.kind!=='capital'&&s.kind!=='inari'))return null;
+  if(s.rank!=='main'||s.kind!=='inari')return null;
   if(!tableaus.has(s))tableaus.set(s,surveyTableau(s));
   return tableaus.get(s);
 }

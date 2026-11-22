@@ -3,7 +3,7 @@ import { sculpture } from './pilgrimage-pigment.js';
 import { roundedStone } from './pigments.js';
 
 // The maple grows out of the moss behind the tsukubai. Its longest limb
-// leans towards the inkstone; lower branches frame the hare and the water basin.
+// leans towards the inkstone; lower branches shade the water basin.
 const {sin,cos,PI}=Math;
 const tau=2*PI;
 function mapleLeaf(){

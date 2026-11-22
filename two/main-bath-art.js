@@ -22,7 +22,6 @@ for(let j=0;j<3;j++){
   }
 }
 const foundationStones={
-  capital:[[-.79,-.17,.48,.41,.087],[.26,.211,1.085,.51,.095]],
   inari:[...gateShoes,[.79,-.03,.69,.48,.026]],
 };
 function bedStone(art,footing,[cx,cz,w,d,top]){

@@ -174,9 +174,9 @@ test('regional basins have distinct shorelines, continuous water and a dry appro
   assert.ok(profiles.size>=10,'distinct shorelines across the island');
 });
 
-test('main bath shores only display freestanding animal carvings in Kyoto and Inari',()=>{
+test('main bath shores only display freestanding animal carvings in Inari',()=>{
   const sites=[...regional().filter(s=>s.rank==='main'),SNOW_SPRING],profiles=new Set();
-  assert.deepEqual(sites.filter(bathTableau).map(s=>s.kind).sort(),['capital','inari']);
+  assert.deepEqual(sites.filter(bathTableau).map(s=>s.kind).sort(),['inari']);
   for(const s of sites){
     const radii=Array.from({length:80},(_,i)=>{
       const angle=i*Math.PI/40;
@@ -193,7 +193,12 @@ test('main bath shores only display freestanding animal carvings in Kyoto and In
       assert.ok(!staticVolumeAt(...old,level+.64),s.name+' retired outdoor jar footing is clear');
       continue;
     }
-    if(s.kind!=='capital' && s.kind!=='inari'){
+    if(s.kind==='capital'){
+      const spot=sitePoint(s,4.97,-2.34);
+      assert.ok(!staticVolumeAt(...spot,springLevel(s)+.60),'the former hare stand is clear');
+      assert.equal(bankSculpture(s.kind).attributes.position.count,0);
+    }
+    if(s.kind!=='inari'){
       assert.equal(bathTableau(s),null,s.name+' has no bankside statue or plinth');
       continue;
     }
