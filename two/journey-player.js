@@ -3,14 +3,6 @@ import { JOURNEY_MUSIC } from './journey-music.js';
 const directory = new URL('../audio/music/', import.meta.url);
 // Four milliseconds of silence let both media elements receive the first user gesture on iOS.
 const silence = 'data:audio/wav;base64,UklGRkQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
-// Seconds before the file ends to overlap its returning intro. Measured on the
-// game masters: long fade-outs (Onsen Ritual in particular) would otherwise
-// leave several seconds of near-silence at the native media loop point.
-const repeatLead = {
-  river: 4.3, shrine: 5.8, market: 3.0, spring: 7.6, terraces: 4.4, coast: 5.8,
-  snow: 2.6, autumn: 3.6, moon: 3.7, dawn: 3.4, kyo: 2.5, peach: 4.3,
-  ryugu: 4.3, todaiji: 3.1, inari: 6.7, tsuruga: 6.2, sakai: 4.1, palace: 5.6, bike: 3.6,
-};
 
 export function createJourneyPlayer(ctx, master) {
   const bus = ctx.createGain();
@@ -129,11 +121,11 @@ export function createJourneyPlayer(ctx, master) {
     nextWarm = now + 4;
   }
 
-  function continueCue(cue, upcoming, now, gain) {
+  function continueCue(track, upcoming, now) {
     const spare = decks.find(deck => deck !== current);
     if (spare.retireAt) return;
     const remaining = current.media.duration - current.media.currentTime;
-    const lead = repeatLead[cue];
+    const lead = track.repeatLead;
     if (remaining < lead + 6 && current.media.duration > 2 * (lead + 6) &&
         now >= (current.repeatAfter || 0)) {
       // Use the same two streams for a long stay. The native loop remains
@@ -144,7 +136,7 @@ export function createJourneyPlayer(ctx, master) {
         if (spare.media.currentTime > 0) spare.media.currentTime = 0;
         if (remaining <= lead) start(spare, now);
       }
-      if (spare.status === 'playing' && spare.media.currentTime > .15) switchTo(spare, now, gain);
+      if (spare.status === 'playing' && spare.media.currentTime > (track.fadeInAt ?? .15)) switchTo(spare, now, track.gain);
       return;
     }
     if (spare.status !== 'idle') pause(spare);
@@ -187,7 +179,7 @@ export function createJourneyPlayer(ctx, master) {
       return false;
     }
     if (current?.file === file) {
-      continueCue(cue, upcoming, now, track.gain);
+      continueCue(track, upcoming, now);
       return now - current.progressAt < 2;
     }
     const next = (!current && resumeDeck?.file === file ? resumeDeck : decks.find(deck => deck.file === file))
@@ -196,7 +188,7 @@ export function createJourneyPlayer(ctx, master) {
     if (next.file !== file && next.retireAt) return Boolean(current);
     prepare(next, file, 'none');
     if (next.status === 'idle') start(next, now);
-    if (next.status === 'playing' && (!current || next.media.currentTime > .15)) switchTo(next, now, track.gain);
+    if (next.status === 'playing' && (!current || next.media.currentTime > (track.fadeInAt ?? .15))) switchTo(next, now, track.gain);
     // A rapid return while another cue buffers must never start that abandoned cue.
     for (const deck of decks) {
       if (deck !== next && deck !== current && !deck.retireAt && deck.status !== 'idle') pause(deck);

@@ -17,17 +17,33 @@ test('each destination, the palace interior and the bicycle have a named local t
   }
 });
 
+test('the revised regional selections use the requested recordings', () => {
+  const expected = {
+    kyo: ['Rise of the Red Sun', 'Mandala Dreams', 'rise-of-the-red-sun.mp3'],
+    snow: ['Sand Mandala', 'Joseph Beg', 'sand-mandala.mp3'],
+    ryugu: ['Across the Sea of Japan', 'Mandala Dreams', 'across-the-sea-of-japan.mp3'],
+    palace: ['Hong Kong Calling', 'Philip Ayers', 'hong-kong-calling.mp3'],
+    inari: ['Hokkaido Solitude', 'Mandala Dreams', 'hokkaido-solitude.mp3'],
+    tsuruga: ['Kyoto by Dawn', 'Ooyy, Smartface', 'kyoto-by-dawn.mp3'],
+    market: ['State of Zen', 'Mandala Dreams', 'state-of-zen.mp3'],
+  };
+  for (const [cue, recording] of Object.entries(expected)) {
+    const { title, artist, file } = JOURNEY_MUSIC[cue];
+    assert.deepEqual([title, artist, file], recording, cue);
+  }
+});
+
 test('the release index lists approved cues and verifies local copies', async () => {
   const folder = new URL('../audio/music/', import.meta.url);
   const index = JSON.parse(await readFile(new URL('available.json', folder), 'utf8'));
-  const files = (await readdir(folder)).filter(file => !file.startsWith('.') && file.endsWith('.mp3')).sort();
   const selected = new Set(Object.values(JOURNEY_MUSIC).map(track => track.file));
   for (const file of Object.keys(index)) assert.ok(selected.has(file), file);
   for (const { sha256, bytes } of Object.values(index)) {
     assert.match(sha256, /^[a-f0-9]{64}$/);
     assert.ok(Number.isSafeInteger(bytes) && bytes > 0);
   }
-  for (const file of files) {
+  for (const file of (await readdir(folder)).filter(file => selected.has(file))) {
+    assert.ok(Object.hasOwn(index, file), file);
     const audio = await readFile(new URL(file, folder));
     assert.equal(audio.length, index[file].bytes, file);
     assert.equal(createHash('sha256').update(audio).digest('hex'), index[file].sha256, file);

@@ -24,7 +24,7 @@ async function playerFixture(t, { legacy = false, saveData = false } = {}) {
   const ctx = { currentTime: 0, createGain: node, createMediaElementSource(media) {
     return { connect(target) { media.level = target.gain; return target; } };
   } };
-  const index = ['inuyama-gardens.mp3', 'water-mirror.mp3', 'onsen-ritual.mp3'];
+  const index = ['inuyama-gardens.mp3', 'state-of-zen.mp3', 'onsen-ritual.mp3', 'hong-kong-calling.mp3'];
   const hash = '1234567890abcdef';
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, async json() {
     return legacy ? index : Object.fromEntries(index.map(name => [name, { sha256: hash, bytes: 2048 }]));
@@ -60,7 +60,7 @@ test('a steady forecast warms one versioned file; a slow change and reversal kee
   assert.match(spare.url, /^data:/);
   river.currentTime = 1.7;
   await update(1.7, 'river', 'market');
-  assert.match(spare.url, /water-mirror\.mp3\?v=1234567890ab$/);
+  assert.match(spare.url, /state-of-zen\.mp3\?v=1234567890ab$/);
   assert.equal(spare.preload, 'metadata');
   assert.equal(spare.plays, 1); // only gesture priming
   let release;
@@ -101,7 +101,7 @@ test('a long stay overlaps the same song, resumes the new pass and frees the dec
   await update(96.5, 'market');
   ending.currentTime = .3;
   await update(96.8, 'market');
-  assert.match(ending.url, /water-mirror\.mp3$/);
+  assert.match(ending.url, /state-of-zen\.mp3$/);
   assert.equal(ending.level.value, .28);
 });
 
@@ -113,4 +113,18 @@ test('Save-Data skips speculative music and a stalled active stream yields to th
   assert.equal(await update(2.6, 'river', 'spring'), false);
   river.currentTime = 1.5;
   assert.equal(await update(2.7, 'river'), true);
+});
+
+test('the palace recording reaches its first audible phrase before the approach fades out', async t => {
+  const { decks: [outgoing, palace], update } = await playerFixture(t);
+  await update(1, 'palace');
+  palace.currentTime = .5;
+  outgoing.currentTime = 1.5;
+  await update(1.5, 'palace');
+  assert.equal(outgoing.level.value, .28);
+  assert.equal(palace.level.value, 0);
+  palace.currentTime = 3.2;
+  await update(4.2, 'palace');
+  assert.equal(palace.level.value, .28);
+  assert.equal(outgoing.level.value, 0);
 });

@@ -15,6 +15,10 @@
     "sha256": "edafbecb9f8e9d536c9c0d8efb37ddcd0068fa20e096d9890925a24034939dda",
     "bytes": 4833219
   },
+  "hong-kong-calling.mp3": {
+    "sha256": "6595ac5b31c8b4ab4570a7156fa4edaa219e2ad7bac788a21ae4e38dcec48e57",
+    "bytes": 2193807
+  },
   "inuyama-gardens.mp3": {
     "sha256": "f1dffad8cd2dc7a33e0d858aa6110ce83936a235863a2a3f474f390474634b4a",
     "bytes": 4693725
@@ -43,6 +47,10 @@
     "sha256": "75ce90633660d1fd1a41a43049fb463f6cbeb42d69a678a6a8ed5dc52905008a",
     "bytes": 4164534
   },
+  "rise-of-the-red-sun.mp3": {
+    "sha256": "3e295c88377b9a82976256ca8f0e140a6a22e0cbded5db30338681b3f817dbef",
+    "bytes": 4370379
+  },
   "sanctity-instrumental-version.mp3": {
     "sha256": "9e1b1bf11c71e181b46f7a859a7a5f723fa3457fa432527a07b671dae6ec1581",
     "bytes": 5387015
@@ -63,16 +71,8 @@
     "sha256": "57011776871804fdfa64282d655bb4a4273f3f4413683ecca275e6bacec6873a",
     "bytes": 5005155
   },
-  "strange-tales-instrumental-version.mp3": {
-    "sha256": "beba1448de2ea1596a1d26ae22add9b6946ce53e9e05f486139b73c994dd9fe0",
-    "bytes": 3006215
-  },
   "waking-dream.mp3": {
     "sha256": "c5d962c013e20230749f38aa1117edd507a9f2e9a7cf8b406e30b5267f4a2365",
     "bytes": 4710444
-  },
-  "water-mirror.mp3": {
-    "sha256": "d860d90c7b274da0bf65e55a4eec9106d5a2fd7886c98677bfbb098c24a65e54",
-    "bytes": 2738721
   }
 }
