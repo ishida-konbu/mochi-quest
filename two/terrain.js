@@ -1,3 +1,4 @@
+import { onSuzuriLand,okaHeight,suzuriBedElevation } from './suzuri-basin-plan.js';
 import { bathPools,bathLocal,poolAt,stationRadius } from './bath-places.js';
 import { addPilgrimBathSolids,pilgrimStations,tideRise } from './pilgrim-bathing-plan.js';
 import { pilgrimRoofContact,snowLamp } from './pilgrim-lodge-plan.js';
@@ -300,6 +301,7 @@ function landHeight(x, z, expanded = true) {
 }
 // The baths sit in a hand-cut hollow; their waterline is independent of the sea.
 const [bathX,bathZ]=snowPoint(-32,-292);
+const capitalInkstone=RETREATS.find(s=>s.shape==='suzuri');
 export const SNOW_SPRING = { name:'雪見の大露天風呂', region:'snow', rank:'main', kind:'snow', yaw:0, lip:snowBathLip, x:bathX, z:bathZ, rx:13.6, rz:8.8, level:landHeight(bathX,bathZ)-.12 };
 export const TSUKIMI = { x: -51.7, z: 285.9, yaw: -.15 };
 export function springRadius(x,z) {
@@ -391,7 +393,8 @@ export function waterSurfaceAt(x,z,time=0,feet=Infinity) {
     if(pools){
       const pool=poolAt(pools,...bathLocal(site,x,z));
       if(pool)return springLevel(site)+pool.y;
-    }else if(bathRadius(site,x,z)<1)return springLevel(site)+tideRise(site,time);
+    }else if(bathRadius(site,x,z)<1 && (site.shape!=='suzuri'||!onSuzuriLand(...bathLocal(site,x,z))))
+      return springLevel(site)+tideRise(site,time);
   }
   if(abs(x-SNOW_SPRING.x)<15 && abs(z-SNOW_SPRING.z)<10 && springRadius(x,z)<1)return SNOW_SPRING.level;
   return max(WATER_Y,mountainStreamWaterAt(x,z));
@@ -1520,6 +1523,11 @@ function surfaceHeight(s, x, z, pad) {
     dz = z - s.z,
     a = dx * s.c - dz * s.s,
     b = dx * s.s + dz * s.c;
+  if(s.kind==='suzuriBasin'){
+    if(onSuzuriLand(a,b))return s.top+okaHeight(a,b);
+    const r=bathRadius(capitalInkstone,x,z);
+    return r<=1?s.top+suzuriBedElevation(a,b,r):-Infinity;
+  }
   if (s.pilgrimKind)return pilgrimRoofContact(s,a,b,pad);
   if (s.kind === 'bell') {
     // The bronze waist narrows toward the shoulder. Each vertical line meets
@@ -1600,7 +1608,10 @@ export function groundHeight(x, z, feet = -Infinity) {
   return max(onBridge ? deck : -Infinity, landscapeFloor(x, z, feet), highest(x, z, 0, feet, true));
 }
 export function waterDepth(x,z,time=0,feet=Infinity) {
-  return max(0, waterSurfaceAt(x,z,time,feet) - terrainHeight(x, z));
+  const line=waterSurfaceAt(x,z,time,feet);
+  if(abs(x-capitalInkstone.x)<6.5 && abs(z-capitalInkstone.z)<4.5)
+    return max(0,line-groundHeight(x,z,line+.15));
+  return max(0,line-terrainHeight(x,z));
 }
 function lowerFace(item,top) {
   if (item.kind === 'roof' || item.kind === 'pagodaEave') return top - (item.thickness ?? Math.max(.10,item.form==='hip'?.09*item.roofRise:0));

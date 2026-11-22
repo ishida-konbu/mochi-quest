@@ -1,8 +1,9 @@
+import { ENTRY_TREADS,SUZURI_WELL,okaHeight,rillPoint } from '../two/suzuri-basin-plan.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
 import { RETREATS, nearbyRetreat, reservedScenery, sitePoint } from '../two/retreat-layout.js';
-import { BUILDINGS, canOccupy, groundHeight, staticVolumeAt, terrainHeight, waterSurfaceAt } from '../two/terrain.js';
+import { BUILDINGS, canOccupy, groundHeight, staticVolumeAt, terrainHeight, waterDepth, waterSurfaceAt } from '../two/terrain.js';
 import { RINSING_HALL, RINSING_SEATS, SUZURI_COURT, SUZURI_WALLS, SUZURI_LEDGE, suzuriStations } from '../two/kyo-bath-layout.js';
 import { Group,Vector3 } from '../two/vendor/three.module.min.js';
 import { rinseDipperAt,rinsingPalms } from '../two/bath-gestures.js';
@@ -114,4 +115,45 @@ test('only the selected hinoki dipper scoops, lifts, pours on the shoulder, and 
   player.bathPose=undefined;draw(101,player);
   assert.ok(ladles.every((m,i)=>m.position.equals(rest[i])));
   assert.ok(!court.children.some(m=>m.isInstancedMesh && m.visible));
+});
+
+test('the front treads and dry grinding land lead to the deep ink well, and old float saves remain wet',()=>{
+  const level=waterSurfaceAt(bath.x,bath.z);
+  for(const q of ENTRY_TREADS){
+    const [x,z]=point(0,q.v);
+    assert.ok(Math.abs(groundHeight(x,z)-level-q.h)<.018,'height of tread at '+q.v);
+    assert.ok(Math.abs(waterDepth(x,z)-Math.max(0,-q.h))<.02,'immersed tread');
+  }
+  const dry=point(-.77,-2.26);
+  assert.equal(waterDepth(...dry),0);
+  assert.ok(Math.abs(groundHeight(...dry)-level-okaHeight(-.77,-2.26))<.001);
+  for(const t of [0,.27,.6,.88,1]){
+    const [u,surface,v]=rillPoint(t);
+    assert.ok(okaHeight(u,v)<surface-.008,'water inside channel');
+    assert.ok(okaHeight(u+.46,v)>surface,'side of channel contains flow');
+  }
+  const g=createGame(),p=g.state.player;
+  function go(u,v){
+    const [x,z]=point(u,v);
+    for(let i=0;i<350;i++){
+      const dx=x-p.x,dz=z-p.z,r=Math.hypot(dx,dz);
+      if(r<.14)return;
+      g.step(1/60,{x:dx/r,z:dz/r});
+    }
+    assert.fail('blocked walking to '+[u,v]);
+  }
+  const street=point(0,6.17);
+  Object.assign(p,{x:street[0],z:street[1],y:groundHeight(...street),grounded:true});
+  go(0,0);go(SUZURI_WELL.u,SUZURI_WELL.v);
+  assert.equal(g.nearest()?.place?.id,'suzuri-umi');
+  assert.ok(waterDepth(p.x,p.z)>1.20);
+  assert.ok(g.act('interact'));
+  const saved=g.save(),resumed=createGame(saved);
+  assert.equal(resumed.state.player.bathPose.action,'deep');
+  for(let i=0;i<230;i++)g.step(1/60);
+  go(0,0);go(0,5.7);
+  const legacy={...saved,lastBathPlace:null,player:{...saved.player,x:dry[0],z:dry[1]}};
+  const old=createGame(legacy);
+  assert.equal(old.state.player.bathPose.action,'float');
+  assert.ok(waterDepth(old.state.player.x,old.state.player.z)>.40);
 });

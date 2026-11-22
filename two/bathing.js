@@ -1,6 +1,6 @@
 import { sluiceOpening } from './pilgrim-bathing-plan.js';
 import { bathLocal,bathPools,poolRadius,isDryTreatment } from './bath-places.js';
-import { bathRadius,sitePoint } from './retreat-layout.js';
+import { wetRetreatRadius,sitePoint } from './retreat-layout.js';
 
 export const SOAK_SECONDS = 3.5;
 
@@ -29,7 +29,7 @@ export function floatBerth(player,target,snowRadius,place=null,level=0) {
   }
   if (target.goemon) return { x:target.x, z:target.z, extension:.37, kettle:true };
   const pool=place && bathPools(site)?.includes(place)?place:null;
-  const radius=pool ? (x,z)=>poolRadius(pool,...bathLocal(site,x,z)) : target.retreat ? (x,z)=>bathRadius(target.retreat,x,z) : snowRadius;
+  const radius=pool ? (x,z)=>poolRadius(pool,...bathLocal(site,x,z)) : target.retreat ? (x,z)=>wetRetreatRadius(target.retreat,x,z) : snowRadius;
   const g=player.buffs.full>0 ? 1.28 : 1;
   const frontX=Math.sin(player.heading), frontZ=Math.cos(player.heading);
   const inward=Math.atan2(target.x-player.x,target.z-player.z);

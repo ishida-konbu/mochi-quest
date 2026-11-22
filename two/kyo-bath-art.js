@@ -1,13 +1,16 @@
-import * as T from './vendor/three.module.min.js';
-import { sculpture,brushStroke } from './pilgrimage-pigment.js';
-import { inscriptionMaterial } from './civic-art.js';
-import { regionalSpringLip } from './regional-springs.js';
 import { sitePoint } from './retreat-layout.js';
 import { terrainMeshHeight } from './terrain.js';
-import { SUZURI_COURT,SUZURI_WALLS,RINSING_HALL,RINSING_SEATS } from './kyo-bath-layout.js';
+import { suzuriSurface } from './suzuri-materials.js';
+import * as T from './vendor/three.module.min.js';
+import { sculpture } from './pilgrimage-pigment.js';
+import { inscriptionMaterial } from './civic-art.js';
+import { dressSuzuriPaving,dressSuzuriRoji } from './suzuri-roji.js';
+import { SUZURI_COURT,SUZURI_WALLS,RINSING_HALL } from './kyo-bath-layout.js';
 import { dressSuzuriMaple } from './suzuri-courtyard-maple.js';
-import { pictureEave,ranma,washPier } from './suzuri-joinery.js';
+import { dressSuzuriWashhouse } from './suzuri-washhouse.js';
+import { pictureEave,ranma } from './suzuri-joinery.js';
 import { suzuriSeatStone } from './suzuri-bathing-art.js';
+import { carvedGable,gateTimberFinish,gateCarpentry,drainStones,earthenPlaster,streetSplashRun,wallStoneRoot } from './kyo-gate-masonry.js';
 import { wallCoping,karahafu,washHallRoof } from './kyo-bath-roofs.js';
 
 const {PI,sin,cos}=Math,TAU=2*PI;
@@ -58,21 +61,80 @@ function noren(){
 }
 
 function paintedPanels(p,f,mat,u,v,mid,width){
-  const h=width/3;
-  f.put('box',u,mid,v-.03,width+.30,h+.28,.115,lacquer,p.wood);
-  f.put('plane',u,mid,v+.037,width,h,1,'#fff',mat);
-  for(const y of [mid-h/2-.045,mid+h/2+.045]){
-    f.put('box',u,y,v+.044,width+.17,.068,.053,'#746145',p.wood);
-    f.put('box',u,y+.011,v+.080,width+.14,.014,.015,gilt,p.bronze);
+  const h=width/3,w=width/4,key='suzuriFusuma'+Math.round(width*100);
+  const timber=sculpture(),fit=sculpture(),radius=.048,cy=h*-.117;
+  // The panel lies in a shallow second track. UVs are calculated in the
+  // full painting's coordinates, including the sliver hidden by each hem.
+  // A curve of positive radius is also used to cut the matching paper hole.
+  const cup=(a,r)=>[r*(1-.105*cos(4*a))*cos(a),r*(1-.105*cos(4*a))*sin(a)*1.12];
+  const cloth='#807a63',cord='#b2a27b',lacquer='#46463e';
+  for(let i=0;i<4;i++){
+    const x=(i-1.5)*w,face=.075+((i===1||i===2)?.038:0);
+    const cx=(i%2===0?1:-1)*(w/2-.106);
+    const hw=w/2-.013,hh=h/2-.012;
+    const silhouette=new T.Shape();
+    silhouette.moveTo(-hw,-hh);silhouette.lineTo(hw,-hh);silhouette.lineTo(hw,hh);
+    silhouette.lineTo(-hw,hh);silhouette.closePath();
+    const hole=new T.Path();
+    for(let j=0;j<=36;j++){
+      const [a,b]=cup(-TAU*j/36,radius*.80);
+      if(j===0)hole.moveTo(cx+a,cy+b);else hole.lineTo(cx+a,cy+b);
+    }
+    hole.closePath();silhouette.holes.push(hole);
+    const paper=new T.ShapeGeometry(silhouette),pos=paper.attributes.position,uv=paper.attributes.uv;
+    for(let j=0;j<pos.count;j++){
+      uv.setXY(j,.5+(x+pos.getX(j))/width,.5+pos.getY(j)/h);
+    }
+    // Four independent wooden leaves have a visible thickness at the
+    // meeting stiles. Thin woven edgings turn over their lacquered arrises.
+    const name=key+'Leaf'+i;p.shapes[name]=paper;
+    timber.box('#827052',x,0,face-.047,w-.010,h+.006,.036);
+    f.put(name,u+x,mid,v+face,1,1,1,'#fff',mat);
+    for(const d of [-1,1]){
+      timber.box(lacquer,x+d*(w/2-.006),0,face-.012,.008,h+.013,.036);
+      timber.box(cloth,x+d*(w/2-.013),0,face+.001,.010,h-.009,.005);
+      timber.box(cord,x+d*(w/2-.018),0,face+.002,.0028,h-.014,.005);
+      timber.box(lacquer,x,d*(h/2+.002),face-.012,w-.006,.011,.037);
+      timber.box(cloth,x,d*(h/2-.009),face+.001,w-.015,.014,.005);
+      timber.box(cord,x,d*(h/2-.016),face+.002,w-.028,.0028,.005);
+    }
+    // A shallow, four-lobed bronze hikite is let into the opening. Model
+    // the concave cup below the painted plane and a gently rubbed flange.
+    const rings=[[.05,-.024],[.49,-.024],[.69,-.018],[.78,-.004],[.82,.002],
+      [.87,.005],[.94,.006],[1,.003],[1.025,0]];
+    const xyz=[],rgb=[],indices=[],n=36,shades=['#575648','#555646','#646955','#737864',
+      '#a09873','#b8aa85','#737968','#a39979','#646954'];
+    for(let r=0;r<rings.length;r++){
+      const [scale,dz]=rings[r],tint=new T.Color(shades[r]);
+      for(let j=0;j<n;j++){
+        const a=TAU*j/n,[sx,sy]=cup(a,radius*scale);
+        xyz.push(x+cx+sx,cy+sy,face+dz);
+        rgb.push(tint.r,tint.g,tint.b);
+        if(r){const a=r*n+j,b=r*n+(j+1)%n;indices.push(a-n,a,b-n,b-n,a,b);}
+      }
+    }
+    const bowl=new T.BufferGeometry();bowl.setAttribute('position',new T.Float32BufferAttribute(xyz,3));
+    bowl.setAttribute('color',new T.Float32BufferAttribute(rgb,3));bowl.setIndex(indices);bowl.computeVertexNormals();
+    fit.add(bowl,'#fff');
+    for(const d of [-1,1])fit.ball('#8d7957',x+cx+d*.045,cy,face+.006,.0036,.0036,.0025);
   }
-  for(const side of [-1,1]){
-    f.put('box',u+side*(width/2+.045),mid,v+.041,.07,h+.08,.063,'#706047',p.wood);
-    for(const end of [-1,1])f.put('box',u+side*(width/2+.057),mid+end*(h/2+.04),v+.081,.13,.074,.013,gilt,p.bronze);
+  // Cypress sill and lintel capture both tracks. The dark grooves remain
+  // visible along their front shoulders when viewed obliquely from the bath.
+  for(const d of [-1,1]){
+    const y=d*(h/2+.061);
+    timber.box('#665540',0,y,.017,width+.24,.099,.23);
+    timber.box('#9b855f',0,y-d*.043,.032,width+.17,.016,.217);
+    for(const zz of [.071,.108])timber.box('#48493f',0,y-d*.052,zz,width+.12,.004,.013);
+    timber.box('#79654c',0,y-d*.025,.139,width+.23,.033,.027);
+    timber.box('#61503f',d*(width/2+.061),0,.007,.084,h+.18,.17);
+    timber.box('#a18c67',d*(width/2+.017),0,.052,.012,h+.055,.100);
   }
-  for(const i of [-1,0,1])f.put('box',u+width*i/4,mid,v+.051,.014,h,.019,'#907f61',p.wood);
+  p.shapes[key+'Frames']=timber.finish();p.shapes[key+'Pulls']=fit.finish();
+  f.put(key+'Frames',u,mid,v,1,1,1,'#fff',p.stems);
+  f.put(key+'Pulls',u,mid,v,1,1,1,'#fff',p.stems);
 }
 
-function plasterWall(p,f,[u,v,x,z,h]){
+function plasterWall(p,f,[u,v,x,z,h],site,level){
   const along=u!==x,rotate=along?0:PI/2,length=Math.hypot(u-x,v-z),mx=(u+x)/2,mz=(v+z)/2;
   const place=(shape,a,y,b,w,high,d,tint,mat)=>f.put(shape,mx+(along?a:b),y,mz+(along?b:a),w,high,d,tint,mat,rotate);
   if(along && v===SUZURI_COURT.front && length>16){
@@ -96,15 +158,17 @@ function plasterWall(p,f,[u,v,x,z,h]){
       }
     }
     p.shapes.suzuriLatticeWall=new T.ExtrudeGeometry(face,{depth:.36,bevelEnabled:false,curveSegments:6});
-    place('suzuriLatticeWall',0,0,-.18,1,1,1,'#c7bda6',p.solid);
-  }else place('box',0,h*.5-.09,0,length+.08,h+.18,.36,'#c7bda6',p.solid);
-  place('box',0,.21,0,length+.12,.45,.43,'#72776c',p.stone);
-  const count=Math.ceil(length/1.09);
-  for(let j=0;j<2;j++)for(let i=0;i<count;i++){
-    const offset=j===0?0:.24*(i!==0 && i!==count-1?1:0);
-    const a=((i+.5)/count-.5)*length+offset;
-    for(const side of [-1,1])place('box',a,.116+j*.212,side*.222,length/count*.96,.184,.035,
-      ['#959a8c','#a1a291','#8a9184','#a6a698'][(i*3+j)%4],p.stone);
+    place('suzuriLatticeWall',0,0,-.18,1,1,1,'#fff',earthenPlaster());
+  }else place('box',0,h*.5-.09,0,length+.08,h+.18,.36,'#fff',earthenPlaster());
+  place('box',0,.21,0,length+.12,.45,.43,'#74776b',p.stone);
+  const root='suzuriStoneRoot'+length.toFixed(3);
+  p.shapes[root]??=wallStoneRoot(length);
+  place(root,0,0,0,1,1,1,'#fff',p.stems);
+  if(along && v===SUZURI_COURT.front){
+    const gutter='suzuriStreetRain'+length.toFixed(3);
+    const ground=(a,b)=>terrainMeshHeight(...sitePoint(site,mx+a,mz+b))-level;
+    p.shapes[gutter]??=streetSplashRun(length,ground);
+    place(gutter,0,0,0,1,1,1,'#fff',p.stems);
   }
   for(const side of [-1,1])for(const y of [h-.48,h-.40,h-.32]){
     place('box',0,y,side*.183,length+.04,.016,.026,'#e2d7be',p.solid);
@@ -115,25 +179,25 @@ function plasterWall(p,f,[u,v,x,z,h]){
   place(cap,0,h+.095,0,1,1,1,'#fff',p.stems);
 }
 
-function gate(p,f){
+function gate(p,f,site,level){
   const {front:z,gateHalf}=SUZURI_COURT;
   p.shapes.suzuriKarahafu=karahafu();
-  f.put('suzuriKarahafu',0,2.9,z,1,1,1,'#fff',p.stems);
+  p.shapes.suzuriGateCarpentry=gateCarpentry();
+  p.shapes.suzuriGableInfill=carvedGable();
+  f.put('suzuriGableInfill',0,2.9,z,1,1,1,'#fff',gateTimberFinish());
+  p.shapes.suzuriGateDrain=drainStones();
+  f.put('suzuriGateCarpentry',0,0,z,1,1,1,'#fff',p.stems);
+  for(const offset of [-1.02,1.015]){
+    const y=terrainMeshHeight(...sitePoint(site,0,z+offset))-level;
+    f.put('suzuriGateDrain',0,y+.014,z+offset,1,1,1,'#fff',p.stems);
+  }
+  f.put('suzuriKarahafu',0,2.9,z,1,1,1,'#fff',gateTimberFinish());
   for(const side of [-1,1]){
     const x=side*gateHalf;
     for(const dz of [-.57,.40]){
-      f.put('box',x,.21,z+dz,.49,.41,.49,'#8a9086',p.stone);
-      f.put('box',x,1.69,z+dz,.27,2.85,.27,'#805f44',p.wood);
-      f.put('box',x,.49,z+dz,.28,.26,.28,'#52554c',p.bronze);
-      for(const y of [2.45,2.66,2.79]){
-        f.put('box',x,y,z+dz,.37+(y-2.45)*.9,.125,.39+(y-2.45)*.62,wood,p.wood);
-      }
+      f.put('box',x,1.57,z+dz,.277,2.50,.277,'#987757',p.wood);
     }
-    f.put('box',x,2.85,z,.45,.16,1.94,wood,p.wood);
-    for(const dz of [-.34,.37]){
-      f.bar([x,2.38,z+dz],[x-side*.45,2.78,z+dz],.093,wood,p.wood,true);
-      f.put('ball',x,2.57,z+dz+.13,.059,.059,.023,gilt,p.bronze);
-    }
+    f.put('box',x,2.94,z,.365,.148,2.06,wood,p.wood);
     const lamp=f.at(side*2.22,.01,z+.37);
     p.lamps.andon(lamp.x,lamp.y,lamp.z,PI,.88);
   }
@@ -143,99 +207,25 @@ function gate(p,f){
   f.put('suzuriNoren',0,2.13,z+.23,3.10,.72,1,'#fff',cloth.material);
   for(const x of [-1.38,-.82,-.39,.39,.82,1.38])f.put('box',x,2.44,z+.23,.076,.14,.073,'#526065',p.solid);
   const plaque=inscriptionMaterial('花京の硯湯',{ground:'#333f3c',ink:'#ead3a1'});
-  f.put('box',0,3.11,z+1.34,1.88,.52,.095,'#6a5140',p.wood);
-  f.put('plane',0,3.11,z+1.395,1.79,.48,1,'#fff',plaque);
+  const cy=2.965,v=z+1.365;
+  f.put('box',0,cy,v,1.77,.447,.094,'#765e43',p.wood);
+  f.put('plane',0,cy,v+.051,1.69,.383,1,'#fff',plaque);
+  for(const side of [-1,1]){
+    f.put('box',0,cy+side*.201,v+.057,1.77,.022,.023,'#b19c72',p.bronze);
+    f.put('box',side*.869,cy,v+.061,.019,.395,.025,'#9d8964',p.bronze);
+    for(const end of [-1,1]){
+      f.put('box',side*.818,cy+end*.182,v+.073,.105,.024,.014,'#9d9372',p.bronze);
+      f.put('ball',side*.84,cy+end*.181,v+.085,.012,.012,.009,'#c3b18c',p.bronze);
+    }
+  }
 }
 
-function tub(){
-  const art=sculpture();
-  art.add(turns([[.002,0],[.37,0],[.394,.031],[.442,.46],[.448,.49],[.406,.50],[.372,.08],[.01,.08]]),'#b79b72');
-  for(let j=0;j<18;j++){
-    const a=TAU*j/18;
-    art.stroke(j%3?'#947a50':'#cbb38b',[[.390*sin(a),.035,.390*cos(a)],[.414*sin(a),.241,.414*cos(a)],
-      [.443*sin(a),.477,.443*cos(a)]],[.004,.008,.004],4);
-  }
-  for(const y of [.09,.37]){
-    const rad=.396+.093*y;
-    art.add(turns([[rad,y-.017],[rad+.006,y-.014],[rad+.009,y+.012],[rad,y+.017]]),'#6e7263');
-  }
-  art.add(turns([[.002,.32],[.400,.32],[.398,.317],[.002,.317]]),'#899d92');
-  return art.finish();
-}
-function washSet(){
-  const art=sculpture(),basin=tub();
-  art.add(washPier(),'#fff');
-  art.box('#888e80',0,.96,-.369,1.28,.52,.091);
-  art.box('#a5aa99',0,1.222,-.369,1.31,.039,.107);
-  art.add(basin,'#fff',.025,.73,.04,.85,.70,.69);
-  // A banded bamboo culm is split down the last internode. Its ochre
-  // underside extends beyond the upper lip like a cut bamboo scoop.
-  const pts=[],idx=[],colors=[],outer=new T.Color('#8f9369'),inner=new T.Color('#c0ab75');
-  const n=18,sections=8;
-  for(let shell=0;shell<2;shell++)for(let j=0;j<=sections;j++){
-    const t=j/sections,open=.035+1.18*Math.max(0,(t-.47)/.53);
-    for(let i=0;i<=n;i++){
-      const angle=open+(TAU-2*open)*i/n,r=shell?.053:.068,cy=cos(angle),sz=sin(angle);
-      pts.push(r*sz,1.235-.068*t+r*cy,-.425+t*.485-.044*cy*t**3);
-      const c=shell?inner:outer;colors.push(c.r,c.g,c.b);
-      const k=pts.length/3-1;
-      if(j<sections && i<n)idx.push(k,k+1,k+n+1,k+1,k+n+2,k+n+1);
-    }
-  }
-  const offset=(n+1)*(sections+1);
-  for(let i=0;i<n;i++){const k=sections*(n+1)+i;idx.push(k,k+offset,k+1,k+1,k+offset,k+offset+1);}
-  for(let j=0;j<sections;j++)for(const k of [j*(n+1),j*(n+1)+n])idx.push(k,k+offset,k+n+1,k+n+1,k+offset,k+n+1+offset);
-  const pipe=new T.BufferGeometry();pipe.setAttribute('position',new T.Float32BufferAttribute(pts,3));
-  pipe.setAttribute('color',new T.Float32BufferAttribute(colors,3));pipe.setIndex(idx);pipe.computeVertexNormals();art.add(pipe,'#fff');
-  art.add(new T.TorusGeometry(.070,.012,5,18), '#6e7856',0,1.211,-.254,1,1,1,.14);
-  art.add(new T.TorusGeometry(.068,.008,5,18), '#b09961',0,1.207,-.225,1,1,1,.14);
-  art.box('#b29b77',.39,.798,.075,.26,.086,.23);
-  art.box('#d5c7a6',.39,.859,.066,.18,.045,.124);
-  return art.finish();
-}
-function bathStool(){
-  const s=sculpture();
-  const cut=new T.Shape();cut.moveTo(-.168,0);cut.lineTo(-.142,.37);cut.lineTo(.142,.37);cut.lineTo(.168,0);
-  cut.lineTo(.081,0);cut.bezierCurveTo(.06,.095,-.07,.095,-.084,0);cut.closePath();
-  const g=new T.ExtrudeGeometry(cut,{depth:.086,bevelEnabled:true,bevelThickness:.012,bevelSize:.013,bevelSegments:2});
-  for(const side of [-1,1])s.add(g,'#9e825c',side*.216,0,0,1,1,1,0,PI/2,side*.046);
-  s.box('#bca27a',0,.33,0,.62,.095,.39);s.box('#876e4d',0,.15,0,.45,.067,.08);
-  return s.finish();
-}
-function brushGarden(){
-  const s=sculpture();
-  s.add(turns([[.01,0],[.42,.025],[.53,.10],[.57,.41],[.49,.63],[.443,.687],[.368,.66],[.30,.45],[.01,.442]]),'#7c867b');
-  s.add(turns([[.01,.551],[.33,.551],[.338,.545],[.01,.545]]),'#a1b2a2');
-  for(const [x,z] of [[-.29,-.15],[.26,.14]])s.stroke('#ae926c',[[x-.29,.69,z],[x,.716,z],[x+.31,.69,z]],
-    [.024,.027,.024],9);
-  s.stroke('#a68d67',[[-.19,.71,-.24],[-.04,.75,0],[.13,.77,.31]],[.014,.02,.018],8);
-  s.add(turns([[.002,0],[.09,.01],[.117,.105],[.124,.13],[.112,.134],[.09,.024],[.001,.024]]),'#b29c79',.12,.732,.30);
-  const stalks=[[-.49,-.46,1.64],[-.62,-.32,1.27],[-.35,-.63,1.39]];
-  for(const [x,z,h] of stalks){
-    s.stroke('#797c58',[[x-.10,.04,z],[x,h*.5,z-.02],[x+.084,h,z-.067]],[.021,.027,.009],9);
-    for(let j=1;j<=3;j++){
-      const side=j%2?1:-1,y=h*j/4,tip=x+side*.28;
-      s.stroke('#8b8966',[[x,y,z],[x+side*.09,y+.13,z+.035],[tip,y+.19,z+.08]],[.013,.009,.003],6);
-      for(let k=0;k<3;k++){
-        const a=side*(.13+.056*k),b=y+.205-.044*k;
-        s.stroke(k%2?'#798c6b':'#909a77',[[tip,b,z+.07],[tip+a*.53,b+.029,z+.10+k*.076],
-          [tip+a,b-.091+.053*k,z+.132+k*.09]],[.003,.030,.002],6);
-      }
-    }
-  }
-  return s.finish();
-}
 
 function washingHall(p,f){
   const r=RINSING_HALL,back=r.v-r.d/2,face=r.v+r.d/2;
   p.shapes.suzuriWashRoof=washHallRoof(r.w+1.12,r.d+1.10,r.rise);
   f.put('suzuriWashRoof',r.u,r.eave,r.v,1,1,1,'#fff',p.stems);
-  f.put('box',r.u,.043,r.v,r.w+.22,.24,r.d+.46,'#8c9185',p.stone);
-  const boards=33;
-  for(let j=0;j<boards;j++){
-    const w=r.w/boards,x=r.u-r.w/2+(j+.5)*w;
-    f.put('box',x,.155,r.v,w-.012,.07,r.d+.43,j%4?'#a99170':'#b59c75',p.deck);
-  }
+  f.put('box',r.u,-.09,r.v,r.w+.22,.22,r.d+.46,'#747b71',p.stone);
   f.put('box',r.u,.064,face+.39,r.w+.17,.072,.50,'#a19f8e',p.stone);
   f.put('box',r.u,1.63,back,r.w,3.29,.18,'#c1b49a',p.solid);
   for(const side of [-1,1]){
@@ -243,10 +233,17 @@ function washingHall(p,f){
     const depth=side<0?1.02:r.d,mid=back+depth/2;
     f.put('box',x,.79,mid,.14,1.42,depth,'#8b7559',p.boarding);
     f.put('box',x,1.48,mid,.21,.11,depth+.12,wood,p.wood);
-    f.put('box',x,2.13,mid,.095,1.27,depth,'#fff',p.lamps.shoji);
-    const count=Math.ceil(depth/.305);
-    for(let k=0;k<=count;k++)f.put('box',x,2.14,back+depth*k/count,.155,1.31,k%4===0?.069:.032,wood,p.wood);
-    for(const y of [1.50,1.85,2.35,2.78])f.put('box',x,y,mid,.193,.045,depth+.10,wood,p.wood);
+    if(side<0){
+      f.put('box',x,2.13,mid,.095,1.27,depth,'#fff',p.lamps.shoji);
+      for(let k=0;k<=4;k++)f.put('box',x,2.14,back+depth*k/4,.155,1.31,k%4===0?.069:.032,wood,p.wood);
+      for(const y of [1.50,1.85,2.35,2.78])f.put('box',x,y,mid,.193,.045,depth+.10,wood,p.wood);
+    }else{
+      // The rear dressing bay is plastered into a deep open lattice. Leave
+      // the middle out rather than hiding the outside behind a shoji plane.
+      for(const [v0,v1] of [[back,-1.99],[.15,face]])
+        f.put('box',x,2.13,(v0+v1)/2,.112,1.29,v1-v0,'#bdb29a',p.solid);
+      f.put('box',x,2.918,-.92,.14,.147,2.16,'#bdb29a',p.solid);
+    }
     f.put('box',x,3.06,r.v,.19,.16,r.d+.40,wood,p.wood);
     if(side<0)f.put('box',x,1.68,back+depth,.16,3.06,.16,wood,p.wood);
   }
@@ -258,35 +255,13 @@ function washingHall(p,f){
     }
   }
   for(const z of [back,face])f.put('box',r.u,3.114,z,r.w+.34,.22,.24,wood,p.wood);
-  f.put('box',r.u,3.159,r.v,r.w+.91,.050,r.d+.91,'#bb9b70',p.deck);
-  for(let j=0;j<=21;j++){
-    const x=r.u+(j/21-.5)*(r.w+.61);
-    f.put('box',x,3.136,r.v,.095,.108,r.d+1.00,cedar,p.wood);
-  }
   for(let bay=0;bay<2;bay++){
     const name='suzuriWashRanma'+bay;
     p.shapes[name]=ranma(r.w/2-.29,Boolean(bay));
     f.put(name,r.u+(bay-.5)*r.w/2,2.795,face-.02,1,1,1,'#fff',p.stems);
   }
-  paintedPanels(p,f,textured('./assets/world/suzuri-rinsing-scroll.webp'),13.29,back+.128,1.99,6.12);
-  p.shapes.suzuriWashSet=washSet();p.shapes.suzuriStool=bathStool();p.shapes.suzuriTub=tub();
-  f.put('box',13.29,1.08,-3.92,7.36,.18,.23,'#93866a',p.wood);
-  p.shapes.suzuriWashTrickle=brushStroke([[0,1.113,.088],[.002,1.097,.11],[.004,1.061,.129],[.006,.960,.15]],
-    [.015,.013,.010,.014],9,7);
-  p.shapes.suzuriWashRipple=new T.TorusGeometry(.073,.004,5,22);
-  for(const [j,u] of RINSING_SEATS.entries()){
-    f.put('suzuriWashSet',u,0,-3.35,1,1,1,'#fff',p.stems);
-    f.put('suzuriWashTrickle',u,0,-3.35,1,1,1,'#c8ded3',p.springFlow);
-    f.put('suzuriWashRipple',u+.006,.957,-3.20,1.02,.73,1,'#d4dccc',p.springFlow,0,PI/2);
-    f.put('suzuriStool',u,.19,-1.92,1,.85,1,'#fff',p.stems,j%2?.07:-.08);
-  }
-  // A wet gutter with removable cedar slats runs along the row of stools.
-  f.put('box',13.30,.20,-2.79,7.75,.018,.20,'#5a6056',p.deck);
-  for(let j=0;j<52;j++)f.put('box',9.49+j*.148,.217,-2.79,.085,.032,.214,'#978567',p.wood);
-  const stackX=18.32;
-  for(let j=0;j<3;j++)f.put('suzuriTub',stackX,.19+j*.30,-3.11,1.30-j*.09,.94,1.3-j*.09,'#fff',p.stems,j*.98);
-  for(let j=0;j<4;j++)f.put('box',stackX+.01,.50+j*.118,-1.18,.74,.103,.46,j===3?'#72888c':'#d0c6ab',p.solid,j*.035);
-  f.put('box',stackX,.350,-1.18,1.01,.23,.63,wood,p.wood);
+  paintedPanels(p,f,textured('./assets/world/suzuri-rinsing-scroll.webp'),13.29,back+.122,2.238,5.42);
+  dressSuzuriWashhouse(p,f);
   // Kusari-doi lead rain from the eave into stone splash dishes.
   p.shapes.suzuriRainCup=turns([[.072,0],[.102,.023],[.157,.162],[.151,.176],[.136,.166],[.071,.021]]);
   for(const side of [-1,1]){
@@ -308,45 +283,16 @@ function washingHall(p,f){
   }
 }
 
-function paving(p,f,s,level){
-  // Dressed granite laid in alternating stretcher courses. Cut the paving
-  // back from the inkstone's own grinding ledge and its sculpted foundation.
-  const {left,right,back,front}=SUZURI_COURT;
-  const tints=['#a7a696','#b3b1a1','#a2a492','#b8b5a4','#aaad9b'];
-  for(let row=0;row<14;row++){
-    const z=back+(row+.5)*.72;
-    for(let col=0;col<=24;col++){
-      const from=Math.max(left+.18,left+.18+(col-.5*(row%2))*1.13);
-      const to=Math.min(right-.18,left+.18+(col+1-.5*(row%2))*1.13);
-      if(to-from<.20 || z>front-.13)continue;
-      const x=(from+to)/2;
-      if(x>9.1 && x<19.65 && z<1.6)continue;
-      const a=Math.atan2(z/s.rz,x/s.rx),lip=regionalSpringLip(s.shape,a);
-      if(Math.hypot(x/s.rx,z/s.rz)<lip*1.21+.13)continue;
-      if(x>3.44 && x<6.92 && z<-1.21 && z>-4.73)continue;
-      const y=terrainMeshHeight(...sitePoint(s,x,z))-level;
-      f.put('box',x,y+.005,z,to-from-.024,.048,.691,tints[(col*3+row*7)%5],p.stone);
-    }
-  }
-  for(let i=0;i<5;i++){
-    const z=front+.35+i*.37,y=terrainMeshHeight(...sitePoint(s,0,z))-level;
-    f.put('box',0,y+.008,z,3.41-.12*i,.052,.34,i%2?'#abb0a1':'#a3a699',p.stone);
-  }
-}
-
 export function dressSuzuriCourt(p,f,s,level){
   p.shapes.suzuriBathSeat=suzuriSeatStone();
-  f.put('suzuriBathSeat',0,0,0,1,1,1,'#fff',p.stems);
-  paving(p,f,s,level);
-  for(const wall of SUZURI_WALLS)plasterWall(p,f,wall);
+  f.put('suzuriBathSeat',0,0,0,1,1,1,'#fff',suzuriSurface('inkstone'));
+  dressSuzuriPaving(p,f,s,level);
+  for(const wall of SUZURI_WALLS)plasterWall(p,f,wall,s,level);
   const {back}=SUZURI_COURT;
   paintedPanels(p,f,textured('./assets/world/suzuri-wash-scroll.webp'),-.03,back+.20,1.70,6.77);
   p.shapes.suzuriGalleryEave=pictureEave();
   f.put('suzuriGalleryEave',-.03,0,back+.10,1,1,1,'#fff',p.stems);
-  gate(p,f);washingHall(p,f);
-  p.shapes.suzuriTsukubai=brushGarden();
-  f.put('suzuriTsukubai',7.45,.06,-3.69,1,1,1,'#fff',p.stems);
+  gate(p,f,s,level);washingHall(p,f);
+  dressSuzuriRoji(p,f);
   dressSuzuriMaple(p,f);
-  const gardenLamp=f.at(8.03,.045,-4.55);
-  p.lamps.stoneLantern(gardenLamp.x,gardenLamp.y,gardenLamp.z,PI,.55);
 }

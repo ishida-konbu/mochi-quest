@@ -1,6 +1,7 @@
+import { onSuzuriLand,suzuriBasinFloor } from './suzuri-basin-plan.js';
 // Positive local Z faces the road. Roofs, steps, pool lips and their
 // collision volumes share the same survey as the signposts on the map.
-import { bathPools, poolRadius, hasOwnInlet } from './bath-places.js';
+import { bathLocal, bathPools, poolRadius, hasOwnInlet } from './bath-places.js';
 import { addVillageBathSolids } from './village-bath-courses.js';
 import { addPilgrimBathSolids,kilnSteamBath } from './pilgrim-bathing-plan.js';
 import { DISTRICTS, districtPoint } from './geography.js';
@@ -81,6 +82,13 @@ export function bathRadius(s,x,z) {
   const u=(dx*c-dz*k)/s.rx,v=(dx*k+dz*c)/s.rz;
   return Math.hypot(u,v)/springLip(s.index,Math.atan2(v,u));
 }
+export function wetRetreatRadius(site,x,z){
+  if(site.shape==='suzuri'){
+    const [u,v]=bathLocal(site,x,z);
+    if(onSuzuriLand(u,v))return Infinity;
+  }
+  return bathRadius(site,x,z);
+}
 export function reservedScenery(x,z) {
   const {west,east,north,south}=COURT_PRECINCT;
   if(x>west && x<east && z>north && z<south)return true;
@@ -123,6 +131,11 @@ export function bathTerrain(s,x,z,native,level) {
   const shore=level-.52+.65*ease((edge+1.08)/2.38);
   let ground=shore+(native-shore)*ease((edge-1.22)/2.72);
   const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
+  if(s.shape==='suzuri' && r<1.05){
+    const u=dx*c-dz*k,v=dx*k+dz*c;
+    const bed=level+suzuriBasinFloor(u,v);
+    ground+=(bed-ground)*ease((1.05-r)/.20);
+  }
   const pools=bathPools(s);
   if(pools){
     const u=dx*c-dz*k,v=dx*k+dz*c;
@@ -141,7 +154,8 @@ export function bathTerrain(s,x,z,native,level) {
     }
   }
   const apron=bathEnclosureGround(s,dx*c-dz*k,dx*k+dz*c);
-  const finished=ground+(level+.026-ground)*apron*ease((r-.85)/.23);
+  let finished=ground+(level+.026-ground)*apron*ease((r-.85)/.23);
+  if(s.shape==='suzuri')finished-=.23*ease((1.045-r)/.09);
   return s.rank==='main' && r>1 ? tableauGround(s,dx*c-dz*k,dx*k+dz*c,finished,level) : finished;
 }
 export function retreatStones(s) {
@@ -214,8 +228,8 @@ export function civicAndBathSolids(height,put,levelOf) {
     if(s.regional){
       const {inlet,sign}=regionalBathFittings(s,springLip);
       if(!hasOwnInlet(s)){
-        add(inlet.u,inlet.v-.20,inlet.w,1.34,.72,'oval',true);
-        add(inlet.u,inlet.v+.04,1.18,1.92,inlet.h,'box',true).bottom=level+.62;
+        add(inlet.u,inlet.v-.20,inlet.w,1.34,s.shape==='suzuri'?inlet.foot+.44:.72,'oval',true);
+        add(inlet.u,inlet.v+.04,1.18,1.92,inlet.h+inlet.foot,'box',true).bottom=level+.62+inlet.foot;
       }
       if(s.shape!=='suzuri' && !kilnSteamBath(s)){
         add(sign.u,sign.v-.07,.13,.13,1.33,'wall');

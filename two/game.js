@@ -1,3 +1,4 @@
+import { onSuzuriLand,okaFront } from './suzuri-basin-plan.js';
 import { tideRise } from './pilgrim-bathing-plan.js';
 import { SAZAE_SPRING } from './ryugu-shell-bath.js';
 import { WAYSIDE_HUTS,KETTLE,CHAYA_SITES,CHAYA_SEAT } from './wayside-hut-layout.js';
@@ -14,7 +15,7 @@ import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
 import { fromHokora } from './lake-hokora-layout.js';
 import { lakeRadius, isletRadius, snowPoint } from './snow-country.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
-import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
+import { COURT, RETREATS, bathRadius, wetRetreatRadius, sitePoint } from './retreat-layout.js';
 import { SEAPORTS,relocateOldQuay } from './seaport-layout.js';
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
 import { RASHOMON, GATE_STONE, GATE_WING, GATE_LEAF, KYO_FOOD, KYO_ANIMALS, KYO_DAY_SECONDS, kyoNight, kyoInfluence } from './kyo-layout.js';
@@ -400,7 +401,7 @@ export function createGame(snapshot = null) {
     const pools=bathPools(site);
     if(pools)return poolAt(pools,u,v,leaving?1.05:.91)??false;
     const inside=target.grand?springRadius(player.x,player.z)<=(leaving?1:.88):
-      bathRadius(site,player.x,player.z)<=(leaving?1.07:.92);
+      wetRetreatRadius(site,player.x,player.z)<=(leaving?1.07:.92);
     return inside?null:false;
   }
   function stillAtPlace(target,place){
@@ -411,7 +412,7 @@ export function createGame(snapshot = null) {
       return bathPools(site)?.includes(place)?poolRadius(place,u,v)<=1.05:stationRadius(place,u,v)<=1.08;
     }
     if(bathPools(site))return false;
-    return target.grand?springRadius(player.x,player.z)<=1:bathRadius(site,player.x,player.z)<=1.07;
+    return target.grand?springRadius(player.x,player.z)<=1:wetRetreatRadius(site,player.x,player.z)<=1.07;
   }
   function nearest() {
     if (player.activity || !player.grounded) return null;
@@ -1444,6 +1445,15 @@ export function createGame(snapshot = null) {
     lastPlace=null;berth=null;
     if(lastBath){
       const site=lastBath.retreat||lastBath.site;
+      if(site?.shape==='suzuri' && player.activity==='bath' && !data.lastBathPlace){
+        // Old journals could put a floating visitor underneath the present
+        // grinding land. Keep the saved soak and move to its lower wet edge.
+        const [u,v]=bathLocal(site,player.x,player.z);
+        if(onSuzuriLand(u,v)){
+          [player.x,player.z]=sitePoint(site,u,okaFront(u)+.63);
+          player.y=groundHeight(player.x,player.z);
+        }
+      }
       const at=placeAt(lastBath);
       if(site && data.lastBathPlace){
         const [u,v]=bathLocal(site,player.x,player.z);

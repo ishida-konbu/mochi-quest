@@ -1,5 +1,5 @@
 import { bathPools,poolLip } from './bath-places.js';
-import { SUZURI_LEDGE } from './kyo-bath-layout.js';
+import { rillPoint } from './suzuri-basin-plan.js';
 import { addBathLeaves } from './bath-leaves.js';
 import { springLip } from './retreat-layout.js';
 import { bathCraft,regionalBathFittings,inletImpactV } from './regional-bath-fittings.js';
@@ -21,6 +21,10 @@ const mineralWash={
   shore:'#91b1ad',maple:'#939b81',susuki:'#8d9199',dawn:'#b1a994',capital:'#526869',
   peach:'#b0aa98',temple:'#96a494',inari:'#899d88',tsuruga:'#7e9ba2',sakai:'#87a89a',
 };
+const bedPaint=`vec2 bed=poolPoint.xz*5.+wave;
+        float speck=pebble(bed)*.58+pebble(bed*3.8)*.31+pebble(bed*14.)*.11;
+        diffuseColor.rgb*=.63+speck*.83;
+        diffuseColor.rgb+=vec3(.019,.014,.007)*pow(max(0.,sin(speck*18.+bed.x*.84+poolTime*.14)),5.);`;
 // The inlet and shallow mineral fringe travel with their particular basin.
 // The hero's reflection and its displacement continue to use world space.
 function regionalFinish(site,pool) {
@@ -35,15 +39,30 @@ function regionalFinish(site,pool) {
   m.specularIntensity=.43;
   m.clearcoat=.14;
   m.clearcoatRoughness=.40;
+  const inkstone=site.shape==='suzuri';
+  if(inkstone){
+    m.color.set('#406965');m.transparent=true;m.depthWrite=false;m.opacity=.42;
+    m.roughness=.19;m.clearcoat=.39;m.clearcoatRoughness=.16;
+  }
   m.onBeforeCompile=shader=>{
     poolMaterial.onBeforeCompile(shader);
     shader.vertexShader='attribute vec3 springInflow; varying vec3 source;\n'+
       shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nsource=springInflow;');
-    shader.uniforms.inkPool={value:site.shape==='suzuri'?1:0};
-    const seat=SUZURI_LEDGE,inlet=regionalBathFittings(site,springLip).inlet;
-    shader.uniforms.suzuriSeat={value:new T.Vector4(seat.u-inlet.u,seat.v-inlet.v-inletImpactV,seat.w/2,seat.d/2)};
+    if(inkstone){
+      shader.fragmentShader='varying vec3 source;\n'+shader.fragmentShader.replace(bedPaint,`
+        vec2 bed=poolPoint.xz*5.+wave;
+        float dist=length(source.xy), phase=dist*22.-poolTime*4.1;
+        float wake=exp(-1.8*dist);
+        wave=wave*.42+.09*wake*sin(phase)*source.xy/max(.035,dist);
+        float sky=1.-abs(dot(normalize(cameraPosition-poolPoint),vec3(0.,1.,0.)));
+        diffuseColor.a=clamp(.39+.32*sky*sky+.22*(1.-source.z),.37,.83);
+        float crest=pow(.5+.5*cos(phase+.31*sin(source.y*6.)),9.)*wake;
+        diffuseColor.rgb+=vec3(.065,.092,.085)*crest;
+      `);
+      return;
+    }
     shader.uniforms.chalkPool={value:site.kind==='sulfur'?1:0};
-    shader.fragmentShader='varying vec3 source; uniform float inkPool, chalkPool; uniform vec4 suzuriSeat;\n'+shader.fragmentShader.replace('vec2 bed=poolPoint.xz*5.+wave;',`
+    shader.fragmentShader='varying vec3 source; uniform float chalkPool;\n'+shader.fragmentShader.replace('vec2 bed=poolPoint.xz*5.+wave;',`
       float range=length(source.xy), phase=range*19.-poolTime*3.4;
       float fan=exp(-2.15*range);
       float broken=.63+.37*sin(source.x*7.4+source.y*4.1+sin(poolTime*.51));
@@ -52,35 +71,13 @@ function regionalFinish(site,pool) {
       float ring=pow(.5+.5*cos(phase+.35*sin(source.y*6.6)),8.)*fan*broken;
       diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.47,.45,.30),edge*.34);
       diffuseColor.rgb+=vec3(.19,.20,.17)*ring;
-      if(inkPool>.5){
-        // The eddy behind the water dropper pulls two fine ribbons of ink
-        // across the sea of the inkstone. The centre stays open for the face.
-        vec2 flow=source.xy+vec2(-.28,.21);
-        float angle=atan(flow.y,flow.x), radius=length(flow);
-        float curl=radius*3.7+1.55*sin(angle+.65*radius)-poolTime*.20;
-        float trace=pow(.5+.5*cos(curl*3.0),15.)*(1.-smoothstep(.3,4.2,radius));
-        diffuseColor.rgb*=1.-.31*trace;
-        // Refracted granite treads underneath the shallows. Their outlines
-        // follow the same dimensions as the bench that supports the body.
-        vec2 slab=source.xy-suzuriSeat.xy+wave*.30;
-        vec2 margin=abs(slab)-(suzuriSeat.zw-vec2(.24));
-        float cut=length(max(margin,vec2(0.)))+min(max(margin.x,margin.y),0.)-.24;
-        vec2 small=abs(slab-vec2(suzuriSeat.z+.19,0.))-vec2(.14,suzuriSeat.w-.18);
-        float toe=length(max(small,vec2(0.)))+min(max(small.x,small.y),0.)-.068;
-        float bench=1.-smoothstep(-.018,.042,cut);
-        float tread=1.-smoothstep(-.018,.048,toe);
-        float polish=.45+.55*pebble(slab*9.+wave*1.1);
-        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.18,.26,.25)*polish,tread*.43);
-        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.25,.34,.30)*polish,bench*.58);
-        diffuseColor.rgb+=vec3(.040,.059,.047)*exp(-40.*abs(cut+.048));
-      }
       if(chalkPool>.5){
         float cloud=pebble(source.xy*.53+wave*.35+vec2(poolTime*.022,0.));
         diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.67,.71,.59),cloud*.49);
       }
       vec2 bed=poolPoint.xz*5.+wave;`);
   };
-  m.customProgramCacheKey=()=> 'regional-spring-ink-and-sinter';
+  m.customProgramCacheKey=()=> inkstone?'suzuri-carved-well-water':'regional-spring-sinter';
   regionalWater.set(key,m);return m;
 }
 export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null, waterWash=null) {
@@ -131,10 +128,7 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null
           `
         #include <color_fragment>
         vec2 wave=ripple(poolPoint.xz,poolTime);
-        vec2 bed=poolPoint.xz*5.+wave;
-        float speck=pebble(bed)*.58+pebble(bed*3.8)*.31+pebble(bed*14.)*.11;
-        diffuseColor.rgb*=.63+speck*.83;
-        diffuseColor.rgb+=vec3(.019,.014,.007)*pow(max(0.,sin(speck*18.+bed.x*.84+poolTime*.14)),5.);
+        ${bedPaint}
       `,
         )
         .replace(
@@ -183,10 +177,13 @@ function placeWater(parent,rx,rz,level,site,waterWash,pool){
     shape.computeBoundingSphere();
     if(site.regional){
       const {inlet}=regionalBathFittings(site,springLip),flow=[];
+      const [flowU,,lipV]=site.shape==='suzuri'?rillPoint(1):
+        [pool?0:inlet.u,0,pool?-pool.rz*.85:inlet.v+inletImpactV];
+      const flowV=lipV+(site.shape==='suzuri'?.10:0);
       // One attribute on the existing fan suffices: interpolating the offset
       // reproduces exact distances, while the last channel follows the shore.
       for(let i=0;i<points.count;i++){
-        flow.push(points.getX(i)*rx-(pool?0:inlet.u),points.getZ(i)*rz-(pool?-pool.rz*.85:inlet.v+inletImpactV),i===0?0:1);
+        flow.push(points.getX(i)*rx-flowU,points.getZ(i)*rz-flowV,i===0?0:1);
       }
       shape.setAttribute('springInflow',new T.Float32BufferAttribute(flow,3));
       material=regionalFinish(site,pool);

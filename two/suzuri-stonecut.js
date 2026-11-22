@@ -65,7 +65,7 @@ export function carveSuzuriStone(art,sectionAt){
       wing.bezierCurveTo(-.347,-.216,-.298,-.151,-.251,-.109);
     }else wing.bezierCurveTo(-.055,-.131,-.171,-.133,-.244,-.108);
     wing.lineTo(-.48,-.157);wing.lineTo(-.443,-.10);wing.closePath();
-    const tone=banking?'#9b9e94':'#879591';
+    const tone=banking?'#78867d':'#73817a';
     carving(wing,origin,across,scale,mirror,tone);
     const path=points=>points.map(([x,t])=>[origin+x*scale*mirror,across+t*scale]);
     const feather=(pts,w=.011)=>stroke(path(pts),[.002,w,.003],'#58676a',.050);
@@ -77,8 +77,8 @@ export function carveSuzuriStone(art,sectionAt){
     const eye=surface(origin+.37*scale*mirror,across+.042*scale,.056);
     art.ball('#364348',...eye,.013,.008,.013);
   }
-  plover(6.80,.47,.92,1,true);
-  plover(8.45,.47,.83,1,false);
+  plover(6.80,.47,.69,1,true);
+  plover(8.45,.47,.60,1,false);
   // Thin paired burin grooves, silver catching only the higher bank. Waves
   // disappear under the water dropper then return beneath the flight.
   function wave(s,t,len,bend){
@@ -94,10 +94,10 @@ export function carveSuzuriStone(art,sectionAt){
   // the way to their points; three seed heads carry a warm iron-brown patina.
   for(const [s,t,reach,rise] of [[2.86,.27,-.44,.37],[2.93,.24,.20,.48],[2.99,.23,.49,.42]]){
     const pts=[[s,t],[s+reach*.29,t+rise*.52],[s+reach*.68,t+rise*.89],[s+reach,t+rise]];
-    stroke(pts,[.008,.012,.009,.003],'#a2977c');
+    stroke(pts,[.008,.012,.009,.003],'#8e9480');
     const tip=pts.at(-1),prev=pts.at(-2);
     stroke([[prev[0]*.48+tip[0]*.52,prev[1]*.48+tip[1]*.52],tip,[tip[0]+reach*.22,tip[1]+.016]],
-      [.011,.034,.002],'#a79775',.027);
+      [.011,.034,.002],'#959583',.027);
     for(const side of [-1,1]){
       const leaf=new T.Shape();
       leaf.moveTo(0,0);leaf.bezierCurveTo(.09,.068,.20,.15,.351,.168);
@@ -105,33 +105,6 @@ export function carveSuzuriStone(art,sectionAt){
       carving(leaf,s+.024,t+.081,side<0?.70:.96,side,'#7d8b7c',.009);
     }
   }
-  // One narrow silver-grey fillet runs round the polished arris and fades
-  // before the walk-in beach. The outer bevel carries the stone's warm layer.
-  const trim=(from,to,across,color,radius,below)=>{
-    const pts=Array.from({length:117},(_,i)=>{
-      const r=sectionAt((from+(to-from)*i/116)*PI/180);
-      return [r.u+r.nx*r.width*across,r.top+below,r.v+r.nz*r.width*across];
-    });
-    const radii=pts.map((_,i)=>Math.max(.001,radius*Math.min(1,i/4,(116-i)/4)));
-    art.stroke(color,pts,radii,160);
-  };
-  trim(117,422,.028,'#a6ada3',.010,.001);
-  trim(139,393,.799,'#8c826e',.009,.004);
-
-  // The inner wall is cut to a waist just above its wet line. During a
-  // half bath the bather sees this silver-grey flowing-water border from
-  // the inside, while the broad carving above remains free of ornament.
-  const cord=(angle,height,proud=0)=>{
-    const r=sectionAt(angle),d=-.226*r.width-proud;
-    return [r.u+d*r.nx,height*r.bank,r.v+d*r.nz];};
-  const grooves=[[.86,2.09],[2.20,3.87],[3.99,5.26],[5.40,6.94]];
-  for(const [from,to] of grooves){
-    const n=61;
-    for(const tier of [0,1]){
-      const pts=Array.from({length:n},(_,i)=>{
-        const t=i/(n-1),angle=from+(to-from)*t,wave=Math.sin(t*Math.PI*4+.54*tier)*Math.sin(t*Math.PI)**2;
-        return cord(angle,.11+.036*tier+.033*wave,.005);});
-      art.stroke(tier?'#88948b':'#637670',pts,pts.map((_,i)=>.002+.009*Math.sin(i*Math.PI/(n-1))**.5),n);
-    }
-  }
+  // Preserve a broad expanse of unadorned stone alongside these shallow
+  // reliefs. The polished arris itself catches the light in the vessel mesh.
 }

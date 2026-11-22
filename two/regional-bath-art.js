@@ -349,7 +349,7 @@ export function dressRegionalBath(p,f,s,level) {
   const c=writingDesk?suzuriCraft:bathCraft[s.kind],fixtures=regionalBathFittings(s,springLip);
   prepareShapes(p,c,key,s);
   const custom=bathPools(s)!==undefined;
-  if(!custom){
+  if(!custom && !writingDesk){
     const bank='springBank-'+s.id;
     p.shapes[bank]??=regionalSpringBank(s,level);
     p.part(bank,s.x,level,s.z,1,1,1,'#fff',s.yaw,0,0,p.springGravel,false,true);
@@ -386,10 +386,11 @@ export function dressRegionalBath(p,f,s,level) {
   }
   const {inlet,sign}=fixtures;
   if(!hasOwnInlet(s)){
-    f.put('regionalInlet-'+key,inlet.u,0,inlet.v,1,1,1,'#fff',writingDesk?celadonGlaze():p.stems);
-    if(writingDesk)p.shapes.suzuriWritingWater??=suzuriPour(inletImpactV);
-    f.put(writingDesk?'suzuriWritingWater':'regionalFall',inlet.u,0,inlet.v,1,1,1,'#bcd4c3',p.springFlow);
+    f.put('regionalInlet-'+key,inlet.u,inlet.foot,inlet.v,1,1,1,'#fff',writingDesk?celadonGlaze():p.stems);
+    if(writingDesk)p.shapes.suzuriWritingWater??=suzuriPour(inletImpactV,inlet.foot);
+    f.put(writingDesk?'suzuriWritingWater':'regionalFall',inlet.u,0,inlet.v,1,1,1,writingDesk?'#86ada7':'#bcd4c3',p.springFlow);
   }
+  if(writingDesk)return; // The inkstone opens onto fitted stone paving in its walled court.
   for(let i=0;i<foliageCluster.length;i++){
     const [nx,nz,size]=foliageCluster[i],a=Math.atan2(nz,nx);
     const lip=springLip(s.index,a);

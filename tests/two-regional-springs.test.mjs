@@ -1,3 +1,4 @@
+import { onSuzuriLand } from '../two/suzuri-basin-plan.js';
 import { kilnSteamBath,steamRoom } from '../two/pilgrim-bathing-plan.js';
 import { bathPools,bathStations,poolLip,isDryTreatment } from '../two/bath-places.js';
 import test from 'node:test';
@@ -155,6 +156,11 @@ test('regional basins have distinct shorelines, continuous water and a dry appro
       const a=j*Math.PI/12, u=Math.cos(a)*s.rx*lip[j],v=Math.sin(a)*s.rz*lip[j];
       const rim=sitePoint(s,u,v), wet=sitePoint(s,u*.48,v*.48);
       assert.ok(Math.abs(bathRadius(s,...rim)-1)<1e-6,s.name+' rim');
+      if(s.shape==='suzuri' && onSuzuriLand(u*.48,v*.48)){
+        assert.ok(groundHeight(...wet)>level,s.name+' exposed grinding land');
+        assert.ok(waterSurfaceAt(...wet)<level,s.name+' dry footing above the ink well');
+        continue;
+      }
       assert.ok(Math.abs(waterSurfaceAt(...wet)-level)<.01,s.name+' waterline');
       assert.ok(level-terrainHeight(...wet)>.13,s.name+' depth');
       // The rendering lattice is coarser than the analytic player footing.

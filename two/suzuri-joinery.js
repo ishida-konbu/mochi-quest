@@ -1,3 +1,4 @@
+import { suzuriSurface } from './suzuri-materials.js';
 // Joinery and celadon made for the inkstone court. The front of every carved
 // panel is +Z; the wall gallery, wash wing and inlet keep their own datum.
 import * as T from './vendor/three.module.min.js';
@@ -139,6 +140,10 @@ function loft(s,points,color,rings=40){
   }),color);
 }
 export function mandarinDropper(s){
+  // The unglazed foot is keyed into the stone so the porcelain never hovers
+  // where the dressed rim changes height under the narrow back of the ewer.
+  s.add(new T.LatheGeometry([[.48,-.36],[.58,-.21],[.595,.081],[.555,.095]].map(v=>new T.Vector2(...v)),44),
+    '#626863',0,0,-.185,.96,1,1.03);
   const bed=new T.LatheGeometry([[.03,.08],[.62,.08],[.67,.112],[.68,.142],[.60,.164],
     [.52,.228],[.54,.31],[.64,.399],[.66,.418],[.637,.44],[.48,.44],[.02,.44]].map(v=>new T.Vector2(...v)),62);
   s.add(bed,'#61706d',0,0,-.185,.97,1,1.04);
@@ -207,6 +212,11 @@ export function mandarinDropper(s){
     const a=u*tau,r=.135-.041*v+.014*sin(v*PI),sh=outer?1:.72;
     return [r*sh*cos(a),.991-.068*v+(.056-.014*v)*sh*sin(a),.486+.459*v];};
   s.add(surface(32,18,(u,v)=>bill(u,v,true)),ochre);
+  // Pierced nostrils have a slip-trailed lip and a dark recessed core.
+  for(const side of [-1,1]){
+    s.ball('#ad9e7e',.074*side,1.013,.611,.023,.008,.038,-.13,side*.22);
+    s.ball('#665e53',.074*side,1.019,.611,.012,.005,.026,-.13,side*.22);
+  }
   s.add(surface(32,11,(u,v)=>bill(u,.67+.33*v,false)),iron);
   s.add(surface(32,2,(u,v)=>{const a=bill(u,1,true),b=bill(u,1,false);return a.map((y,j)=>y*(1-v)+b[j]*v);}),milk);
   for(const dir of [-1,1])quill(sea,[[.100*dir,1.018,.533],[.109*dir,1.01,.63],[.118*dir,.983,.741],
@@ -218,20 +228,14 @@ export function mandarinDropper(s){
     s.ball(green,.076*cos(a),1.067,-.17+.076*sin(a),.014,.016,.014);
   }
 }
-let glazed;
-export function celadonGlaze(){
-  if(glazed)return glazed;
-  glazed=new T.MeshPhysicalMaterial({vertexColors:true,roughness:.31,metalness:.04,
-    clearcoat:.48,clearcoatRoughness:.22,side:T.DoubleSide});
-  return glazed;
-}
+export function celadonGlaze(){return suzuriSurface('celadon');}
 // A source-sized stream clears the hollow bill and falls into its measured
 // impact ripple. The groove between the two short strands catches the light.
-export function suzuriPour(end){
-  const paint=new T.Color(),green=new T.Color('#91ada4'),glint=new T.Color('#d0e4dc');
+export function suzuriPour(end,foot){
+  const paint=new T.Color(),green=new T.Color('#91ada4'),glint=new T.Color('#bad6cf');
   return surface(25,42,(u,t)=>{
-    const a=u*tau,r=(.048+.010*t-.017*sin(PI*t))*(1+.09*cos(3*a+2*t));
-    return [r*cos(a)+.004*sin(t*4),.921*(1-t*t)+r*.33*sin(a),
+    const a=u*tau,r=(.041-.021*t+.005*t**5)*(1+.14*cos(3*a+2*t));
+    return [r*cos(a)+.004*sin(t*4),foot+.921-(foot+.921-.267)*t*t+r*.33*sin(a),
       .937+(end-.937)*t+.80*r*sin(a)];
   },(u,t)=>paint.copy(green).lerp(glint,.14+.64*Math.max(0,cos(u*tau*2+t))**5));
 }

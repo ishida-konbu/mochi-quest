@@ -1656,7 +1656,7 @@ function makeObject(o, parent) {
         mesh.add(mist);
         return {mist,spread:q.rx*.80,phase:i*.58};
       });
-    }else{
+    }else if(o.retreat.shape!=='suzuri'){
       steam=particles('steam',30);
       steam.position.y=.51;
       steam.scale.set(1,.9,o.retreat.rz/o.retreat.rx);

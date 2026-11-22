@@ -2,7 +2,8 @@ import * as T from './vendor/three.module.min.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { villageCoping,buildVillageCoping } from './village-coping.js';
 import { bathFinish } from './bath-material-study.js';
-import { carveSuzuriStone } from './suzuri-stonecut.js';
+import { suzuriSurface } from './suzuri-materials.js';
+import { hewnInkstone,polishedInkstone } from './suzuri-basin-stone.js';
 import { basinFinishes,rimPoint,rimSection } from './main-bath-rims.js';
 
 const tau=2*Math.PI;
@@ -18,6 +19,7 @@ const sections={
 };
 
 export function buildBasinVessel(site){
+  if(site.shape==='suzuri')return hewnInkstone(site);
   if(villageCoping(site.kind))return buildVillageCoping(site);
   const [type]=basinFinishes[site.kind];
   const pigment=basinFinishes[site.kind].slice(3).map(tint=>new T.Color(tint));
@@ -58,10 +60,6 @@ export function buildBasinVessel(site){
   // Winding runs up the wet inside and faces the sky across the top.
   shell.setIndex(faces);shell.computeVertexNormals();
   const art=sculpture();art.add(shell,'#fff');
-  if(type==='slab'){
-    carveSuzuriStone(art,sectionAt);
-    return art.finish();
-  }
   const mark=basinFinishes[site.kind][6];
   // Lashing across the top and down the face gives the timber baths scale.
   // Grooves and gold-inlaid ribs pick out the fan pleats and the shell flutes.
@@ -87,6 +85,7 @@ export function buildBasinVessel(site){
 
 const materials=new WeakMap();
 export function basinMaterial(p,site){
+  if(site.shape==='suzuri')return polishedInkstone(suzuriSurface('inkstone'));
   if(villageCoping(site.kind))return bathFinish(({sakura:"cedar",bamboo:"bamboo"})[site.kind]||"slate");
   const type=basinFinishes[site.kind][0];
   if(!materials.has(p))materials.set(p,new Map());

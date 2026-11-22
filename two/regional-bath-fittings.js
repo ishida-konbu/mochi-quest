@@ -6,7 +6,7 @@ export function regionalBathFittings(site, lip) {
   const shore=(angle)=>lip(site.index,angle);
   return {
     inlet:{u:site.rx*shore(a)*Math.cos(a),v:site.rz*shore(a)*Math.sin(a)-.16,
-      w:1.62,d:2.16,h:1.35},
+      w:1.62,d:2.16,h:1.35,foot:site.shape==='suzuri'?.455:0},
     sign:{u:(site.rx+.58)*shore(b)*Math.cos(b),v:(site.rz+.52)*shore(b)*Math.sin(b),
       w:1.46,d:.16,h:1.39},
   };
