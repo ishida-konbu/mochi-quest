@@ -1,7 +1,7 @@
 // Transport every cross-section, its ink normals and the ornaments on its
 // spine together. Geometry also deforms in the shadow pass and atlas baker.
 import * as T from './vendor/three.module.min.js';
-import { dragonWave, dragonPhase } from './animal-motion.js';
+import { dragonWave, dragonPhase, dragonPitch } from './animal-motion.js';
 
 function dragonSkin(mesh) {
   const source=mesh.geometry;
@@ -44,6 +44,7 @@ export function prepareDragon(mesh,joints) {
   }
 }
 export function poseDragon(j,n,time) {
+  j.trunk.rotation.x = dragonPitch(n);
   const phase=dragonPhase(time,n), {rings,width,rest,normals,pos,normal}=j.flight;
   const last=rings.length-1;
   for(let r=0;r<=last;r++){

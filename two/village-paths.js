@@ -3,6 +3,7 @@
 import { BUILDINGS, BRIDGES, GATES, MARKET_STALLS, REGIONS, TREES, SHRINE_BAMBOO, regionAt, solidHeightAt, terrainHeight, waterDepth, groundHeight, nearRoad } from './terrain.js';
 import { buildingCraft, roomPlan } from './architecture.js';
 import { POUNDING } from './festival.js';
+import { predatorRange, patrolAt } from './predator-trails.js';
 
 const tau=Math.PI*2, stepSize=16;
 const cellKey=(x,z)=>Math.floor(x/stepSize)*128+Math.floor(z/stepSize);
@@ -69,6 +70,7 @@ export function openGround(x,z,pad) {
 }
 
 export function walkCircuit(n,angle,out) {
+  if(n.trail) return patrolAt(n.trail,n.homeX,n.homeZ,angle,out);
   const r=n.radius;
   out.x=n.homeX+r*(Math.sin(angle)-Math.sin(n.phase));
   out.z=n.homeZ+r*.66*(Math.cos(angle)-Math.cos(n.phase));
@@ -119,6 +121,35 @@ function findSite(n,accept) {
   }
   throw new Error('No clear village site for '+n.id);
 }
+function settlePredator(n, workers, objects) {
+  const trail=predatorRange(n), pad=animalRadius(n);
+  // Cover the whole animal at the outside of the bend. A clear centre alone
+  // would allow the flank or tail to swing out onto a road.
+  const reach=trail.radius*1.15+pad;
+  const sampleCount=Math.ceil(tau*trail.radius*1.35/.48);
+  const point={}, clearance=pad+.24;
+  n.homeX=trail.x; n.homeZ=trail.z;
+  findSite(n,(x,z)=>{
+    if(nearRoad(x,z,24+reach))return false;
+    if(BUILDINGS.some(b=>Math.hypot(x-b.x,z-b.z)<47+reach+.72*Math.hypot(b.w,b.d)))return false;
+    if(REGIONS.some(r=>Math.hypot(x-r.x,z-r.z)<59+reach))return false;
+    if(GATES.some(g=>Math.hypot(x-g.x,z-g.z)<43+reach+g.w*.63))return false;
+    if(objects.some(o=>Math.hypot(x-o.x,z-o.z)<50+reach) ||
+       workers.some(w=>Math.hypot(x-w.homeX,z-w.homeZ)<31+reach))return false;
+    for(let i=0;i<sampleCount;i++){
+      patrolAt(trail,x,z,tau*i/sampleCount,point);
+      const {x:px,z:pz}=point;
+      if(!openGround(px,pz,clearance) ||
+        Math.abs(terrainHeight(px+1,pz)-terrainHeight(px-1,pz))>1.22 ||
+        Math.abs(terrainHeight(px,pz+1)-terrainHeight(px,pz-1))>1.22)return false;
+    }
+    return true;
+  });
+  n.trail=trail;
+  n.radius=trail.radius;
+  n.cruise=(n.type==='shishi'?.89:1.18)/n.radius;
+  n.habitat=REGIONS[regionAt(n.homeX,n.homeZ)].id;
+}
 let villagePlan;
 export function prepareVillageRoutes(npcs,objects) {
   if(villagePlan) {
@@ -127,8 +158,13 @@ export function prepareVillageRoutes(npcs,objects) {
   }
   registerVillageObjects(objects);
   seatWorkers(npcs);
+  const workers=npcs.filter(n=>n.area);
   for(const n of npcs) {
     if(n.room!==undefined || n.atMortar || ['bird','dragon','kirin'].includes(n.type)) continue;
+    if(n.type==='tiger' || n.type==='shishi') {
+      settlePredator(n,workers,objects);
+      continue;
+    }
     const pad=animalRadius(n);
     if(n.area) {
       const sweep=pad+.46;
@@ -159,5 +195,5 @@ export function prepareVillageRoutes(npcs,objects) {
   }
   // Only immutable starting positions and tool assignments are shared.
   villagePlan=new Map(npcs.map(n=>[n.id,Object.fromEntries(
-    ['x','z','y','homeX','homeZ','radius','heading','facing','room','craft'].filter(k=>k in n).map(k=>[k,n[k]]))]));
+    ['x','z','y','homeX','homeZ','radius','heading','facing','room','craft','habitat','trail','cruise'].filter(k=>k in n).map(k=>[k,n[k]]))]));
 }

@@ -11,7 +11,7 @@ import { loadRiceModel } from './mochi-model.js';
 import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS_KEY as settingsKey,
   transferURL, decodeTransfer, storeTransfer } from './journey-transfer.js';
 import { createGame } from './game.js';
-import { SPECIES, dragonVisible } from './bestiary.js';
+import { SPECIES } from './bestiary.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
 import { preloadBeastCoats } from './beast-art.js';
 import { REGIONS, groundHeight, landscapeFloor, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
@@ -93,9 +93,6 @@ let goal = REGIONS.some((r) => r.id === savedSettings.goal) ? savedSettings.goal
 let trackedAnimal = null, jumpPin = null;
 const speciesNames = { frog:'蛙', rabbit:'兎', turtle:'ミツユビハコガメ',
   ...Object.fromEntries(Object.entries(SPECIES).map(([type,spec])=>[type,type==='bird'?'丹頂鶴':spec.label])) };
-function visibleRecipient() {
-  return trackedAnimal?.type === 'dragon' && !dragonVisible(p) ? null : trackedAnimal;
-}
 function nearestUndelivered(type) {
   let result = null, best = Infinity;
   for (const n of state.npcs) {
@@ -298,7 +295,7 @@ $('download').onclick = () => {
 };
 function moveCamera(dx, dy) {
   yaw -= dx * 0.0055;
-  pitch = clamp(pitch + dy * 0.004, photoMode ? -0.06 : 0.045, 1.08);
+  pitch = clamp(pitch + dy * 0.004, photoMode ? -0.06 : -1.25, 1.08);
 }
 canvas.onpointerdown = (e) => {
   if (look.id !== null || dialog.open) return;
@@ -459,9 +456,11 @@ function updateCamera(dt, snap = false) {
   const sx = Math.sin(yaw),
     sz = Math.cos(yaw),
     d = distance * (full > 1 && photoMode ? 1.18 : 1);
-  const dx = sx * Math.cos(pitch) * d,
-    dy = Math.sin(pitch) * d + (photoMode ? 0.1 : 0.62),
-    dz = sz * Math.cos(pitch) * d;
+  // At the horizon, hold the eye above ground and tilt up to follow an animal overhead.
+  const orbitPitch = photoMode ? pitch : Math.max(0, pitch);
+  const dx = sx * Math.cos(orbitPitch) * d,
+    dy = Math.sin(orbitPitch) * d + (photoMode ? 0.1 : 0.62),
+    dz = sz * Math.cos(orbitPitch) * d;
   let fraction = 1;
   // While the grass mochi is inside a trunk, start the camera ray on the
   // outward side of that trunk. A second wall still shortens the camera arm.
@@ -493,6 +492,7 @@ function updateCamera(dt, snap = false) {
     aim.y += 0.53;
   } else aim.y -= .13;
   camera.lookAt(aim);
+  if (!photoMode && pitch < 0) camera.rotateX(-pitch);
   camera.updateMatrixWorld();
 }
 const fullScore = new Intl.NumberFormat('ja-JP');
@@ -553,21 +553,21 @@ function updateHUD() {
     el.classList.toggle('major', n % 3 === 0);
     el.firstElementChild.textContent = n % 3 === 0 ? directions[(((n / 3) % 8) + 8) % 8] : '';
   });
-  const recipient = visibleRecipient();
-  const dest = recipient || REGIONS.find(r => r.id === goal);
-  $('target').hidden = !dest && !trackedAnimal;
-  if (trackedAnimal && !recipient) {
-    $('target').textContent = '龍　十五夜の薄野で、羽二重餅に変身して上空へ';
-  } else if (dest) {
+  const dest = trackedAnimal || REGIONS.find(r => r.id === goal);
+  $('target').hidden = !dest;
+  if (dest) {
     const dx = wrapDelta(dest.x - p.x),
       dz = wrapDelta(dest.z - p.z),
       heading = Math.atan2(dx, -dz) + yaw;
     const pointer = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][
       ((Math.round(heading / (Math.PI / 4)) % 8) + 8) % 8
     ];
-    $('target').textContent = pointer + '　' + (trackedAnimal ? speciesNames[dest.type] : dest.name) + '　' + Math.round(Math.hypot(dx, dz)) + ' m' + (recipient && Math.abs(dest.y-p.y)>2 ? (dest.y>p.y ? '　↑ ' : '　↓ ') + Math.round(Math.abs(dest.y-p.y)) + ' m' : '');
+    const name = trackedAnimal ? speciesNames[dest.type] : dest.name;
+    const height = trackedAnimal ? trackedAnimal.y - p.y : 0;
+    const elevation = Math.abs(height) > 2 ? '　' + (height > 0 ? '上 ' : '下 ') + Math.round(Math.abs(height)) + ' m' : '';
+    $('target').textContent = pointer + '　' + name + '　' + Math.round(Math.hypot(dx, dz)) + ' m' + elevation;
   }
-  if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, recipient);
+  if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, trackedAnimal);
 }
 function openDialog(kind) {
   if (!renderer || dialog.open) return;
@@ -587,7 +587,7 @@ function openDialog(kind) {
 function mapDialog() {
   const body = $('dialog-content');
   body.innerHTML =
-    '<div class="atlas-layout"><canvas class="map-canvas" id="atlas" width="540" height="540" aria-label="十の名所、お餅の現在地と選んだ名所の自転車ポート"></canvas><div class="map-caption"><div class="map-places"></div><p class="map-detail" aria-live="polite"></p><div class="actions"><button class="jump-link" id="set-goal">ここを道しるべにする</button><button class="choice" id="clear-goal">道しるべを外す</button></div></div></div>';
+    '<div class="atlas-layout"><canvas class="map-canvas" id="atlas" width="540" height="540"></canvas><div class="map-caption"><div class="map-places"></div><p class="map-detail" aria-live="polite"></p><div class="actions"><button class="jump-link" id="set-goal">ここを道しるべにする</button><button class="choice" id="clear-goal">道しるべを外す</button></div></div></div>';
   for (const [i, r] of REGIONS.entries()) {
     const b = document.createElement('button');
     b.innerHTML = '<em>' + labels[i] + '</em> ' + r.name;
@@ -689,7 +689,10 @@ function journalDialog() {
 }
 function redrawAtlas() {
   const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
-  drawMap($('atlas'),state,yaw,selectedPlace,true,point,visibleRecipient());
+  const name = trackedAnimal ? speciesNames[trackedAnimal.type] : '';
+  const atlas = $('atlas');
+  atlas.setAttribute('aria-label', '十の名所、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
+  drawMap(atlas,state,yaw,selectedPlace,true,point,trackedAnimal,name);
 }
 function selectMap(id) {
   selectedPlace = id;

@@ -10,7 +10,7 @@ import { buildTurtle } from './turtle-art.js';
 import { DYES } from './procession.js';
 import { distantProcession, preparePlates, VILLAGERS, beastFrame } from './procession-view.js';
 import { finishInSlices } from './preparation.js';
-import { SPECIES, dragonVisible, isFlying, moveWildlife } from './bestiary.js';
+import { SPECIES, isFlying, moveWildlife } from './bestiary.js';
 import { poseHareRider } from './scroll-riders.js';
 import { createSkyLife } from './sky-life.js';
 import { createCraneFlight } from './crane-flight.js';
@@ -1767,7 +1767,7 @@ export function createActors(scene, renderer) {
     const focalPixels=(viewport?.height || window.innerHeight)*camera.projectionMatrix.elements[5]*.5;
     visible.length=0; selected.clear();
     for (const n of state.nearbyNpcs) {
-      if(n.mounted || n.atMortar || (n.type==='dragon' && !dragonVisible(p))) continue;
+      if(n.mounted || n.atMortar) continue;
       const view=state.photo ? atPhotoTime(n,t) : n;
       const dx=wrapDelta(view.x-p.x),dz=wrapDelta(view.z-p.z);
       const distance=Math.hypot(dx,dz);

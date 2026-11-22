@@ -6,8 +6,8 @@ const TAU=Math.PI*2;
 const pigment={monkey:'#87664e',bird:'#e6e0cc',fox:'#bd6d3f',tiger:'#c08640',dragon:'#547c74',kirin:'#8a9f86',deer:'#bcaa90',boar:'#9d967f',shishi:'#cbbfa1'};
 
 function paintMask(g,type) {
-  const monkey=type==='monkey', tiger=type==='tiger', dragon=type==='dragon', fox=type==='fox';
-  const ink='#443a31', light='#ede2c9', accent=monkey?'#bf8373':dragon?'#b09262':'#ad7955';
+  const tiger=type==='tiger', dragon=type==='dragon', fox=type==='fox';
+  const ink='#443a31', light='#ede2c9', accent=dragon?'#b09262':'#ad7955';
   const ellipse=(x,y,rx,ry,c)=>{
     g.fillStyle=c;g.beginPath();g.ellipse(x,y,rx,ry,0,0,TAU);g.fill();
   };
@@ -28,12 +28,7 @@ function paintMask(g,type) {
   }
   for(const [y,sign] of [[0,1],[192,-1],[384,1]]){
     g.save();g.translate(0,y);g.scale(1,sign);
-    if(monkey){
-      g.fillStyle='#c18d79';g.beginPath();g.moveTo(293,7);g.bezierCurveTo(311,53,473,70,521,39);
-      g.bezierCurveTo(565,18,687,21,745,-5);g.bezierCurveTo(717,-39,615,-65,492,-59);
-      g.bezierCurveTo(383,-60,307,-25,293,7);g.fill();
-      ellipse(459,-12,48,20,'#c9907a');
-    } else{
+    {
       // Buff jaw and ruff wash set off the eye at the edge of the white cheek.
       g.fillStyle=dragon?'#b7ae84':light;g.beginPath();g.moveTo(218,-47);
       g.bezierCurveTo(283,-43,342,-20,401,-18);g.bezierCurveTo(526,-15,625,-30,710,4);
@@ -193,7 +188,27 @@ function down(g,rng) {
 // to the nap of each hide, and reflect the brush at the UV seam on the belly.
 const brushwork = new Image();
 brushwork.src = new URL('./animal-brushwork.webp', import.meta.url).href;
-await brushwork.decode();
+// The portrait follows the head sculpt's cylindrical UV. Its eyelids, nostrils
+// and lip line register with the sockets, nasal wings and moving lower jaw.
+const portrait = new Image();
+portrait.src = new URL('./macaque-portrait.webp', import.meta.url).href;
+await Promise.all([brushwork.decode(), portrait.decode()]);
+
+function printMacaquePortrait(g) {
+  g.drawImage(portrait,0,0,768,384);
+  // Crossfade a small strip of nape fur across the wrap behind the ears.
+  const seam=document.createElement('canvas');
+  seam.width=64;seam.height=384;
+  const ctx=seam.getContext('2d');
+  ctx.drawImage(portrait,portrait.naturalWidth*.125,0,portrait.naturalWidth/12,portrait.naturalHeight,0,0,64,384);
+  const fade=ctx.createLinearGradient(0,0,64,0);
+  fade.addColorStop(0,'transparent');fade.addColorStop(.48,'black');
+  fade.addColorStop(.52,'black');fade.addColorStop(1,'transparent');
+  ctx.globalCompositeOperation='destination-in';
+  ctx.fillStyle=fade;ctx.fillRect(0,0,64,384);
+  g.drawImage(seam,-32,0);g.drawImage(seam,736,0);
+}
+
 function printBrushwork(g,type,part) {
   const tile = type==='bird' ? 2 : ['kirin','dragon'].includes(type) ? 3 :
     ['boar','monkey','shishi'].includes(type) || part==='brush' ? 1 : 0;
@@ -233,6 +248,7 @@ export function paintBeastCoat(type,part) {
   else if(['deer','boar','shishi'].includes(type))scrollHide(g,type,rng);
   else if(part==='wing')vanes(g,rng);
   else if(part==='leg')legs(g,type);
+  else if(part==='face' && type==='monkey')printMacaquePortrait(g);
   else if(part==='face')paintMask(g,type);
   else if(part==='brush')tail(g,rng);
   else if(type==='tiger')tiger(g);
@@ -247,7 +263,7 @@ export function paintBeastCoat(type,part) {
       }
     });
   }
-  printBrushwork(g,type,part);
+  if (type!=='monkey' || part!=='face') printBrushwork(g,type,part);
   // Broken fibres and blooms are layered last so the deposits continue over
   // the mask, stripes and shell markings instead of showing a tiled noise field.
   for(let i=0;i<13000;i++){

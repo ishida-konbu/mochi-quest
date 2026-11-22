@@ -5,6 +5,7 @@ import { POUNDING, POUNDING_CREW } from './festival.js';
 import { prepareVillageRoutes, animalRadius, openGround, walkCircuit } from './village-paths.js';
 import { procession } from './procession.js';
 import { walkingScore } from './animal-motion.js';
+import { legendary } from './legend-flight.js';
 import { SPECIES, wildlifeHomes, moveWildlife, recipientContact } from './bestiary.js';
 
 const MAX_VITAL = 100;
@@ -108,7 +109,6 @@ function makeWorld() {
     Object.assign(npcs.at(-1),visitor);
   }
   prepareVillageRoutes(npcs,objects);
-  for(const n of npcs) if(SPECIES[n.type]) moveWildlife(n,0);
   return { objects, npcs };
 }
 
@@ -434,10 +434,10 @@ export function createGame(snapshot = null) {
     crowdCellX=cx; crowdCellZ=cz;
     const cellX=(cx+.5)*32, cellZ=(cz+.5)*32;
     state.nearbyNpcs=npcs.filter(n=>{
-      if(n===turtle || n.type==='dragon')return true;
+      if(n===turtle || legendary(n.type))return true;
       // A crane's ellipse can swing two radii away from its original perch.
       // Stream the whole route before its edge reaches the 128 m view radius.
-      const reach=n.type==='bird' ? 128+16+2*n.radius : n.type==='kirin' ? 165 : 150;
+      const reach=n.type==='bird' ? 128+16+2*n.radius : 150;
       return Math.abs(wrapDelta(n.homeX-cellX))<reach && Math.abs(wrapDelta(n.homeZ-cellZ))<reach;
     });
   }
@@ -724,7 +724,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 4, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 4, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: objects.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -793,6 +793,16 @@ export function createGame(snapshot = null) {
     return true;
   }
   const restored = restore(snapshot) === true;
+  // Older scrolls have no sky seed. Give their existing journey a stable
+  // migration, so a second import opens onto exactly the same stretch of sky.
+  const savedSeed=restored ? snapshot.flightSeed : null;
+  const validSeed=Number.isInteger(savedSeed) && savedSeed>=0 && savedSeed<=0xffffffff;
+  state.flightSeed=restored ? (validSeed?savedSeed:0x82c6710b) : Math.floor(Math.random()*0x100000000);
+  for(const n of npcs) if(SPECIES[n.type]) {
+    if(legendary(n.type)) n.flightSeed=state.flightSeed;
+    moveWildlife(n,state.time);
+  }
+  updateHareRider(riverRider,state.time);
   refreshCrowd();
   return { state, act, step, nearest, teleport, save, restored };
 }

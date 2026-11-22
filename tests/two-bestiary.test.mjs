@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
 import { SPECIES, recipientContact } from '../two/bestiary.js';
-import { groundHeight } from '../two/terrain.js';
+import { BUILDINGS, GATES, nearRoad, groundHeight } from '../two/terrain.js';
+import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
+import { Euler, Vector3 } from '../two/vendor/three.module.min.js';
+import { dragonPitch, dragonWave } from '../two/animal-motion.js';
 
 test('the recipient ledger covers all 675 individuals and gives the two legends a hundredfold score',()=>{
   const {state}=createGame();
@@ -91,4 +94,53 @@ test('the mounted hare and its deer receive separate letters while travelling to
   assert.ok(game.state.delivered.has(hare.id));
   assert.ok(Math.hypot(deer.x-hare.x,deer.z-hare.z)<.14);
   assert.equal(deer.heading,hare.heading);
+});
+
+test('the ten tigers and two shishi patrol clear wild ranges away from roads, houses and shrine gates',()=>{
+  const {state}=createGame();
+  const cats=state.npcs.filter(n=>n.type==='tiger'||n.type==='shishi');
+  const historicIds=[...Array.from({length:10},(_,i)=>'tiger-'+(611+i)),'shishi-673','shishi-674'];
+  assert.deepEqual(cats.map(n=>n.id),historicIds);
+  assert.equal(new Set(cats.filter(n=>n.type==='tiger').map(n=>n.habitat)).size,10);
+  assert.deepEqual(cats.filter(n=>n.type==='shishi').map(n=>n.habitat),['snow','autumn']);
+  for(const n of cats){
+    const pad=animalRadius(n),point={};
+    for(let j=0;j<120;j++){
+      walkCircuit(n,2*Math.PI*j/120,point);
+      const {x,z}=point;
+      assert.ok(openGround(x,z,pad),n.id);
+      assert.ok(!nearRoad(x,z,23+pad),n.id);
+      for(const b of BUILDINGS){
+        const dx=x-b.x,dz=z-b.z;
+        const edgeX=Math.max(0,Math.abs(dx*b.cos-dz*b.sin)-b.w*.64);
+        const edgeZ=Math.max(0,Math.abs(dx*b.sin+dz*b.cos)-b.d*.70);
+        assert.ok(Math.hypot(edgeX,edgeZ)>47+pad,n.id);
+      }
+      assert.ok(GATES.every(g=>Math.hypot(x-g.x,z-g.z)>43+pad+g.w*.63),n.id);
+      assert.ok(state.objects.every(o=>Math.hypot(x-o.x,z-o.z)>49+pad),n.id);
+    }
+  }
+  const old=createGame().save();
+  old.delivered=historicIds;
+  assert.deepEqual([...createGame(old).state.delivered],historicIds);
+});
+
+test('a letter crosses the tilted dragon tail at its drawn height during a climb and a dive', () => {
+  const n = { type:'dragon', x:415.2, y:38, z:91, heading:.97, stature:2.1, speed:5, wavePhase:1.7 };
+  const sway = dragonWave(-2.86, n.wavePhase, {});
+  for (const rise of [-4, 4]) {
+    n.verticalSpeed = rise;
+    const pitch = dragonPitch(n);
+    assert.ok(pitch * rise < 0);
+    const tail = new Vector3(-.59+sway.x, .60+sway.y, -2.86)
+      .multiplyScalar(n.stature).applyEuler(new Euler(pitch, n.heading, 0, 'YXZ'));
+    const target = { x:n.x+tail.x, y:n.y+tail.y, z:n.z+tail.z };
+    for (const aim of [n.heading, n.heading+Math.PI/2]) {
+      const dx=Math.sin(aim), dz=Math.cos(aim);
+      const shot={x:target.x-3*dx, y:target.y, z:target.z-3*dz};
+      assert.ok(recipientContact(n,shot,dx,dz,3) <= 3);
+    }
+    const level = { ...n, verticalSpeed:0 };
+    assert.equal(recipientContact(level,target,1,0,0),Infinity);
+  }
 });

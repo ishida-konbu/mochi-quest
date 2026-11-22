@@ -86,7 +86,7 @@ export function paintMapPaper() {
   }
   return c;
 }
-export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null) {
+export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null, recipientName = '') {
   const w = canvas.width,
     h = canvas.height,
     g = canvas.getContext('2d'),
@@ -157,6 +157,15 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
       g.fillRect(-6,-6,12,12); g.strokeRect(-6,-6,12,12);
       g.restore();
       g.fillStyle='#fff8df'; g.fillRect(x-1.5,y-1.5,3,3);
+      if (large && point === recipient && recipientName) {
+        g.font = 'bold 13px serif';
+        const side = x + 12 + g.measureText(recipientName).width > w - 3 ? -1 : 1;
+        g.textAlign = side < 0 ? 'right' : 'left';
+        g.lineWidth = 3; g.strokeStyle = '#fff4de'; g.fillStyle = tint;
+        const labelY = Math.min(h - 10, Math.max(10, y - 8));
+        g.strokeText(recipientName, x + side*12, labelY);
+        g.fillText(recipientName, x + side*12, labelY);
+      }
     }
   }
   g.save();

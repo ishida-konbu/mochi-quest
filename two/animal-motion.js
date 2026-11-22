@@ -1,7 +1,6 @@
 // Periodic paths can be sampled at any world time, including a resumed journey.
 const clamp = value => Math.min(1, Math.max(0, value));
 const smooth = value => {const t=clamp(value);return t*t*(3-2*t);};
-export const dragonVisible = player => player.h >= 48;
 
 // The crest travels from the head through the tail. Give the light tip a wider
 // sweep. Both the rendered transverse sections and the delivery volumes use it.
@@ -14,6 +13,12 @@ export function dragonWave(z, phase, out) {
   return out;
 }
 export const dragonPhase = (time, n) => (time+(n.phase||0))*1.12;
+// The dragon's head points along local +Z. A negative X rotation raises it.
+export const maxDragonPitch = .40;
+export function dragonPitch(n) {
+  const slope = Math.atan2(n.verticalSpeed || 0, Math.max(2, n.speed || 0));
+  return -Math.max(-maxDragonPitch, Math.min(maxDragonPitch, slope));
+}
 export const kirinFrequency = 2.18;
 export function hoofPhase(side,front) {
   return side<0 ? (front<0 ? 0 : Math.PI/2) : (front<0 ? Math.PI : 1.5*Math.PI);
@@ -48,33 +53,5 @@ export function walkingScore(time, n, out) {
   out.pace=pace;
   out.gesture=smooth((t-moving+.4)/1.05)*smooth((period-.1-t)/1.05);
   out.variation=((cycle+(n.manner||0))%3+3)%3;
-  return out;
-}
-
-function knot(index,seed,lane) {
-  let h=Math.imul(index+141,0x45d9f3b)^Math.imul(seed+lane*213,0x119de1f3);
-  h=Math.imul(h^(h>>>16),0x45d9f3b);
-  return ((h^(h>>>16))>>>0)/4294967296;
-}
-function cat(a,b,c,d,t) {return b+.5*t*(c-a+t*(2*a-5*b+4*c-d+t*(3*b-a-3*c+d)));}
-function tangent(a,b,c,d,t) {return .5*((c-a)+2*t*(2*a-5*b+4*c-d)+3*t*t*(3*b-a-3*c+d));}
-const kirinKeys = new WeakMap();
-export function kirinPath(n,time,out) {
-  const interval=9.8, u=time/interval, i=Math.floor(u),t=u-i, seed=Math.round(n.phase*982)+7;
-  let path=kirinKeys.get(n);
-  if(!path || path.index!==i) {
-    const points=[];
-    for(let j=i-1;j<=i+2;j++) {
-      const theta=j*1.04+n.phase+(knot(j,seed,0)-.5)*.85, r=8+knot(j,seed,1)*8;
-      points.push([Math.sin(theta)*r,Math.cos(theta)*r,3.1+4*knot(j,seed,2)]);
-    }
-    path={index:i,points};kirinKeys.set(n,path);
-  }
-  const [a,b,c,d]=path.points;
-  out.x=n.homeX+cat(a[0],b[0],c[0],d[0],t);
-  out.z=n.homeZ+cat(a[1],b[1],c[1],d[1],t);
-  out.clearance=cat(a[2],b[2],c[2],d[2],t);
-  const dx=tangent(a[0],b[0],c[0],d[0],t),dz=tangent(a[1],b[1],c[1],d[1],t);
-  out.heading=Math.atan2(dx,dz);out.speed=Math.hypot(dx,dz)/interval;
   return out;
 }

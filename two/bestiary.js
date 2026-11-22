@@ -2,8 +2,8 @@
 import { REGIONS, groundHeight, waterDepth, solidHeightAt, terrainHeight, WATER_Y, seeded, wrapCoord, wrapDelta } from './terrain.js';
 
 import { canopyHeight, walkCircuit } from './village-paths.js';
-import { dragonWave, dragonPhase, kirinPath, walkingScore } from './animal-motion.js';
-export { dragonVisible } from './animal-motion.js';
+import { legendary, legendPath } from './legend-flight.js';
+import { dragonWave, dragonPhase, dragonPitch, maxDragonPitch, walkingScore } from './animal-motion.js';
 
 export const SPECIES = Object.freeze({
   monkey: { count:90, points:30, label:'猿', stature:1, frame:2.7, center:.88 },
@@ -53,67 +53,90 @@ export function wildlifeHomes(fixed) {
 
 const motion = {}, wave = {}, samplePath={};
 const altitudeCourses=new WeakMap();
+const dragonSpine=[-7.5,-4.3,-1.1,2.1,5.3], kirinFeet=[0], maxDragonSlope=Math.sin(maxDragonPitch);
 function requiredHeight(n,time) {
-  if(n.type==='kirin') kirinPath(n,time,samplePath);
-  else {
-    const angle=time*n.cruise+n.phase;
-    samplePath.x=n.homeX+n.radius*(Math.sin(angle)-Math.sin(n.phase));
-    samplePath.z=n.homeZ+n.radius*.66*(Math.cos(angle)-Math.cos(n.phase));
-    samplePath.clearance=clearanceBands[0]+3.1*Math.sin(angle*.57+n.phase)+1.5*Math.cos(angle*1.17);
+  if(legendary(n.type)) {
+    legendPath(n,time,samplePath);
+    const {x,z,speed,heading,clearance}=samplePath;
+    const dragon=n.type==='dragon', ground=Math.max(WATER_Y,terrainHeight(x,z));
+    let required=ground+clearance;
+    // The long tail and the whiskered head cross a ridge at different times.
+    // Inflate by half the inter-sample travel so thin roofs cannot slip between checks.
+    const radius=(dragon?3.95:3.05)+speed*.11, sin=Math.sin(heading),cos=Math.cos(heading);
+    for(const offset of dragon?dragonSpine:kirinFeet) {
+      const px=wrapCoord(x+sin*offset),pz=wrapCoord(z+cos*offset);
+      // A steep climb lowers the tail relative to the middle of the body.
+      const pitchDrop=dragon ? Math.abs(offset)*maxDragonSlope : 0;
+      required=Math.max(required,Math.max(WATER_Y,terrainHeight(px,pz))+1.4+pitchDrop,
+        solidHeightAt(px,pz,radius)+1.8+pitchDrop,canopyHeight(px,pz,radius)+1.15+pitchDrop);
+    }
+    return required;
   }
-  const {x,z,clearance}=samplePath;
-  const reach=n.type==='kirin'?3.0:1.9;
-  return Math.max(Math.max(WATER_Y,terrainHeight(x,z))+clearance,solidHeightAt(x,z,reach)+2.15,canopyHeight(x,z,reach)+.95);
+  const angle=time*n.cruise+n.phase;
+  walkCircuit(n,angle,samplePath);
+  const {x,z}=samplePath;
+  const clearance=clearanceBands[0]+3.1*Math.sin(angle*.57+n.phase)+1.5*Math.cos(angle*1.17);
+  return Math.max(Math.max(WATER_Y,terrainHeight(x,z))+clearance,solidHeightAt(x,z,1.9)+2.15,canopyHeight(x,z,1.9)+.95);
 }
 // Follow a smooth vertical envelope above the entire route. A solitary roof
 // or boulder must be cleared on approach, not with a vertical pop at its edge.
-function courseHeight(n,time) {
-  const spacing=.6, u=time/spacing, i=Math.floor(u), f=u-i;
+function courseHeight(n,time,out) {
+  const far=legendary(n.type), spacing=far?.22:.6, u=time/spacing, i=Math.floor(u), f=u-i;
   let course=altitudeCourses.get(n);
-  if(!course) {course={samples:new Map(),index:NaN,levels:[]};altitudeCourses.set(n,course);}
+  if(!course || course.seed!==n.flightSeed) {
+    course={samples:new Map(),index:NaN,levels:[],seed:n.flightSeed};
+    altitudeCourses.set(n,course);
+  }
   if(course.index!==i) {
     course.index=i;
     // Allow time to climb over mature woodland before the next sharp crown edge.
-    const reach=n.type==='kirin'?34:22;
+    const reach=far?46:22, climb=n.type==='dragon'?7.6:n.type==='kirin'?5.4:2.35;
     for(const k of course.samples.keys()) if(k<i-reach-1||k>i+reach+2)course.samples.delete(k);
     for(let k=i-reach-1;k<=i+reach+2;k++) if(!course.samples.has(k))course.samples.set(k,requiredHeight(n,k*spacing));
     for(let j=0;j<4;j++) {
       const middle=i+j-1;let highest=-Infinity;
       for(let k=middle-reach;k<=middle+reach;k++){
-        const drop=Math.max(0,Math.abs(k-middle)-1)*spacing*(n.type==='kirin'?1.05:2.35);
+        const drop=Math.max(0,Math.abs(k-middle)-1)*spacing*climb;
         highest=Math.max(highest,course.samples.get(k)-drop);
       }
       course.levels[j]=highest;
     }
   }
   const [a,b,c,d]=course.levels;
-  return b+.5*f*(c-a+f*(2*a-5*b+4*c-d+f*(3*b-a-3*c+d)))+.08;
+  const linear=c-a,quadratic=2*a-5*b+4*c-d,cubic=3*b-a-3*c+d;
+  if(out) out.verticalSpeed=.5*(linear+2*f*quadratic+3*f*f*cubic)/spacing;
+  return b+.5*f*(linear+f*(quadratic+f*cubic))+.08;
 }
-export function kirinFlight(n,time,out) {
-  kirinPath(n,time,out);
-  out.y=courseHeight(n,time);
+export function legendFlight(n,time,out) {
+  legendPath(n,time,out);
+  out.y=courseHeight(n,time,out);
   out.altitude=out.y-Math.max(WATER_Y,terrainHeight(out.x,out.z));
   return out;
 }
 
 export function moveWildlife(n,time) {
-  if(n.type==='kirin') {kirinFlight(n,time,n);return;}
+  if(legendary(n.type)) {
+    legendFlight(n,time,n);
+    if(n.type==='dragon') n.wavePhase=dragonPhase(time,n);
+    return;
+  }
   const air=isFlying(n.type);
   if(!air) walkingScore(time,n,motion);
   const angle=(air?time:motion.travel)*n.cruise+n.phase;
   walkCircuit(n,angle,n);
   n.x=wrapCoord(n.x);n.z=wrapCoord(n.z);
   if(!air) {n.gesture=motion.gesture;n.variation=motion.variation;}
-  n.heading=Math.atan2(Math.cos(angle),-.66*Math.sin(angle));
-  n.speed=n.radius*n.cruise*Math.hypot(Math.cos(angle),.66*Math.sin(angle))*(air?1:motion.pace);
+  if(n.trail) n.speed=n.pathSpeed*n.cruise*motion.pace;
+  else {
+    n.heading=Math.atan2(Math.cos(angle),-.66*Math.sin(angle));
+    n.speed=n.radius*n.cruise*Math.hypot(Math.cos(angle),.66*Math.sin(angle))*(air?1:motion.pace);
+  }
   if (air) {
     const terrain=Math.max(WATER_Y,terrainHeight(n.x,n.z));
-    const dragon=n.type==='dragon', band=n.flightBand||0;
-    const clearance=dragon?91+7*Math.sin(angle*.72)+3.5*Math.sin(angle*1.65+n.phase)
-      :clearanceBands[band]+(3.1+band*1.9)*Math.sin(angle*.57+n.phase)+1.5*Math.cos(angle*1.17);
-    n.y=dragon||band>0 ? terrain+clearance : courseHeight(n,time);
+    const band=n.flightBand||0;
+    const clearance=clearanceBands[band]+(3.1+band*1.9)*Math.sin(angle*.57+n.phase)+1.5*Math.cos(angle*1.17);
+    n.y=band>0 ? terrain+clearance : courseHeight(n,time);
     n.altitude=n.y-terrain;
-    if(dragon) n.wavePhase=dragonPhase(time,n);
   } else n.y=groundHeight(n.x,n.z);
 }
 
@@ -146,19 +169,21 @@ export function recipientContact(n,shot,dx,dz,length) {
   const scale=n.stature||1, extent=(SPECIES[n.type]?.frame || 2)*scale;
   if(Math.abs(rx)>extent+length || Math.abs(rz)>extent+length || Math.abs(shot.y-n.y)>extent) return Infinity;
   const c=Math.cos(n.heading),s=Math.sin(n.heading);
-  const x=(rx*c-rz*s)/scale,z=(rx*s+rz*c)/scale,y=(shot.y-n.y)/scale;
-  const vx=(dx*c-dz*s)/scale,vz=(dx*s+dz*c)/scale;
+  const dragon=n.type==='dragon', pitch=dragon ? dragonPitch(n) : 0;
+  const cp=Math.cos(pitch),sp=Math.sin(pitch);
+  const forward=(rx*s+rz*c)/scale, height=(shot.y-n.y)/scale;
+  const x=(rx*c-rz*s)/scale, y=height*cp+forward*sp, z=forward*cp-height*sp;
+  const advance=(dx*s+dz*c)/scale, vx=(dx*c-dz*s)/scale, vy=advance*sp, vz=advance*cp;
   let first=Infinity;
   for(const [cx,cy,cz,w,h,d] of volumes) {
     // The sheet itself has width and a little flutter at its leading edge.
-    const dragon=n.type==='dragon';
     if(dragon) dragonWave(cz,n.wavePhase||0,wave);
     const a=w+.105,b=h+.14,e=d+.105, up=(y-cy-(dragon?wave.y:0))/b;
-    if(Math.abs(up)>1) continue;
-    const xx=(x-cx-(dragon?wave.x:0))/a,zz=(z-cz)/e,ux=vx/a,uz=vz/e;
+    if(!vy && Math.abs(up)>1) continue;
+    const xx=(x-cx-(dragon?wave.x:0))/a,zz=(z-cz)/e,ux=vx/a,uy=vy/b,uz=vz/e;
     const C=xx*xx+zz*zz+up*up-1;
     if(C<=0) return 0;
-    const A=ux*ux+uz*uz,B=xx*ux+zz*uz,D=B*B-A*C;
+    const A=ux*ux+uy*uy+uz*uz,B=xx*ux+up*uy+zz*uz,D=B*B-A*C;
     if(D<0 || B>=0) continue;
     const enter=(-B-Math.sqrt(D))/A;
     if(enter>=0 && enter<=length && enter<first) first=enter;

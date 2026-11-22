@@ -47,7 +47,8 @@ function coat(type, detail) {
       shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
         'float margin=1.-smoothstep(.015,.23,abs(dot(normalize(normal),normalize(vViewPosition))));outgoingLight*=1.-.48*margin;\n#include <opaque_fragment>');
     };
-    paperPigment(brushWash(material,.56));
+    if(type==='monkey' && part==='face') brushWash(material,.42);
+    else paperPigment(brushWash(material,.56));
     coats.set(key, material);
   }
   if (!coatLoads.has(key)) {
@@ -360,78 +361,166 @@ function quadruped(root,type,{group,batch}){
     }
   });
 }
-function macaqueFace(head,group,batch) {
-  const stations=[[0,-.035,-.192,.006,.012],[0,.065,-.153,.149,.157],[0,.070,-.08,.197,.201],
-    [0,.083,.005,.209,.191],[0,.071,.073,.199,.170],[0,.040,.109,.151,.143],
-    [0,-.019,.15,.107,.086],[0,-.028,.214,.066,.049],[0,-.019,.239,.009,.015]];
-  const crown=pelt(head,'monkey',stations);
-  crown.position.z=-.065;
-  // One shallow mask includes both orbital ridges, the bridge of the nose,
-  // cheekbones and projecting muzzle. Lines below follow exactly that surface.
-  function face(x,y,offset=0) {
-    const side=Math.abs(x), ridge=Math.exp(-((y-.109)**2)/.00060)*Math.exp(-((side-.087)**2)/.0054);
-    const orbit=Math.exp(-((y-.074)**2)/.00058-((side-.087)**2)/.0019);
-    const muzzle=Math.exp(-((y+.060)**2)/.0045-(x*x)/.012);
-    const boundary=(x/.172)**2+((y-.035)/.163)**2;
-    const fold=.141*THREE.MathUtils.smoothstep(boundary,.54,1.10);
-    return [x,y,.209 - fold - .071*(x/.17)**2-.019*((y-.049)/.14)**2+.020*ridge-.015*orbit+.081*muzzle+offset];
-  }
-  const outline=[[0,.202],[.056,.186],[.126,.172],[.168,.114],[.166,.062],[.150,.03],
-    [.129,-.003],[.125,-.062],[.079,-.122],[0,-.137],[-.079,-.122],[-.125,-.062],
-    [-.129,-.003],[-.15,.03],[-.166,.062],[-.168,.114],[-.126,.165],[-.056,.179],[0,.202]];
-  const line=new THREE.SplineCurve(outline.map(([x,y])=>new THREE.Vector2(x,y)));
-  const pos=[],ix=[],uv=[],rings=16,sides=56;
-  for(let j=0;j<=rings;j++)for(let i=0;i<=sides;i++){
-    const edge=line.getPoint(i/sides),t=j/rings,x=edge.x*t,y=.034+(edge.y-.034)*t;
-    pos.push(...face(x,y));uv.push(.44+x*1.3, .48+y*1.1);
-    if(i<sides&&j<rings){const k=j*(sides+1)+i;ix.push(k,k+1,k+sides+1,k+1,k+sides+2,k+sides+1);}
-  }
-  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
-  geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geo.setIndex(ix);geo.computeVertexNormals();
-  const mask=new THREE.Mesh(geo,coat('monkey','face'));mask.castShadow=true;head.add(mask);
-  batch(head,b=>{
-    const stroke=(path,width,shade)=>tusk(b,path.map(([x,y,d])=>face(x,y,d??.003)),width,shade);
-    for(const s of [-1,1]){
-      const lift=s*.005;
-      function eyePatch(w,h,depth,shade) {
-        const vertices=[...face(s*.083,.073+lift,depth+.002)],index=[];
-        for(let k=0;k<32;k++){
-          const a=k*TAU/32,dx=Math.cos(a),dy=Math.sin(a)*(.62+.38*Math.abs(Math.sin(a)));
-          vertices.push(...face(s*(.083+dx*w),.073+lift+dy*h+.006*dx,depth));index.push(0,k+1,(k+1)%32+1);
-        }
-        const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
-        g.setIndex(index);g.computeVertexNormals();b.add(g,shade);g.dispose();
-      }
-      eyePatch(.049,.019,.002,soot);eyePatch(.038,.012,.0055,'#e6d7b8');
-      const pupil=face(s*.076,.072+lift,.011);b.ball(...pupil,.012,.013,.004,'#41392e',[0,s*.27,0]);
-      b.ball(...face(s*.072,.076+lift,.016),.003,.004,.002,paper);
-      stroke([[s*.137,.090+lift],[s*.109,.108+lift],[s*.074,.111+lift],[s*.041,.088]],.006,soot);
-      stroke([[s*.121,.058+lift],[s*.100,.046+lift],[s*.067,.045+lift]],.0035,'#947d68');
-      stroke([[s*.030,.091],[s*.047,.125],[s*.087,.143],[s*.138,.131]],.010,'#5f5143');
-      stroke([[s*.121,.018],[s*.105,.001],[s*.103,-.020]],.0037,'#a1846b');
-      stroke([[s*.167,.084],[s*.158,.047],[s*.143,.025]],.0055,'#766650');
-      // A folded, forward-facing auricle recedes into the temporal fur.
-      foldedEar(b,s,[s*.184,.061,-.016],.068,.094,true,'#9b8670','#b9a087');
-      for(let i=0;i<5;i++) {
-        const h=.094-.033*i;
-        lock(b,[[s*.130,h+.034,.119],[s*.173,h+.005,.108],[s*.207,h-.032,.062],
-          [s*(.218+.002*i),h-.072,.022-i*.008]],.035,[s*.72,.07,.45],
-          i%2?['#b2a185','#d6c9ac','#796e5c']:['#bfad8c','#ddd0b8','#8f8069']);
-      }
+// Height, half breadth, occiput, face plane and muzzle projection, from chin
+// to crown. The nose and jaws project ahead of the orbit in the scroll's profile.
+const macaqueSections = [
+  [-.171,.003,.018,.024,.061],[-.155,.091,-.059,.088,.102],
+  [-.131,.140,-.106,.124,.134],[-.103,.165,-.145,.142,.143],
+  [-.080,.178,-.138,.149,.141],[-.063,.185,-.158,.158,.122],
+  [-.048,.188,-.183,.162,.156],[-.027,.190,-.187,.166,.159],
+  [-.005,.192,-.190,.172,.153],[.018,.197,-.194,.182,.129],
+  [.049,.199,-.199,.176,.071],[.077,.198,-.203,.182,.027],
+  [.104,.197,-.205,.188,.010],[.132,.198,-.205,.196,0],
+  [.159,.195,-.20,.189,0],[.191,.187,-.186,.174,0],
+  [.216,.167,-.166,.140,0],[.236,.139,-.140,.104,0],
+  [.251,.107,-.118,.074,0],[.263,.070,-.090,.043,0],
+  [.270,.032,-.059,.004,0],[.272,.002,-.029,-.025,0],
+];
+const gaussian=(x)=>Math.exp(-x*x);
+function macaqueFace(head,batch) {
+  const positions=[],indices=[],uv=[],blink=[],jaw=[];
+  const rows=76,sides=84, bottom=macaqueSections[0][0],top=macaqueSections.at(-1)[0];
+  function sample(y,a) {
+    const cols=macaqueSections;
+    let j=1;
+    while(j<cols.length-1 && cols[j][0]<y) j++;
+    const p=cols[j-1],q=cols[j],f=(y-p[0])/(q[0]-p[0]);
+    function section(k) {
+      const prev=cols[Math.max(0,j-2)],next=cols[Math.min(cols.length-1,j+1)];
+      const dy=q[0]-p[0],m0=dy*(q[k]-prev[k])/(q[0]-prev[0]),m1=dy*(next[k]-p[k])/(next[0]-p[0]);
+      return (2*f**3-3*f*f+1)*p[k]+(f**3-2*f*f+f)*m0+(-2*f**3+3*f*f)*q[k]+(f**3-f*f)*m1;
     }
-    volume(b,[[0,.075,.197,.016,.014],[0,.045,.212,.024,.026],
-      [0,.019,.246,.041,.025],[0,.010,.26,.052,.021],[0,.005,.27,.024,.012]],'#aa856e',14);
-    for(const s of [-1,1]){
-      b.ball(s*.027,.010,.270,.011,.004,.005,'#514237',[0,0,s*.27]);
-      stroke([[s*.019,-.011],[s*.014,-.036],[s*.024,-.046]],.0036,'#8f715d');
+    const w=section(1),back=section(2),front=section(3),reach=section(4),sin=Math.sin(a),cos=Math.cos(a);
+    const x=sin*w,absX=Math.abs(x),forward=Math.max(0,cos);
+    const hinge=gaussian((y+.061)/.038),cheek=gaussian((Math.abs(a)-1.2)/.62);
+    const mane=.010*cheek*Math.cos(3.2*a+1.7)*gaussian((y+.058)/.051);
+    // Small projecting brow, scooped eye socket, maxillary pads and broad
+    // nostril wings are continuous with the forehead and hanging lower cheek.
+    const eyeY=.094+.004*Math.sign(a);
+    const socket=gaussian((absX-.090)/.047)*gaussian((y-eyeY)/.024);
+    const brow=gaussian((absX-.087)/.057)*gaussian((y-.132-.012*(absX/.18))/.015);
+    const globe=gaussian((absX-.089)/.023)*gaussian((y-eyeY)/.013);
+    const nose=gaussian((absX-.029)/.025)*gaussian((y-.004)/.017);
+    const muzzleWidth=.78-.23*THREE.MathUtils.smoothstep(y,-.01,.093);
+    const snout=reach*Math.exp(-Math.pow(Math.abs(a)/muzzleWidth,2.55));
+    const z=(front+back)/2+(front-back)/2*cos+snout+forward*(.014*brow-.017*socket+.014*globe+.024*nose);
+    const drop=.035*cheek*hinge*(.65+.35*Math.cos(8*a+1));
+    const edge=THREE.MathUtils.smoothstep(Math.abs(a),.96,1.48)*gaussian((y+.065)/.080);
+    const tufts=edge*(.009*Math.cos(61*y+2*a)+.003*Math.sin(121*y-4*a));
+    // Shallow overlapping locks change the outline as well as the pigment.
+    const crown=gaussian((y-.199)/.062)*THREE.MathUtils.smoothstep(Math.abs(a),.47,1.55);
+    const ragged=crown*(.0038*Math.sin(10*a+45*y)+.0029*Math.cos(17*a+68*y));
+    return [x+Math.sign(a)*(mane+tufts)+sin*ragged,
+      y-drop-.19*Math.max(0,y-.148)+ragged*.50,z+cos*ragged];
+  }
+  for(let j=0;j<=rows;j++)for(let k=0;k<=sides;k++){
+    const t=j/rows,y=THREE.MathUtils.lerp(bottom,top,t),u=k/sides,a=(u-.5)*TAU;
+    const [x,yy,z]=sample(y,a),eyeY=.094+.004*Math.sign(a);
+    positions.push(x,yy,z);uv.push(u,t);
+    const nearEye=gaussian((Math.abs(a)-.477)/.173);
+    const lid=nearEye*gaussian((y-eyeY)/.026);
+    blink.push(0,(eyeY-y)*lid*.95,-.010*lid);
+    const hinge=THREE.MathUtils.smoothstep(-y,.059,.115)*gaussian(a/.83);
+    jaw.push(0,-.015*hinge,-.004*hinge);
+    if(j<rows&&k<sides){
+      const i=j*(sides+1)+k;
+      indices.push(i,i+1,i+sides+1,i+1,i+sides+2,i+sides+1);
     }
-    stroke([[-.087,-.054],[-.048,-.065],[-.004,-.067],[.042,-.059],[.080,-.044]],.0056,soot);
-    stroke([[-.046,-.083],[.007,-.087],[.042,-.079]],.0041,'#a68d74');
-    for(let i=-2;i<=2;i++) {
-      lock(b,[[i*.033,.224,.052],[i*.04,.251,.024],[i*.041+.012,.264,-.015],
-        [i*.040+.033,.275,-.058]],.030,[0,1,.2],['#82755e','#a49375','#776852']);
+  }
+  for(let i=1;i<sides-1;i++){
+    const n=rows*(sides+1);
+    indices.push(0,i+1,i,n,n+i,n+i+1);
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  geo.setIndex(indices);geo.computeVertexNormals();
+  const n=geo.attributes.normal, v=new THREE.Vector3(),w=new THREE.Vector3();
+  for(let j=0;j<=rows;j++){
+    const k=j*(sides+1);
+    v.fromBufferAttribute(n,k).add(w.fromBufferAttribute(n,k+sides)).normalize();
+    n.setXYZ(k,v.x,v.y,v.z);n.setXYZ(k+sides,v.x,v.y,v.z);
+  }
+  geo.morphTargetsRelative=true;
+  geo.morphAttributes.position=[new THREE.Float32BufferAttribute(blink,3),new THREE.Float32BufferAttribute(jaw,3)];
+  const skull=new THREE.Mesh(geo,coat('monkey','face'));
+  skull.name='猿の面相';skull.castShadow=skull.receiveShadow=true;head.add(skull);
+  const outline=brushContour(skull);
+  outline.morphTargetInfluences=skull.morphTargetInfluences;
+  // The auricle is turned out to the side. Its pale helix folds back over a
+  // hollow concha, with a tragus at the front and a softly pointed lower lobe.
+  const earXYZ=[],earRGB=[],earTriangles=[];
+  const furEdges=batch(head,b=>{
+    for(const s of [-1,1]){
+      const center=new THREE.Vector3(s*.199,.098,-.047),tangent=new THREE.Vector3(s*.51,.055,-.85).normalize();
+      const out=new THREE.Vector3(s*.85,.055,.51).normalize(),up=new THREE.Vector3().crossVectors(tangent,out);
+      if(up.y<0)up.negate();
+      up.normalize();
+      const ear=(x,y,d)=>center.clone().addScaledVector(tangent,x).addScaledVector(up,y).addScaledVector(out,d).toArray();
+      const rim=[
+        [.02,-.009,-.043,'#97856b'],[.55,-.004,-.033,'#9c866d'],[.88,0,-.014,'#947d63'],
+        [1,.002,.003,'#a68b6f'],[.96,.003,.014,'#c4a789'],[.83,.005,.018,'#c6a88b'],
+        [.68,.003,.011,'#ae8d70'],[.53,.001,-.001,'#937259'],[.30,-.006,.001,'#96775e'],
+        [.01,-.009,.001,'#a1846b']
+      ];
+      const base=earXYZ.length/3,count=40;
+      for(const [r,shift,depth,tint] of rim)for(let k=0;k<count;k++){
+        const a=k*TAU/count,h=Math.sin(a),c=Math.cos(a);
+        const ridge=.008*r*Math.cos(2*a+.45)+.014*r*c;
+        earXYZ.push(...ear(r*(.062*c*(1+.21*h)+.013*h),shift+.065*r*h,depth+ridge));
+        const shade=new THREE.Color(tint).multiplyScalar(.99+.10*Math.sin(3*a+.65*r));
+        earRGB.push(shade.r,shade.g,shade.b);
+      }
+      for(let row=0;row<rim.length-1;row++)for(let k=0;k<count;k++){
+        const i=base+row*count+k,n=base+row*count+(k+1)%count;
+        if(s>0)earTriangles.push(i,n,i+count,n,n+count,i+count);
+        else earTriangles.push(n,i,i+count,n+count,n,i+count);
+      }
+      tusk(b,[ear(-.025,-.017,.023),ear(-.014,-.009,.019),ear(-.001,-.006,.011),
+        ear(.009,.012,.012)],.0031,'#816851');
+      tusk(b,[ear(-.007,-.024,.010),ear(.006,-.021,.009),ear(.016,-.009,.008),
+        ear(.017,.002,.009)],.0015,'#705e4a');
+      // Short locks lie flush on the crown before lifting away at the tips.
+      // The elevation and direction change from the eyebrow to the occiput.
+      for(let i=0;i<18;i++){
+        const row=i%3,column=Math.floor(i/3),a=s*(.54+.43*column+.17*row);
+        const rootY=.245-.021*row+.008*Math.sin(i*2.7);
+        const drift=.28+.11*Math.sin(1.7*i),fall=.036+.029*row+.009*Math.cos(i);
+        const normal=[Math.sin(a),.70-row*.22,Math.cos(a)];
+        const path=[[0,-.002],[.36,.001],[.73,.0035],[1,.008+row*.0015]].map(([f,raised])=>{
+          const angle=a+s*drift*f,point=sample(rootY-fall*f,angle);
+          point[0]+=raised*Math.sin(angle);point[1]+=raised*(.65-.22*row);point[2]+=raised*Math.cos(angle);
+          return point;
+        });
+        lock(b,path,.0021+.00085*(i%4),normal,
+          i%3===0?['#766b56','#95856b','#635847']:['#a18e71','#b3a081','#8f7d61']);
+      }
+      // Only the tips leave the pelt. They spread irregularly at the jaw,
+      // following the painted hair that runs towards the hinge of the ear.
+      for(let i=0;i<9;i++){
+        const y=.045-i*.022,angle=1.41+.26*Math.sin(2.39*i);
+        const start=sample(y,angle*s),end=sample(y-.030,(angle+.19)*s);
+        const lift=.007+.004*Math.sin(i*.81);
+        tusk(b,[start,[end[0]+s*.002,end[1]+.012,end[2]+.016],
+          [end[0]+s*lift,end[1]-.006,end[2]-.012],
+          [end[0]+s*(lift+.003),end[1]-.013,end[2]-.020-i%3*.008]],.0021+i%3*.00055,
+          i%3?'#a89b80':'#8b7e67');
+      }
     }
   });
+  // Keep the ear's translucent ochre wash in the same colour range as its
+  // fur. The ear and loose hair share the facial ink's rendering response.
+  const skin=surfaceGrain(brushWash(new THREE.MeshStandardMaterial({
+    vertexColors:true,roughness:.96,side:THREE.DoubleSide
+  }),.40),14);
+  skin.userData.portrait=true;
+  furEdges.material=skin;
+  const ears=new THREE.BufferGeometry();
+  ears.setAttribute('position',new THREE.Float32BufferAttribute(earXYZ,3));
+  ears.setAttribute('color',new THREE.Float32BufferAttribute(earRGB,3));
+  ears.setIndex(earTriangles);ears.computeVertexNormals();
+  const pair=new THREE.Mesh(ears,skin);
+  pair.castShadow=pair.receiveShadow=true;head.add(pair);
 }
 
 function foldedEar(b,side,base,width,height,round,fur,inside) {
@@ -523,7 +612,7 @@ function simian(root,{group,batch}) {
     tusk(b,[[.242,.871,.042],[.256,.972,.022],[.255,1.004,.016]],.018,'#a7895d');
   });
   head.rotation.x=.068;
-  macaqueFace(head,group,batch);
+  macaqueFace(head,batch);
   for(const s of [-1,1]) {
     const leg=group(body,'leg'+s+',1',s*.133,.65,-.05);
     batch(leg,b=>{
@@ -792,7 +881,7 @@ export function buildBeast(parent,type,builders,variant=0) {
   // Give these brush details their own reusable ink response.
   parent.traverse(part=>{
     const source=part.material;
-    if(!source?.vertexColors || !source.isMeshStandardMaterial)return;
+    if(!source?.vertexColors || !source.isMeshStandardMaterial || source.userData.portrait)return;
     if(!brushMaterials.has(source)) {
       const copy=source.clone();
       copy.onBeforeCompile=source.onBeforeCompile;copy.customProgramCacheKey=source.customProgramCacheKey;
@@ -830,6 +919,10 @@ export function beastRig(mesh,n) {
   bindScrollSkin(mesh);
   const joints={};mesh.traverse(o=>{if(o.isGroup&&o.name)joints[o.name]=o;});
   if(n.type==='dragon')prepareDragon(mesh,joints);
+  if(n.type==='monkey') {
+    joints.face=mesh.getObjectByName('猿の面相');
+    joints.face.getObjectByName('墨の輪郭').morphTargetInfluences=joints.face.morphTargetInfluences;
+  }
   if(n.type==='shishi' && !n.variant)joints.butterfly=lionButterfly(joints.trunk);
   joints.mask.userData.restY=joints.mask.position.y;
   joints.mask.userData.restZ=joints.mask.position.z;
@@ -893,6 +986,9 @@ export function poseBeast(j,n,time) {
   head.rotation.set(.032*Math.cos(p)*walk,.18*Math.sin(t*.88),0);
   if(n.type==='monkey') {
     head.rotation.x+=hold*(.22+.11*Math.cos(t*2));head.rotation.z=.13*hold;
+    const lidClock=(t+1.07)%4.83;
+    j.face.morphTargetInfluences[0]=Math.exp(-((lidClock-.63)**2)/.0038);
+    j.face.morphTargetInfluences[1]=hold*(variation===1?.45+.42*Math.sin(t*3.2):.18);
     const writing=variation!==1?hold:0;
     j.fude.quaternion.copy(brushRest);
     if(writing>0){

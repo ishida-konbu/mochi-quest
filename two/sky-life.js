@@ -1,6 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 import { BOUND, REGIONS, terrainHeight, WATER_Y, seeded, wrapDelta } from './terrain.js';
-import { kirinFlight } from './bestiary.js';
+import { legendFlight } from './bestiary.js';
 import { kirinFrequency } from './animal-motion.js';
 import { kirinTouchdowns } from './handscroll-beasts.js';
 
@@ -222,7 +222,7 @@ function royalFootsteps(scene) {
       for(let k=step-5;k<=step;k++) {
         const leg=((k%4)+4)%4, side=leg<2?-1:1;
         const touch=(k*quarter)/kirinFrequency-royal.phase;
-        kirinFlight(royal,touch,flight);
+        legendFlight(royal,touch,flight);
         const sole=kirinTouchdowns[leg], scale=royal.stature;
         const x=sole.x*scale,y=sole.y*scale,z=sole.z*scale;
         const c=Math.cos(flight.heading), s=Math.sin(flight.heading);
