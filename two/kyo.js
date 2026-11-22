@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
-import { KYO_BUILDINGS, KYO_FOOD, kyoNight } from './kyo-layout.js';
+import { KYO_BUILDINGS, KYO_FOOD, KYO_SCREENS, screenFold, kyoNight } from './kyo-layout.js';
 import { scrollPaper, printSurface } from './kyo-scrollwork.js';
 import { createStreetCrowd } from './kyo-people.js';
 import { seeded, terrainHeight, wrapDelta } from './terrain.js';
@@ -101,19 +101,18 @@ function entrance(p,light) {
   gate.part('plane',0,4.02,1.741,2.20,.75,1,'#ffffff',plaque);
   for(const x of [-2.8,2.8])lantern(gate,x,4.28,1.71,.36,light);
 }
-function paintedShutters(p,x,z,yaw,width,picture) {
-  const f=frame(p,x,z,yaw),w=width,h=w*.53,base=.34,depth=1.55;
+function paintedShutters(p,{x,z,yaw,width:w,height:h,picture}) {
+  const f=frame(p,x,z,yaw),base=.34,depth=1.55;
   const mat=scrollPaper();
   f.part('box',0,base-.05,0,w+.24,.16,.68,'#564b3c',p.deck);
   f.part('kyoScreen'+picture,0,base+h*.5,.047,w,h,depth,'#fff',mat);
-  const fold=u=>.047+depth*.17*(1-Math.abs(2*((u*2)%1)-1));
   for(let i=0;i<4;i++){
     const a=i/4,b=(i+1)/4,x0=(a-.5)*w,x1=(b-.5)*w;
     for(const y of [base-.007,base+h+.009]){
-      f.stroke([x0,y,fold(a)],[x1,y,fold(b)],.066,'#423b30',p.wood,true);
-      f.stroke([x0,y+.022,fold(a)+.011],[x1,y+.022,fold(b)+.011],.013,'#c2a16c');
+      f.stroke([x0,y,screenFold(a)],[x1,y,screenFold(b)],.066,'#423b30',p.wood,true);
+      f.stroke([x0,y+.022,screenFold(a)+.011],[x1,y+.022,screenFold(b)+.011],.013,'#c2a16c');
     }
-    if(i)f.stroke([x0,base,fold(a)],[x0,base+h,fold(a)],.011,'#706248');
+    if(i)f.stroke([x0,base,screenFold(a)],[x0,base+h,screenFold(a)],.011,'#706248');
   }
   for(const y of [base-.16,base+h+.12])
     f.part('box',0,y,.07,w+.11,.16,.08,'#897448',p.wood);
@@ -149,11 +148,9 @@ function shopFronts(p,light,windowPaper){
     // Slender lattice windows in the gable walls light up the cross streets at night.
     for(const side of [-1,1]){
       // Two pairs of machiya unfold their summer screens onto the stone avenue.
-      const towardsSquare=side*Math.sin(yaw)*(z+424)>0;
-      if((z===-445 || z===-400)&&towardsSquare){
-        const co=Math.cos(yaw),si=Math.sin(yaw),offset=side*(w*.5+1.05);
-        const picture=z===-445?(x<120?2:3):(x<120?1:0);
-        paintedShutters(p,x+offset*co,z-offset*si,yaw+side*Math.PI/2,d*.68,picture);
+      const screen=KYO_SCREENS.find(q=>q.shop===i && q.side===side);
+      if(screen){
+        paintedShutters(p,screen);
         continue;
       }
       const sideX=side*(w*.5+.13), sill=1.22, span=d*.50;

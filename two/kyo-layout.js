@@ -34,6 +34,15 @@ houses.push(
   [175,-401,9.0,7.4,3.5,2.7,-Math.PI/2,'shop','brew'],
 );
 export const KYO_BUILDINGS = houses;
+export const KYO_SCREENS=houses.flatMap(([x,z,w,d,,,yaw],shop)=>{
+  if(z!==-445 && z!==-400) return [];
+  const side=Math.sign(Math.sin(yaw)*(z+424));
+  const offset=side*(w*.5+1.05),width=d*.68;
+  return [{shop,side,x:x+offset*Math.cos(yaw),z:z-offset*Math.sin(yaw),yaw:yaw+side*Math.PI/2,
+    width,height:width*.53,picture:z===-445?(x<120?2:3):(x<120?1:0)}];
+});
+export const screenFold = u=>.047+1.55*.17*(1-Math.abs(2*((u*2)%1)-1));
+
 
 export const KYO_FOOD = [
   {type: 'kyoTea', x: 115, z: -432, yaw: Math.PI / 2},

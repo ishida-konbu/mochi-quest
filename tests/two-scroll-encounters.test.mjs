@@ -4,7 +4,8 @@ import { createGame } from '../two/game.js';
 import { updateScrollResident } from '../two/scroll-encounters.js';
 import { SEA_SPECIES, updateRyuguResident } from '../two/ryugu-residents.js';
 import { animalRadius, openGround } from '../two/village-paths.js';
-import { groundHeight, terrainHeight, WATER_Y } from '../two/terrain.js';
+import { groundHeight, terrainHeight, solidHeightAt, WATER_Y } from '../two/terrain.js';
+import { KYO_SCREENS, screenFold } from '../two/kyo-layout.js';
 import { RYUGU, palaceSolid } from '../two/ryugu-layout.js';
 
 test('the five new districts have playable encounters on clear ground and at swimmable depths',()=>{
@@ -50,4 +51,16 @@ test('new land and sea recipients accept a thrown letter and survive a save alon
   assert.equal(resumed.state.delivered.size,691);
   assert.equal(resumed.state.player.mode,'kagami');
   assert.ok(resumed.state.kagamiUnlocked);
+});
+
+test('all four Kyoto folding screens stop the camera ray at the painted leaves',()=>{
+  assert.equal(KYO_SCREENS.length,4);
+  for(const {x,z,yaw,width,height} of KYO_SCREENS) {
+    const base=terrainHeight(x,z);
+    for(const t of [.08,.25,.45,.7,.9]) {
+      const u=(t-.5)*width,v=screenFold(t);
+      const px=x+Math.cos(yaw)*u+Math.sin(yaw)*v, pz=z-Math.sin(yaw)*u+Math.cos(yaw)*v;
+      assert.ok(solidHeightAt(px,pz,.2,base+2.1)>=base+height+.34);
+    }
+  }
 });

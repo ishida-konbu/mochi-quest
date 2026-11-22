@@ -1,4 +1,4 @@
-import { KYO_BUILDINGS, KYO_ROADS } from './kyo-layout.js';
+import { KYO_BUILDINGS, KYO_ROADS, KYO_SCREENS, screenFold } from './kyo-layout.js';
 import { INARI_ROUTE, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS } from './trade-routes.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
@@ -743,6 +743,18 @@ for (const b of BUILDINGS) {
       const f = plan.workbench;
       localSolid(f.u, f.v, f.width, f.depth, plan.floor + f.height, 'box', true);
     }
+  }
+}
+// A folded street screen can stand between a pilgrim and the orbiting
+// camera. Give each leaf the same hinge position as its painted face.
+for(const {x,z,width,height,yaw} of KYO_SCREENS) {
+  const base=terrainHeight(x,z), c=cos(yaw), s=sin(yaw);
+  putSolid(x,z,width*.5+.12,.34,yaw,base+.37,'box',true);
+  for(let i=0;i<4;i++) {
+    const u=((i+.5)/4-.5)*width, from=screenFold(i/4),to=screenFold((i+1)/4);
+    const v=(from+to)*.5, turn=yaw-Math.atan2(to-from,width/4);
+    putSolid(x+c*u+s*v,z-s*u+c*v,hypot(width/4,to-from)/2+.03,.056,turn,
+      base+height+.54,'wall',false);
   }
 }
 pilgrimageSolids(terrainHeight,putSolid);
