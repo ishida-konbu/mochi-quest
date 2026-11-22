@@ -92,16 +92,32 @@ function plankedHull(){
   }
   return indexed(pos,uv,ix,colors);
 }
-function deckGrain(){
+function deckGrain(hold=false){
   const positions=[],uv=[],indices=[];
   for(let j=0;j<80;j++){
-    const z=-15.38+j*.386,z0=z-.187,z1=z+.187,half=hullWidth(z)-.09;
-    const spans=z>hatch.bottom-.17&&z<hatch.top+.15?[[-half,-1.36],[1.36,half]]:[[-half,half]];
+    const z=-15.38+j*.386,z0=z-.187,z1=z+.187,half=hold?hullWidth(z)*.82:hullWidth(z)-.09;
+    const spans=!hold&&z>hatch.bottom-.17&&z<hatch.top+.15?[[-half,-1.36],[1.36,half]]:[[-half,half]];
     for(const [a,b] of spans){
       const k=positions.length/3;
-      positions.push(a,DECK_Y+.009,z0,b,DECK_Y+.009,z0,a,DECK_Y+.009,z1,b,DECK_Y+.009,z1);
+      const y=(hold?HOLD_Y:DECK_Y)+.009;
+      positions.push(a,y,z0,b,y,z0,a,y,z1,b,y,z1);
       const off=.37*j;uv.push(a*.14+off,0,b*.14+off,0,a*.14+off,1,b*.14+off,1);
       indices.push(k,k+2,k+1,k+1,k+2,k+3);
+    }
+  }
+  return indexed(positions,uv,indices);
+}
+function bulkheadBoards(){
+  const positions=[],uv=[],indices=[];
+  for(const z of [-8.35,6.65])for(const side of [-1,1])for(const face of [-1,1]){
+    const width=hullWidth(z)*.79-.99;
+    for(let n=0;n<8;n++){
+      const y0=.72+n*.309+.009,y1=y0+.291,plane=z+face*.102;
+      const x0=side,x1=side*(1+width),k=positions.length/3;
+      positions.push(x0,y0,plane,x1,y0,plane,x0,y1,plane,x1,y1,plane);
+      const off=n*.421;
+      uv.push(off,0,off+width*.19,0,off,1,off+width*.19,1);
+      indices.push(k,k+1,k+2,k+1,k+3,k+2);
     }
   }
   return indexed(positions,uv,indices);
@@ -187,6 +203,14 @@ function buildLibrary(){
     main.box('#856344',side*1.7,.05,-16.56,.48,2,.20,.56,0,.16*side);
   }
   const mastDefs=[[8.2,7.15,6.1,7.5],[-6.35,9.3,7.9,8]];
+  // The transverse timbers supporting the upper deck leave the central companionway clear.
+  for(const z of [-14.2,-11.5,-8.8,-6.1,4.9,7.6,10.3,13.0]){
+    detail.box('#806b50',0,deck-.25,z,1.86*hullWidth(z),.17,.19);
+    for(const side of [-1,1]){
+      const x=side*hullWidth(z)*.86;
+      rod(detail,'#927759',[x,deck-.67,z],[x-side*.45,deck-.29,z],.074);
+    }
+  }
   const sailGs=[];
   for(const [z,w,h,y] of mastDefs){
     rod(main,'#7e6346',[0,deck-.18,z],[.04,y+h+1.22,z-.12],.195);
@@ -232,14 +256,23 @@ function buildLibrary(){
     g.fillStyle='#635843';g.font='25px serif';g.fillText('海路之圖',18,31);
   });
   const deckhand=traveller(new T.Group(),false);
-  const deckMat=new T.MeshLambertMaterial({map:wood,color:'#d3bc9b'});
+  const deckMat=new T.MeshLambertMaterial({map:wood,color:'#d3bc9b',side:T.DoubleSide});
+  const tallies=graphic(256,384,(g,w,h)=>{
+    g.fillStyle='#d4be90';g.fillRect(0,0,w,h);
+    for(let i=0;i<255;i++){g.fillStyle=i%2?'rgba(104,73,41,.12)':'rgba(250,230,183,.43)';g.fillRect((i*83)%w,(i*43)%h,5+i%15,1);}
+    g.strokeStyle='#93754f';g.lineWidth=2;g.strokeRect(8,7,w-16,h-14);
+    g.font='29px serif';g.fillStyle='#594432';for(const [i,line] of ['津荷目録','青磁廿壺','麻布十反','昆布三俵'].entries()){
+      for(const [j,c] of [...line].entries())g.fillText(c,202-i*57,56+j*41);
+    }
+    g.textAlign='center';g.fillStyle='#a25741';g.fillRect(37,259,45,50);g.font='26px serif';g.fillStyle='#e4ce9e';g.fillText('津',59,294);
+  });
   const wake=sculpture();
   for(const side of [-1,1])for(let k=0;k<17;k++){
     const z=15-k*2.7,offset=z>0?hullWidth(z)+.24:4.2+(-z)*.15;
     const pts=Array.from({length:7},(_,i)=>[side*(offset+.10*i+.15*sin(i*.5+k)),.017, z-i*.49]);
     wake.stroke(k%2?'#dacfb6':'#e6e0c5',pts,[.004,.039,.070,.095,.063,.036,.003],10);
   }
-  return {deckhand,deckG:deckGrain(),deckMat,wake:wake.finish(),hullG,hullM,main:main.finish(),details:detail.finish(),board:little.finish(),pigments,sails,sailGs,scroll:new T.MeshLambertMaterial({map:scroll,side:T.DoubleSide})};
+  return {deckhand,deckG:deckGrain(),holdG:deckGrain(true),bulkheads:bulkheadBoards(),tallies:new T.MeshLambertMaterial({map:tallies,side:T.DoubleSide}),deckMat,wake:wake.finish(),hullG,hullM,main:main.finish(),details:detail.finish(),board:little.finish(),pigments,sails,sailGs,scroll:new T.MeshLambertMaterial({map:scroll,side:T.DoubleSide})};
 }
 function deckhand(template){
   const person=template.clone(true);
@@ -256,6 +289,8 @@ function shipScene(ship,L){
   const mesh=(g,m,parent=root)=>{const o=new T.Mesh(g,m);o.receiveShadow=o.castShadow=true;parent.add(o);return o;};
   mesh(L.hullG,L.hullM);mesh(L.main,L.pigments);
   mesh(L.details,L.pigments,near);mesh(L.deckG,L.deckMat,near);
+  mesh(L.holdG,L.deckMat,near);mesh(L.bulkheads,L.deckMat,near);
+  const manifest=mesh(new T.PlaneGeometry(.51,.77),L.tallies,near);manifest.position.set(1.67,2.31,-8.228);
   const wake=mesh(L.wake,L.pigments);wake.receiveShadow=wake.castShadow=false;
   for(const g of L.sailGs)mesh(g,L.sails[ship.color==='indigo'?1:0]);
   const chart=mesh(new T.PlaneGeometry(2.36,.98),L.scroll,near);chart.position.set(0,DECK_Y+1.36,-13.40);
