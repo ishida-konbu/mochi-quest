@@ -6,7 +6,6 @@ import { createPickupContacts } from './pickup-contacts.js';
 import { createAmbientContacts } from './ambient-contacts.js';
 import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
-import { VILLAGE_BATHS, VILLAGE_WATER_HEIGHT } from './village-baths.js';
 import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
 import { SEAPORTS,relocateOldQuay } from './seaport-layout.js';
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
@@ -83,9 +82,10 @@ function makeWorld() {
     objects.push(landmark);
     return landmark;
   }
+  const retiredVillageSites=[];
   function placeSpring(site) {
     const pool=object('onsen',site.x,site.z,site.yaw,site.regional ? 'onsen-'+site.id : undefined);
-    pool.retreat=site;
+    pool.retreat=site; pool.rank=site.rank; pool.region=site.region;
   }
   function npc(type, role, x, z, phase, side = 1) {
     const heading = role === 'sumo' ? side * Math.PI / 2 : phase;
@@ -98,7 +98,7 @@ function makeWorld() {
     if (SEASONAL_STOPS[id]) {
       const [first, second] = SEASONAL_STOPS[id];
       object(first, x - 13, z - 9);
-      if(first==='onsen')objects.at(-1).villageBath=VILLAGE_BATHS[id];
+      if(first==='onsen')retiredVillageSites.push(objects.at(-1));
       if(id==='dawn') object(second,300,184.8);
       else object(second,x+6,z+14);
       object('port', ...(port || [x+12,z+5]));
@@ -122,7 +122,7 @@ function makeWorld() {
     ['onsen','manga','sake','ramen','haramaki','port'].forEach((type, k) => {
       // Leave the bather visible through the open side of each noren.
       object(type, places[k][0], places[k][1], type === 'onsen' ? 0 : (i + k) * .47);
-      if(type==='onsen')objects.at(-1).villageBath=VILLAGE_BATHS[id];
+      if(type==='onsen')retiredVillageSites.push(objects.at(-1));
     });
     npc('rabbit', 'porter', x-4, river ? 55 : z+5, i * .8 + .2);
     npc('frog', 'sumo', x+4.1, river ? 52 : z-7, i, 1);
@@ -133,9 +133,9 @@ function makeWorld() {
   });
   npc('turtle', 'wander', -14, 54, 0);
   object('onsen',SNOW_SPRING.x,SNOW_SPRING.z);
-  objects.at(-1).grand = true;
+  Object.assign(objects.at(-1),{grand:true,rank:SNOW_SPRING.rank,region:SNOW_SPRING.region});
   object('tsukimi',TSUKIMI.x,TSUKIMI.z,TSUKIMI.yaw);
-  for (const visitor of procession(objects,npcs)) {
+  for (const visitor of procession()) {
     const {type,role,x,z,phase} = visitor;
     npc(type,role,x,z,phase);
     Object.assign(npcs.at(-1), visitor, { heading:visitor.facing });
@@ -144,6 +144,12 @@ function makeWorld() {
     const {type,role,x,z,phase}=visitor;
     npc(type,role,x,z,phase);
     Object.assign(npcs.at(-1),visitor);
+  }
+  // The old village tubs were landmarks in the original population survey.
+  // Reserve their inventory slots for existing journeys after casting the residents.
+  for(const site of retiredVillageSites){
+    inventory[inventory.indexOf(site)]=null;
+    objects.splice(objects.indexOf(site),1);
   }
   // Move the reading table after casting the historic village and wildlife surveys.
   // Its inventory slot and the creatures drawn around the old shop stay stable.
@@ -172,8 +178,13 @@ function makeWorld() {
   }
   for(const hut of WAYSIDE_HUTS){
     if(!hut.bath)continue;
-    object('onsen',hut.bath.x,hut.bath.z,hut.yaw);
-    objects.at(-1).goemon=hut;
+    const slot=hut.inventorySlot;
+    const kettle=object('onsen',hut.bath.x,hut.bath.z,hut.yaw,'onsen-'+(slot ?? hut.id));
+    kettle.goemon=hut;
+    if(slot!=null){
+      while(inventory.length<=slot)inventory.push(null);
+      inventory[slot]=kettle;
+    }
   }
   for(const site of RETREATS)if(site.regional)placeSpring(site);
   prepareVillageRoutes(npcs,objects);
@@ -263,9 +274,8 @@ export function createGame(snapshot = null) {
   // so the first frame of a resumed soak uses the same level as the mesh.
   Object.defineProperty(player, 'bathWaterY', {get() {
     if(player.activity!=='bath')return;
-    if(lastBath?.villageBath)return lastBath.y+VILLAGE_WATER_HEIGHT;
     if(lastBath)return waterSurfaceAt(lastBath.x,lastBath.z);
-    return player.inWater ? waterSurfaceAt(player.x,player.z) : player.y+VILLAGE_WATER_HEIGHT;
+    return waterSurfaceAt(player.x,player.z);
   }});
   let shotId = 0;
   let throwCooldown = 0;
@@ -340,7 +350,7 @@ export function createGame(snapshot = null) {
     if (target.goemon) return gap(target) <= KETTLE.widthScale*(leaving ? 1.65 : .79);
     if (target.retreat) return bathRadius(target.retreat, player.x, player.z) <= (leaving ? 1.07 : .92);
     if (target.grand) return springRadius(player.x, player.z) <= (leaving ? 1 : .88);
-    return gap(target) <= (leaving ? 3.35 : 3.1);
+    return false;
   }
   function nearest() {
     if (player.activity || !player.grounded) return null;
@@ -370,10 +380,8 @@ export function createGame(snapshot = null) {
         if (target.type === 'onsen') {
           if (!insideBath(target)) continue;
           radius = Infinity;
-          if (target.villageBath) label = target.villageBath.name+'につかる';
           if (target.goemon) label = '五右衛門風呂につかる';
-          if (target.retreat) label = target.retreat.name + 'につかる';
-          if (target.grand) label = '雪見の大露天風呂につかる';
+          if (target.rank) label = (target.rank==='main'?'主湯':'脇湯')+'・'+(target.retreat || SNOW_SPRING).name+'につかる';
         }
       } else {
         continue;
@@ -392,7 +400,7 @@ export function createGame(snapshot = null) {
   function collect(target) {
     if (target.type === 'onsen') {
       lastBath = target;
-      if (!target.grand && !target.retreat) {
+      if (target.goemon) {
         player.x = target.x; player.z = target.z; player.y = target.y;
       }
       player.h = player.vy = 0;
@@ -544,7 +552,7 @@ export function createGame(snapshot = null) {
       Object.assign(player,{x:target.x,y:target.y,z:target.z,heading:target.chaya.yaw,h:0,vy:0,grounded:true});
       beginActivity('chaya',4.4);
       sound('pickup');
-      message(target.chaya.name+'の縁台で、焼きたての団子をひと串。');
+      message(target.chaya.name+'の縁台で、'+target.chaya.dango+'と'+target.chaya.tea+'をいただく。');
       return true;
     } else if (target.type === 'port') {
       if (target.bikes < 1) return false;
@@ -1051,8 +1059,8 @@ export function createGame(snapshot = null) {
     if (player.activity || player.mode === 'kusa') return;
     if (!player.mount && player.grounded) {
       for (const o of objects) {
-        if (!o.grand && !o.retreat && !o.goemon && !['tsukimi','kyoTea','mitarashi'].includes(o.type) && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
-            gap(o) <= (o.type === 'onsen' ? 1.55 : .83)) { collect(o); return; }
+        if (!['onsen','tsukimi','kyoTea','mitarashi'].includes(o.type) && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
+            gap(o) <= .83) { collect(o); return; }
       }
     }
     const n=bumped;
@@ -1281,7 +1289,8 @@ export function createGame(snapshot = null) {
     Object.assign(turtle, {x:t.x,z:t.z,homeX:t.homeX,homeZ:t.homeZ,y:groundHeight(t.x,t.z),mounted:p.mount==='turtle'});
     turtlePause=t.pause; turtleLeg=t.leg; recoverRider=turtle.mounted;
     lastBath=objects.find(o=>o.type==='onsen' && o.id===data.lastBath)??null;
-    if(player.activity==='bath' && data.lastBath && !lastBath) {
+    if(lastBath && !insideBath(lastBath,true))lastBath=null;
+    if(player.activity==='bath' && !lastBath) {
       player.activity=null;
       player.activityTime=0;
     }

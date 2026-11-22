@@ -41,6 +41,10 @@ for(const g of GATES) for(const side of [-1,1]) {
   }
 }
 for(const b of BRIDGES) for(const side of [-1,1]) indexDisc(fixtures,b.x+side*(b.halfWidth+.94),b.z+b.length*.5+.48,.49);
+// Keep both landings open. A patrolling animal turning at a sill can push
+// a traveller against the rail before there is room to pass on either side.
+for(const b of BRIDGES) for(const end of [-1,1])
+  indexDisc(fixtures,b.x,b.z+end*(b.length/2+1.25),b.halfWidth+1.25);
 for(const [x,z] of MARKET_STALLS) indexDisc(fixtures,x,z,2.0);
 indexDisc(fixtures,POUNDING.x,POUNDING.z,2.2);
 for(const [x,z] of KADOMATSU) indexDisc(fixtures,x,z,.4);

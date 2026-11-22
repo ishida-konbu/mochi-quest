@@ -10,7 +10,7 @@ import { kosode, silkMaterial, SilkPanels } from './kosode.js';
 import { dressedRiceFace } from './mochi-model.js';
 import { paintedSilk,townPortrait } from './emaki-costume.js';
 import { brushStroke } from './pilgrimage-pigment.js';
-import { CARRIAGES, OX_HITCH, merchantPose, carriagePose } from './traveller-positions.js';
+import { CARRIAGES, OX_HITCH, RIVER_SKIFFS, SKIFF_SCALE, merchantPose, carriagePose } from './traveller-positions.js';
 export {merchantPosition} from './traveller-positions.js';
 
 const { PI, sin, cos }=Math;
@@ -145,8 +145,10 @@ function boatHull() {
   const g=new THREE.BufferGeometry();
   g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setIndex(ix);g.computeVertexNormals();return g;
 }
-function marketBoat(tint,index) {
+function marketBoat(index,skiff) {
   const root=new THREE.Group();
+  root.name=skiff?.name ?? '沖の帆掛け問屋';
+  if(skiff)root.scale.setScalar(SKIFF_SCALE);
   const hull=paint(root,b=>{
     b.add(boatHull(),'#886e4d');
     for(const side of [-1,1]){
@@ -154,12 +156,16 @@ function marketBoat(tint,index) {
       b.stroke(gunwale,.045,'#584937');
     }
     for(let i=-4;i<=4;i++) b.box(0,.43,i*.47,1.25*(1-Math.abs(i/5)**2),.07,.44,straw);
-    b.rod([0,.42,-.58],[0,3.3,-.58],.047,'#79573a',.031);
-    b.rod([-.88,3.15,-.58],[.88,3.15,-.58],.035,'#624e36');
+    if(!skiff){
+      b.rod([0,.42,-.58],[0,3.3,-.58],.047,'#79573a',.031);
+      b.rod([-.88,3.15,-.58],[.88,3.15,-.58],.035,'#624e36');
+    }
     for(const side of [-1,1]){
-      b.stroke([[side*.90,3.15,-.56],[side*.72,2.14,-.30],[side*.78,.54,-1.34]],.014,'#957956');
-      b.stroke([[side*.84,3.16,-.56],[side*.92,2.86,-.45],[side*.95,1.58,-.56],[side*.68,.55,.13]],.011,'#7b6750');
-      b.rod([side*.86,1.56,-.57],[side*.91,1.61,-.56],.025,straw);
+      if(!skiff){
+        b.stroke([[side*.90,3.15,-.56],[side*.72,2.14,-.30],[side*.78,.54,-1.34]],.014,'#957956');
+        b.stroke([[side*.84,3.16,-.56],[side*.92,2.86,-.45],[side*.95,1.58,-.56],[side*.68,.55,.13]],.011,'#7b6750');
+        b.rod([side*.86,1.56,-.57],[side*.91,1.61,-.56],.025,straw);
+      }
       for(const height of [.14,.28]){
         const seam=Array.from({length:15},(_,i)=>{
           const t=i/7-1;
@@ -168,19 +174,43 @@ function marketBoat(tint,index) {
         b.stroke(seam,.011,'#5e503f');
       }
     }
-    b.rod([-.98,1.57,-.56],[.98,1.57,-.56],.025,'#9d8459');
-    for(const z of [-1.05,.85]){
-      b.stroke([[0,3.2,-.57],[-.035,2.43,z*.34-.35],[.025,.53,z]],.011,'#786954');
+    if(skiff){
+      // Low cargo and folded covers fit between the piles under all three
+      // arched bridges. A cloth, tied in two places, identifies each house.
+      b.box(0,.71,-.61,1.21,.46,.95,'#8c7554');
+      b.box(0,.95,-.61,1.24,.065,1.01,skiff.color);
+      for(const side of [-1,1]){
+        b.box(side*.605,.826,-.61,.03,.23,1.01,skiff.color,[0,0,side*.07]);
+        b.box(side*.627,.797,-.61,.012,.032,.96,'#d3c4a1');
+      }
+      for(const z of [-.92,-.29])
+        b.stroke([[-.68,.52,z],[-.617,.95,z],[0,.998,z],[.617,.95,z],[.68,.52,z]],.019,'#b6a17a');
+      b.rod([-.56,.53,-1.63],[-.55,.56,1.53],.034,'#b0986c');
+      if(index===3){
+        for(const [x,y,color] of [[-.17,1.06,skiff.color],[.14,1.06,'#a68271'],[0,1.26,'#85856f']])
+          b.rod([x,y,-1.01],[x,y,-.26],.148,color);
+      }
+      if(index===4){
+        for(const x of [-.26,.26]){
+          b.box(x,1.10,-.61,.42,.25,.67,'#9a895d');
+          b.box(x,1.24,-.61,.45,.041,.71,'#bda77d');
+          b.box(x,1.268,-.61,.065,.022,.71,skiff.color);
+        }
+      }
+    }else{
+      b.rod([-.98,1.57,-.56],[.98,1.57,-.56],.025,'#9d8459');
+      for(const z of [-1.05,.85])
+        b.stroke([[0,3.2,-.57],[-.035,2.43,z*.34-.35],[.025,.53,z]],.011,'#786954');
     }
     for(const z of [-1.55,1.6]) for(const side of [-1,1]) {
       b.ball(side*.30,.65,z,.26,.28,.39,'#bda172');
       for(const dz of [-.12,.14]) b.loop(side*.30,.66,z+dz,.26,.34,.048,'#7d6b4d');
     }
-    b.rod([-.42,1.25,.78],[-1.24,.04,1.75],.039,lacquer);
-  },'帆掛けの餅問屋');
+    if(!skiff)b.rod([-.42,1.25,.78],[-1.24,.04,1.75],.039,lacquer);
+  },skiff?'橋をくぐる高瀬舟':'帆掛けの餅問屋');
   hull.material=scrollPigment();
   const merchant=traveller(root,false);merchant.position.set(0,.45,.56);merchant.scale.setScalar(.87);
-  const row=ferryCrew(root,index);
+  const row=ferryCrew(root,index,!skiff);
   return {root,row};
 }
 export function createTravellers(scene) {
@@ -190,7 +220,7 @@ export function createTravellers(scene) {
     scene.add(cart.root);
     return {...cart,...journey};
   });
-  const boats=['#825643','#526775','#7b7051'].map((tint,i)=>{const boat=marketBoat(tint,i);scene.add(boat.root);return boat;});
+  const boats=[null,null,...RIVER_SKIFFS].map((skiff,i)=>{const boat=marketBoat(i,skiff);scene.add(boat.root);return boat;});
   function place(root,player,x,z,y,yaw){
     const dx=wrapDelta(x-player.x),dz=wrapDelta(z-player.z);
     root.visible=dx*dx+dz*dz<155**2;

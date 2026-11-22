@@ -130,7 +130,8 @@ test('one kinako throw sends eight notices radially, with one cooldown and one c
 
 test('bath and belly wrap protect both vitals; manga speed and ramen size bonuses apply after the activity',()=>{
   const game=createGame(),p=game.state.player;
-  p.hp=9;p.mp=3;collect(game,'onsen');assert.equal(p.activity,'bath');
+  p.hp=9;p.mp=3;collect(game,'onsen');assert.equal(p.activity,null);
+  assert.ok(game.act('interact'));assert.equal(p.activity,'bath');
   run(game,3.8);assert.equal(p.hp,100);assert.equal(p.mp,100);assert.ok(p.buffs.warm>18);
   game.act('kinako');at(game,get(game,'rabbit'));run(game,.2);assert.equal(p.hp,100);assert.equal(p.mp,100);
   run(game,.8);game.act('normal');p.buffs.warm=0;

@@ -4,6 +4,8 @@ import { waterSurfaceAt,terrainHeight } from './terrain.js';
 import { workshopFrame, inscriptionMaterial } from './civic-art.js';
 import { roundedStone } from './pigments.js';
 import { sculpture, brushStroke } from './pilgrimage-pigment.js';
+import { bathEnclosure,waysideBankRocks } from './bath-enclosures.js';
+import { dressBathEnclosure } from './bath-pavilion-art.js';
 import { dressRegionalBath } from './regional-bath-art.js';
 
 const {PI,sin,cos}=Math;
@@ -23,45 +25,9 @@ function curtain() {
   }
   g.computeVertexNormals();return g;
 }
-function tools(p,f,x,z) {
-  f.put('bathPail',x,.28,z,.26,.39,.26,'#ac8c63',p.wood);
-  for(const y of [.34,.58]) f.put('bathBand',x,y,z,.257,.036,.257,'#686657',p.fine);
-  f.bar([x-.24,.7,z],[x+.24,.7,z],.028,'#725c45');
-  f.put('box',x+.74,.61,z,.77,.09,.41,'#ab9067',p.deck);
-  for(const side of [-1,1]) f.put('box',x+.74+side*.26,.455,z,.09,.24,.33,'#826748');
-  f.put('bathPail',x+.68,.67,z,.095,.11,.095,'#beab76');
-  f.bar([x+.74,.755,z],[x+1.14,.81,z+.09],.021,'#9e875c');
-}
-function bathhouse(p,f,s,cloth) {
-  const cedar='#8d7457',beam='#6f604a',z=-5.2;
-  for(let j=0;j<16;j++)f.put('box',(j-7.5)*.39,.17,z,.38,.2,3.14,'#b8a07b',p.deck);
-  for(const u of [-2.9,2.9]) for(const v of [-6.5,-3.9]){
-    f.put('rock',u,.13,v,.29,.25,.28,'#8c9282',p.stone);
-    f.put('box',u,1.85,v,.19,3.18,.19,beam);
-    f.bar([u,2.67,v],[u-Math.sign(u)*.59,3.24,v],.065,cedar,p.wood,true);
-  }
-  for(const v of [-6.51,-3.83])f.put('box',0,3.20,v,6.50,.21,.24,beam);
-  const thatch=s.kind==='peach';
-  f.put('roof',0,3.35,z,7.23,1.64,4.4,thatch?'#a29472':'#78776a',thatch?p.thatch:p.roofs);
-  for(const side of [-1,1]) {
-    for(let k=-6;k<=6;k++)f.bar([k*.51,3.24,z+side*1.46],[k*.51,3.31,z+side*2.14],.053,cedar,p.wood,true);
-    f.bar([-3.49,3.37,z+side*2.11],[3.49,3.37,z+side*2.11],.089,beam);
-  }
-  // A rolled bamboo blind over the changing bench with two hemp lashings.
-  for(let j=0;j<28;j++){
-    const u=(j-13.5)*.21,y=1.47+.05*sin(j*4.67);
-    f.put('round',u,y,-6.53,.091,2.56,.083, j%3?'#aa9b76':'#998c66');
-  }
-  for(const y of [.73,1.64,2.73])f.bar([-2.97,y,-6.42],[2.97,y,-6.42],.034,beam);
-  f.put('round',0,2.97,-6.42,.18,6.1,.18,'#a79b75',p.wood,0,0,PI/2);
-  f.bar([-2.67,3.08,-3.83],[-.25,3.08,-3.83],.041,'#776442');
-  for(let i=0;i<3;i++)
-    f.put('springCurtain',-2.29+i*.77,2.53,-3.82,.75,1.04,.92,'#e8decb',cloth[i],0,0,.009*sin(i));
-  tools(p,f,1.05,-4.97);
-}
 function inlet(p,f,s) {
   const u=-s.rx*.71,v=-s.rz*.51;
-  const wood=s.hut||s.kind==='reed';
+  const wood=['cedar','coast','reed'].includes(s.kind);
   f.put('rock',u,.41,v-.75,.88,1.01,.79,'#858d7c',p.stone,-.3);
   if(wood) {
     f.put('springGutter',u,1.04,v,.21,1.64,.21,'#ad9670',p.wood,0,PI/2-.07);
@@ -101,17 +67,16 @@ function plants(p,f,s) {
     }
   }
   if(s.kind==='reed') {
+    const r=bathEnclosure(s).room;
     for(let i=0;i<22;i++) {
       const a=PI+.108*i,w=1+.23*sin(i*1.8),u=(s.rx+1.5+.7*cos(i*2.2))*cos(a),v=(s.rz+1.55)*sin(a);
+      if(Math.abs(u-r.u)<r.w/2+.6 && Math.abs(v-r.v)<r.d/2+.85)continue;
       const [x,z]=sitePoint(s,u,v),y=terrainHeight(x,z)-waterSurfaceAt(s.x,s.z);
       f.put('waysidePampas',u,y,v,w,w,w,'#fff',p.stems,i*2.4);
     }
   }
-  if(s.kind==='slate'||s.kind==='maple'){
-    for(let i=0;i<9;i++){
-      const u=-4.3+.83*i,v=-4.15-.35*cos(i*.7),height=(1+.58*sin(i*.64))*(s.kind==='slate'?1.8:1);
-      f.put('springCrag'+(i%3),u,height*.28,v,1.2+.4*cos(i*.7),height,1.12,palettes[s.kind][i%4],p.stone,i*.17,.11,-.18);
-    }
+  for(const q of waysideBankRocks(s)){
+    f.put('springCrag'+(q.i%3),q.u,q.h*.20,q.v,q.w,q.h,q.d,palettes[s.kind][q.i%4],p.stone,q.yaw);
   }
   // Petals or maple leaves collect on the quiet lip away from the inlet.
   if(s.kind==='peach'||s.kind==='maple')for(let j=0;j<12;j++){
@@ -120,7 +85,10 @@ function plants(p,f,s) {
       s.kind==='peach'?'#dec0ac':j%3?'#ad7552':'#b18851',p.fine,j);
   }
 }
-export function dressWaysideBaths(p) {
+export function dressWaysideBaths(p,gravel) {
+  p.springGravel=new T.MeshLambertMaterial({
+    map:gravel,vertexColors:true,transparent:true,depthWrite:false,
+  });
   const vector=a=>a.map(v=>new T.Vector2(...v));
   p.shapes.springCurtain=curtain();
   p.shapes.waysidePampas=pampas();
@@ -145,6 +113,7 @@ export function dressWaysideBaths(p) {
   for(let i=0;i<3;i++)p.shapes['springCrag'+i]=roundedStone(i*2.59+.42);
   for(const s of RETREATS){
     const level=waterSurfaceAt(s.x,s.z),f=workshopFrame(p,s,level),tints=palettes[s.kind];
+    dressBathEnclosure(p,f,s,level);
     if(s.regional){dressRegionalBath(p,f,s,level);continue;}
     for(const q of retreatStones(s)) {
       const scale=q.scanned?.64:1;
@@ -154,12 +123,6 @@ export function dressWaysideBaths(p) {
         f.put('rock',q.u*.99,.077+.64*q.h,q.v*.99,q.w*.76,q.h*.37,q.d*.76,
           s.kind==='maple'||s.kind==='cedar'?'#949b7d':'#b7b5a1',p.stone,q.angle,0,.13*sin(q.i));
       }
-    }
-    const dye={cedar:'#5e6b58',peach:'#9b6862',coast:'#566d73'};
-    if(s.hut) {
-      const dyePot={cloth:true,ground:dye[s.kind],ink:'#e8e0c7'};
-      const crest=inscriptionMaterial('♨',dyePot);
-      bathhouse(p,f,s,[crest,inscriptionMaterial('ゆ',dyePot),crest]);
     }
     inlet(p,f,s);plants(p,f,s);
     const u=s.rx*.74,v=s.rz*.96;

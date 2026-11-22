@@ -13,7 +13,8 @@ test('the river, the fishing beaches and the ocean passages host 380 fry beyond 
   for(const s of FISH_SCHOOLS)totals[s.kind]=(totals[s.kind]||0)+s.fry.length;
   assert.deepEqual(totals,{river:80,coast:108,ocean:192});
   for(const h of WAYSIDE_HUTS.filter(s=>s.kind==='fisher')){
-    assert.ok(FISH_SCHOOLS.some(s=>s.kind==='coast'&&Math.hypot(s.x-h.x,s.z-h.z)<50),h.name);
+    const habitat=h.bank==='river'?'river':'coast';
+    assert.ok(FISH_SCHOOLS.some(s=>s.kind===habitat && Math.hypot(s.x-h.x,s.z-h.z)<50),h.name);
   }
   for(const route of SEAWAYS){
     const near=FISH_SCHOOLS.filter(s=>s.kind==='ocean' && route.points.some(([x,z])=>Math.hypot(s.x-x,s.z-z)<48));

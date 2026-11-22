@@ -86,40 +86,17 @@ export function setRiverStones(scene, objects) {
     contactRipples(scene, stones, shapes, clock);
     // Each bath has its own batch bounds. Only the spring in view spends
     // triangles on the lichen, chisel edges and dark stones at the waterline.
-    for (const pool of objects.filter((o) => o.type === 'onsen' && !o.goemon)) {
-      const rim = shapes.map(() => []);
-      const yaw = pool.heading || 0,
-        cy = Math.cos(yaw),
-        sy = Math.sin(yaw);
-      if(pool.retreat) {
-        const site=pool.retreat;
-        for(const q of retreatStones(site).filter(q=>q.scanned)){
-          const [x,z]=sitePoint(site,q.u,q.v);
-          transform.position.set(x,pool.y+.49-.31*q.h,z);
-          transform.scale.set(q.w*2.08,q.h*1.49,q.d*2.11);
-          transform.rotation.set(.03*Math.sin(q.i),yaw+q.angle,.05*Math.cos(q.i));
-          transform.updateMatrix();
-          rim[(q.i+site.index)%shapes.length].push(transform.matrix.clone());
-        }
-        drawGroups(rim,pool.y+.52,site.regional?bathCraft[site.kind].base:null);
-        continue;
-      }
-      for (let i = 0; i < 23; i++) {
-        const a = (i * Math.PI * 2) / 23, tub=pool.villageBath;
-        const lip=tub ? tub.lip(a) : 1;
-        const dx=((tub?.rx ?? 1.96)-.05)*lip*Math.cos(a),
-          dz=((tub?.rz ?? 1.56)-.07)*lip*Math.sin(a);
-        transform.position.set(pool.x + dx * cy + dz * sy, pool.y - 0.048, pool.z - dx * sy + dz * cy);
-        transform.rotation.set(
-          (rng() - 0.5) * 0.18,
-          yaw - a + Math.PI / 2 + (rng() - 0.5) * 0.33,
-          (rng() - 0.5) * 0.13,
-        );
-        transform.scale.set(0.48 + rng() * 0.28, 0.3 + rng() * 0.23, 0.37 + rng() * 0.23);
+    for (const pool of objects.filter(o=>o.retreat)) {
+      const site=pool.retreat,rim=shapes.map(()=>[]);
+      for(const q of retreatStones(site).filter(q=>q.scanned)){
+        const [x,z]=sitePoint(site,q.u,q.v);
+        transform.position.set(x,pool.y+.49-.31*q.h,z);
+        transform.scale.set(q.w*2.08,q.h*1.49,q.d*2.11);
+        transform.rotation.set(.03*Math.sin(q.i),site.yaw+q.angle,.05*Math.cos(q.i));
         transform.updateMatrix();
-        rim[Math.floor(rng() * rim.length)].push(transform.matrix.clone());
+        rim[(q.i+site.index)%shapes.length].push(transform.matrix.clone());
       }
-      drawGroups(rim, pool.y + .189);
+      drawGroups(rim,pool.y+.52,site.regional?bathCraft[site.kind].base:null);
     }
   });
 }

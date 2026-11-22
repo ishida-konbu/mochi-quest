@@ -2,30 +2,30 @@
 // the road, so a pool can follow the contours independently of its compass bearing.
 export const REGIONAL_SPRINGS = [
   // Ferry, shrine, market, old mountain baths and farming hamlets.
-  ['river-hanabira', '花筏の湯', 'river', 'sakura', 'lotus', 32.75,46.50,-.3511, 5.00,3.60],
+  ['river-hanabira', '花筏の湯', 'river', 'sakura', 'lotus', 29,77,2.8204, 5.00,3.60],
   ['shrine-sasafune', '笹舟の湯', 'shrine', 'bamboo', 'leaf', -140.25,-132.25,-1.0872, 4.50,3.15],
-  ['market-tsuboyu', '蔵町の甕湯', 'market', 'earthen', 'gourd', 40.31,-123.63,-1.0014, 4.72,3.30],
-  ['pass-yunohana', '湯の花の岩棚', 'spring', 'sulfur', 'cleft', 172.25,-156.75,-.2673, 5.20,3.65],
+  ['market-tsuboyu', '蔵町の甕湯', 'market', 'earthen', 'gourd', 38,-106,-1.2764, 4.72,3.30],
+  ['pass-yunohana', '湯の花の岩棚', 'spring', 'sulfur', 'cleft', 170,-144,.6750, 5.20,3.65],
   ['paddy-azemichi', '畦映しの湯', 'terraces', 'paddy', 'terrace', 95.37,67.87,-.1813, 5.34,3.20],
   ['coast-kaigara', '松浜の貝湯', 'coast', 'shore', 'shell', -174.25,80,.2338, 5.00,3.60],
-  ['snow-usugori', '薄氷の湯', 'snow', 'snow', 'pebble', -18.98,-259.98,3.4241, 5.47,3.49],
+  ['moon-kusatsuyu', '草露の小湯', 'moon', 'susuki', 'pebble', 47,356,2.9783, 3.23,2.51,'sub'],
   ['autumn-kaedeba', '楓葉の湯', 'autumn', 'maple', 'leaf', 326.34,-56.09,-1.7547, 4.96,3.61],
   ['moon-yumihari', '弓張月の湯', 'moon', 'susuki', 'oxbow', -31.57,275.90,-2.6966, 5.40,3.34],
   ['dawn-akatsuki', '暁の扇湯', 'dawn', 'dawn', 'fan', 306.50,145.75,-.1526, 5.00,3.60],
   // The city outskirts, orchard, pilgrimage precincts and working ports.
   ['capital-suzuri', '花京の硯湯', 'kyo', 'capital', 'inkstone', 121,-911.75,1.4790, 4.92,3.42],
-  ['peach-hanamomo', '花桃の瓢湯', 'peach', 'peach', 'gourd', -778.75,-172.75,-2.3003, 3.95,2.72],
+  ['peach-hanamomo', '花桃の瓢湯', 'peach', 'peach', 'gourd', -783,-193,.0469, 4.50,3.20],
   ['temple-hasu', '蓮弁の湯', 'todaiji', 'temple', 'lotus', 380.62,854.25,1.9306, 5.23,3.79],
-  ['inari-magari', '稲荷山の曲り湯', 'inari', 'inari', 'oxbow', 390.05,-404.15,-3.7099, 4.75,3.17],
-  ['tsuruga-shiomachi', '船溜りの湯', 'tsuruga', 'tsuruga', 'shell', 360.75,-1420.25,-1.6201, 5.12,3.27],
-  ['sakai-tsuboguchi', '堺の壺口湯', 'sakai', 'sakai', 'inkstone', -165.25,-594.50,2.5147, 4.80,3.05],
+  ['inari-magari', '稲荷山の曲り湯', 'inari', 'inari', 'oxbow', 378,-592,-.0422, 4.75,3.17],
+  ['tsuruga-shiomachi', '船溜りの湯', 'tsuruga', 'tsuruga', 'shell', 353,-1413,-.5404, 5.12,3.27],
+  ['sakai-tsuboguchi', '堺の壺口湯', 'sakai', 'sakai', 'inkstone', -176,-554,-1.5708, 4.80,3.05],
   // Longer journeys have intermediate stops beyond the settled centres.
-  ['snow-nagoriyuki', '峠の名残雪', 'snow', 'snow', 'cleft', 36.08,-328.20,4.0083, 4.53,3.68],
-  ['temple-kongoseki', '参詣道の金剛石湯', 'todaiji', 'temple', 'terrace', 272.54,636.24,2.6673, 5.40,3.61],
-  ['inari-kitsunebi', '狐火の湯', 'inari', 'inari', 'leaf', 509,-601.25,1.5070, 4.65,3.25],
-  ['tsuruga-funami', '敦賀峠の船見湯', 'tsuruga', 'tsuruga', 'fan', 453,-1338.25,-1.7269, 4.20,2.78],
-  ['capital-shigure', '北山時雨の湯', 'kyo', 'capital', 'pebble', 375.25,-972.75,-1.2928, 4.97,3.47],
-].map(([id,name,region,kind,shape,x,z,yaw,rx,rz])=>({id,name,region,kind,shape,x,z,yaw,rx,rz,regional:true}));
+  ['snow-nagoriyuki', '峠の名残雪', 'snow', 'snow', 'cleft', 36.08,-328.20,4.0083, 3.18,2.51,'sub'],
+  ['sakai-akane', '堺街道の茜湯', 'sakai', 'sakai', 'terrace', -49,-722,.5880, 3.28,2.57,'sub'],
+  ['peach-yamamomo', '山桃の小湯', 'peach', 'peach', 'leaf', -485,-79,3.0991, 3.24,2.54,'sub'],
+  ['tsuruga-funami', '敦賀峠の船見湯', 'tsuruga', 'tsuruga', 'fan', 519,-1250,-1.3494, 3.26,2.51,'sub'],
+  ['capital-shigure', '北山時雨の湯', 'kyo', 'capital', 'pebble', 375.25,-972.75,-1.2928, 3.19,2.52,'sub'],
+].map(([id,name,region,kind,shape,x,z,yaw,rx,rz,rank='main'])=>({id,name,region,kind,shape,x,z,yaw,rx,rz,rank,regional:true}));
 
 // Radius from the centre, measured in units of each basin's two semi-axes.
 // Each outline is single-valued round the centre so the mesh, water tests,

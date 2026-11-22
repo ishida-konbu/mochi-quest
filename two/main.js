@@ -18,12 +18,13 @@ import { SEA_SPECIES } from './ryugu-residents.js';
 import { seaPortrait } from './ryugu-performers.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
 import { preloadBeastCoats } from './beast-art.js';
-import { REGIONS, WATER_Y, terrainHeight, shoreDistance, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
+import { WAYSIDE_SITES } from './wayside-hut-layout.js';
+import { REGIONS, regionAt, WATER_Y, terrainHeight, shoreDistance, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
 import { createAudio } from '../sound.js';
 import { MODES, EMOTES, HELP, glyph, paintGlyphs, drawFace } from './interface.js';
-import { loadMapPaper, drawMap, mapHit, mapCoordinates, labels, regionPort } from './map.js';
+import { loadMapPaper, drawMap, mapHit, mapCoordinates, labels, regionPort, mappedBath } from './map.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('scene'),
@@ -747,7 +748,7 @@ function redrawAtlas() {
   const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
   const name = trackedAnimal ? speciesNames[trackedAnimal.type] : '';
   const atlas = $('atlas');
-  atlas.setAttribute('aria-label', '十七の名所、各地の野湯、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
+  atlas.setAttribute('aria-label', '十七の名所、主湯と脇湯、茶屋と小屋、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
   drawMap(atlas,state,yaw,selectedPlace,true,point,trackedAnimal,name);
 }
 function directions(from,to,originLabel) {
@@ -784,9 +785,15 @@ function selectMap(id) {
     inari: '京から南の街道をたどり、朱塗りの千本鳥居をくぐって雲上の奥社へ。日が差す雨の参道には、狐の嫁入りの行列が現れます。'
   };
   if (landmarks[id]) detail.append(document.createElement('br'), landmarks[id]);
-  const nearbyBaths=state.objects.filter(o=>o.retreat?.region===id);
-  for(const bath of nearbyBaths) {
-    detail.append(document.createElement('br'),'♨ '+bath.retreat.name+'　'+directions(r,bath,'名所'));
+  const baths=state.objects.map(mappedBath).filter(s=>s && s.region===id);
+  for(const bath of baths.sort((a,b)=>Number(b.rank==='main')-Number(a.rank==='main'))){
+    const rank=bath.rank==='main'?'♨ 主湯':'湯 脇湯';
+    detail.append(document.createElement('br'),rank+'　'+bath.name+'　'+directions(r,bath,'名所'));
+  }
+  const signs={chaya:'茶',fisher:'漁',charcoal:'炭'};
+  for(const site of WAYSIDE_SITES){
+    if(REGIONS[regionAt(site.x,site.z)].id===id)
+      detail.append(document.createElement('br'),signs[site.kind]+'　'+site.name+'　'+directions(r,site,'名所'));
   }
   const port = regionPort(state, id);
   if (port) {

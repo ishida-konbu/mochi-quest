@@ -11,7 +11,7 @@ test('a rolling dango can enter, bathe and resume at each rural spring',()=>{
   const game=createGame(),p=game.state.player;
   const wayside=RETREATS.filter(site=>!site.regional);
   assert.equal(wayside.length,5);
-  assert.equal(wayside.filter(s=>s.hut).length,2);
+  assert.ok(wayside.every(s=>s.rank==='sub'));
   for(const s of wayside){
     const [x,z]=sitePoint(s,0,s.rz+4);
     Object.assign(p,{x,z,y:groundHeight(x,z),mode:'dango',mount:null,h:0,vy:0,speed:0,vx:0,vz:0,grounded:true,activity:null,hp:38,mp:54});

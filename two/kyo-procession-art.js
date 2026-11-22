@@ -29,8 +29,8 @@ export function courtCurtains(b){
 }
 // A crouching deckhand propels the skiff with a sculling oar; the hand holding it
 // and the oar are one moving pair so the grip stays closed on an uneven swell.
-export function ferryCrew(root,index) {
-  const type=index===1?'frog':'rabbit';
+export function ferryCrew(root,index,withSail=true) {
+  const type=index%2===1?'frog':'rabbit';
   const crew=makeNPC({id:'ferry-hand',type,role:'sailor'},root);
   crew.shadow.visible=false;
   const {mesh,limbs}=crew;
@@ -48,8 +48,10 @@ export function ferryCrew(root,index) {
     b.ball(...hand,.045,.044,.054,'#c7b69a');
   },'櫓');
   oar.material=scrollPigment();
-  const sail=illustratedMesh(root,3,'sail');
-  sail.name='波越え兎の荷印';sail.position.set(0,2.345,-.54);sail.scale.set(1.87,1.55,1);
+  if(withSail){
+    const sail=illustratedMesh(root,3,'sail');
+    sail.name='波越え兎の荷印';sail.position.set(0,2.345,-.54);sail.scale.set(1.87,1.55,1);
+  }
   return (time,near)=>{
     mesh.visible=near;
     if(!near)return;

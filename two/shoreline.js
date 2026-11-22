@@ -10,6 +10,13 @@ export const halfBreadth = t => Math.max(.012,.5*(1-Math.abs(t)**2.45));
 export const sheerHeight = t => .54+.43*Math.abs(t)**2.8+.045*t;
 
 // This identical displacement also places contact strokes on moving water.
+export function waterWave(x,z,t) {
+  const smooth=(a,b,q)=>{
+    const u=Math.min(1,Math.max(0,(q-a)/(b-a)));return u*u*(3-2*u);
+  };
+  const sea=Math.max(smooth(175,275,-x),smooth(312,383,x),smooth(350,410,Math.abs(z)));
+  return (.014+.086*sea)*(Math.sin(x*.54+z*.31-t*1.23)+.29*Math.sin(z*.84-t*1.42));
+}
 export const waterWaveGLSL = `float waveHeight(vec2 q,float t){
   float sea=max(smoothstep(175.,275.,-q.x),max(smoothstep(312.,383.,q.x),smoothstep(350.,410.,abs(q.y))));
   return (.014+.086*sea)*(sin(q.x*.54+q.y*.31-t*1.23)+.29*sin(q.y*.84-t*1.42));

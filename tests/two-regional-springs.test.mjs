@@ -4,7 +4,7 @@ import { createGame } from '../two/game.js';
 import { Group } from '../two/vendor/three.module.min.js';
 import { regionalSpringBank } from '../two/regional-bath-art.js';
 import { addSpringSurface } from '../two/spring-water.js';
-import { VILLAGE_WATER_HEIGHT } from '../two/village-baths.js';
+import { WAYSIDE_HUTS } from '../two/wayside-hut-layout.js';
 import { REGIONS, groundHeight, regionAt, terrainHeight, terrainMeshHeight, waterSurfaceAt } from '../two/terrain.js';
 import { RETREATS, bathRadius, sitePoint, springLip } from '../two/retreat-layout.js';
 
@@ -34,17 +34,23 @@ function walk(game,destination,label){
   assert.fail(label+' stopped at '+[p.x,p.z]+' heading to '+destination);
 }
 
-const retiredIds=new Set(['onsen-58','onsen-64']);
+const retiredIds=new Set([0,6,12,18,24,30,36,58,64].map(i=>'onsen-'+i));
 test('the spring inventory preserves the historical IDs around the retired trail baths',()=>{
   const {objects}=createGame().state;
-  const old=objects.filter(o=>!o.retreat?.regional);
+  const old=objects.filter(o=>historicIds.includes(o.id));
   assert.deepEqual(old.map(o=>o.id),historicIds.filter(id=>!retiredIds.has(id)));
-  const oldSprings=old.filter(o=>o.type==='onsen'),springs=objects.filter(o=>o.type==='onsen');
+  const springs=objects.filter(o=>o.type==='onsen' && !o.goemon);
+  const mains=springs.filter(o=>o.rank==='main'),subs=springs.filter(o=>o.rank==='sub');
+  assert.equal(mains.length,16);
+  assert.deepEqual(new Set(mains.map(o=>o.region)),new Set(REGIONS.filter(r=>r.id!=='ryugu').map(r=>r.id)));
+  assert.equal(subs.length,11);
+  for(const s of subs){
+    assert.ok(mains.every(m=>Math.hypot(s.x-m.x,s.z-m.z)>60),s.id+' away from main baths');
+    assert.ok(s.retreat.rx<=3.5 && s.retreat.rz<2.7,s.id+' small pool');
+  }
+  assert.equal(springs.length,mains.length+subs.length);
+  assert.equal(objects.filter(o=>o.goemon).length,WAYSIDE_HUTS.length);
   const added=springs.filter(o=>o.retreat?.regional);
-  assert.equal(oldSprings.length,20);
-  assert.equal(oldSprings.filter(o=>o.goemon).length,7);
-  assert.equal(springs.length,41);
-  assert.equal(added.length,21);
   for(const o of added)assert.equal(o.id,'onsen-'+o.retreat.id);
   assert.deepEqual(new Set(added.map(o=>o.retreat)),new Set(regional()));
   assert.equal(new Set(objects.map(o=>o.id)).size,objects.length);
@@ -92,6 +98,15 @@ test('the visible bank meets the water at every vertex and beds into the hillsid
       assert.ok(bank.getY(i)<0 && bank.getY(rim)>0 && bank.getY(rim)<.01,s.name+' water contact');
       const ground=terrainMeshHeight(...sitePoint(s,bank.getX(outer),bank.getZ(outer)));
       assert.ok(Math.abs(level+bank.getY(outer)-ground+.05)<.001,s.name+' outside edge below ground');
+      // The front opening gets walked and viewed at eye level. A vertical
+      // cut face here makes a sunken spring look like a tub on a pedestal.
+      if(Math.abs(i-segments/4)<=segments/20){
+        for(let row=1;row<4;row++){
+          const a=row*stride+i,b=a+stride;
+          const run=Math.hypot(bank.getX(b)-bank.getX(a),bank.getZ(b)-bank.getZ(a));
+          assert.ok(bank.getY(a)-bank.getY(b)<run*.38,s.name+' gently bedded front shore');
+        }
+      }
     }
   }
 });
@@ -134,32 +149,26 @@ test('a walker enters, bathes, resumes, leaves and bathes again at every regiona
   }
 });
 
-test('the original village baths still welcome walkers automatically and rearm on leaving',()=>{
-  const game=createGame(),p=game.state.player;
-  const villages=game.state.objects.filter(o=>o.type==='onsen' && !o.retreat && !o.goemon && !o.grand);
-  assert.equal(villages.length,7);
-  assert.equal(new Set(villages.map(o=>o.villageBath?.name)).size,7);
-  assert.equal(new Set(villages.map(o=>o.villageBath?.shape)).size,7);
-  const outlines=new Set();
-  for(const o of villages){
-    const tub=o.villageBath;
-    assert.equal(tub.region,REGIONS[regionAt(o.x,o.z)].id,o.id);
-    assert.ok(tub.rx>0 && tub.rz>0 && tub.name,o.id);
-    const radii=Array.from({length:32},(_,i)=>tub.lip(i*Math.PI/16));
-    assert.ok(radii.every(r=>Number.isFinite(r) && r>0),tub.name);
-    outlines.add(radii.map(r=>r.toFixed(3)).join(','));
-    const approach=[o.x,o.z+3.75];
-    arrive(game,...approach);
-    walk(game,[o.x,o.z],o.id);
-    assert.equal(p.activity,'bath',o.id);
-    assert.equal(p.bathWaterY,o.y+VILLAGE_WATER_HEIGHT,o.id);
-    assert.equal(createGame(game.save()).state.player.bathWaterY,p.bathWaterY,o.id+' resumed tub');
-    assert.equal(game.save().lastBath,o.id);
-    for(let i=0;i<37;i++)game.step(.1);
-    walk(game,approach,o.id+' exit');
-    assert.equal(game.save().lastBath,null,o.id);
+test('running through any bath only offers the named action; legacy village soaks resume on dry ground',()=>{
+  const g=createGame(),p=g.state.player;
+  for(const o of g.state.objects.filter(o=>o.type==='onsen')){
+    Object.assign(p,{x:o.x,z:o.z,y:groundHeight(o.x,o.z),activity:null,invulnerable:2,grounded:true,h:0});
+    g.step(1/60);
+    assert.equal(p.activity,null,o.id+' waits for E');
+    const choice=g.nearest();
+    assert.equal(choice?.target,o,o.id+' offers an action');
+    if(o.rank)assert.match(choice.label,o.rank==='main'?/主湯/:/脇湯/);
   }
-  assert.equal(outlines.size,7,'the original village waters have seven locally drawn rims');
+  for(const [id,x,z] of [['onsen-0',-10,44],['onsen-18',131,-116],['onsen-36',-91,-299],['onsen-67',145.5,425.3]]){
+    const journal=g.save();
+    Object.assign(journal.player,{x,z,y:groundHeight(x,z),activity:'bath',activityTime:2});
+    journal.lastBath=id;
+    const restored=createGame(journal);
+    assert.ok(restored.restored);
+    assert.equal(restored.state.player.activity,null);
+    assert.equal(restored.save().lastBath,null);
+    assert.deepEqual([restored.state.player.x,restored.state.player.z],[x,z]);
+  }
 });
 
 test('an original v11 inventory and an in-progress Goemon bath retain their meaning on a round trip',()=>{

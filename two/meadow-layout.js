@@ -1,7 +1,7 @@
 import { fireTrailDistance, inFireMeadow } from './higashiyama.js';
 import { POUNDING } from './festival.js';
 import { inMountainStreamClearing } from './mountain-streams.js';
-import { WAYSIDE_SITES,inHutYard } from './wayside-hut-layout.js';
+import { WAYSIDE_SITES,inHutYard,onTeaFootpath } from './wayside-hut-layout.js';
 import { SEAPORTS,portReserved } from './seaport-layout.js';
 import { HERBS, HERB_FORMS } from './meadow-herbs.js';
 // One repeatable planting plan per 26 m square. All coordinates here are canonical.
@@ -72,8 +72,9 @@ export function meadowExclusions(objects,residents=[]) {
   });
   add(COURT.x,COURT.z+11.5,29,reservedScenery);
   add(KIYOMIZU.x,KIYOMIZU.z-16,36,kiyomizuClearing);
-  for(const s of RETREATS)add(s.x,s.z,11,reservedScenery);
-  for(const s of WAYSIDE_SITES)add(s.x,s.z,14,inHutYard);
+  for(const s of RETREATS)add(s.x,s.z,15,reservedScenery);
+  for(const s of WAYSIDE_SITES)
+    add(s.x,s.z,14,s.kind==='chaya' ? (x,z)=>inHutYard(x,z)||onTeaFootpath(s,x,z) : inHutYard);
   for(const p of SEAPORTS)add(p.x,p.z,72,portReserved);
   for(const beat of STREET_BEATS)for(const hearth of beat.hearths)circle(hearth.x,hearth.z,.80);
   add(SNOW_SPRING.x,SNOW_SPRING.z,17,(x,z)=>springRadius(x,z)<1.18);

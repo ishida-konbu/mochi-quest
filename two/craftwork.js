@@ -21,7 +21,7 @@ function line(c,commands,color,width) {
 }
 // A hare springs across the curtain, painted in one long spine stroke.
 // The frog crouches low on its haunches, with little splayed toes.
-function animal(c,hare,color) {
+export function paintScrollAnimal(c,hare,color) {
   const pen=(commands,width=2.8)=>line(c,commands,color,width);
   if(hare) {
     pen([[9,56],[13,40,21,35,32,34],[47,31,48,22,61,22],[69,20,72,25,79,28],[82,31,77,34,66,33],[60,40,55,42,50,43]],3.7);
@@ -61,7 +61,7 @@ function textile(hare,ground) {
     for(let i=0;i<h;i+=4)c.fillRect(0,i,w,1);
     c.fillStyle='#ddcba8';c.fillRect(0,16,w,3);c.fillRect(0,232,w,3);
     waves(c,w,224,'rgba(232,217,184,.55)');
-    c.save();c.translate(10,22);c.scale(2.55,2.55);animal(c,hare,'#f4e5bf');c.restore();
+    c.save();c.translate(10,22);c.scale(2.55,2.55);paintScrollAnimal(c,hare,'#f4e5bf');c.restore();
     c.fillStyle='#b26148';c.fillRect(210,166,20,24);
     line(c,[[216,186],[217,174],[225,174],[222,182],[215,180]],'#ead6b0',1.4);
   });
@@ -102,7 +102,7 @@ export function porcelain(parent,shape,profile,offset=0) {
       }
       waves(c,w,145,'#687876');
       for(let i=0;i<4;i++){
-        c.save();c.translate(i*128+2,5);c.scale(1.33,1.39);animal(c,i%2===0,'#536978');c.restore();
+        c.save();c.translate(i*128+2,5);c.scale(1.33,1.39);paintScrollAnimal(c,i%2===0,'#536978');c.restore();
       }
       for(const y of [4,9,h-20,h-11]) {c.fillStyle='#718184';c.fillRect(0,y,w,y%2?2:3);}
     });

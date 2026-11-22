@@ -83,6 +83,10 @@ const originalSeasonAt = (x,z,out={}) => seasonalFields(x,z,out,originalDelta);
 const hill = (x, z, cx, cz, rx, rz) => exp(-(((x - cx) / rx) ** 2 + ((z - cz) / rz) ** 2));
 export const riverZ = (x) => 18 + 9 * sin(x / 51) + 3.3 * sin(x / 25);
 export const riverHalfWidth = (x) => 8.6 + 1.9 * sin(x / 38 + 0.35) + 0.95 * sin(x / 14);
+// The last bends fan into tidal flats on either shore. Inland the old survey
+// remains the centreline used for the three timber bridges and riparian woods.
+export const riverMouthFlare = x => max(
+  smooth(197,248,-x)*(1-smooth(252,269,-x)), smooth(340,392,x)*(1-smooth(398,415,x)));
 export const coastX = (z) => -250 + 64 * exp(-(((z - 112) / 75) ** 2)) + 5.5 * sin(z / 23);
 export const eastCoastX = (z) => 374 - 48 * exp(-(((z-176)/99)**2)) + 7 * sin(z/36);
 function originalShore(x, z) {
@@ -162,6 +166,21 @@ function outerHeight(x,z,base) {
   return ground;
 }
 const mapleStreamZ = x => -130 + 3.3*sin((x-292)/15);
+function estuaryTerrain(x,z,native) {
+  if ((x> -198 || x< -260) && (x<340 || x>402)) return native;
+  const maple=x>340 && z < -110 && z > -152;
+  if (!maple && (z<0 || z>55)) return native;
+  const tide=riverMouthFlare(x);
+  const width=maple ? 3.1+3.8*tide : riverHalfWidth(x)+6.4*tide;
+  const across=abs(z-(maple?mapleStreamZ(x):riverZ(x)));
+  if(across>width+10)return native;
+  // Only remove material. The gravel shoulder descends into the channel,
+  // then the offshore shelf takes over wherever it lies below the tidal bed.
+  const bed=(maple?-1.15:-1.57)-1.30*tide;
+  const bank=max(0,across-width);
+  const profile=bed+(WATER_Y-bed)*smooth(.40,1,across/width)+bank*(.24+.025*bank);
+  return native+(min(native,profile)-native)*smooth(0,.22,tide);
+}
 function naturalHeight(x, z) {
   const d = abs(z - riverZ(x)) - riverHalfWidth(x);
   const basic =
@@ -223,21 +242,36 @@ function landHeight(x, z, expanded = true) {
   return graded;
 }
 // The baths sit in a hand-cut hollow; their waterline is independent of the sea.
-export const SNOW_SPRING = { x: -32, z: -292, rx: 13.6, rz: 8.8, level: naturalHeight(-32,-292)-.12 };
+export const SNOW_SPRING = { name:'雪見の大露天風呂', region:'snow', rank:'main', x: -32, z: -292, rx: 13.6, rz: 8.8, level: naturalHeight(-32,-292)-.12 };
 export const TSUKIMI = { x: -51.7, z: 285.9, yaw: -.15 };
 export function springRadius(x,z) {
   return hypot((x-SNOW_SPRING.x)/SNOW_SPRING.rx,(z-SNOW_SPRING.z)/SNOW_SPRING.rz);
 }
-export function terrainHeight(x,z) {
+function groundBeforeBath(x,z) {
   const base=portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight));
-  const native=kiyomizuTerrain(x,z,mountainStreamTerrain(x,z,mapleApproachHeight(x,z,base)));
+  return estuaryTerrain(x,z,kiyomizuTerrain(x,z,mountainStreamTerrain(x,z,mapleApproachHeight(x,z,base))));
+}
+// A waterline cut into the local slope. The lower of the upstream plot and
+// its front approach keeps the entrance from projecting above the meadow.
+const springLevels=new WeakMap();
+function springLevel(site) {
+  if(!springLevels.has(site)){
+    const front=sitePoint(site,0,site.rz+1.7);
+    const base=groundBeforeBath(site.x,site.z);
+    const sill=groundBeforeBath(...front);
+    springLevels.set(site,Math.max(base-.88,Math.min(base-.17,sill-.18)));
+  }
+  return springLevels.get(site);
+}
+export function terrainHeight(x,z) {
+  const native=groundBeforeBath(x,z);
   const hut=nearbyHut(x,z);
   if(hut){
     const w=clearingWeight(hut,x,z);
     if(w>0)return native+(landHeight(hut.x,hut.z)-native)*w;
   }
   const site=nearbyRetreat(x,z);
-  if(site) return bathTerrain(site,x,z,native,landHeight(site.x,site.z)+.22);
+  if(site) return bathTerrain(site,x,z,native,springLevel(site));
   if (abs(x-SNOW_SPRING.x)>23 || abs(z-SNOW_SPRING.z)>16) return native;
   const r = springRadius(x,z);
   const bed = SNOW_SPRING.level-.61+smooth(.70,1.03,r)*.87;
@@ -263,7 +297,7 @@ export function waterSurfaceAt(x,z) {
   const hut=nearbyHut(x,z);
   if(hut?.bath && (x-hut.bath.x)**2+(z-hut.bath.z)**2<KETTLE.widthScale**2) return terrainHeight(hut.x,hut.z)+KETTLE.water;
   const site=nearbyRetreat(x,z);
-  if(site && bathRadius(site,x,z)<1) return landHeight(site.x,site.z)+.22;
+  if(site && bathRadius(site,x,z)<1) return springLevel(site);
   if(abs(x-SNOW_SPRING.x)<15 && abs(z-SNOW_SPRING.z)<10 && springRadius(x,z)<1)return SNOW_SPRING.level;
   return max(WATER_Y,mountainStreamWaterAt(x,z));
 }
@@ -902,7 +936,7 @@ for(const s of RETREATS){
   const spots=s.kind==='cedar'?[[-6,-8],[5,-9],[6,-6],[-7,-5]]:[[-6,-7],[6,-5],[-7,-2]];
   for(const [i,[u,v]] of spots.entries()){
     const [x,z]=sitePoint(s,u,v);
-    if(nearRoad(x,z,3)||TREES.some(t=>hypot(t.x-x,t.z-z)<3))continue;
+    if(nearRoad(x,z,3)||reservedScenery(x,z)||TREES.some(t=>hypot(t.x-x,t.z-z)<3))continue;
     TREES.push({x,z,kind:TREE_FAMILIES[family][0],form:family*4+i,seed:94071+i+41*s.index,
       h:(s.kind==='cedar'?9.3:s.kind==='slate'?4.4:5.7)+i*.54});
   }
@@ -1375,12 +1409,6 @@ export function groundHeight(x, z, feet = -Infinity) {
   const deck = b ? bridgeHeight(b, z) : -Infinity;
   const onBridge = b && (feet === -Infinity || feet >= deck - .36);
   return max(onBridge ? deck : -Infinity, landscapeFloor(x, z), highest(x, z, 0, feet, true));
-}
-// The village census predates the level bicycle turnout. Its dry earthen
-// shoulder supplied the seed slopes; actual homes use today's walking floor.
-export function villageSurveyHeight(x,z) {
-  if (x>290 && x<305 && z>-117.5 && z< -102.5) return landHeight(x,z);
-  return groundHeight(x,z);
 }
 export function waterDepth(x, z) {
   return max(0, waterSurfaceAt(x,z) - terrainHeight(x, z));

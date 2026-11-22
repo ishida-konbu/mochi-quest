@@ -1,6 +1,5 @@
 import { goemonWaterWash } from './goemon-bath-art.js';
 import { KETTLE } from './wayside-hut-layout.js';
-import { VILLAGE_BATHS } from './village-baths.js';
 import { addFlumes } from './snow-bath.js';
 import { porcelain, makeMoonCakes } from './craftwork.js';
 import { SNOW_SPRING, wrapDelta } from './terrain.js';
@@ -1199,49 +1198,6 @@ function cuff(parent) {
     b.loop(0, 0.302, 0, 0.244, 0.244, 0.027, '#dcc094');
   });
 }
-function onsen(parent,tub=VILLAGE_BATHS.river) {
-  addSpringSurface(parent,tub.rx,tub.rz,undefined,tub);
-  batch(parent, (b) => {
-    const bed=new THREE.CylinderGeometry(1,1.09,.20,64);
-    const points=bed.attributes.position;
-    for(let i=0;i<points.count;i++){
-      const x=points.getX(i),z=points.getZ(i),r=tub.lip(Math.atan2(z,x));
-      points.setXYZ(i,x*r,points.getY(i),z*r);
-    }
-    bed.computeVertexNormals();
-    b.add(bed,tub.bank,[0,.064,0],[tub.rx,1,tub.rz]);
-    bed.dispose();
-    for (const x of [-1.98, -0.93]) b.rod([x, 0.12, -1.1], [x, 2.13, -1.1], 0.041, '#896d50');
-    b.rod([-2.11, 2.05, -1.1], [-0.8, 2.05, -1.1], 0.054, wood);
-    b.rod([1.64, 0.011, -0.6], [1.64, 0.74, -0.6], 0.081, '#a39563');
-    b.rod([1.68, 0.72, -0.6], [1.26, 0.61, -0.6], 0.071, '#b1a36e');
-    b.rod([1.26, 0.6, -0.6], [1.23, 0.2, -0.6], 0.026, '#bdd0b6');
-    for (let j = 0; j < 14; j++) {
-      const x = -1.37 + (j % 4) * 0.1,
-        z = -1.26 + Math.sin(j * 6) * 0.15;
-      b.ball(x, 0.37, z, 0.03, 0.24 + 0.1 * Math.cos(j * 2), 0.047, '#8c975c', [
-        0,
-        0,
-        Math.sin(j * 3) * 0.55,
-      ]);
-    }
-  });
-  const mat = printed('bath-sign-'+tub.region, 220, 180, (c, w, h) => {
-    c.fillStyle = tub.dye;
-    c.fillRect(0, 0, w, h);
-    c.fillStyle = '#ecd5aa';
-    c.font = 'bold 126px "Hiragino Mincho ProN",serif';
-    c.textAlign = 'center';
-    c.fillText('ゆ', 96, 136);
-    c.font = '24px "Hiragino Mincho ProN",serif';
-    c.fillText(tub.crest,185,54);
-    c.fillRect(0, 12, w, 2);
-    c.fillRect(0, 163, w, 2);
-    c.fillStyle='rgba(49,39,31,.32)';
-    c.fillRect(108, 122, 4, 58);
-  });
-  printPlane(parent, 'curtain', mat, -1.455, 1.59, -1.09, 1.025, 0.828);
-}
 function bicyclePort(parent) {
   batch(parent, (b) => {
     b.box(-0.82, 0.087, -0.25, 0.38, 0.16, 0.36, '#a8a18a');
@@ -1281,7 +1237,7 @@ function bicyclePort(parent) {
     parent.add(m);
   }
 }
-const objectModels = { manga, sake, ramen, tsukimi: makeMoonCakes, haramaki: cuff, onsen, port: bicyclePort };
+const objectModels = { manga, sake, ramen, tsukimi: makeMoonCakes, haramaki: cuff, port: bicyclePort };
 function accessory(item) {
   return model(item, objectModels[item]);
 }
@@ -1687,14 +1643,8 @@ function makeObject(o, parent) {
     steam.scale.y=1.55;
     mesh.add(steam);
     flumes=addFlumes(mesh);
-  } else if(o.type==='tsukimi') {
+  } else if(o.type==='tsukimi' || o.type==='port') {
     mesh=accessory(o.type);
-  } else if (o.type === 'port' || o.type === 'onsen') {
-    mesh = o.villageBath ? model('village-bath-'+o.villageBath.region,parent=>onsen(parent,o.villageBath)) : accessory(o.type);
-    if (o.type === 'onsen') {
-      steam = particles('steam', 19);
-      mesh.add(steam);
-    }
   } else {
     mesh = model('stand', markerStand);
     feature = accessory(o.type);
@@ -1819,7 +1769,7 @@ export function createActors(scene, renderer) {
     const kinds = new Set();
     for (const item of state.objects) {
       const kind = item.goemon ? 'goemon' : item.grand ? 'snow-spring' : item.retreat ? 'wayside-spring' : item.type;
-      if (!objectModels[item.type] || kinds.has(kind)) continue;
+      if ((!objectModels[item.type] && item.type!=='onsen') || kinds.has(kind)) continue;
       kinds.add(kind);
       const record = makeObject(item, root);
       record.mesh.visible = false;
@@ -1912,7 +1862,7 @@ export function createActors(scene, renderer) {
     }
     processionView.end();beastView.end();craneFlight.end();
     for (const o of state.objects) {
-      if (!objectModels[o.type]) continue;
+      if (!objectModels[o.type] && o.type!=='onsen') continue;
       let rec = objects.get(o.id);
       const near = o.active && within(o, p, o.type === 'port' || o.type === 'onsen' ? 101 : 67);
       if (near && !rec) {

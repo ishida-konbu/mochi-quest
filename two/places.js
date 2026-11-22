@@ -577,19 +577,6 @@ function grove(p, a) {
   }
   emaRack(p, a);
 }
-function screen(f, x, z0, width, top) {
-  for (const k of [-1, 1]) f.post(x + (k * width) / 2, z0, top + 0.07, 0.072, '#8e7b51');
-  for (const yy of [0.4, top - 0.14])
-    f.line([x - width / 2, yy, z0], [x + width / 2, yy, z0], 0.036, '#89784e');
-  const strips = Math.ceil(width / 0.125);
-  for (let j = 0; j < strips; j++) {
-    const u = x - width / 2 + ((j + 0.5) * width) / strips;
-    const ht = top + 0.04 * sin(j * 2.4);
-    f.post(u, z0, ht, 0.056, ['#bdad79', '#b6a370', '#c0b182'][j % 3], undefined);
-  }
-  for (const y of [0.48, top - 0.29])
-    f.line([x - width * 0.48, y, z0 + 0.064], [x + width * 0.48, y, z0 + 0.064], 0.017, '#786c4e');
-}
 function makeSteam(p, locations) {
   const texMap = tex(128, 128, (ctx, w, h) => {
     const g = ctx.createRadialGradient(w * 0.51, h * 0.48, 1, w * 0.5, h * 0.5, w * 0.5);
@@ -640,64 +627,10 @@ function makeSteam(p, locations) {
   dots.renderOrder = 3;
   p.scene.add(dots);
 }
-function baths(p) {
-  const { x, z } = byId('spring'),
-    bx = x - 13,
-    bz = z - 9;
-  // Leave the stepped, open southern entry clear for the player's bath interaction.
-  const back = fixture(p, bx - 0.7, bz - 2.72, -0.22);
-  screen(back, 0, 0, 4.05, 1.69);
-  const west = fixture(p, bx - 2.74, bz - 0.72, 1.25);
-  screen(west, 0, 0, 2.35, 1.53);
-  for (const [dx, dz, s] of [
-    [1.96, -1.6, 0.58],
-    [2.54, -1.96, 0.83],
-    [3.14, -1.58, 0.62],
-    [-2.06, -1.84, 0.53],
-    [2.45, 0.96, 0.37],
-  ]) {
-    const xx = bx + dx,
-      zz = bz + dz,
-      h = terrainHeight(xx, zz);
-    p.part(
-      'rock',
-      xx,
-      h + s * 0.24,
-      zz,
-      s * 1.06,
-      s * 0.75,
-      s * 0.82,
-      '#8c9588',
-      dx * 0.91,
-      0,
-      0.17,
-      p.solid,
-      true,
-      true
-    );
-    p.part(
-      'rock',
-      xx + 0.04,
-      h + s * 0.63,
-      zz,
-      s * 0.76,
-      s * 0.18,
-      s * 0.57,
-      '#939d77',
-      dx * 0.91,
-      0,
-      -0.06,
-      p.solid,
-      false,
-      true
-    );
-  }
-  // Mineral vents above the bath cast a second veil of steam on the approach.
-  const vents = [
-    [bx + 0.1, bz, 1.15, terrainHeight(bx, bz)],
-    [bx + 2.66, bz - 2.02, 0.58, terrainHeight(bx + 2.66, bz - 2.02) + 0.45],
-    [140.2, -118.3, 0.89, terrainHeight(140.2, -118.3) + 0.25],
-  ];
+// The mineral vent is a natural feature above the pass. Bathing and the
+// changing bays take place at the surveyed pool farther up the hillside.
+function passVent(p) {
+  const vents = [[140.2, -118.3, .89, terrainHeight(140.2, -118.3) + .25]];
   for (let j = 0; j < 6; j++) {
     const a = (j * TAU) / 6,
       xx = 140.2 + cos(a) * 0.51,
@@ -1041,7 +974,7 @@ export function dressPlaces(p) {
   p.hullWood.vertexColors = true;
   market(p, art);
   grove(p, art);
-  baths(p);
+  passVent(p);
   terraces(p, art);
   coast(p, art);
   for(const vessel of BOATS) boat(p,vessel);

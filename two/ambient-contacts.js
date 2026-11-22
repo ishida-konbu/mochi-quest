@@ -2,7 +2,7 @@
 // Each moving footprint is sampled from the same itinerary as its drawing.
 import { DISTRICTS } from './geography.js';
 import { terrainHeight, roadSurfaceHeight, groundHeight, wrapDelta } from './terrain.js';
-import { CARRIAGES, OX_HITCH, HORSE_SCALE, carriagePose, merchantPose, horsePose } from './traveller-positions.js';
+import { CARRIAGES, OX_HITCH, HORSE_SCALE, RIVER_SKIFFS, SKIFF_SCALE, carriagePose, merchantPose, horsePose } from './traveller-positions.js';
 import { OX_SCALE } from './scroll-fauna.js';
 import { MERCHANT_ROUTES, ROAD_MERCHANTS, roadMerchantPose } from './road-merchant-routes.js';
 import { QUAY_MERCHANTS } from './seaport-layout.js';
@@ -23,8 +23,10 @@ const carriage=[
   [0,OX_HITCH+.83*OX_SCALE,.28*OX_SCALE,.43*OX_SCALE,1.04*OX_SCALE,1.86*OX_SCALE],
   ...[-1,1].flatMap(s=>[-.62,.44].map(z=>[s*.29*OX_SCALE,OX_HITCH+z*OX_SCALE,.1*OX_SCALE,.14*OX_SCALE,0,.55*OX_SCALE])),
 ];
-const boat=[[0,0,.71,1.89,-.13,.57],[0,2.17,.39,.68,.04,.65],[0,-2.17,.39,.68,.04,.65],
-  [0,.56,.44,.32,.45,1.97],[0,-.58,.68,.055,1.57,3.16]];
+const hull=[[0,0,.71,1.89,-.13,.57],[0,2.17,.39,.68,.04,.65],[0,-2.17,.39,.68,.04,.65],
+  [0,.56,.44,.32,.45,2.10]];
+const boat=[...hull,[0,-.58,.68,.055,1.57,3.16]];
+const skiff=[...hull,[0,-.61,.62,.51,.48,1.26],[.075,-2.12,.37,.26,.5,1.81]];
 const horse=[[0,-.14,.36,.89,.74,1.78],[0,.77,.24,.39,1.31,2.11],
   ...[-1,1].flatMap(s=>[-.69,.44].map(z=>[s*.24,z,.081,.13,0,.89]))];
 const figure=[[0,0,.34,.28,0,1.86]];
@@ -71,7 +73,8 @@ export function createAmbientContacts(){
       sampledTravel=time;
       vehicles=CARRIAGES.map(journey=>[carriagePose(journey,time),carriage,1]);
       vehicles.push([horsePose(time),horse,HORSE_SCALE]);
-      for(let i=0;i<3;i++)vehicles.push([merchantPose(i,time),boat,1]);
+      for(let i=0;i<2;i++)vehicles.push([merchantPose(i,time),boat,1]);
+      RIVER_SKIFFS.forEach((_,i)=>vehicles.push([merchantPose(2+i,time),skiff,SKIFF_SCALE]));
     }
     for(const [q,shapes,scale] of vehicles)if(check(q,shapes,scale))return true;
     // Outside a road's bounds even its outermost load is out of reach.

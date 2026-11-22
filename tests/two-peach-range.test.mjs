@@ -98,14 +98,14 @@ test('an existing journey on the former eastern approach regains its footing',()
   }
 });
 
-test('the mountain trail has no bathing stop until the pool in the orchard',()=>{
+test('the mountain trail approaches the orchard main bath and the mountain sub bath stays off the path',()=>{
   const game=createGame(),baths=game.state.objects.filter(o=>o.type==='onsen');
   const inner=baths.find(o=>o.id==='onsen-peach-hanamomo');
   assert.ok(Math.hypot(inner.x-PEACH.x,inner.z-PEACH.z)<12);
   // Start beyond the shrine village, whose own bath serves that settlement.
   const trail=road.points.slice(road.points.findIndex(([x])=>x< -208));
   for(const [x,z] of trail)for(const bath of baths){
-    if(bath!==inner)assert.ok(Math.hypot(bath.x-x,bath.z-z)>35,bath.id+' beside the trail');
+    if(bath!==inner && !bath.goemon)assert.ok(Math.hypot(bath.x-x,bath.z-z)>35,bath.id+' beside the trail');
   }
   Object.assign(game.state.player,{x:inner.x,z:inner.z,y:groundHeight(inner.x,inner.z),mode:'dango'});
   assert.equal(game.nearest()?.target,inner);
@@ -126,9 +126,11 @@ test('journals from each retired bath resume on dry ground without a bath activi
     assert.ok(restored.restored);
     assert.deepEqual([p.x,p.z],[x,z]);
     assert.equal(p.y,groundHeight(x,z));
-    assert.equal(waterDepth(x,z),0);
+    // The old peach cauldron was rebuilt at this hut and is reached with the new action.
+    if(id!=='onsen-64')assert.equal(waterDepth(x,z),0);
     assert.equal(nearbyRetreat(x,z),undefined);
-    assert.notEqual(restored.nearest()?.target?.type,'onsen');
+    if(id==='onsen-64')assert.equal(restored.nearest()?.target?.goemon?.id,'peach-hearth');
+    else assert.notEqual(restored.nearest()?.target?.type,'onsen');
     assert.equal(restored.save().lastBath,null);
     assert.equal(p.activity,null);
     assert.equal(p.activityTime,0);

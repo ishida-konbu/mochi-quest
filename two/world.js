@@ -1,5 +1,5 @@
 import { buildDangoChaya } from './dango-chaya-art.js';
-import { WAYSIDE_SITES, BATH_YARD } from './wayside-hut-layout.js';
+import { WAYSIDE_SITES, BATH_YARD, TEA_FOOTPATHS } from './wayside-hut-layout.js';
 import { buildWaysideHut } from './wayside-hut-art.js';
 import { buildGoemonBath } from './goemon-bath-art.js';
 import { createLampCollection } from './kyo-lights.js';
@@ -20,6 +20,7 @@ import { dressCourt } from './magistrates-hall.js';
 import { dressWaysideBaths } from './wayside-baths.js';
 import { dressRyugu, createRyuguLife } from './ryugu.js';
 import { createTravellers } from './travelling-merchants.js';
+import { RIVER_SKIFFS, merchantPose } from './traveller-positions.js';
 import { noren } from './craftwork.js';
 import { pagodaPlan, roomPlan, roofForm, HOUSE_EAVES, PAGODA_SPAN } from './architecture.js';
 import { tradeFacade } from './workshops.js';
@@ -50,10 +51,11 @@ import {
   ROADS,
   BRIDGES, MAPLE_FOOTINGS,
   WATER_Y,
-  terrainHeight,
+  terrainHeight, terrainMeshHeight,
   bridgeHeight,
   riverZ,
   riverHalfWidth,
+  riverMouthFlare,
   coastX,
   regionAt,
   nearRoad,
@@ -193,7 +195,8 @@ function* landscape(scene, art) {
       const x=(column+i/grid)*span-BOUND, z=(row+j/grid)*span-BOUND, y=h(x,z);
       p.push(x,y,z);
       uv.push(x/3.7,z/3.7);
-      const r=regionAt(x,z), river=abs(z-riverZ(x))-riverHalfWidth(x), coast=shoreDistance(x,z);
+      const r=regionAt(x,z), coast=shoreDistance(x,z);
+      const river=abs(z-riverZ(x))-riverHalfWidth(x)-6.4*riverMouthFlare(x);
       c.copy(colors[r]).lerp(soil, max(0,1-abs(river-2)/7)*.72);
       c.lerp(stone, max(0,min(1,(y-15)/30))*.68);
       const rise=kyoRidgeHeight(x,z);
@@ -278,7 +281,7 @@ function reserveMasonry(original) {
 function buildRoads(scene, art) {
   const material = trailMaterial(art), paving=kyoPavingMaterial(art.rock), climate={};
   const approach=reserveMasonry(material),avenue=reserveMasonry(paving);
-  for (const road of ROADS) {
+  for (const road of [...ROADS,...TEA_FOOTPATHS]) {
     const p=[], uv=[], ix=[], snow=[];
     const end=road.points.at(-1);
     for (let i=0; i<road.points.length; i++) {
@@ -292,7 +295,7 @@ function buildRoads(scene, art) {
       const underDeck=BRIDGES.some(b=>abs(x-b.x)<b.halfWidth+.5 && abs(z-b.z)<b.length*.5-.4);
       for(let j=0;j<=4;j++) {
         const across=(j/4-.5)*width, xx=x+(dz/l)*across, zz=z-(dx/l)*across;
-        p.push(xx,h(xx,zz)+.08,zz);
+        p.push(xx,road.footpath?terrainMeshHeight(xx,zz)+.045:h(xx,zz)+.08,zz);
         if(road.paved) uv.push(xx,zz);
         else uv.push(j/4,endWeight);
         snow.push(snowAmount);
@@ -321,6 +324,7 @@ function makeWater(scene, art, panorama) {
         climate: {value:new THREE.Vector4()},
         hullPlacement: {value: BOATS.map(b => new THREE.Vector4(b.x,b.z,cos(b.yaw),sin(b.yaw)))},
         hullSize: {value: BOATS.map(b => new THREE.Vector4(b.length,b.width,0,0))},
+        skiffPlacement: {value: RIVER_SKIFFS.map(()=>new THREE.Vector4())},
         pebble: { value: null },
         horizon: { value: null },
         deep: { value: css('#65898a') },
@@ -339,6 +343,7 @@ function makeWater(scene, art, panorama) {
         #include <fog_vertex>
       }`,
     fragmentShader: `uniform float clock;uniform vec4 climate;uniform sampler2D pebble,horizon;uniform vec3 deep,jade,foam;
+      uniform vec4 skiffPlacement[${RIVER_SKIFFS.length}];
       varying vec3 vWorld;
       ${hullWaterGLSL}
       #include <fog_pars_fragment>
@@ -360,7 +365,9 @@ function makeWater(scene, art, panorama) {
         float margin=hullMargin(p,(vWorld.y-${WATER_Y - HULL_DRAFT})/${HULL_HEIGHT});
         if(margin<0.)discard;
         float river=18.+9.*sin(p.x/51.)+3.3*sin(p.x/25.);
-        float halfBank=8.6+1.9*sin(p.x/38.+.35)+.95*sin(p.x/14.);
+        float tide=max(smoothstep(197.,248.,-p.x)*(1.-smoothstep(252.,269.,-p.x)),
+                       smoothstep(340.,392.,p.x)*(1.-smoothstep(398.,415.,p.x)));
+        float halfBank=8.6+1.9*sin(p.x/38.+.35)+.95*sin(p.x/14.)+6.4*tide;
         float coastBand=(p.y-112.)/75.;float shoreX=-250.+64.*exp(-coastBand*coastBand)+5.5*sin(p.y/23.);
         float eastBand=(p.y-176.)/99.;float eastX=374.-48.*exp(-eastBand*eastBand)+7.*sin(p.y/36.);
         float end=375.+7.*sin(p.x/41.)+4.*cos(p.x/22.);
@@ -373,7 +380,7 @@ function makeWater(scene, art, panorama) {
               float seam=max(0.,1.-abs(shoreDist-edge)/24.);shoreDist=max(shoreDist,edge)+6.*seam*seam;
             }}`).join('\n')}
         float inside=max(halfBank-abs(p.y-river),-shoreDist);
-        if (p.x>278. && p.y < -104. && p.y > -152.) inside=max(inside,3.1-abs(p.y+130.-3.3*sin((p.x-292.)/15.)));
+        if (p.x>278. && p.y < -104. && p.y > -152.) inside=max(inside,3.1+3.8*tide-abs(p.y+130.-3.3*sin((p.x-292.)/15.)));
         float depth=smoothstep(-1.8,6.8,inside);
         vec2 along=normalize(vec2(1.,(9./51.)*cos(p.x/51.)+(3.3/25.)*cos(p.x/25.)));
         vec2 uv=vec2(dot(p,along),p.y-river);
@@ -409,6 +416,23 @@ function makeWater(scene, art, panorama) {
         col+=vec3(.12,.155,.10)*caustic*(1.-depth)*.8;
         col=mix(col,col*vec3(.52,.67,.67),inkline*.6);
         col=mix(col,foam,glint*.46+hair*.20+shore*.48);
+        // Two tapering brushstrokes leave the loaded bow, curl alongside its
+        // planks, then break into a chain of short ripples astern.
+        if(p.y> -5. && p.y<59. && p.x> -273. && p.x<421.){
+          for(int i=0;i<${RIVER_SKIFFS.length};i++){
+            vec4 boat=skiffPlacement[i];vec2 delta=p-boat.xy;
+            if(max(abs(delta.x),abs(delta.y))>9.)continue;
+            float aft=2.44-dot(delta,boat.wz);
+            if(aft<0. || aft>9.)continue;
+            float across=abs(dot(delta,vec2(boat.z,-boat.w)));
+            float reach=aft/9.;
+            float shoulder=.61*(1.-exp(-aft*1.15))+.16*aft;
+            float broken=mix(1.,smoothstep(-.45,.64,sin(aft*3.8-t*3.1+float(i))+.27*sidle),reach);
+            float line=1.-smoothstep(.014,.084+min(.12,fwidth(across)),abs(across-shoulder-.035*sidle));
+            float wash=1.-smoothstep(.022,.115,abs(across-shoulder*.71));
+            col=mix(col,foam,(line*.64+wash*.22)*broken*(1.-smoothstep(.47,1.,reach))*smoothstep(0.,.43,aft));
+          }
+        }
         float meniscus=1.-smoothstep(.008,.056+min(.05,length(fwidth(p))),margin);
         col=mix(col,col*vec3(.57,.61,.58),meniscus*.58);
         col=mix(col,foam,.25*(1.-smoothstep(.012,.059,abs(margin-.086+.013*slow)))*(.52+.41*sidle));
@@ -459,6 +483,11 @@ function makeWater(scene, art, panorama) {
   scene.add(m);
   return {uniforms:mat.uniforms,update(time,player){
     mat.uniforms.clock.value=time;
+    RIVER_SKIFFS.forEach((_,i)=>{
+      const q=merchantPose(2+i,time);
+      const nearby=wrapDelta(q.x-player.x)**2+wrapDelta(q.z-player.z)**2<155**2;
+      mat.uniforms.skiffPlacement.value[i].set(nearby?q.x:2*BOUND,q.z,cos(q.yaw),sin(q.yaw));
+    });
     m.position.x=Math.round(player.x/4)*4; m.position.z=Math.round(player.z/4)*4;
   }};
 }
@@ -1856,9 +1885,9 @@ function createWaysideHuts(scene) {
       let root=models.get(s);
       if(dx*dx+dz*dz>190**2){if(root)root.visible=false;continue;}
       if(!root){
-        if(s.kind==='chaya')root=buildDangoChaya(s.variant);
+        if(s.kind==='chaya')root=buildDangoChaya(s.variant,s.dye);
         else{
-          root=buildWaysideHut(s.kind,s.variant);
+          root=buildWaysideHut(s.kind,s.variant,s.bank);
           if(s.bath){
             const bath=buildGoemonBath(s.variant);
             bath.position.set(BATH_YARD[0],0,BATH_YARD[1]);
@@ -1912,7 +1941,7 @@ export function* prepareWorld(scene) {
   painter.cityShell=true;
   const updateCourt=dressCourt(painter,scene);
   painter.cityShell=false;
-  dressWaysideBaths(painter);
+  dressWaysideBaths(painter,art.gravel);
   dressSeaports(painter);
   yield;
   const updateKyo=createKyo(scene,painter);

@@ -2,39 +2,56 @@
 import { sitePoint } from './retreat-layout.js';
 
 const clearings=[
-  ['charcoal','桃山道の炭焼き小屋',-305,-140,-.319,false],
-  ['charcoal','雪街道の炭焼き小屋',-132,-217,1.856],
-  ['charcoal','京へ上る炭焼き小屋',187,-690,-2.312],
-  ['charcoal','大仏道の炭焼き小屋',144,421,2.218],
-  ['fisher','西浜の漁師小屋',-235,-10,-.795],
-  ['fisher','朝凪の漁師小屋',335,252,2.081],
-  ['fisher','入江の漁師小屋',92,616,-1.390],
-  ['fisher','敦賀外浜の漁師小屋',557,-1308,2.062],
+  ['peach-hearth','charcoal','桃山道の炭焼き小屋',-305,-140,-.319],
+  ['snow-hearth','charcoal','雪街道の炭焼き小屋',-132,-217,1.856,65],
+  ['capital-hearth','charcoal','京へ上る炭焼き小屋',187,-690,-2.312,66],
+  ['temple-hearth','charcoal','大仏道の炭焼き小屋',216,548,2.218,67],
+  ['west-beach','fisher','西浜の漁師小屋',-235,-10,-.795,68],
+  ['morning-beach','fisher','朝凪の漁師小屋',335,252,2.081,69],
+  ['south-cove','fisher','入江の漁師小屋',92,616,-1.390,70],
+  ['tsuruga-beach','fisher','敦賀外浜の漁師小屋',557,-1308,2.062,71],
+  ['willow-weir','fisher','柳瀬の漁師小屋',-76,31,-3.025,null,'river'],
+  ['north-pass-hearth','charcoal','北山越の炭焼き小屋',454,-1059,-1.83],
+  ['sweetfish-weir','fisher','鮎瀬の漁師小屋',206,-9,.1584,null,'river'],
 ];
 export const BATH_YARD=[2.35,4.25];
 export const KETTLE={widthScale:1.22,radius:1.08,lip:1.15,board:.84,water:1.035};
 export const KETTLE_STEPS=[
   {z:2.65,top:.23},{z:2.15,top:.46},{z:1.65,top:.69},{z:1.23,top:.92},
 ];
-export const WAYSIDE_HUTS=clearings.map(([kind,name,x,z,yaw,hasBath=true],i)=>{
-  const hut={kind,name,x,z,yaw,variant:i%4};
-  if(hasBath){
-    const [bx,bz]=sitePoint(hut,...BATH_YARD);
-    hut.bath={x:bx,z:bz,yaw};
-  }
+export const WAYSIDE_HUTS=clearings.map(([id,kind,name,x,z,yaw,inventorySlot,bank],i)=>{
+  const hut={id,kind,name,x,z,yaw,inventorySlot,bank,variant:i%4};
+  const [bx,bz]=sitePoint(hut,...BATH_YARD);
+  hut.bath={x:bx,z:bz,yaw};
   return hut;
 });
 // Surveyed from the painted road centrelines, with the bench facing passing travellers.
 export const CHAYA_SITES=[
-  ['川風の団子茶屋',65.65,94.54,2.8259],
-  ['雪解けの団子茶屋',47.85,-366.70,-1.8649],
-  ['薄野の団子茶屋',105.94,336.96,-.5265],
-  ['桃山の団子茶屋',-368.68,-121.03,.3754],
-  ['稲荷道の団子茶屋',365,-696.22,2.4075],
-  ['潮見の団子茶屋',385.89,-1380.06,-.9562],
-  ['堺道の団子茶屋',47.15,-754.94,.6634],
-].map(([name,x,z,yaw],i)=>({kind:'chaya',name,x,z,yaw,variant:i%4}));
+  ['川風の団子茶屋',65.65,94.54,2.8259,'桜団子','桜葉茶','#efb4a9'],
+  ['雪解けの団子茶屋',47.85,-366.70,-1.8649,'きなこ団子','ほうじ茶','#d6ab70'],
+  ['薄野の団子茶屋',105.94,336.96,-.5265,'月見団子','番茶','#f7e4b5'],
+  ['桃山の団子茶屋',-368.68,-121.03,.3754,'よもぎ団子','山茶','#a0b685'],
+  ['稲荷道の団子茶屋',365,-696.22,2.4075,'みたらし団子','煎茶','#c5894b'],
+  ['潮見の団子茶屋',385.89,-1380.06,-.9562,'藻塩の焼き団子','玄米茶','#ead5ae'],
+  ['堺道の団子茶屋',47.15,-754.94,.6634,'黒ごま団子','煎茶','#91877d'],
+  ['桃の間道の団子茶屋',-601.79,-183.72,-1.1071,'花桃団子','番茶','#edb5b1'],
+  ['参詣坂の団子茶屋',363.04,795.64,1.8844,'よもぎ団子','ほうじ茶','#a0b685'],
+].map(([name,x,z,yaw,dango,tea,dye],i)=>({kind:'chaya',name,x,z,yaw,dango,tea,dye,variant:i%4}));
 export const CHAYA_SEAT={x:1.64,z:2.63,width:2.18,depth:.68,top:.48};
+// Feet cut a softer bend from the verge into the covered seat.
+const teaPathX=v=>CHAYA_SEAT.x-.60*Math.sin(Math.PI*(v-2.9)/7.9);
+export const TEA_FOOTPATHS=CHAYA_SITES.map(s=>({
+  width:1.48, footpath:true, fadeEnd:.9,
+  points:Array.from({length:13},(_,i)=>{
+    const v=10.8-i*7.9/12;
+    return sitePoint(s,teaPathX(v),v);
+  }),
+}));
+export function onTeaFootpath(s,x,z){
+  const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
+  const v=dx*k+dz*c;
+  return v>=2.9 && v<=10.8 && Math.abs(dx*c-dz*k-teaPathX(v))<.65;
+}
 export const WAYSIDE_SITES=[...WAYSIDE_HUTS,...CHAYA_SITES];
 const cells=new Map();
 const cell=(x,z)=>Math.floor(x/32)*256+Math.floor(z/32);

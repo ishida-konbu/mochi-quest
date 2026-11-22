@@ -11,7 +11,7 @@ import { KIYOMIZU, OTOWA_ROOFS, PAGODA } from './kiyomizu-layout.js';
 import { COURT } from './retreat-layout.js';
 import { HIGASHIYAMA, KITAYAMA, FIRE_TRAILS, westRidgeHeight } from './higashiyama.js';
 import { RASHOMON, GATE_STONE, GATE_STONE_APRONS, GATE_STONE_STEPS, GATE_WING } from './kyo-layout.js';
-import { KIYOMIZU_ROAD, REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
+import { KIYOMIZU_ROAD, REGIONS, SNOW_SPRING, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
 const SIZE = 2048, SPAN = 2 * BOUND, adj = SIZE / SPAN;
 export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾', '十一', '十二', '十三', '十四', '十五', '十六', '十七'];
 const toX = (x) => SIZE / 2 + x * adj;
@@ -25,10 +25,13 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=kaede-spring', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=sakuragawa-yumeguri', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
+}
+export function mappedBath(object){
+  return object.retreat || (object.grand ? SNOW_SPRING : null);
 }
 export function regionPort(state, id) {
   return state.objects.find(o => o.type === 'port' && REGIONS[regionAt(o.x, o.z)].id === id);
@@ -304,15 +307,19 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   for(const {fall} of MOUNTAIN_STREAMS)marks.push([fall.toe,'滝']);
   const hutGlyph={chaya:'茶',charcoal:'炭',fisher:'漁'};
   for(const site of WAYSIDE_SITES)marks.push([site,hutGlyph[site.kind]]);
-  for(const site of state.objects)if(site.retreat)marks.push([site,'♨']);
+  for(const object of state.objects){
+    const bath=mappedBath(object);
+    if(bath)marks.push([bath,bath.rank==='main'?'♨':'湯']);
+  }
   for(const [site,glyph] of marks){
     const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
     if(x<0||x>w||y<0||y>h)continue;
-    const regional=site.retreat?.regional, highlighted=regional && site.retreat.region===goal;
-    const size=large ? (regional && !highlighted ? 11 : 15) : 17;
+    const mainBath=site.rank==='main', subBath=site.rank==='sub';
+    const highlighted=site.region===goal && (mainBath||subBath);
+    const size=large ? (subBath && !highlighted ? 10 : mainBath && highlighted ? 17 : 14) : subBath ? 14 : 17;
     g.font='bold '+size+'px serif';g.textAlign='center';g.textBaseline='middle';
     g.lineWidth=3;g.strokeStyle='#fff2d6';
-    g.fillStyle=glyph==='滝'?'#416b70':site===COURT?'#685449':highlighted?'#933c2e':'#8c5140';
+    g.fillStyle=glyph==='滝'?'#416b70':subBath?'#4f6961':mainBath?'#943c2f':site===COURT?'#685449':'#8c5140';
     const labelX=site===COURT && large?x-4:x;
     g.strokeText(glyph,labelX,y);g.fillText(glyph,labelX,y);
   }

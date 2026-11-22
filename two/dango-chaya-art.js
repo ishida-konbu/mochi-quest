@@ -176,12 +176,12 @@ function grilledRice(glazed,variant){
   }
   g.setAttribute('color',new T.Float32BufferAttribute(colors,3));g.computeVertexNormals();dumplings.set(key,g);return g;
 }
-function skewer(p,x,y,z,glazed,angle=0){
+function skewer(p,x,y,z,glazed,angle=0,dye='#ffffff'){
   const at=(d,h=0)=>[x+sin(angle)*d,y+h,z+cos(angle)*d];
   p.stroke(bamboo,[at(-.24),at(.03),at(.40)],[.013,.014,.01],5);
   for(let i=0;i<3;i++){
     const pos=at(.075-i*.130,.022+.005*cos(i*2));
-    p.add(grilledRice(glazed,i),'#ffffff',...pos,.085,.079,.086,.07*i,angle+.08*i,.08*sin(i));
+    p.add(grilledRice(glazed,i),dye,...pos,.085,.079,.086,.07*i,angle+.08*i,.08*sin(i));
   }
 }
 function service(s,p,cloth){
@@ -205,7 +205,7 @@ function service(s,p,cloth){
     p.ball(i%3?'#58463a':'#a36b44',x,1.048,cz+.04*sin(i*4),.077,.045,.13,.07,i*.46,.16*cos(i));
   }
   for(const sign of [-1,1])p.box(iron,cx,1.124,cz+.130*sign,1.03,.025,.024);
-  for(let i=0;i<4;i++)skewer(p,cx-.342+i*.224,1.17,cz,i<2,.055*sin(i));
+  for(let i=0;i<2;i++)skewer(p,cx-.342+i*.224,1.17,cz,true,.055*sin(i));
   s.panel(clay,'#a49a85',7,3,(u,v)=>[cx-.51+1.02*u,.865+.139*v,cz+.277]);
   for(const off of [-.30,0,.30]){
     p.box('#52483a',cx+off,.965,cz+.28,.122,.043,.011);
@@ -223,7 +223,6 @@ function service(s,p,cloth){
   chawan(p,2.46,.531,2.53,.84);
   const sidePlate=[[.001,0],[.105,0],[.156,.016],[.166,.036],[.133,.03],[.056,.018],[.001,.018]];
   vessel(p,'#d6c8a8',.49,boardY+.005,.20,sidePlate);
-  skewer(p,.49,boardY+.083,.20,false,-.26);
   // Fired storage jars in the shade and the woven screen on the back wall
   // are visible through the waist-high opening from either side of the road.
   siding(s,[-.55,-1.80],[1.21,-1.80],.93,2.16,reed,'#d9cbac');
@@ -233,7 +232,8 @@ function service(s,p,cloth){
   }
 }
 
-export function buildDangoChaya(variant=0){
+const localDumplings=new Map();
+export function buildDangoChaya(variant=0,dye='#ffffff'){
   const seed=Math.abs(variant|0)%3;
   if(!cache.has(seed)){
     const s=paintedPanels(),p=sculpture(),cloth=paintedPanels();
@@ -242,6 +242,14 @@ export function buildDangoChaya(variant=0){
   }
   const root=new T.Group(),mats=[...waysideMaterials(),paintedCloth()];
   root.name='団子茶屋';
+  if(!localDumplings.has(dye)){
+    const tray=sculpture();
+    for(let i=2;i<4;i++)skewer(tray,-1.235-.342+i*.224,1.17,2.23,false,.055*sin(i),dye);
+    skewer(tray,.49,.753,.20,false,-.26,dye);
+    localDumplings.set(dye,tray.finish());
+  }
+  const serving=new T.Mesh(localDumplings.get(dye),mats[1]);
+  serving.name='土地の串団子';root.add(serving);
   const names=['茅葺きと木組み','火鉢と串団子','藍暖簾と茶幟'];
   for(const [i,geometry] of cache.get(seed).entries()){
     const mesh=new T.Mesh(geometry,mats[i]);mesh.name=names[i];

@@ -301,18 +301,25 @@ export function regionalSpringBank(site,level) {
     const spread=(.93+.12*cos(3*a)+.07*sin(7*a))*(1+Math.min(2.4,Math.max(0,level-terrainMeshHeight(x,z))));
     shore.push({u,v,dx:u/length,dz:v/length,spread});
   }
-  const offsets=[-.13,0,.09,.28,.64];
+  // Carry the wet gravel into an irregular apron. A wide outside row may be
+  // swallowed by the hillside; the shared lip still meets the water exactly.
+  const offsets=[-.19,0,.28,.78,1.72],coverage=[.90,.96,.72,.23,0];
+  const colors=[];
   const bank=patch(4,80,(turn,across)=>{
+    const a=turn*tau,row=Math.round(across*4);
     const {u,v,dx,dz,spread}=shore[Math.round(turn*80)];
-    const row=Math.round(across*4),offset=offsets[row]*(row>1?spread:1);
+    const offset=offsets[row]*(row>1?spread:1);
     const px=u+dx*offset,pz=v+dz*offset;
-    if(row<2)return [px,row===0?-.065:.006,pz];
-    const [x,z]=sitePoint(site,px,pz);
-    if(row===2)return [px,Math.max(.014,terrainHeight(x,z)-level),pz];
-    const mesh=terrainMeshHeight(x,z)-level;
-    const y=row===4?mesh-.05:.25*(terrainHeight(x,z)-level)+.75*mesh;
+    const [x,z]=sitePoint(site,px,pz),mesh=terrainMeshHeight(x,z)-level;
+    const sand=.40+.16*sin(a*11+site.index)+.072*cos(a*29-row*1.3)+.11*row;
+    const pigment=tint('#aa9b7e','#e5dbbd',sand);
+    colors.push(pigment.r,pigment.g,pigment.b,coverage[row]);
+    if(row<2)return [px,row===0?-.075:.006,pz];
+    const beach=(.036+.028*row)*(.92+.08*sin(3*a+.5));
+    const y=row===4?mesh-.05:Math.max(beach,mesh+.012)*(row===2?.76:1);
     return [px,y,pz];
   });
+  bank.setAttribute('color',new T.Float32BufferAttribute(colors,4));
   const positions=bank.attributes.position,uv=bank.attributes.uv;
   for(let i=0;i<positions.count;i++)uv.setXY(i,positions.getX(i)*.67,positions.getZ(i)*.67);
   return bank;
@@ -322,7 +329,19 @@ export function dressRegionalBath(p,f,s,level) {
   prepareShapes(p,c,s.kind);
   const bank='springBank-'+s.id;
   p.shapes[bank]??=regionalSpringBank(s,level);
-  f.put(bank,0,0,0,1,1,1,tint(c.base,'#816e54',.65),p.stone);
+  p.part(bank,s.x,level,s.z,1,1,1,'#fff',s.yaw,0,0,p.springGravel,false,true);
+  // A half-submerged fringe of stream gravel marks the opening without
+  // making a raised sill across the path down into the water.
+  for(let j=0;j<21;j++){
+    const across=(j%7-3)*.276+.09*sin(j*2.84+s.index);
+    const a=PI*.5+across,lip=springLip(s.index,a);
+    const offset=.08+.21*Math.floor(j/7)+.11*cos(j*3.27);
+    const u=(s.rx*lip+offset)*cos(a),v=(s.rz*lip+offset)*sin(a);
+    const levelAt=terrainMeshHeight(...sitePoint(s,u,v))-level;
+    const size=.066+.039*(1+sin(j*2.67+s.index));
+    f.put('springCrag'+(j%3),u,Math.max(.028,levelAt),v,size*1.24,size*.42,size,
+      j%3?'#a09278':'#827962',p.stone,j*1.82);
+  }
   const stones=retreatStones(s);
   for(const q of stones){
     const scale=q.scanned?.64:1;

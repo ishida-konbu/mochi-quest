@@ -18,10 +18,11 @@ function arrive(p,[x,z]){
   Object.assign(p,{x,z,y:groundHeight(x,z),h:0,vx:0,vz:0,vy:0,speed:0,activity:null,mount:null,grounded:true,hp:32,mp:14});
 }
 
-test('all seven tea houses face a walkable road and serve a complete, repeatable meal on the bench',()=>{
+test('all countryside tea houses face a walkable road and serve a complete, repeatable meal on the bench',()=>{
   const g=createGame(),p=g.state.player;
-  assert.equal(CHAYA_SITES.length,7);
+  assert.equal(CHAYA_SITES.length,9);
   for(const site of CHAYA_SITES){
+    assert.ok(site.tea && site.dango && site.dye);
     const road=sitePoint(site,CHAYA_SEAT.x,10.8),front=sitePoint(site,CHAYA_SEAT.x,3.73);
     assert.ok(nearRoad(...road,1),site.name+' faces its road');
     assert.ok(waterDepth(...front)===0);

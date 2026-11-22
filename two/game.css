@@ -674,7 +674,8 @@ dialog::backdrop {
     right: 16px;
     bottom: max(calc(env(safe-area-inset-bottom) + 80px), 88px);
   }
-  .keyline {
+  .keyline,
+  #context kbd {
     display: none;
   }
   #mini-button {

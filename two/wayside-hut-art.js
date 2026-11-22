@@ -368,12 +368,35 @@ function charcoalGear(s,p,seed){
   for(const x of [-.071,0,.071])p.stroke('#534e43',[[-3.0+x,.23,1.81],[-3.02+x,.12,1.93],[-3.05+x,.10,2.07]],[.024,.019,.012],5);
 }
 
-export function buildWaysideHut(kind,variant=0){
-  const fish=kind==='fisher', seed=Math.abs(variant|0)%3, key=kind+seed;
+// A river fisher sets a split-bamboo trap in the shallows. The funnel opens
+// into a deeper basket; daylight shows through the ribs as it dries on land.
+function riverTraps(p){
+  for(const [x,z,scale] of [[4.75,2.14,1],[5.32,2.06,.82]]){
+    const along=(a,t,funnel=false)=>{
+      const r=scale*(funnel?.28-.20*t:.16+.12*t+.083*sin(PI*t));
+      return [x+r*cos(a),.34*scale+r*sin(a),z+scale*(funnel?.62-.43*t:-.54+1.16*t)];
+    };
+    for(let j=0;j<20;j++){
+      const a=tau*j/20;
+      cord(p,[0,.23,.54,.81,1].map(t=>along(a+.08*t,t)),.013,'#ab925f');
+      cord(p,[0,.46,1].map(t=>along(a+.08,t,true)),.008,'#8c7952');
+    }
+    for(const t of [0,.08,.28,.56,.83,.97,1]){
+      const ring=Array.from({length:21},(_,i)=>along(tau*i/20+.08*t,t));
+      cord(p,ring,t===1?.024:.012,t===1?bark:'#baab7b',20);
+    }
+  }
+}
+
+export function buildWaysideHut(kind,variant=0,bank){
+  const fish=kind==='fisher', seed=Math.abs(variant|0)%3, key=kind+seed+(bank||'');
   if(!cache.has(key)){
     const s=paintedPanels(),p=sculpture();
     cabin(s,p,fish,seed);
-    if(fish){fisherRoof(s,p,seed);fishGear(s,p,seed);}
+    if(fish){
+      fisherRoof(s,p,seed);fishGear(s,p,seed);
+      if(bank==='river')riverTraps(p);
+    }
     else {charcoalRoof(s,p,seed);kiln(s,p,seed);lumber(s,p,seed);charcoalGear(s,p,seed);}
     cache.set(key,[s.finish(),p.finish()]);
   }

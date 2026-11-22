@@ -1,6 +1,5 @@
 import { springLip } from './retreat-layout.js';
 import { bathCraft,regionalBathFittings,inletImpactV } from './regional-bath-fittings.js';
-import { VILLAGE_WATER_HEIGHT } from './village-baths.js';
 import * as T from './vendor/three.module.min.js';
 
 const uniforms = {
@@ -39,7 +38,7 @@ function regionalFinish(craft) {
   m.customProgramCacheKey=()=> 'regional-spring-inlet-v1';
   regionalWater.set(craft,m);return m;
 }
-export function addSpringSurface(parent, rx=1.96, rz=1.56, level=VILLAGE_WATER_HEIGHT, site=null, waterWash=null) {
+export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null, waterWash=null) {
   if (!poolMaterial) {
     disc = new T.CircleGeometry(1, 80);
     disc.rotateX(-Math.PI / 2);

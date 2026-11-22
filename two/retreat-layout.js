@@ -2,6 +2,7 @@
 // collision volumes share the same survey as the signposts on the map.
 import { DISTRICTS, districtPoint } from './geography.js';
 import { REGIONAL_SPRINGS, regionalSpringLip, regionalRimStones } from './regional-springs.js';
+import { bathEnclosureGround, bathEnclosureReserved, addBathEnclosureSolids, waysideBankRocks } from './bath-enclosures.js';
 import { regionalBathFittings } from './regional-bath-fittings.js';
 import { TRADE_ROADS, measureRoute, cartPosition } from './trade-routes.js';
 
@@ -27,17 +28,17 @@ function wayside(id, fraction, offset) {
 // Keep the two retired peach approach numbers vacant.
 const springSurvey=[];
 export const RETREATS=[
-  {...wayside('capital-road',.50,16),name:'杉木立の湯',kind:'cedar',hut:true,rx:4.65,rz:3.55},
-  {...wayside('temple-road',.56,-16),name:'薄明の湯',kind:'reed',rx:5.9,rz:3.08},
-  {...wayside('inari-road',.64,-16),name:'雲間の湯',kind:'slate',rx:5.36,rz:3.30},
-  {x:-127,z:146,yaw:2.42,name:'潮待ちの湯',kind:'coast',hut:true,rx:5.12,rz:3.82},
-  {x:229,z:-172,yaw:.71,name:'楓の岩湯',kind:'maple',rx:4.77,rz:4.02},
+  {...wayside('capital-road',.50,16),name:'杉木立の湯',kind:'cedar',region:'inari',rx:3.22,rz:2.52},
+  {...wayside('temple-road',.56,-16),name:'薄明の湯',kind:'reed',region:'todaiji',rx:3.50,rz:2.49},
+  {x:560,z:-484,yaw:-1.5440,name:'雲間の湯',kind:'slate',region:'inari',rx:3.30,rz:2.51},
+  {x:-127,z:146,yaw:2.42,name:'潮待ちの湯',kind:'coast',region:'coast',rx:3.4,rz:2.53},
+  {x:229,z:-172,yaw:.71,name:'楓の岩湯',kind:'maple',region:'autumn',rx:3.26,rz:2.62},
   ...REGIONAL_SPRINGS,
 ].map(site=>{
   if(springSurvey.length===2 || springSurvey.length===23)springSurvey.push(null);
   const index=springSurvey.length;
   springSurvey.push(site);
-  return {...site,index};
+  return {rank:'sub',...site,index};
 });
 
 export function sitePoint(site,u,v) {
@@ -47,7 +48,7 @@ export function sitePoint(site,u,v) {
 const siteCells=new Map();
 for (const s of RETREATS) {
   // Beyond this rectangle bathTerrain has fully blended back to native ground.
-  const reach=s.regional ? Math.ceil(Math.max(s.rx,s.rz)*1.32*1.86) : 14;
+  const reach=Math.max(14,Math.ceil(Math.max(s.rx,s.rz)*1.32*1.86),Math.ceil(s.rz*1.25+8));
   const entry={site:s,reach2:reach*reach};
   for(let a=Math.floor((s.x-reach)/32);a<=Math.floor((s.x+reach)/32);a++)
     for(let b=Math.floor((s.z-reach)/32);b<=Math.floor((s.z+reach)/32);b++){
@@ -80,12 +81,11 @@ export function reservedScenery(x,z) {
   const {west,east,north,south}=COURT_PRECINCT;
   if(x>west && x<east && z>north && z<south)return true;
   const s=nearbyRetreat(x,z);
-  if(s?.regional){
-    const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
-    const u=dx*c-dz*k,v=dx*k+dz*c;
-    return bathRadius(s,x,z)<1.38 || (Math.abs(u)<2.5 && v>=0 && v<s.rz+4.9);
-  }
-  return !!s && Math.hypot(s.x-x,s.z-z)<(s.hut?9.6:7.1);
+  if(!s)return false;
+  const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
+  const u=dx*c-dz*k,v=dx*k+dz*c;
+  return (!s.regional && Math.hypot(dx,dz)<5.15) || bathRadius(s,x,z)<1.38 || (Math.abs(u)<2.5 && v>=0 && v<s.rz+4.9) ||
+    bathEnclosureReserved(s,u,v);
 }
 const ease=n=>{const t=Math.min(1,Math.max(0,n));return t*t*(3-2*t);};
 export function courtTerrain(x,z,native,base) {
@@ -104,18 +104,15 @@ export function bathTerrain(s,x,z,native,level) {
   // A shallow submerged seat rises into a gravel beach at the entrance.
   // The smaller, lobed pools keep a low shelf under the bank stones. The
   // painted terrain interpolates these vertices across two-metre triangles.
-  if(s.regional){
-    const shelf=level-.52+.531*ease((r-.77)/.32);
-    return shelf+(native-shelf)*ease((r-1.24)/.62);
-  }
-  const cut=level-.52+.64*ease((r-.68)/.40);
-  let ground=cut+(native-cut)*ease((r-1.10)/.76);
-  if(s.hut) {
-    const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
-    const edge=Math.max(Math.abs(dx*c-dz*k)-3.1,Math.abs(dx*k+dz*c+5.2)-1.4);
-    ground+=(level+.05-ground)*(1-ease(edge/1.2));
-  }
-  return ground;
+  // A gravel shore rises through the waterline and stays level for a step
+  // before the hillside resumes. Its width is in metres on baths of either rank.
+  const radialMetres=Math.hypot(x-s.x,z-s.z);
+  const edge=r>0 ? radialMetres*(1-1/r) : -s.rz;
+  const shore=level-.52+.65*ease((edge+1.08)/2.38);
+  const ground=shore+(native-shore)*ease((edge-1.22)/2.72);
+  const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
+  const apron=bathEnclosureGround(s,dx*c-dz*k,dx*k+dz*c);
+  return ground+(level+.026-ground)*apron*ease((r-.85)/.23);
 }
 export function retreatStones(s) {
   if(s.regional)return regionalRimStones(s);
@@ -180,17 +177,9 @@ export function civicAndBathSolids(height,put) {
       add(inlet.u,inlet.v+.04,1.18,1.92,inlet.h,'box',true).bottom=level+.62;
       add(sign.u,sign.v-.07,.13,.13,1.33,'wall');
       add(sign.u,sign.v,sign.w,sign.d,sign.h,'wall').bottom=level+.89;
-    } else if(s.kind==='slate'||s.kind==='maple'){
-      for(let i=0;i<9;i++){
-        const u=-4.3+.83*i,v=-4.15-.35*Math.cos(i*.7),h=(1+.58*Math.sin(i*.64))*(s.kind==='slate'?1.8:1);
-        add(u,v,2.3,1.92,1.17*h,'oval',true,i*.17);
-      }
+    }else{
+      for(const q of waysideBankRocks(s))add(q.u,q.v,2*q.w,2*q.d,1.20*q.h,'oval',true,q.yaw);
     }
-    if(!s.hut)continue;
-    for(const u of [-2.9,2.9])for(const v of [-6.5,-3.9])add(u,v,.20,.20,3.31,'wall');
-    add(0,-6.53,5.9,.15,2.85,'wall');
-    add(0,-5.2,6.35,3.1,.27,'floor',true);
-    add(0,-5.2,7.2,4.4,3.30,'ceiling');
-    add(0,-5.2,7.2,4.4,3.35,'roof',true).roofRise=1.64;
+    addBathEnclosureSolids(s,add);
   }
 }
