@@ -6,7 +6,7 @@ import { DISTRICTS } from './geography.js';
 const districts = [
   ...SEAPORTS.map(p=>[p.x,p.z,94,81]),
   [DISTRICTS.kyo.x,DISTRICTS.kyo.z-6,157,156],
-  [DISTRICTS.peach.x,DISTRICTS.peach.z,202,162],
+  [DISTRICTS.peach.x+24,DISTRICTS.peach.z-23,312,212],
   [DISTRICTS.ryugu.x+12,DISTRICTS.ryugu.z,94,66],
   [DISTRICTS.todaiji.x,DISTRICTS.todaiji.z,88,77],
   [DISTRICTS.inari.x-63,DISTRICTS.inari.z+113,304,210],

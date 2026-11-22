@@ -24,7 +24,7 @@ function itinerary(road,origin,destination,lane,first,last) {
   const points=road.points.slice(first?stopIndex(road,first):0,last?stopIndex(road,last)+1:undefined);
   const xs=points.map(p=>p[0]),zs=points.map(p=>p[1]);
   const bounds={west:Math.min(...xs),east:Math.max(...xs),north:Math.min(...zs),south:Math.max(...zs)};
-  return {...measureRoute(points),origin,destination,lane,width:road.width,bounds};
+  return {...measureRoute(points),origin,destination,lane,width:road.width,bounds,merchants:road.merchants};
 }
 export const MERCHANT_ROUTES=[
   // The western bridge has a skewed approach and inset timber rails.
@@ -37,7 +37,7 @@ export const MERCHANT_ROUTES=[
 // Same pace on each road keeps neighbours from overtaking in a narrow pass.
 // The two halves of each period already contain the outward and return trips.
 export const ROAD_MERCHANTS=MERCHANT_ROUTES.flatMap((route,index)=>{
-  const count=Math.max(2,Math.ceil(route.length/110)),speed=.94+(index%4)*.09;
+  const count=route.merchants ?? Math.max(2,Math.ceil(route.length/110)),speed=.94+(index%4)*.09;
   const period=2*(route.length/speed+townStop);
   return Array.from({length:count},(_,i)=>({
     route,speed,offset:period*((.073+index*.317+i/count)%1),

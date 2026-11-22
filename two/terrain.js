@@ -1,12 +1,12 @@
-import { nearbyHut, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
+import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
 import { HIGASHIYAMA, KITAYAMA, FIRE_COAST, eastRidgeHeight, northRidgeHeight, inFireMeadow } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
-import { DISTRICTS, districtPoint, WORLD_BOUND, wrapWorld } from './geography.js';
+import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
 import { RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
-import { CEDAR_GROVES, INARI_ROUTE, PEACH_TREES, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
+import { CEDAR_GROVES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS } from './trade-routes.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
@@ -97,6 +97,8 @@ export const PENINSULAS = [
   [394,-547,249,214], [433,-641,166,141], [316,-402,192,148],
   [-304,-91,178,86], [-502,-142,230,101], [-714,-170,224,137], [-782,-187,198,153],
   [-913,-218,158,145], [-881,-306,163,121], [-746,-301,147,107],
+  // A mountain coast shelves into the sea around the extended peach watershed.
+  [-704,-269,248,122],[-575,-229,165,89],[-811,-101,203,145],[-661,-122,181,148],
   [112,382,210,166], [193,497,156,181], [256,616,180,165],
   [336,707,177,163], [427,837,181,175],
   // Pine-covered islets flank the Ryugu sea lane, with open water between.
@@ -227,6 +229,17 @@ export function terrainHeight(x,z) {
   const r = springRadius(x,z);
   const bed = SNOW_SPRING.level-.61+smooth(.70,1.03,r)*.87;
   return bed+(native-bed)*smooth(1.08,1.60,r);
+}
+// Root a plant on the actual painted triangle. Across the crease of a rocky
+// spur the analytic surface can differ visibly from its sampled vertices.
+const groundSpacing=2*BOUND/(TERRAIN_TILES*TERRAIN_SUBDIVISIONS);
+export function terrainMeshHeight(x,z) {
+  const left=Math.floor((x+BOUND)/groundSpacing)*groundSpacing-BOUND;
+  const north=Math.floor((z+BOUND)/groundSpacing)*groundSpacing-BOUND;
+  const u=(x-left)/groundSpacing,v=(z-north)/groundSpacing;
+  const east=terrainHeight(left+groundSpacing,north),south=terrainHeight(left,north+groundSpacing);
+  return u+v<=1 ? terrainHeight(left,north)*(1-u-v)+east*u+south*v :
+    terrainHeight(left+groundSpacing,north+groundSpacing)*(u+v-1)+east*(1-v)+south*(1-u);
 }
 // Street processions follow the stone walking level beneath the gatehouse.
 export function roadSurfaceHeight(x,z) {
@@ -666,8 +679,8 @@ for (const t of emptySites) {
 }
 // Add new roads after laying out the established groves. Clear only the
 // actual verges of the connecting roads, preserving old woodland elsewhere.
-export const CONNECTING_ROADS = TRADE_ROADS.map(({width,knots,destination,origin})=>({
-  ...road(width,knots),destination,origin,
+export const CONNECTING_ROADS = TRADE_ROADS.map(({width,knots,destination,origin,merchants})=>({
+  ...road(width,knots),destination,origin,merchants,
 }));
 const extensions = [...CONNECTING_ROADS, ...KYO_ROADS.map(([width,knots,paved])=>({...road(width,knots),paved})), {width:3.7,points:INARI_ROUTE}];
 for (const avenue of extensions) { ROADS.push(avenue); indexRoad(avenue); }
@@ -680,8 +693,7 @@ const saplings = seeded(0x5c311);
 function transplant(x,z,family) {
   if(abs(x-RASHOMON.x)<19 && abs(z-RASHOMON.z)<29)return false;
   if(portReserved(x,z)||reservedScenery(x,z)||inFireMeadow(x,z))return false;
-  if(abs(x-DISTRICTS.peach.x)<220 && abs(z-DISTRICTS.peach.z)<180 &&
-    PEACH_TREES.some(t=>(x-t.x)**2+(z-t.z)**2<25))return false;
+  if(nearPeachTrunk(x,z,5))return false;
   if (shoreDistance(x,z)<10 || landHeight(x,z)<2 || nearRoad(x,z,3.1) ||
       abs(z-riverZ(x))-riverHalfWidth(x)<11 || safe(x,z,6) ||
       BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4.5) ||
@@ -793,6 +805,12 @@ for(const s of RETREATS){
   }
 }
 ROCKS.push(...offshoreReefs(terrainHeight,shoreDistance,seeded(0x687063)));
+// Respect the same surveyed yards whatever the seeded planting sequence.
+// Cut after planting so a cleared trunk does not reshuffle distant woods.
+for(let i=TREES.length-1;i>=0;i--){
+  const {x,z}=TREES[i],hut=nearbyHut(x,z);
+  if(hut && (hypot(x-hut.x,z-hut.z)<=8 || inHutYard(x,z))) TREES.splice(i,1);
+}
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
 // The shrine's small bamboo stands are planted individually between its

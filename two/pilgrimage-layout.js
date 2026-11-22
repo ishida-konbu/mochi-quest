@@ -1,7 +1,9 @@
 // Shared by terrain, collision, map paths, and the painted landmarks.
 // Positive local Z points out of the temple, toward an approaching pilgrim.
+import { peachRangeHeight, PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { DISTRICTS, DISTRICT_SHIFT } from './geography.js';
 import { TRADE_ROADS } from './trade-routes.js';
+import { reservedScenery } from './retreat-layout.js';
 
 const { PI, sin, cos, abs, hypot, min, max, exp } = Math;
 const clamp01 = x => min(1, max(0, x));
@@ -62,49 +64,9 @@ const ridgeHeads=[
   [-286,160,61,32,-1.05,27],[-229,207,48,23,-.94,23],[-176,247,35,19,-.71,16],
   [39,-7,55,22,.54,35],[92,51,64,22,.85,27],[116,103,40,17,1.03,19],
 ].map(([x,z,w,d,a,h])=>({x,z,w,d,h,c:cos(a),s:sin(a),extent:hypot(w,d)}));
-// The western divide bends north behind the orchard. Each summit sits on
-// its own shoulder; passes cut across the spine toward the outer foothills.
-const peachRidgelines=[
-  [-126,0,126,52,-1.22,52],[-72,-86,141,51,-.34,45],[-149,-94,93,67,.42,28],
-  [-143,54,88,40,-1.11,24],[-79,-103,69,36,-.49,47],[-156,-42,58,36,-.99,43],
-  [17,-100,79,34,.25,43],[-181,20,46,33,-.96,23],[77,-77,69,29,.76,24],
-  [-193,-68,48,29,-.42,-17],[-119,-79,40,22,-.91,-16],[8,-133,54,24,.38,-14],
-].map(([x,z,w,d,a,h])=>({x,z,w,d,c:cos(a),s:sin(a),h}));
-function peachRange(x,z,base) {
-  const dx=x-PEACH.x,dz=z-PEACH.z,a=dx/123,b=dz/108,r=hypot(a,b);
-  const angle=Math.atan2(b,a),gate=ease((abs(angle)-.24)/.64);
-  let ridges=0;
-  for(const peak of peachRidgelines){
-    const u=dx-peak.x+21,v=dz-peak.z+13;
-    const along=(u*peak.c+v*peak.s)/peak.w,side=(v*peak.c-u*peak.s)/peak.d;
-    ridges+=peak.h*exp(-(along*along+side*side));
-  }
-  const apron=ease((r-.51-.08*sin(2*angle))/.71)*gate;
-  const limit=ease((dx+311)/53)*ease((227-dx)/50)*ease((dz+253)/53)*ease((191-dz)/43);
-  const folds=(2.5*cos(dx*.064+dz*.045)+1.6*sin(dz*.091-dx*.073))*ease(ridges/42);
-  const massif=.86*max(0,ridges+folds)*apron*limit;
-  if(r>=1.3)return base+massif;
-
-  // Low blades of exposed rock sit in broad, overlapping buttresses. Keep
-  // the eastern approach and the floor of the orchard below the first ridge.
-  const ridge=.77+.071*sin(5*angle)+.056*cos(3*angle);
-  const peaks=.61+.30*sin(5*angle+.65)+.17*cos(9*angle);
-  const buttress=exp(-((r-ridge)**2)/.057)*(14+13*peaks)*gate*ease((r-.40)/.34);
-  let bluff=0;
-  if(r>.42 && r<1.25)for(const c of crags){
-    const u=x-c.x,v=z-c.z;
-    if(abs(u)>53 || abs(v)>53)continue;
-    const across=(-u*c.sa+v*c.ca)/c.width, along=(u*c.ca+v*c.sa)/c.depth;
-    const q=hypot(across+.14*along,along);
-    const crown=.67*(1-ease(q))+.33*(1-ease((q-.26)/.52));
-    bluff=max(bluff,c.h*crown*gate);
-  }
-  const basin=5.3+2.2*sin(a*5+.3)*cos(b*6)+3.5*r;
-  return mix(base,basin+buttress+bluff,ease((1.3-r)/.33))+massif;
-}
 export function pilgrimageHeight(x, z, base) {
-  if(x>PEACH.x-311 && x<PEACH.x+227 && z>PEACH.z-253 && z<PEACH.z+191)
-    return peachRange(x,z,base);
+  const {west,east,north,south}=PEACH_RANGE_BOUNDS;
+  if(x>west && x<east && z>north && z<south)return peachRangeHeight(x,z,base);
   // An undulating watershed above the pilgrimage road. Overlapping lobes
   // carry the main divide into subsidiary ridges, open saddles and valleys.
   const dx=x-inari.x, dz=z-inari.z;
@@ -192,51 +154,124 @@ function alongPass(x,z,knots,radius) {
 const peachPass=TRADE_ROADS.find(r=>r.id==='peach-pass').knots;
 const inariApproach=TRADE_ROADS.find(r=>r.id==='inari-road').knots;
 export const MOON_GATE={x:PEACH.x-15,z:PEACH.z};
-function orchard() {
-  let state=634711;
-  const rand = () => (state=(Math.imul(state,1664525)+1013904223)>>>0)/4294967296;
-  const trees=[];
-  for(let i=0;i<430;i++){
-    const u = (rand()-.5)*174, v = (rand()-.5)*135;
-    if(hypot(u/83,v/66)>1 || hypot(u,v)<10 || abs(v-3*sin(u/13))<3.9) continue;
-    if(alongPass(PEACH.x+u,PEACH.z+v,peachPass,4.6) ||
-      hypot(PEACH.x+u-MOON_GATE.x,PEACH.z+v-MOON_GATE.z)<9) continue;
-    const wx=PEACH.x+u,wz=PEACH.z+v,ground=pilgrimageHeight(wx,wz,5);
-    if(ground>17 && hypot(pilgrimageHeight(wx+1,wz,5)-ground,pilgrimageHeight(wx,wz+1,5)-ground)>.78) continue;
-    if(trees.some(q=>(q.x-PEACH.x-u)**2+(q.z-PEACH.z-v)**2<27)) continue;
-    trees.push({x:PEACH.x+u,z:PEACH.z+v,size: .76+rand()*.63,turn:rand()*PI*2,seed:i+4493});
-  }
-  // The ancient tree at the moon gate is a separate sculpture. Include it
-  // in the census when tripling the original orchard; retain every old trunk.
-  const target=(trees.length+1)*3-1;
-  const clearings=[[6,-3,9],[-13,7,7],[-32,-12,7],[40,-10,7],[15,-26,6]];
-  const floorTarget=target-162;
-  for(let attempt=0;trees.length<target && attempt<30000;attempt++){
-    const cliff=trees.length>=floorTarget;
-    let u,v;
-    if(cliff){
-      // Groups of five to ten follow separate shelves. Vary their height
-      // between the inner cliff and the receding western and northern ridges.
-      const c=crags[(Math.floor(attempt/8)*7)%crags.length];
-      const d=.73+rand()*.86;
-      u=(c.x-PEACH.x)*d+(rand()-.5)*24;
-      v=(c.z-PEACH.z)*d+(rand()-.5)*19;
-    }else{
-      u=(rand()-.5)*195;v=(rand()-.5)*153;
-      if(hypot(u/94,v/73)>1 || hypot(u,v)<11 || abs(v-3*sin(u/13))<4.0)continue;
+// The same local stand index keeps planted trunks apart, clears the wild
+// woodland crew's sites, and finds the flowering canopy above a traveller.
+const peachCells=new Map(),peachCell=16;
+function visitPeaches(x,z,r,visit){
+  for(let col=Math.floor((x-r)/peachCell);col<=Math.floor((x+r)/peachCell);col++){
+    for(let row=Math.floor((z-r)/peachCell);row<=Math.floor((z+r)/peachCell);row++){
+      const stand=peachCells.get(col*512+row);
+      if(stand)for(const tree of stand){
+        if((x-tree.x)**2+(z-tree.z)**2<r*r && visit(tree))return true;
+      }
     }
-    const x=PEACH.x+u,z=PEACH.z+v,h=pilgrimageHeight(x,z,5);
-    const slope=hypot(pilgrimageHeight(x+.7,z,5)-h,pilgrimageHeight(x,z+.7,5)-h)/.7;
-    if(cliff ? h<21 || slope>1.65 : slope>.72 || h>24)continue;
-    if(alongPass(x,z,peachPass,4.8) || hypot(x-MOON_GATE.x,z-MOON_GATE.z)<9 ||
-      clearings.some(([a,b,r])=>hypot(u-a,v-b)<r) || CLIFF_PINES.some(q=>hypot(x-q.x,z-q.z)<3))continue;
-    const spacing=cliff?5.3:4.65;
-    if(trees.some(q=>(x-q.x)**2+(z-q.z)**2<spacing*spacing))continue;
-    trees.push({x,z,cliff,size:cliff?.72+rand()*.75:.78+rand()*.67,turn:rand()*2*PI,seed:19342+attempt});
+  }
+  return false;
+}
+export const nearPeachTrunk=(x,z,r)=>visitPeaches(x,z,r,()=>true);
+export function nearbyPeaches(x,z,r,visit){visitPeaches(x,z,r,tree=>{visit(tree);return false;});}
+
+function orchard(){
+  let state=634711;
+  const rand=()=>(state=(Math.imul(state,1664525)+1013904223)>>>0)/4294967296;
+  const trees=[],clearings=[[6,-3,9],[-13,7,7],[-32,-12,7],[40,-10,7],[15,-26,6]];
+  function plant(tree){
+    const key=Math.floor(tree.x/peachCell)*512+Math.floor(tree.z/peachCell);
+    if(!peachCells.has(key))peachCells.set(key,[]);
+    peachCells.get(key).push(tree);trees.push(tree);
+  }
+  function occupied(x,z,spacing){
+    return nearPeachTrunk(x,z,spacing) || alongPass(x,z,peachPass,5.3) ||
+      hypot(x-MOON_GATE.x,z-MOON_GATE.z)<9 || reservedScenery(x,z) ||
+      clearings.some(([u,v,r])=>hypot(x-PEACH.x-u,z-PEACH.z-v)<r) ||
+      CLIFF_PINES.some(q=>(x-q.x)**2+(z-q.z)**2<12);
+  }
+  function slope(x,z){
+    return .5*hypot(pilgrimageHeight(x+1,z,5)-pilgrimageHeight(x-1,z,5),
+      pilgrimageHeight(x,z+1,5)-pilgrimageHeight(x,z-1,5));
+  }
+  // A loose orchard on both banks leaves the moon gate, bout and picnics open.
+  for(let attempt=0;trees.length<263 && attempt<4500;attempt++){
+    const u=(rand()-.5)*188,v=(rand()-.5)*146,x=PEACH.x+u,z=PEACH.z+v;
+    if(hypot(u/94,v/73)>1 || hypot(u,v)<10 || abs(v-3*sin(u/13))<3.9 ||
+      occupied(x,z,4.9) || pilgrimageHeight(x,z,5)>26 || slope(x,z)>.73)continue;
+    plant({x,z,size:.76+rand()*.67,turn:rand()*PI*2,seed:attempt+4493});
+  }
+  // Independent colonies on the shelves of the original inner crags.
+  let ledges=0;
+  for(let attempt=0;ledges<162 && attempt<7000;attempt++){
+    const c=crags[(Math.floor(attempt/8)*7)%crags.length],d=.73+rand()*.84;
+    const x=PEACH.x+(c.x-PEACH.x)*d+(rand()-.5)*24,z=PEACH.z+(c.z-PEACH.z)*d+(rand()-.5)*19;
+    if(occupied(x,z,5.2) || pilgrimageHeight(x,z,5)<19 || slope(x,z)>1.36)continue;
+    plant({x,z,cliff:true,size:.75+rand()*.69,turn:rand()*2*PI,seed:19342+attempt});ledges++;
+  }
+  // Stands follow the shoulder contours, curling into the lateral gullies.
+  // The ridgeline alternates rose, pale double-flowered trees and exposed rock.
+  const stands=[
+    [-143,-34,48,20],[-175,-75,36,17],[-107,-79,43,19],[-61,-97,51,22],
+    [-23,-75,36,18],[23,-91,51,21],[66,-112,43,19],[106,-76,42,18],
+    [135,-104,39,17],[178,-76,55,21],[212,-48,47,16],[251,-27,29,12],
+    [-176,29,39,17],[-134,55,44,18],[-96,75,39,16],[-63,99,40,19],
+    [-33,68,42,18],[12,83,47,18],[64,92,49,20],[113,80,46,20],
+    [151,71,44,19],[199,55,47,20],[239,24,34,14],
+    [66,-38,32,16],[87,-11,38,19],[105,10,30,13],
+    [85,53,34,16],[130,33,37,17],[157,9,38,17],[170,-33,39,17],
+    [-135,-124,39,18],[-89,-142,43,16],[-43,-132,42,16],[35,-141,39,15],
+  ];
+  for(const [band,[u,v,length,width]] of stands.entries()){
+    const cx=PEACH.x+u,cz=PEACH.z+v;
+    const gx=pilgrimageHeight(cx+3,cz,5)-pilgrimageHeight(cx-3,cz,5);
+    const gz=pilgrimageHeight(cx,cz+3,5)-pilgrimageHeight(cx,cz-3,5);
+    const heading=Math.atan2(-gx,gz),c=cos(heading),s=sin(heading);
+    const dye=Math.floor(rand()*5),count=Math.round(length*width/20);
+    let accepted=0;
+    for(let i=0;accepted<count && i<240;i++){
+      const arc=rand()*PI*2,r=Math.sqrt(rand()),along=cos(arc)*r;
+      const across=sin(arc)*r*width+width*.28*sin(along*3.2+band);
+      const x=cx+along*length*c-across*s,z=cz+along*length*s+across*c;
+      if(occupied(x,z,4.8))continue;
+      const h=pilgrimageHeight(x,z,5),grade=slope(x,z);
+      if(h<15 || grade>1.28 || (h>105 && rand()<.35))continue;
+      const wayside=alongPass(x,z,peachPass,21);
+      const size=(.83+rand()*.69)*(1-.18*clamp01((h-64)/75));
+      plant({x,z,cliff:true,upland:true,wayside,size,turn:rand()*PI*2,
+        tint:rand()<.68?dye:Math.floor(rand()*6),seed:80001+band*240+i});
+      accepted++;
+    }
+  }
+  // Wild peaches spill down fissures on the steep faces. These narrow
+  // colonies interrupt the skyline bands; the intervening cliffs stay bare.
+  const gullies=[
+    [[-91,-40],[-88,-58],[-76,-86]], [[-46,-38],[-37,-58],[-49,-82]],
+    [[-8,-42],[3,-60],[25,-84]], [[42,-38],[53,-53],[65,-78]],
+    [[-85,34],[-94,49],[-91,76]], [[-39,39],[-29,58],[-43,82]],
+    [[13,39],[25,55],[35,80]], [[55,43],[60,61],[81,78]],
+    [[58,2],[71,-13],[81,-43]], [[108,27],[98,12],[94,-15]],
+    [[125,-19],[112,-35],[105,-56]], [[116,35],[131,46],[137,66]],
+    [[132,2],[141,18],[157,44]], [[162,-29],[174,-48],[188,-68]],
+    [[186,13],[199,-6],[208,-38]], [[202,33],[203,49],[219,68]],
+    [[-87,7],[-104,-2],[-124,-21]], [[-71,26],[-92,28],[-115,37]],
+  ];
+  for(const [gully,course] of gullies.entries()){
+    const dye=(gully+2)%5;
+    let planted=0;
+    for(let i=0;i<200 && planted<33;i++){
+      const span=rand()*2,leg=Math.floor(span),t=span-leg;
+      const [ax,az]=course[leg],[bx,bz]=course[leg+1],dx=bx-ax,dz=bz-az;
+      const drift=(rand()-.5)*(13+13*sin(PI*span/2))/hypot(dx,dz);
+      const x=PEACH.x+ax+dx*t+dz*drift,z=PEACH.z+az+dz*t-dx*drift;
+      if(occupied(x,z,4.25))continue;
+      const h=pilgrimageHeight(x,z,5),grade=slope(x,z);
+      if(h<15 || grade<.42 || grade>2.38)continue;
+      const size=.82+rand()*.48;
+      plant({x,z,cliff:true,upland:true,wayside:alongPass(x,z,peachPass,21),size,
+        turn:rand()*PI*2,tint:rand()<.65?dye:Math.floor(rand()*6),seed:97021+gully*200+i});
+      planted++;
+    }
   }
   return trees;
 }
-export const PEACH_TREES = orchard();
+export const PEACH_TREES=orchard();
 export const TEMPLE_COLUMNS = [-16,-11,11,16].flatMap(x=>[-10,0,10].map(z=>[x,z]));
 // Cedar woods run beside the switchbacks. The central walk, shrine apron,
 // stone stamp table and the three wedding clearings stay open.

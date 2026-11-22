@@ -70,14 +70,22 @@ test('the peach orchard lies inside a mountain range with a low eastern pass',()
   }
 });
 
-test('the original peach valley and its surrounding bluffs support three times the flowering trees',()=>{
-  assert.equal(PEACH_TREES.length+1,3*142); // The moon gate's ancient peach is separately modeled.
-  const cliffs=PEACH_TREES.filter(t=>t.cliff);
-  assert.equal(cliffs.length,162);
-  const heights=cliffs.map(t=>terrainHeight(t.x,t.z));
-  assert.ok(Math.max(...heights)-Math.min(...heights)>35);
+test('flowering peach colonies follow the wooded slopes and gorge while keeping the moon gate and spring open',()=>{
+  const mountain=PEACH_TREES.filter(t=>t.upland),basin=PEACH_TREES.filter(t=>!t.cliff);
+  const centre=DISTRICTS.peach,spring=RETREATS.find(s=>s.kind==='peach'),aspects=new Array(8).fill(0);
+  const heights=mountain.map(t=>terrainHeight(t.x,t.z));
+  assert.ok(basin.length>=200 && mountain.length>=600);
+  assert.ok(heights.filter(y=>y>80).length>=100 && heights.filter(y=>y>30 && y<60).length>=70);
+  assert.ok(mountain.filter(t=>t.wayside).length>=40);
+  for(const t of mountain){
+    const a=Math.atan2(t.z-centre.z,t.x-centre.x)+Math.PI;
+    aspects[Math.floor(a*4/Math.PI)%8]++;
+  }
+  assert.ok(aspects.every(n=>n>=25),'blooming slopes in all eight directions: '+aspects);
   for(const t of PEACH_TREES){
     assert.ok(Math.hypot(t.x-MOON_GATE.x,t.z-MOON_GATE.z)>8.9);
+    assert.ok(Math.hypot(t.x-spring.x,t.z-spring.z)>9.5);
+    assert.equal(waterDepth(t.x,t.z),0);
     assert.ok(terrainHeight(t.x,t.z)>0);
   }
 });

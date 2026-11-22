@@ -1,3 +1,4 @@
+import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { DAIBUTSU, INARI_SANCTUARY, PEACH_TREES } from './pilgrimage-layout.js';
 import { PALACE_APPROACH, RYUGU, HALLS, GATE_V } from './ryugu-layout.js';
 import { DISTRICTS } from './geography.js';
@@ -20,7 +21,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=roadside-1', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=peach-gorge', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -62,11 +63,12 @@ export function paintMapPaper() {
   const cells=Math.ceil(SPAN/step),stride=cells+1,heights=new Float32Array(stride*stride);
   for(let j=0;j<=cells;j++)for(let i=0;i<=cells;i++)
     heights[j*stride+i]=terrainHeight(i*step-BOUND,j*step-BOUND);
-  const contours=new Path2D();
+  const contours=new Path2D(),peach=PEACH_RANGE_BOUNDS;
   for (let j=0;j<cells;j++) for (let i=0;i<cells;i++) {
     const x=i*step-BOUND,z=j*step-BOUND,idx=j*stride+i;
     const a=heights[idx], b=heights[idx+stride+1];
-    const inRanges=z<DISTRICTS.kyo.z+140 && (Math.abs(x-KITAYAMA.x)<380 && z<DISTRICTS.kyo.z-75 ||
+    const inRanges=(x>peach.west && x<peach.east && z>peach.north && z<peach.south) ||
+      z<DISTRICTS.kyo.z+140 && (Math.abs(x-KITAYAMA.x)<380 && z<DISTRICTS.kyo.z-75 ||
       Math.abs(z-HIGASHIYAMA.z)<320 && x>DISTRICTS.kyo.x+115);
     if (a < WATER_Y) {
       const depth = Math.min(1, Math.max(0, -a / 28));

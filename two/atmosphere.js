@@ -182,8 +182,9 @@ export function createAtmosphere(scene) {
         .lerp(palette.dawnFog, s.dawn);
       // Keep a distinct near slope, middle spur and pale far divide above
       // the valley mist. Fade the painted horizon behind the real mountains.
-      const mountainDistance=Math.min(
-        Math.hypot((player.x-DISTRICTS.peach.x+55)/244,(player.z-DISTRICTS.peach.z+42)/184),
+      const peachDistance=Math.hypot((player.x-DISTRICTS.peach.x-24)/318,(player.z-DISTRICTS.peach.z+23)/210);
+      const peachAir=1-THREE.MathUtils.smoothstep(peachDistance,.66,1.20);
+      const mountainDistance=Math.min(peachDistance,
         Math.hypot((player.x-DISTRICTS.inari.x+88)/292,(player.z-DISTRICTS.inari.z-99)/206));
       const mountain=1-THREE.MathUtils.smoothstep(mountainDistance,.6,1.35);
       const clearAir=mountain*(.67+.33*THREE.MathUtils.smoothstep(player.y,8,65));
@@ -196,8 +197,8 @@ export function createAtmosphere(scene) {
         const facing=-(dx*view[8]+dz*view[10])/Math.max(1,range);
         hillView=Math.max(hillView,(1-THREE.MathUtils.smoothstep(range,495,650))*THREE.MathUtils.smoothstep(facing,.26,.79));
       }
-      dome.material.uniforms.horizonInk.value=1-.42*Math.max(clearAir,hillView);
-      scene.fog.density = 0.0057 - Math.max(.0025*clearAir,.00415*hillView) + 0.003 * s.snow - 0.0008 * s.dawn;
+      dome.material.uniforms.horizonInk.value=1-Math.max(.70*peachAir,.42*clearAir,.42*hillView);
+      scene.fog.density = 0.0057 - Math.max(.0033*peachAir,.0025*clearAir,.00415*hillView) + 0.003 * s.snow - 0.0008 * s.dawn;
       scene.environmentIntensity = 0.67 - 0.51 * s.moon;
     },
   };

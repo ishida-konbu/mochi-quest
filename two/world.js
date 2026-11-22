@@ -8,6 +8,7 @@ import { createOceanShips } from './ocean-ship-art.js';
 import { dressWardShop } from './kyo-market.js';
 import { dressOutcrops } from './outcrops.js';
 import { DISTRICTS,TERRAIN_TILES,TERRAIN_SUBDIVISIONS } from './geography.js';
+import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { scrollCoverage } from './scroll-paper.js';
 import { createKyo, kyoPavingMaterial } from './kyo.js';
 import { dressPilgrimage, pilgrimageLife } from './pilgrimage.js';
@@ -135,6 +136,8 @@ function* landscape(scene, art) {
     const deep=shoreDistance(midX,midZ)<-span*1.6 &&
       Math.hypot(midX-DISTRICTS.ryugu.x,midZ-DISTRICTS.ryugu.z)>span*1.8;
     const grid=deep ? 1 : TERRAIN_SUBDIVISIONS;
+    const range=PEACH_RANGE_BOUNDS;
+    const peachTile=midX+span/2>range.west && midX-span/2<range.east && midZ+span/2>range.north && midZ-span/2<range.south;
     const p=[], ix=[], uv=[], col=[], surface=[], seasons=[], scroll=[], ridges=[];
     for (let j=0; j<=grid; j++) for (let i=0; i<=grid; i++) {
       const x=(column+i/grid)*span-BOUND, z=(row+j/grid)*span-BOUND, y=h(x,z);
@@ -175,9 +178,22 @@ function* landscape(scene, art) {
     ground.setAttribute('terrainMix',new THREE.Float32BufferAttribute(surface,2));
     ground.setAttribute('scrollAmount',new THREE.Float32BufferAttribute(scroll,1));
     ground.setAttribute('seasons',new THREE.Float32BufferAttribute(seasons,4));
+    // Adjacent tiles compute their own normals. Sample both sides at the
+    // join so a sunlit rock face stays continuous across the tile boundary.
+    if(peachTile && !deep){
+      const step=span/grid,normals=ground.attributes.normal;
+      function seamNormal(i,j){
+        const v=j*(grid+1)+i,x=p[v*3],z=p[v*3+2];
+        const nx=h(x-step,z)-h(x+step,z),nz=h(x,z-step)-h(x,z+step),ny=2*step;
+        const length=Math.hypot(nx,ny,nz);
+        normals.setXYZ(v,nx/length,ny/length,nz/length);
+      }
+      for(let i=0;i<=grid;i++){seamNormal(i,0);seamNormal(i,grid);}
+      for(let j=1;j<grid;j++){seamNormal(0,j);seamNormal(grid,j);}
+    }
     const land=new THREE.Mesh(ground,mat);
     land.receiveShadow=true;
-    land.userData.range=eastRidgeHeight(midX,midZ)+northRidgeHeight(midX,midZ)>0?710:475;
+    land.userData.range=peachTile || eastRidgeHeight(midX,midZ)+northRidgeHeight(midX,midZ)>0?710:475;
     scene.add(land);
     yield;
   }

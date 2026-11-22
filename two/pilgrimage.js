@@ -7,8 +7,8 @@ import { paintPeachCliffs } from './pilgrimage-cliffs.js';
 import { foxParties } from './pilgrimage-foxes.js';
 import { brushWash, surfaceGrain } from './scroll-sculpt.js';
 import * as T from './vendor/three.module.min.js';
-import { terrainHeight, seeded, wrapDelta } from './terrain.js';
-import { DAIBUTSU, PEACH, PEACH_TREES, WEDDING_SITES, weddingPoint, MOON_GATE, INARI_GATES, INARI_SANCTUARY, TEMPLE_COLUMNS } from './pilgrimage-layout.js';
+import { terrainHeight, terrainMeshHeight, seeded, wrapDelta } from './terrain.js';
+import { DAIBUTSU, PEACH, PEACH_TREES, nearbyPeaches, WEDDING_SITES, weddingPoint, MOON_GATE, INARI_GATES, INARI_SANCTUARY, TEMPLE_COLUMNS } from './pilgrimage-layout.js';
 
 const { sin,cos,PI,abs,hypot,min,max } = Math, TAU=PI*2;
 const vec=(...v)=>new T.Vector3(...v);
@@ -242,12 +242,13 @@ function fallenBlossoms(p) {
   const rng=seeded(96254), bins=new Map(), colors=['#f493a1','#fed3d4','#da788e','#e8a29c','#fff0db'].map(c=>new T.Color(c));
   const material=new T.MeshLambertMaterial({side:T.DoubleSide,vertexColors:true,emissive:'#a68b81',emissiveIntensity:.14});
   for(const tree of PEACH_TREES){
-    for(let j=0;j<(tree.cliff?7:48);j++){
+    const count=tree.upland?(tree.wayside?10:0):tree.cliff?7:48;
+    for(let j=0;j<count;j++){
       const a=rng()*TAU,d=(.21+rng()**.7*4.32)*tree.size;
       const x=tree.x+cos(a)*d,z=tree.z+sin(a)*d, key=Math.floor(x/30)+','+Math.floor(z/30);
       if(!bins.has(key))bins.set(key,{x,z,p:[],c:[],idx:[]});
       const b=bins.get(key), k=b.p.length/3, color=colors[Math.floor(rng()*colors.length)];
-      const spin=rng()*TAU,len=.045+rng()*.078,wid=len*(.39+rng()*.31),y=terrainHeight(x,z)+.069;
+      const spin=rng()*TAU,len=.045+rng()*.078,wid=len*(.39+rng()*.31),y=terrainMeshHeight(x,z)+.05;
       for(const [u,v] of [[0,-len],[-wid,.09*len],[-wid*.65,.76*len],[0,.60*len],[wid*.65,.78*len],[wid,0]]){
         b.p.push(x-b.x+cos(spin)*u+sin(spin)*v,y+(v>0?.008:0),z-b.z-sin(spin)*u+cos(spin)*v);
         b.c.push(color.r,color.g,color.b);
@@ -396,23 +397,32 @@ function fallingPetals(scene) {
   shape.moveTo(0,-.58);shape.bezierCurveTo(-.53,-.1,-.64,.77,0,.46);
   shape.bezierCurveTo(.57,.76,.54,-.04,0,-.58);
   const geo=new T.ShapeGeometry(shape,5),mat=new T.MeshLambertMaterial({side:T.DoubleSide});
-  const petals=new T.InstancedMesh(geo,mat,210),obj=new T.Object3D(),rng=seeded(6231);
-  const specs=Array.from({length:210},()=>[rng(),rng(),rng(),rng()]);
-  for(let j=0;j<210;j++)petals.setColorAt(j,new T.Color(j%3?'#ee8fa3':'#ffd2d4'));
+  const capacity=256,petals=new T.InstancedMesh(geo,mat,capacity),obj=new T.Object3D();
+  const soil=new WeakMap();
+  for(let i=0;i<capacity;i++)petals.setColorAt(i,new T.Color(i%3?'#ee8fa3':'#ffd2d4'));
   petals.frustumCulled=false;petals.instanceMatrix.setUsage(T.DynamicDrawUsage);scene.add(petals);
-  return (time,player,active)=>{
-    petals.visible=active;if(!active)return;
-    const xf=player.x+wrapDelta(PEACH.x-player.x), zf=player.z+wrapDelta(PEACH.z-player.z);
+  return (time,player)=>{
     let count=0;
-    for(let i=0;i<specs.length;i++){
-      const [u,v,w,s]=specs[i], phase=(time*(.067+s*.045)+w)%1,a=i+time*.91;
-      const x=xf+(u-.5)*106+phase*3.5+cos(a)*.71,z=zf+(v-.5)*86+sin(a*.7)*.75;
-      if((x-player.x)**2+(z-player.z)**2>46**2)continue;
-      obj.position.set(x,terrainHeight(x,z)+.11+(1-phase)*(5.2+s*3),z);
-      obj.rotation.set(a,phase*TAU*3,a*.71);
-      obj.scale.setScalar((.10+s*.067)*min(1,phase*9,(1-phase)*12));obj.updateMatrix();petals.setMatrixAt(count++,obj.matrix);
-    }
-    petals.count=count;petals.instanceMatrix.needsUpdate=true;
+    nearbyPeaches(player.x,player.z,26,tree=>{
+      if(count===capacity)return;
+      if(!soil.has(tree))soil.set(tree,terrainMeshHeight(tree.x,tree.z));
+      const y=soil.get(tree),height=tree.size*4.6;
+      if(Math.abs(player.y-y-height*.6)>22)return;
+      // A gust loosens a few petals from this actual crown. The release
+      // point stays on the tree as the camera turns or crosses a cell.
+      for(let j=0;j<4 && count<capacity;j++){
+        const a=tree.turn+j*2.4,seed=(tree.seed*.2781+j*.471)%1;
+        const phase=(time*(.087+seed*.053)+seed)%1,swirl=TAU*phase;
+        obj.position.set(tree.x+tree.size*1.8*cos(a)+phase*3.1+.53*sin(a+swirl*2),
+          y+(.14+(1-phase)*height)*(1+.16*cos(a+seed)),
+          tree.z+tree.size*1.6*sin(a)+phase*.89+.52*cos(swirl*1.7+a));
+        obj.rotation.set(a+swirl*2.2,swirl*3.1,a+swirl);
+        obj.scale.setScalar((.085+seed*.056)*min(1,phase*9,(1-phase)*10));
+        obj.updateMatrix();petals.setMatrixAt(count++,obj.matrix);
+      }
+    });
+    petals.visible=count>0;petals.count=count;
+    if(count)petals.instanceMatrix.needsUpdate=true;
   };
 }
 export function pilgrimageLife(scene){
@@ -425,18 +435,22 @@ export function pilgrimageLife(scene){
     if(terrainHeight(x,z)>y+1.6) continue;
     clouds.push({x,z,y,w:32+rng()*59,h:6+rng()*10});
   }
-  for(let i=0;i<32;i++){
-    const a=i*2.4,r=28+rng()*45,x=PEACH.x+cos(a)*r,z=PEACH.z+sin(a)*r*.8;
-    valley.push({x,z,y:terrainHeight(x,z)+2+rng()*7,w:19+rng()*35,h:3.7+rng()*6});
+  // A handful of veils sit in separate hollows. Preserve a clear view
+  // across the orchard and past the first flowering shoulder at each turn.
+  for(const [u,v,width] of [[-29,-23,22],[-57,12,26],[-36,30,20],[4,-31,20],
+    [34,21,25],[46,-7,18],[77,31,21],[110,18,22],[119,-15,18],
+    [147,-39,23],[172,4,19],[201,28,22]]){
+    const x=PEACH.x+u,z=PEACH.z+v;
+    valley.push({x,z,y:terrainMeshHeight(x,z)+2.6+rng()*2.2,w:width,h:4+rng()*4});
   }
-  const cloud=banks(scene,map,clouds,'#f0ece3',.64), mist=banks(scene,map,valley,'#ead9d0',.47);
+  const cloud=banks(scene,map,clouds,'#f0ece3',.64), mist=banks(scene,map,valley,'#eddfd4',.24);
   const orchard=createPeachOrchard(scene);
   const foxes=foxParties(scene), rain=sunshower(scene), petals=fallingPetals(scene);
   return (time,player,camera)=>{
     orchard(camera);
     const nearInari=abs(wrapDelta(player.x-DISTRICTS.inari.x+60))<260 && abs(wrapDelta(player.z-DISTRICTS.inari.z-82))<217;
-    const nearPeach=hypot(wrapDelta(player.x-PEACH.x),wrapDelta(player.z-PEACH.z))<157;
+    const nearPeach=hypot(wrapDelta(player.x-PEACH.x),wrapDelta(player.z-PEACH.z))<347;
     cloud(time,player,nearInari);mist(time,player,nearPeach);foxes(time,player,nearInari,camera);
-    rain(time,player,nearInari);petals(time,player,nearPeach);
+    rain(time,player,nearInari);petals(time,player);
   };
 }

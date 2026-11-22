@@ -1,3 +1,4 @@
+import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { PEACH_BOUT } from './scroll-encounters.js';
 import { groundImpressions } from './scroll-paper.js';
 import * as THREE from './vendor/three.module.min.js';
@@ -30,6 +31,7 @@ export function loadPigments() {
 export function meadowMaterial(art) {
   const mat = new THREE.MeshLambertMaterial({ map: art.turf, vertexColors: true });
   const impressions=groundImpressions();
+  const {west,east,north,south}=PEACH_RANGE_BOUNDS;
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.impressions = { value: impressions };
     shader.uniforms.woodFloor = { value: art.forest };
@@ -77,8 +79,14 @@ export function meadowMaterial(art) {
           // Horizontal beds catch dry brush; breaks in the stroke expose
           // pale stone where the ridge turns towards the sky.
           float beds=inkPoint.y*.54+field.x*.051+.69*sin(field.y*.084+field.x*.022);
+          vec2 spur=abs((field-vec2(${((west+east)/2).toFixed(1)},${((north+south)/2).toFixed(1)}))
+            /vec2(${((east-west)/2).toFixed(1)},${((south-north)/2).toFixed(1)}));
+          float mountain=1.-smoothstep(.80,1.,max(spur.x,spur.y));
+          // Short, tilted seams turn around the peach spurs. The exposed rock
+          // carries a separate, hand-painted wash on its steepest faces.
+          beds+=mountain*(1.7*sin(.064*field.x-.042*field.y)+1.2*sin(.075*field.y+inkPoint.y*.13));
           float broken=smoothstep(.36,.76,shingle.g+pool*.51);
-          float bedding=(1.-smoothstep(.045,.22,abs(sin(beds))))*broken;
+          float bedding=(1.-smoothstep(.045,.22,abs(sin(beds))))*broken*(1.-.73*mountain);
           float stria=max(mark.g,bedding*.62)*cliff;
           float stroke=mix(max(grass,stria),mark.b,damp);
           float mottling=clamp(.55*luma+.10*pool+.09*woodland,0.,.55);
