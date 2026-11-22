@@ -10,7 +10,7 @@ import { kosode, silkMaterial, SilkPanels } from './kosode.js';
 import { dressedRiceFace } from './mochi-model.js';
 import { paintedSilk,townPortrait } from './emaki-costume.js';
 import { brushStroke } from './pilgrimage-pigment.js';
-import { CARRIAGES, OX_HITCH, RIVER_SKIFFS, SKIFF_SCALE, merchantPose, carriagePose } from './traveller-positions.js';
+import { CARRIAGES, OX_HITCH, RIVER_SKIFFS, SKIFF_SCALE, merchantPose, carriageHorizontalPose, carriagePose, carriageGroundHeight } from './traveller-positions.js';
 export {merchantPosition} from './traveller-positions.js';
 
 const { PI, sin, cos }=Math;
@@ -68,8 +68,8 @@ export function traveller(parent,noble){
   },'旅装と手回り品').material=scrollPigment();
   return root;
 }
-function oxCarriage() {
-  const root=new THREE.Group(), wheels=[];
+function carriageBody() {
+  const root=new THREE.Group();
   const oxZ=OX_HITCH;
   // The yoke and strap follow the ox; the rear shaft sockets belong to the wagon.
   const onOx=([x,y,z])=>[x*OX_SCALE,y*OX_SCALE,oxZ+z*OX_SCALE];
@@ -122,17 +122,39 @@ function oxCarriage() {
   const back=illustratedMesh(root,2,'curtain');
   back.position.set(0,2.211,-1.619);back.scale.set(1.65,1.03,.38);back.rotation.y=Math.PI;
   for(const side of [-1,1]) {
-    wheels.push(paint(root,b=>{
+    paint(root,b=>{
       b.add(hoop,ink,[0,0,0],[.98,.98,.98],[0,PI/2,0]);
       for(let i=0;i<14;i++) {
         const a=i*PI/7;
         b.rod([0,0,0],[0,.90*sin(a),.90*cos(a)],.037,straw,.032);
       }
       b.rod([-.14,0,0],[.14,0,0],.15,lacquer);
-    },'車輪',[side*1.055,1.035,-.63]));
+    },'車輪',[side*1.055,1.035,-.63]);
   }
-  const ox=harnessBeast(root,'ox',OX_SCALE,oxZ);
-  return {root,wheels,ox,noble};
+  return root;
+}
+function packCarriage(root,load){
+  // The passenger sits ahead of the luggage. Narrow trays behind the seat
+  // leave the rolled side blinds and the passenger's sleeves in view.
+  paint(root,b=>{
+    if(load==='sakai'){
+      // A low plank tray and two straw-bound jars from the Sakai potters.
+      b.box(-.31,1.49,-1.20,.96,.13,.59,'#9a7753');
+      for(const [x,r,clay] of [[-.56,.215,'#906e58'],[-.11,.165,'#697b70']]){
+        b.ball(x,1.64,-1.2,r,r*1.31,r,clay);
+        b.rod([x,1.69+r*.61,-1.2],[x,1.71+r*.74,-1.2],r*.58,clay);
+        b.rod([x,1.71+r*.74,-1.2],[x,1.725+r*.74,-1.2],r*.61,'#beab79');
+        b.loop(x,1.69,-1.2,r*.97,r*.97,.043,straw);
+      }
+    }else{
+      // Three bolts of cloth, wrapped in indigo and madder, on the market road.
+      for(const [x,y,shade] of [[-.54,1.57,'#6a7f83'],[-.29,1.57,'#a66c61'],[-.42,1.77,'#728369']]){
+        b.rod([x,y,-1.52],[x,y,-.92],.135,shade);
+        b.rod([x,y,-.929],[x,y,-.914],.103,'#c6bda2');
+        for(const z of [-1.40,-1.04])b.rod([x,y,z-.012],[x,y,z+.012],.139,'#b8a579');
+      }
+    }
+  },load==='sakai'?'堺の焼物を納めた荷籠':'街道の反物荷').material=scrollPigment();
 }
 function boatHull() {
   const v=[],ix=[];
@@ -215,11 +237,8 @@ function marketBoat(index,skiff) {
 }
 export function createTravellers(scene) {
   const horse=capitalHorse(scene), walkers=createRoadMerchants(scene);
-  const carts=CARRIAGES.map(journey=>{
-    const cart=oxCarriage();
-    scene.add(cart.root);
-    return {...cart,...journey};
-  });
+  let body;
+  const carts=CARRIAGES.map(journey=>({journey,figure:null}));
   const boats=[null,null,...RIVER_SKIFFS].map((skiff,i)=>{const boat=marketBoat(i,skiff);scene.add(boat.root);return boat;});
   function place(root,player,x,z,y,yaw){
     const dx=wrapDelta(x-player.x),dz=wrapDelta(z-player.z);
@@ -231,14 +250,27 @@ export function createTravellers(scene) {
     walkers(time,player,camera);
     horse(time,player);
     for(const cart of carts){
-      const {root,wheels,ox,noble,offset}=cart,q=carriagePose(cart,time);
-      if(!place(root,player,q.x,q.z,q.y,q.yaw)) continue;
-      root.rotation.order='YXZ';root.rotation.x=-Math.atan(q.grade);
+      const {journey}=cart,q=carriageHorizontalPose(journey,time);
+      const dx=wrapDelta(q.x-player.x),dz=wrapDelta(q.z-player.z);
+      if(dx*dx+dz*dz>=155**2){if(cart.figure)cart.figure.root.visible=false;continue;}
+      carriagePose(journey,time,q);
+      if(!cart.figure){
+        body??=carriageBody();
+        const root=body.clone(),noble=root.getObjectByName('御簾の公達餅');
+        const wheels=root.children.filter(part=>part.name==='車輪');
+        const ox=harnessBeast(root,'ox',OX_SCALE,OX_HITCH);
+        if(journey.load)packCarriage(root,journey.load);
+        root.name='御簾の牛車・'+journey.id;scene.add(root);
+        cart.figure={root,wheels,ox,noble};
+      }
+      const {root,wheels,ox,noble}=cart.figure;
+      root.visible=true;root.position.set(player.x+dx,q.y,player.z+dz);
+      root.rotation.set(-Math.atan(q.grade),q.yaw,Math.atan(q.bank/Math.hypot(1,q.grade)),'YXZ');
       const look=Math.atan2(wrapDelta(player.x-q.x),wrapDelta(player.z-q.z))-q.yaw;
       noble.rotation.y=Math.max(-1.22,Math.min(1.22,Math.atan2(sin(look),cos(look))))+.08*sin(time*.56);
-      noble.rotation.z=.036*cos(time*1.23+offset);
+      noble.rotation.z=.036*cos(time*1.23+journey.offset);
       wheels.forEach(w=>w.rotation.x=q.travelled/.98);
-      ox.pose(time,Number(q.moving),q.travelled*3.44/OX_SCALE);
+      ox.pose(time,Number(q.moving),q.travelled*3.44/OX_SCALE,carriageGroundHeight);
     }
     boats.forEach(({root:m,row},i)=>{
       const a=merchantPose(i,time);

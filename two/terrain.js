@@ -22,7 +22,7 @@ import { springGroundSurvey } from './spring-ground-survey.js';
 import { COURT, RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
 import { CEDAR_GROVES, CLIFF_PINES, PEACH_TREES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
-import { TRADE_ROADS } from './trade-routes.js';
+import { TRADE_ROADS, freightRoadEarthwork } from './trade-routes.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
 import { roomPlan, pagodaPlan, roofForm, roofProfile, houseRoof, roofSkinDepth, roofWallContacts } from './architecture.js';
@@ -346,8 +346,9 @@ export function springLevel(site) {
   }
   return springLevels.get(site);
 }
+const freightGround=freightRoadEarthwork(road);
 export function terrainHeight(x,z) {
-  const native=groundBeforeBath(x,z);
+  const native=freightGround(x,z,groundBeforeBath(x,z));
   const hut=nearbyHut(x,z);
   if(hut){
     const w=clearingWeight(hut,x,z);
@@ -923,7 +924,7 @@ function wildTree(x,z) {
 // Each transplant consumes a variable number of seed draws. Resume each
 // existing road's survey so rerouting the snow road cannot move other groves.
 const avenueSeeds={'temple-road':0x9b6fcd3e,'peach-pass':0xc3454d7a,'inari-road':0xdcf1d981,
-  'tsuruga-road':0x3cabd4d5,'sakai-road':0x48e975d7};
+  'tsuruga-road':0x3cabd4d5,'sakai-road':0x48e975d7,'inland-road':0x76e798de,'spring-pass-road':0x96fa37d1};
 for(const avenue of CONNECTING_ROADS) {
   if(avenueSeeds[avenue.id])saplings=seeded(avenueSeeds[avenue.id]);
   for(let i=5;i<avenue.points.length;i+=4) {

@@ -2,9 +2,9 @@
 // Each moving footprint is sampled from the same itinerary as its drawing.
 import { DISTRICTS } from './geography.js';
 import { terrainHeight, roadSurfaceHeight, groundHeight, wrapDelta } from './terrain.js';
-import { CARRIAGES, OX_HITCH, HORSE_SCALE, RIVER_SKIFFS, SKIFF_SCALE, carriagePose, merchantPose, horsePose } from './traveller-positions.js';
+import { CARRIAGES, OX_HITCH, HORSE_SCALE, RIVER_SKIFFS, SKIFF_SCALE, carriageHorizontalPose, carriagePose, merchantPose, horsePose } from './traveller-positions.js';
 import { OX_SCALE } from './scroll-fauna.js';
-import { MERCHANT_ROUTES, ROAD_MERCHANTS, roadMerchantPose } from './road-merchant-routes.js';
+import { MAX_MERCHANT_SHOULDER, MERCHANT_ROUTES, ROAD_MERCHANTS, roadMerchantPose } from './road-merchant-routes.js';
 import { QUAY_MERCHANTS } from './seaport-layout.js';
 import { COURT } from './retreat-layout.js';
 import { kyoNight, kyoClock } from './kyo-layout.js';
@@ -47,7 +47,7 @@ function penetration(q,shapes,x,z,feet,height,radius,scale=1) {
   for(const [cx,cz,w,d,lo,hi] of shapes){
     const a=Math.max(0,Math.abs(u-cx)-w),b=Math.max(0,Math.abs(v-cz)-d);
     if(a*a+b*b>r*r)continue;
-    const base=(q.y??(q.floor||terrainHeight)(q.x,q.z))+(q.grade||0)*v*scale;
+    const base=(q.y??(q.floor||terrainHeight)(q.x,q.z))+((q.grade||0)*v+(q.bank||0)*u)*scale;
     if(feet>=base+hi*scale || feet+height<=base+lo*scale)continue;
     const inside=Math.min(w-Math.abs(u-cx),d-Math.abs(v-cz));
     const gap=inside>=0 ? -inside : Math.hypot(a,b);
@@ -71,17 +71,21 @@ export function createAmbientContacts(){
     }
     if(time!==sampledTravel){
       sampledTravel=time;
-      vehicles=CARRIAGES.map(journey=>[carriagePose(journey,time),carriage,1]);
+      vehicles=CARRIAGES.map(journey=>[carriageHorizontalPose(journey,time),carriage,1,journey]);
       vehicles.push([horsePose(time),horse,HORSE_SCALE]);
       for(let i=0;i<2;i++)vehicles.push([merchantPose(i,time),boat,1]);
       RIVER_SKIFFS.forEach((_,i)=>vehicles.push([merchantPose(2+i,time),skiff,SKIFF_SCALE]));
     }
-    for(const [q,shapes,scale] of vehicles)if(check(q,shapes,scale))return true;
+    for(const [q,shapes,scale,journey] of vehicles){
+      if(Math.abs(wrapDelta(x-q.x))>7+radius || Math.abs(wrapDelta(z-q.z))>7+radius)continue;
+      if(journey && q.y===undefined)carriagePose(journey,time,q);
+      if(check(q,shapes,scale))return true;
+    }
     // Outside a road's bounds even its outermost load is out of reach.
     // Reuse its poses across all the mount, body and sweep probes in a step.
     const wx=wrapDelta(x),wz=wrapDelta(z);
     for(const road of tradingRoads){
-      const {west,east,north,south}=road.route.bounds,pad=road.route.lane+radius+1;
+      const {west,east,north,south}=road.route.bounds,pad=MAX_MERCHANT_SHOULDER+radius+1;
       if(wx<west-pad||wx>east+pad||wz<north-pad||wz>south+pad)continue;
       if(time!==road.lastTime){
         road.lastTime=time;

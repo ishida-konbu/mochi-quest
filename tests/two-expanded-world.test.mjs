@@ -1,14 +1,13 @@
 import {DISTRICTS, FIFTH_EDITION_CENTRES, relocateLegacyPosition} from '../two/geography.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, roadSurfaceHeight, groundHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
+import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, roadSurfaceHeight, groundHeight, waterDepth, solidHeightAt, bridgeAt, bridgeHeight} from '../two/terrain.js';
 import {RETREATS,bathRadius,sitePoint} from '../two/retreat-layout.js';
 import {INARI_GATES, INARI_ROUTE, PEACH_TREES, nearPeachTrunk, MOON_GATE} from '../two/pilgrimage-layout.js';
 import {PALACE_APPROACH} from '../two/ryugu-layout.js';
 import {HIGASHIYAMA} from '../two/higashiyama.js';
 import {kyoInfluence, kyoNight, kyoClock, KYO_DAY_SECONDS} from '../two/kyo-layout.js';
-import {measureRoute, cartPosition} from '../two/trade-routes.js';
-import {merchantPosition} from '../two/travelling-merchants.js';
+import { CARRIAGES, OX_HITCH, RIVER_SKIFFS, carriageHorizontalPose, carriagePose, merchantPosition } from '../two/traveller-positions.js';
 import {createGame} from '../two/game.js';
 import {FLEET,vesselPose} from '../two/ocean-voyage.js';
 
@@ -180,29 +179,51 @@ test('the longer Kyoto cycle preserves the light of an older journey without res
   assert.equal(createGame(bad).state.player.kyoClockOffset,0);
 });
 
-test('both ox teams reach each town on dry roads and all three merchants keep to water',()=>{
-  CONNECTING_ROADS.slice(0,2).forEach((road,i)=>{
-    const route=measureRoute(road.points), speed=i===0?1.85:1.63;
-    assert.ok(route.length>240);
-    const start=cartPosition(route,0,speed);
-    const end=cartPosition(route,route.length/speed+3,speed);
-    const back=cartPosition(route,2*(route.length/speed+7),speed);
+test('four ox carriages take their passengers to town, over the deck and clear of scenery, while the five small traders stay afloat',()=>{
+  assert.deepEqual(CARRIAGES.map(j=>j.id),['snow-kyoto','susuki-todaiji','kyoto-sakai','kyoto-todaiji']);
+  let deckSamples=0;
+  for(const journey of CARRIAGES){
+    const {route,speed,offset}=journey, travel=route.length/speed,half=travel+7;
+    const start=carriagePose(journey,-offset),end=carriagePose(journey,travel+3-offset);
+    const back=carriagePose(journey,2*half-offset);
     assert.equal(end.moving,false);
     assert.ok(Math.hypot(end.x-start.x,end.z-start.z)>160);
     assert.ok(Math.hypot(back.x-start.x,back.z-start.z)<.01);
-    for(let t=0;t<2*(route.length/speed+7);t+=.5){
-      const q=cartPosition(route,t,speed);
-      for(const offset of [-1.6,0,3.2]){
-        const x=q.x+Math.sin(q.yaw)*offset,z=q.z+Math.cos(q.yaw)*offset;
-        assert.ok(waterDepth(x,z)<.15,'cart enters water at '+[x,z]);
-        const y=roadSurfaceHeight(x,z), clearance=offset>2?.47:1;
-        assert.ok(Math.abs(y-groundHeight(x,z,y))<.03,'cart leaves its road surface at '+[x,z]);
-        assert.ok(solidHeightAt(x,z,clearance,y)<y+.45,'cart clips scenery at '+[x,z]);
+    for(let t=0;t<2*half;t+=.65){
+      const q=carriagePose(journey,t),s=Math.sin(q.yaw),c=Math.cos(q.yaw);
+      for(const [u,v] of [[-1.08,-1.65],[1.08,-1.65],[-1.08,.55],[1.08,.55],
+        [-.44,OX_HITCH],[.44,OX_HITCH],[0,OX_HITCH+1.35]]){
+        const x=q.x+c*u+s*v,z=q.z-s*u+c*v,bridge=bridgeAt(x,z);
+        const floor=bridge?bridgeHeight(bridge,z):roadSurfaceHeight(x,z);
+        const where=journey.id+' at '+[x,z].map(n=>n.toFixed(1));
+        if(bridge){deckSamples++;assert.ok(Math.abs(x-bridge.x)+.12<bridge.halfWidth,where);}
+        assert.ok(bridge || waterDepth(x,z)<.15,where+' water');
+        assert.ok(solidHeightAt(x,z,.08,floor)<floor+.45,where+' obstruction');
       }
     }
-  });
-  for(let i=0;i<3;i++) for(let t=0;t<310;t+=.5){
+  }
+  assert.ok(deckSamples>100);
+  for(let i=0;i<2+RIVER_SKIFFS.length;i++) for(let t=0;t<310;t+=.5){
     const p=merchantPosition(i,t);
     assert.ok(waterDepth(p.x,p.z)>1);
   }
+});
+
+test('the long-distance and local temple passengers pass with room for both carriages and their oxen',()=>{
+  const local=CARRIAGES[1],through=CARRIAGES[3],cycle=4*(through.route.length/through.speed+7);
+  const parts=[[-1.65,1.22],[-.55,1.22],[.65,1.22],[1.70,.86],[2.75,.66],[3.90,.61],[4.95,.44]];
+  let passing=0;
+  for(let t=0;t<cycle;t+=.42){
+    const a=carriageHorizontalPose(local,t),b=carriageHorizontalPose(through,t);
+    if(Math.hypot(a.x-b.x,a.z-b.z)>13)continue;
+    passing++;
+    assert.ok(a.moving && b.moving);
+    assert.ok(a.passing>0 && b.passing<0);
+    for(const [av,ar] of parts)for(const [bv,br] of parts){
+      const dx=a.x+av*Math.sin(a.yaw)-b.x-bv*Math.sin(b.yaw);
+      const dz=a.z+av*Math.cos(a.yaw)-b.z-bv*Math.cos(b.yaw);
+      assert.ok(Math.hypot(dx,dz)>ar+br,'carriages overlap at '+[a.x,a.z].map(Math.round));
+    }
+  }
+  assert.ok(passing>20);
 });

@@ -16,16 +16,29 @@ export function harnessBeast(parent,type,scale,z=0){
   const legs=[];
   for(const side of [-1,1])for(const fore of [-1,1]){
     const joint=joints.get('leg'+side+','+fore);
-    legs.push({joint,height:joint.position.y,angle:(side===1?Math.PI:0)+(fore===1?Math.PI*.54:0)});
+    legs.push({joint,hip:joint.position.clone(),angle:(side===1?Math.PI:0)+(fore===1?Math.PI*.54:0)});
   }
-  return {root,pose(time,speed,phase){
+  const inverse=new T.Matrix4(),sole=new T.Vector3(),up=new T.Vector3();
+  return {root,pose(time,speed,phase,road){
     const head=joints.get('head'),stride=horse?.38:.24;
     head.rotation.x=speed*.065*Math.cos(phase*2)+(1-speed)*(.14+.115*Math.sin(time*.85));
     head.rotation.y=.083*Math.sin(time*.66);head.rotation.z=.021*Math.sin(time*1.07);
     if(horse){const tail=joints.get('tail');tail.rotation.z=.17*Math.sin(time*1.7)+.08*Math.sin(time*2.73);tail.rotation.x=-.27-.10*Math.cos(phase)*speed;}
-    for(const {joint,height,angle} of legs){
+    if(road){
+      root.updateWorldMatrix(true,false);
+      inverse.copy(root.matrixWorld).invert();up.setFromMatrixColumn(inverse,1);
+    }
+    for(const {joint,hip,angle} of legs){
       const step=phase+angle; joint.rotation.x=stride*Math.sin(step)*speed;
-      joint.position.y=height+.055*speed*Math.max(0,-Math.cos(step));
+      const lift=.055*speed*Math.max(0,-Math.cos(step));
+      joint.position.copy(hip);joint.position.y+=lift;
+      if(road){
+        // The centre of the split hoof comes from the lowest ring of the ox
+        // model. Keep a loaded foot planted while the other lifts and swings.
+        sole.set(0,-.995*hip.y,.101).applyQuaternion(joint.quaternion)
+          .add(joint.position).applyMatrix4(root.matrixWorld);
+        joint.position.addScaledVector(up,road(sole.x,sole.z)+lift*scale-sole.y);
+      }
     }
   }};
 }
