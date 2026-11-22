@@ -2,6 +2,7 @@
 // six haori dyes share one portrait and a smaller cloth-coverage plate.
 import * as THREE from './vendor/three.module.min.js';
 import { DYES, TRADES } from './procession.js';
+import { SCROLL_FAUNA, FAUNA_SHEET, faunaDrawing, faunaFrequency } from './scroll-fauna.js';
 import { SPECIES } from './bestiary.js';
 import { seasonAt } from './terrain.js';
 import { finishInSlices } from './preparation.js';
@@ -63,8 +64,12 @@ function plate(filename,color) {
   return plates.get(filename);
 }
 
+export const COSTUME_SHEET={columns:8,rows:10,width:128,height:128};
+export const costumeFrame=role=>role<5 ? 2.28:role===8 ? 4.45:3.18;
+export const costumeCentre=role=>role<5 ? .94:1.39;
+
 export async function preparePlates(renderer) {
-  const entries=[plate('procession.webp',true),plate('procession-dyes.webp',false),plate('beasts.webp',true)];
+  const entries=[plate('procession.webp',true),plate('procession-dyes.webp',false),plate('beasts.webp',true),plate('scroll-fauna.webp',true),plate('costumes.webp',true)];
   await Promise.all(entries.map(entry=>entry.ready));
   function* upload() {
     for (const {texture} of entries) {renderer?.initTexture(texture);yield;}
@@ -73,13 +78,14 @@ export async function preparePlates(renderer) {
 }
 
 export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
-  const sheet=beasts ? BEASTS : VILLAGERS;
+  const scroll=beasts==='scroll',costumes=beasts==='costumes';
+  const sheet=costumes?COSTUME_SHEET:scroll ? FAUNA_SHEET : beasts ? BEASTS : VILLAGERS;
   const geometry=new THREE.PlaneGeometry(1,1);
   const cells=new THREE.InstancedBufferAttribute(new Float32Array(capacity*3),3).setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('tileCell',cells);
   const motion=new THREE.InstancedBufferAttribute(new Float32Array(capacity*3),3).setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('nextPose',motion);
-  const atlas=plate(beasts?'beasts.webp':'procession.webp',true).texture;
+  const atlas=plate(costumes?'costumes.webp':scroll?'scroll-fauna.webp':beasts?'beasts.webp':'procession.webp',true).texture;
   const cloth=beasts ? null : plate('procession-dyes.webp',false).texture;
   const material=new THREE.MeshBasicMaterial({map:atlas,transparent:true,alphaTest:.035});
   material.onBeforeCompile=shader=>{
@@ -115,15 +121,15 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
       shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',cellFilter);
     }
   };
-  material.customProgramCacheKey=()=>beasts?'beast-plate':'haori-plate';
+  material.customProgramCacheKey=()=>costumes?'costume-plate':scroll?'fauna-plate':beasts?'beast-plate':'haori-plate';
   const figures=new THREE.InstancedMesh(geometry,material,capacity);
   const shadows=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1),shadowMaterial,capacity);
   if (cloth) {
     figures.setColorAt(0,white);
     figures.instanceColor.setUsage(THREE.DynamicDrawUsage);
   }
-  figures.name=beasts?'鳥獣の絵巻・遠景':'街道の旅人・遠景';
-  shadows.renderOrder=1;
+  figures.name=costumes?'旅装の遠景':beasts?'鳥獣の絵巻・遠景':'街道の旅人・遠景';
+  shadows.visible=!!shadowMaterial;shadows.renderOrder=1;
   for(const batch of [figures,shadows]) {
     batch.frustumCulled=false;
     batch.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -134,9 +140,9 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   const headings=new WeakMap();
   transform.rotation.order='YXZ';
   shadow.rotation.x=-Math.PI/2;
-  let count=0;
+  let count=0,shadowCount=0;
   function begin(player) {
-    count=0;
+    count=0;shadowCount=0;
     const {moon,dawn,snow,autumn}=seasonAt(player.x,player.z,climate);
     material.color.setRGB(1-.59*moon-.05*snow,1-.46*moon-.1*dawn-.035*autumn,1-.28*moon-.23*dawn-.075*autumn);
   }
@@ -151,12 +157,14 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
     const drift=last===undefined ? Infinity : THREE.MathUtils.euclideanModulo(turn-last+4,8)-4;
     const direction=Math.abs(drift)>.58 ? THREE.MathUtils.euclideanModulo(Math.round(turn),8) : last;
     headings.set(n,direction);
-    const spec=SPECIES[n.type];
+    const spec=SPECIES[n.type] || SCROLL_FAUNA[n.type];
     let start,poses,cycle;
-    if (beasts) {
-      const drawing=beastDrawing(n.type,n.variant);
+    if(costumes){
+      start=n.costume*8;poses=1;cycle=0;
+    }else if (beasts) {
+      const drawing=scroll?faunaDrawing(n):beastDrawing(n.type,n.variant);
       start=drawing.start;poses=drawing.poses;
-      cycle=(time+(n.phase||0))*gaitFrequency(n.type)/tau;
+      cycle=scroll?(time*faunaFrequency(n.type)+n.phase)/tau:(time+(n.phase||0))*gaitFrequency(n.type)/tau;
     } else {
       const craft=n.craft || n.role;
       const index=roleIndex.get(craft)+(n.type==='rabbit'?0:residentRoles.length);
@@ -173,22 +181,29 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
     cells.setXYZ(count,tile%sheet.columns,sheet.rows-1-Math.floor(tile/sheet.columns),fade*handedness);
     if (cloth) figures.setColorAt(count,n.area ? dyes[n.dye] : white);
     const scale=n.stature||1, build=n.build||1;
-    const center=n.y+(spec?.center??VILLAGERS.center)*scale;
+    const center=n.y+(costumes?costumeCentre(n.costume):spec?.center??VILLAGERS.center)*scale;
     transform.position.set(x,center,z);
     transform.rotation.set(-Math.atan2(camera.position.y-center,Math.hypot(vx,vz)),facing,0,'YXZ');
-    const span=spec ? beastFrame(n.type) : 0;
+    const span=costumes?costumeFrame(n.costume):scroll ? spec.frame : spec ? beastFrame(n.type) : 0;
     transform.scale.set((span||residentFrameX(n.craft || n.role))*scale*build,(span||VILLAGERS.frameY)*scale,1);
     transform.updateMatrix();figures.setMatrixAt(count,transform.matrix);
-    shadow.position.set(x,n.y-(n.altitude||0)+.025,z);
     const contact=Math.max(0,1-(n.altitude||0)/12);
-    shadow.scale.set(1.12*scale*build*contact,.85*scale*contact,1);
-    shadow.updateMatrix();shadows.setMatrixAt(count,shadow.matrix);
+    if(shadowMaterial && n.type!=='fishfolk' && contact>0){
+      shadow.position.set(x,n.y-(n.altitude||0)+.025,z);
+      shadow.scale.set(1.12*scale*build*contact,.85*scale*contact,1);
+      shadow.updateMatrix();shadows.setMatrixAt(shadowCount++,shadow.matrix);
+    }
     count++;
   }
   function end() {
-    figures.count=shadows.count=count;
+    figures.count=count;shadows.count=shadowCount;
+    if(shadowCount){
+      shadows.instanceMatrix.clearUpdateRanges();
+      shadows.instanceMatrix.addUpdateRange(0,shadowCount*16);
+      shadows.instanceMatrix.needsUpdate=true;
+    }
     if (!count) return;
-    for(const attribute of [cells,motion,figures.instanceMatrix,shadows.instanceMatrix,figures.instanceColor]) {
+    for(const attribute of [cells,motion,figures.instanceMatrix,figures.instanceColor]) {
       if (!attribute) continue;
       attribute.clearUpdateRanges();attribute.addUpdateRange(0,count*attribute.itemSize);
       attribute.needsUpdate=true;

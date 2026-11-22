@@ -19,7 +19,9 @@ test('the seeded meadows reach the density target while leaving water and the ba
   }
   const earlierRoots=7667;
   assert.ok(total-outer >= earlierRoots*48);
-  assert.ok(outer>90000 && outer<130000);
+  // The enlarged country roads keep the original meadow density. Tiles
+  // stream near the traveller, irrespective of the total planting count.
+  assert.ok(outer>650000 && outer<1050000);
   assert.ok(Math.abs(MEADOW_TILES*MEADOW_TILE-2*BOUND)<1e-8);
   assert.equal(forms.size,60);
   const sample=()=>{const roots=[];visitMeadowTile(16,18,masks,(...p)=>roots.push(p));return roots;};

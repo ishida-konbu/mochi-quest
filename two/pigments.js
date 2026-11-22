@@ -74,7 +74,12 @@ export function meadowMaterial(art) {
           float damp=smoothstep(-.4,1.9,.38-inkPoint.y);
           float cliff=smoothstep(.032,.36,incline);
           float grass=mark.r*(.60+.32*pool)*(1.-cliff);
-          float stria=mark.g*cliff;
+          // Horizontal beds catch dry brush; breaks in the stroke expose
+          // pale stone where the ridge turns towards the sky.
+          float beds=inkPoint.y*.54+field.x*.051+.69*sin(field.y*.084+field.x*.022);
+          float broken=smoothstep(.36,.76,shingle.g+pool*.51);
+          float bedding=(1.-smoothstep(.045,.22,abs(sin(beds))))*broken;
+          float stria=max(mark.g,bedding*.62)*cliff;
           float stroke=mix(max(grass,stria),mark.b,damp);
           float mottling=clamp(.55*luma+.10*pool+.09*woodland,0.,.55);
           vec3 fieldWash=mix(vec3(.77,.72,.59),vec3(.41,.46,.32),mottling+.13*woodland);

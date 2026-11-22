@@ -1,8 +1,10 @@
+import { districtPoint, DISTRICTS } from './geography.js';
 import * as THREE from './vendor/three.module.min.js';
 import { KYO_BUILDINGS, KYO_FOOD, KYO_SCREENS, screenFold, kyoNight } from './kyo-layout.js';
 import { scrollPaper, printSurface } from './kyo-scrollwork.js';
 import { createStreetCrowd } from './kyo-people.js';
 import { seeded, terrainHeight, wrapDelta } from './terrain.js';
+import { sculpture } from './pilgrimage-pigment.js';
 
 const TAU=Math.PI*2;
 const timber='#775942', lacquer='#874b39', soot='#484840', gilt='#c4a66e';
@@ -38,6 +40,17 @@ function cloth(label,bg,fg,vertical=false){
     for(let j=0;j<h;j+=3){
       c.fillStyle=j%2?'rgba(255,244,209,.06)':'rgba(56,39,37,.047)';c.fillRect(0,j,w,1);
     }
+    if(vertical){
+      const rng=seeded(label.codePointAt(0));
+      for(let x=0;x<w;x+=2){
+        c.fillStyle=x%6?'rgba(249,233,199,.048)':'rgba(64,47,41,.10)';
+        c.fillRect(x,0,1,h);
+      }
+      for(let j=0;j<230;j++){
+        c.fillStyle='rgba(238,225,197,.18)';
+        c.fillRect(rng()*w,rng()*h,.7,1+rng()*4.5);
+      }
+    }
     c.strokeStyle=fg;c.lineWidth=2;c.strokeRect(6,6,w-12,h-12);
     c.fillStyle=fg;c.textAlign='center';c.textBaseline='middle';
     c.font='bold '+(vertical?55:62)+'px "Hiragino Mincho ProN","Yu Mincho",serif';
@@ -46,6 +59,33 @@ function cloth(label,bg,fg,vertical=false){
     c.fillStyle='#a44333';c.fillRect(w*.81,h*.78,w*.075,h*.109);
     c.strokeStyle='#e4c9a0';c.lineWidth=1;c.strokeRect(w*.825,h*.80,w*.05,h*.071);
   });
+}
+function hangingBanner() {
+  const g=new THREE.PlaneGeometry(1,1,16,12),points=g.attributes.position;
+  for(let i=0;i<points.count;i++){
+    const x=points.getX(i),y=points.getY(i),drop=.5-y;
+    points.setXYZ(i,x+.026*drop*drop,y+.018*drop*drop*Math.sin(8*x),
+      (.022+.072*drop)*Math.sin(11*x+.6*drop)+.045*drop*drop);
+  }
+  g.computeVertexNormals();return g;
+}
+
+function ironKettle() {
+  const pot=sculpture(),iron='#474c47',patina='#65675a';
+  const cast=(profile,tint)=>pot.add(new THREE.LatheGeometry(profile.map(q=>new THREE.Vector2(...q)),38),tint);
+  cast([[.02,0],[.18,0],[.235,.043],[.284,.12],[.302,.201],[.284,.28],[.238,.345],[.191,.377],[.16,.38]],iron);
+  cast([[.008,.432],[.06,.424],[.134,.406],[.18,.387],[.201,.39],[.201,.373],[.182,.369]],patina);
+  pot.ball(iron,0,.465,0,.032,.037,.032);
+  pot.stroke(iron,[[-.21,.30,0],[-.236,.44,0],[-.177,.63,.008],[-.01,.695,.022],[.165,.635,.043],[.236,.456,.035],[.206,.30,0]],
+    [.019,.022,.025,.026,.023,.020,.016],32);
+  pot.stroke(patina,[[-.228,.19,.064],[-.295,.223,.079],[-.343,.306,.09],[-.389,.366,.093],[-.416,.376,.093]],
+    [.079,.068,.049,.034,.041],24);
+  const stud=new THREE.ConeGeometry(.013,.014,6);
+  for(let j=0;j<3;j++)for(let i=0;i<28;i++){
+    const a=(i+j*.5)*TAU/28,r=[.285,.298,.300][j];
+    pot.add(stud,patina,r*Math.sin(a),.124+j*.036,r*Math.cos(a),1,1,1,Math.PI/2,a);
+  }
+  return pot.finish();
 }
 function lanternPaper(){
   return painted(256,144,(c,w,h)=>{
@@ -78,7 +118,7 @@ function lantern(f,x,top,z,r,light) {
   f.stroke([x,top-h,z],[x,top-h-.125,z],.012,'#87603d');
 }
 function entrance(p,light) {
-  const gate=frame(p,120,-377,0);
+  const gate=frame(p,...districtPoint('kyo',120,-377),0);
   const plaque=cloth('洛中','#474942','#e4c683');
   for(const x of [-5.7,-3.9,3.9,5.7]){
     for(const z of [-1.49,1.49]){
@@ -136,9 +176,9 @@ function shopFronts(p,light,windowPaper){
       lantern(f,end,wall-.53,front,.325,light);
       const offset=-end;
       f.stroke([offset,wall-.34,front-.9],[offset,wall-.34,front+.17],.042,timber);
-      f.part('plane',offset,wall-1.08,front-.08,.62,1.28,1,'#fff',banners[craft],.09,.032);
+      f.part('shopBanner',offset,wall-1.08,front-.08,.62,1.28,1,'#fff',banners[craft],.09,.032);
     } else {
-      f.part('plane',end,wall-1.14,front,.67,1.35,1,'#fff',banners[craft],.045);
+      f.part('shopBanner',end,wall-1.14,front,.67,1.35,1,'#fff',banners[craft],.045);
     }
     // Narrow projecting lattice bays, and the bamboo blind rolled beneath each eave.
     const flank=-Math.sign(end)*w*.415, face=d*.50+.198, wide=w*.145;
@@ -178,7 +218,7 @@ function foodCounter(p,stand,light) {
   f.part('box',0,2.27,.78,1.6,.53,.13,'#73583e',p.wood);
   f.part('plane',0,2.27,.856,1.52,.46,1,'#fff',sign);
   for(const x of [-1.27,1.27]){
-    f.part('plane',x,2.05,.76,.48,.91,1,'#fff',mark,0,x*.014);
+    f.part('shopBanner',x,2.05,.76,.48,.91,1,'#fff',mark,0,x*.014);
     f.part('box',x,.59,.18,.12,1.12,.41,timber,p.wood);
   }
   f.part('box',0,.91,.24,2.98,.105,1.05,'#b9996a',p.deck);
@@ -186,11 +226,7 @@ function foodCounter(p,stand,light) {
   f.part('box',0,.38,-.29,2.44,.079,.6,timber,p.wood);
   lantern(f,-1.85,2.49,.12,.225,light);
   if(tea){
-    f.part('ball',-.68,1.22,.23,.30,.27,.265,'#5e6960');
-    f.part('round',-.68,1.451,.23,.17,.059,.15,'#647066');
-    f.part('ball',-.68,1.513,.23,.043,.047,.041,'#4e584f');
-    f.stroke([-.87,1.24,.23],[-1.07,1.39,.25],.066,'#627068');
-    f.stroke([-.514,1.27,.18],[-.32,1.32,.03],.067,'#786446');
+    f.part('teaKettle',-.68,.969,.23,1,1,1,'#fff',p.stems);
     for(let j=0;j<5;j++){
       const x=.16+j%3*.32, z=.04+Math.floor(j/3)*.29;
       f.part('kyoCup',x,.974,z,.121,.139,.12,j%2?'#e3dbc1':'#9caca0');
@@ -217,7 +253,7 @@ function foodCounter(p,stand,light) {
 function streetLamps(p,light){
   for(const z of [-382,-395,-411,-438,-451,-472]){
     for(const side of [-1,1]){
-      const f=frame(p,120+side*4.85,z,0);
+      const f=frame(p,...districtPoint('kyo',120+side*4.85,z),0);
       f.part('rock',0,.12,0,.38,.20,.36,'#919782',p.stone);
       f.post(0,0,3.10,.076);
       f.stroke([side*.16,3.04,0],[-side*.83,3.04,0],.059,timber);
@@ -226,7 +262,7 @@ function streetLamps(p,light){
     }
   }
   // A line of gaily dyed lanterns draws visitors to the entrance of the hanamachi.
-  const f=frame(p,150,-425,0);
+  const f=frame(p,...districtPoint('kyo',150,-425),0);
   for(const z of [-4.6,4.6])f.post(0,z,4.33,.087);
   const cable=z=>3.48+.81*(z/4.6)**2;
   for(let i=0;i<12;i++){
@@ -277,6 +313,7 @@ export function kyoPavingMaterial() {
 // Short axe-cut strokes describe folds in the real slope. The gathering of darks
 // follows the spurs, leaving the grass in the fire clearing and the skyline in reserve.
 function hillsideInk(p) {
+  const [cx,cz]=districtPoint('kyo',122,-536);
   const rand=seeded(66189), positions=[],colors=[],indices=[];
   const light=new THREE.Color('#8a8970'),dark=new THREE.Color('#666b56');
   function stroke(x,z,length,dx,width,tint){
@@ -286,16 +323,16 @@ function hillsideInk(p) {
       const w=width*(.10+.90*arc**.68);
       for(const side of [-1,1]){
         const u=xx+side*w+.057*Math.sin(t*14+side);
-        positions.push(u-122,terrainHeight(u,zz)+.145,zz+536);
+        positions.push(u-cx,terrainHeight(u,zz)+.145,zz-cz);
         colors.push(tint.r,tint.g,tint.b);
       }
       if(j<8){const k=base+j*2;indices.push(k,k+2,k+1,k+1,k+2,k+3);}
     }
   }
   for(let i=0;i<67;i++){
-    const x=122+(rand()-.5)*136,z=-539+rand()*43;
-    const side=x<122?-1:1;
-    if(Math.abs(x-122)<16 && z>-532 || terrainHeight(x,z)<12)continue;
+    const x=cx+(rand()-.5)*136,z=cz-3+rand()*43;
+    const side=x<cx?-1:1;
+    if(Math.abs(x-cx)<16 && z>cz+4 || terrainHeight(x,z)<12)continue;
     const count=2+Math.floor(rand()*5),length=1.2+rand()*5;
     for(let j=0;j<count;j++){
       const drift=rand()-.5;
@@ -308,14 +345,14 @@ function hillsideInk(p) {
   p.shapes.kyoHillInk=g;
   const mat=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,transparent:true,
     opacity:.70,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2});
-  p.part('kyoHillInk',122,0,-536,1,1,1,'#fff',0,0,0,mat,false,true);
+  p.part('kyoHillInk',cx,0,cz,1,1,1,'#fff',0,0,0,mat,false,true);
 }
 
 function mountainFires(scene) {
   // Lay the 大 onto real terrain. Projecting each hearth from the centre of the avenue
   // keeps a level crossbar on the curved mountain and leaves real parallax at the sides.
-  const hearths=[],viewerZ=-424,viewY=terrainHeight(120,viewerZ)+1.9;
-  const northZ=-536,nearZ=-482,cx=122;
+  const hearths=[],viewerZ=DISTRICTS.kyo.z,viewY=terrainHeight(DISTRICTS.kyo.x,viewerZ)+1.9;
+  const northZ=viewerZ-112,nearZ=viewerZ-58,cx=DISTRICTS.kyo.x+2;
   const topSlope=(terrainHeight(cx,northZ)-viewY)/(viewerZ-northZ);
   const lower=Math.max(.062,topSlope*.23),upper=Math.min(.246,topSlope*.82);
   function hearth(u,height) {
@@ -385,6 +422,8 @@ function mountainFires(scene) {
 
 export function createKyo(scene,painter){
   const p=painter,light=lanternPaper();
+  p.shapes.shopBanner=hangingBanner();
+  p.shapes.teaKettle=ironKettle();
   light.emissiveMap=light.map;
   p.shapes.kyoLantern=new THREE.LatheGeometry([
     [.48,-.5],[.69,-.47],[.87,-.37],[.97,-.22],[1,.04],[.98,.23],[.89,.36],[.70,.47],[.48,.5],
@@ -403,10 +442,10 @@ export function createKyo(scene,painter){
   for(const stand of KYO_FOOD)foodCounter(p,stand,light);
   streetLamps(p,light);
   const crowd=createStreetCrowd(scene), fires=mountainFires(scene);
-  return (time,player)=>{
+  return (time,player,camera)=>{
     const night=kyoNight(time);
     light.emissiveIntensity=.04+night*.94;
     windowPaper.emissiveIntensity=night*.46;
-    crowd(time,player);fires(time,night,player);
+    crowd(time,player,camera);fires(time,night,player);
   };
 }

@@ -32,8 +32,8 @@ function pine(i) {
 export function* paintPeachCliffs(p,map){
   // Reuse the ground mesh lattice exactly. The varnish sits directly on
   // the collidable stone even where a ledge has an almost vertical face.
-  const n=480,span=2*BOUND/n, index=v=>Math.floor((v+BOUND)/span);
-  const colMin=index(PEACH.x-131),colMax=index(PEACH.x+128)+1,rowMin=index(PEACH.z-117),rowMax=index(PEACH.z+118)+1;
+  const n=960,span=2*BOUND/n, index=v=>Math.floor((v+BOUND)/span);
+  const colMin=index(PEACH.x-251),colMax=index(PEACH.x+160)+1,rowMin=index(PEACH.z-189),rowMax=index(PEACH.z+130)+1;
   const surface=new T.MeshLambertMaterial({map,vertexColors:true,transparent:true,depthWrite:false,
     polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2,emissiveMap:map,emissive:'#a0a28b',emissiveIntensity:.19});
   surface.onBeforeCompile=shader=>{
@@ -53,12 +53,17 @@ export function* paintPeachCliffs(p,map){
       const r=hypot(dx,dz),a=(Math.atan2(dz,dx)+PI*2)%(PI*2);
       const slope=hypot((terrainHeight(x+1,z)-terrainHeight(x-1,z))*.5,(terrainHeight(x,z+1)-terrainHeight(x,z-1))*.5);
       const stripe=.5+.5*sin(a*18+.22*y+sin(a*9));
-      const alpha=ease(y+2.4*stripe,11,20)*ease(r,.42,.61)*(1-ease(r,.99,1.12))*
-        (.57+.41*ease(slope,.16,.92));
+      const bare=ease(slope,.23,.86);
+      const inner=ease(y+2.4*stripe,11,25)*ease(r,.42,.72)*(1-ease(r,1.02,1.29))*(.38+.57*bare);
+      const outer=ease(y,35,74)*bare*ease(r,.72,1.15)*.74;
+      const fade=ease(x-PEACH.x,-251,-225)*(1-ease(x-PEACH.x,137,160))*
+        ease(z-PEACH.z,-189,-160)*(1-ease(z-PEACH.z,112,130));
+      const alpha=Math.max(inner,outer)*fade;
       maxAlpha=Math.max(maxAlpha,alpha);
       stone.set('#e5e5cf').lerp(moss,.49*(1-ease(slope,.39,.94)));
       xyz.push(u*span/12,(y+.024)/12,v*span/12);colors.push(stone.r,stone.g,stone.b,alpha);
-      uv.push(a*1.79+.29*sin(a*3)+.006*y,y*.027+.18*cos(a*7)+.06*sin(a*14));
+      uv.push((x-PEACH.x)*.012+(z-PEACH.z)*.006+.004*y+.10*sin(z*.061),
+        y*.027+.16*sin(x*.039)+.08*cos(z*.072));
       if(u<nx&&v<nz){const j=v*(nx+1)+u,k=j+nx+1;faces.push(j,k,j+1,j+1,k,k+1);}
     }
     if(maxAlpha<.01)continue;

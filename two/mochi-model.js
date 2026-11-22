@@ -110,6 +110,90 @@ function skinMaterial(maps) {
   return { material, uniforms };
 }
 
+// Cut above the rigged hands and turn the unexposed underside into a rounded
+// chin. Intersect the original triangles so the upper cheeks, UV seams and lip
+// bed remain precisely those of the player, even in a close side portrait.
+function riceBust(src) {
+  const cut=1.075, ids=new Map(), xyz=[], uv=[], normals=[], indices=[];
+  const pos=src.attributes.position, tex=src.attributes.uv, norm=src.attributes.normal;
+  const va=new T.Vector3(),vb=new T.Vector3();
+  function vertex(a,b=a,t=0){
+    const key=a===b?a:Math.min(a,b)+'/'+Math.max(a,b);
+    if(ids.has(key))return ids.get(key);
+    const id=xyz.length/3;ids.set(key,id);
+    for(const [array,attr] of [[xyz,pos],[normals,norm]]){
+      va.fromBufferAttribute(attr,a).lerp(vb.fromBufferAttribute(attr,b),t);
+      if(attr===norm)va.normalize();
+      array.push(va.x,va.y,va.z);
+    }
+    uv.push(T.MathUtils.lerp(tex.getX(a),tex.getX(b),t),T.MathUtils.lerp(tex.getY(a),tex.getY(b),t));
+    return id;
+  }
+  const rings=new Map(),levels=9;
+  function ring(start){
+    if(rings.has(start))return rings.get(start);
+    const row=[],x=xyz[start*3],z=xyz[start*3+2];
+    for(let j=0;j<=levels;j++){
+      const a=j/levels*Math.PI*.5,r=Math.cos(a),y=-.64*Math.sin(a);
+      row.push(xyz.length/3);xyz.push(x*r,cut+y,z*r);
+      va.set(x*r/1.21**2,y/.64**2,z*r/1.08**2).normalize();
+      normals.push(va.x,va.y,va.z);
+      // Sample unprinted rice on the reverse of the albedo sheet. Projecting
+      // the cut edge's UVs straight down would drag the painted mouth onto the collar.
+      uv.push(.23+.13*x*r,.21+.15*z*r);
+    }
+    rings.set(start,row);return row;
+  }
+  const ix=src.index.array;
+  for(let i=0;i<ix.length;i+=3){
+    const clipped=[];let enter,leave;
+    for(let k=0;k<3;k++){
+      const a=ix[i+k],b=ix[i+(k+1)%3],ya=pos.getY(a),yb=pos.getY(b);
+      if(ya>=cut)clipped.push(vertex(a));
+      if((ya>=cut)===(yb>=cut))continue;
+      const edge=vertex(a,b,(cut-ya)/(yb-ya));clipped.push(edge);
+      if(ya>=cut)leave=edge;else enter=edge;
+    }
+    for(let k=1;k<clipped.length-1;k++)indices.push(clipped[0],clipped[k],clipped[k+1]);
+    if(enter===undefined)continue;
+    const left=ring(enter),right=ring(leave);
+    for(let j=0;j<levels;j++){
+      indices.push(left[j],right[j],right[j+1]);
+      if(j<levels-1)indices.push(left[j],right[j+1],left[j+1]);
+    }
+  }
+  const g=new T.BufferGeometry();
+  for(const [name,data,n] of [['position',xyz,3],['normal',normals,3],['uv',uv,2]])
+    g.setAttribute(name,new T.Float32BufferAttribute(data,n));
+  g.setIndex(indices);g.computeBoundingSphere();return g;
+}
+
+let residentSkin;
+const residentMaterials=new Map();
+export function dressedRiceFace(kind,capacity=0) {
+  const face=capacity ? new T.InstancedMesh(new T.BufferGeometry(),undefined,capacity) : new T.Mesh();
+  face.name='にっこり餅の面相';face.castShadow=true;face.visible=false;
+  if(capacity){face.frustumCulled=false;face.instanceMatrix.setUsage(T.DynamicDrawUsage);}
+  function fit(){
+    const original=source.gltf.scene.getObjectByName('Nikkori');
+    residentSkin??=riceBust(original.geometry);
+    if(!residentMaterials.has(kind)){
+      const {material,uniforms}=skinMaterial(source.maps);
+      const gestures=['Warm','Read','Surprise','Normal','Warm','Read','Normal'];
+      uniforms.riceSmile.value=0;
+      uniforms.riceCell.value=original.userData.faceCues[gestures[kind]][0][1];
+      uniforms.riceTint.value.set(kind===3?'#dce6ae':kind===4?'#f2d3a4':'#fff9ec');
+      residentMaterials.set(kind,material);
+    }
+    face.material.dispose();
+    face.geometry.dispose();
+    face.geometry=residentSkin;face.material=residentMaterials.get(kind);face.visible=true;
+  }
+  if(source)fit();
+  else loadRiceModel().then(fit,()=>{}); // The boot screen owns the shared loading error.
+  return face;
+}
+
 function kagamiLayers(parent, grain) {
   const stack = new T.Group();
   stack.name='鏡餅・福重ね';

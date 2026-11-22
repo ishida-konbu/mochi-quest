@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
+import { SilkPanels, silkMaterial } from './kosode.js';
 import { wrapDelta } from './terrain.js';
 import { SEA_ENSEMBLES, updateRyuguResident } from './ryugu-residents.js';
 import { InkForm, surface, fin, pigment, seaPrint, INK, SOOT, PAPER, WARM, RED } from './ryugu-ink.js';
@@ -18,18 +19,74 @@ function eye(f,x,y,z,side,r,forward=.48) {
   f.stroke([[x+side*r*.08,y+r*.78,z+r*.73],[x+side*r*.45,y+r*1.02,z+r*.17],
     [x+side*r*.09,y+r*.92,z-r*.88]],[.007,.023,.006],INK,'paper',7);
 }
+const breamSections=[[-.89,.028,.048,-.12],[-.68,.11,.19,-.09],[-.48,.22,.34,-.04],[-.20,.31,.45,0],
+    [.12,.36,.48,.04],[.40,.324,.43,.078],[.62,.24,.32,.105],[.785,.14,.18,.09],[.87,.055,.072,.075]];
+// The court players dress around their anatomy: the dancer's mantle clears
+// each ray, the drummer's short coat leaves the shell exposed, and a scribe
+// knots the indigo cloth above the roots of the eight working arms.
+function courtGarb(kind,pivot) {
+  const silk=new SilkPanels();
+  if(kind==='bream'){
+    // Two suspended shoulder panels flex over the flanks. The red underside
+    // appears along their turned trail and the short pleats beneath the knot.
+    for(const side of [-1,1]){
+      const panel=(u,v,lift=0)=>{
+        const peak=sin(Math.PI*u),z=-.63+.92*u-.043*v;
+        const index=breamSections.findIndex(r=>r[0]>=z),lower=breamSections[index-1],upper=breamSections[index];
+        const t=(z-lower[0])/(upper[0]-lower[0]);
+        const [width,height,center]=[1,2,3].map(i=>THREE.MathUtils.lerp(lower[i],upper[i],t));
+        const a=.40+.15*u+(.67+.69*peak)*v,fold=.010+.016*peak*v*cos(14*u-v);
+        return [side*(width+fold+lift)*sin(a),center+(height+.015+lift)*cos(a),z];
+      };
+      silk.cut(15,26,panel,3);
+      silk.cut(2,26,(u,v)=>panel(u,.928+.053*v,.006),4,'#af765b');
+    }
+  }else if(kind==='seaTurtle'){
+    for(const side of [-1,1]){
+      // The short open happi drapes from the neck over each shell margin;
+      // leave the central scutes and the breast carrying the drum uncovered.
+      const panel=(u,v,d=0)=>{
+        const a=side*(.63+2.04*u),arc=sin(v*Math.PI);
+        const y=.45-.81*v-.10*sin(Math.PI*u)*v;
+        const radius=Math.sqrt(Math.max(.13,1-(y/.72)**2));
+        return [sin(a)*(.565*radius+.012*arc+.020*cos(12*u-v)*v+d),
+          y+.036*cos(5*u)*v, -.075+cos(a)*(.57*radius+d)];
+      };
+      silk.cut(19,24,panel,0);
+      silk.cut(12,4,(u,v)=>panel(.015+.060*u,v,.008),4,'#e3c69f');
+      silk.cut(3,24,(u,v)=>panel(u,.921+.057*v,.006),4,'#bd9d77');
+    }
+  }else{
+    const tilt=new THREE.Quaternion().setFromEuler(new THREE.Euler(-.19,0,.05));
+    const q=new THREE.Vector3();
+    const sash=(u,v,d=0)=>{
+      const a=tau*u,lat=.42+.225*v+.054*sin(a),r=cos(lat);
+      q.set((.443+d)*r*sin(a),.604*sin(lat),(.414+d)*r*cos(a)).applyQuaternion(tilt);
+      return [q.x,.33+q.y,-.055+q.z];
+    };
+    silk.cut(6,42,sash,1);
+    silk.cut(2,42,(u,v)=>sash(u,.065+.082*v,.004),4,'#dcc99f');
+    const knot=sash(.715,.51);
+    for(const side of [-1,1]){
+      silk.cut(16,8,(u,v)=>{
+        return [knot[0]-.10*v-.07*sin(v*Math.PI)+(u-.5)*.078,
+          knot[1]+side*.043*v-.245*v*v+.014*cos(tau*u),
+          knot[2]-(side<0?.217:.115)*v+(u-.5)*.060];
+      },1);
+    }
+  }
+  return {name:kind+'-silk',pivot,geometry:silk.finish(),material:silkMaterial()};
+}
 function breamBody(f) {
   // The artwork is mapped once to each flank. The lateral line and operculum
   // run nose to tail on both sides around a continuous, spindle-shaped body.
-  const rings=[[-.89,.028,.048,-.12],[-.68,.11,.19,-.09],[-.48,.22,.34,-.04],[-.20,.31,.45,0],
-    [.12,.36,.48,.04],[.40,.324,.43,.078],[.62,.24,.32,.105],[.785,.14,.18,.09],[.87,.055,.072,.075]];
   const positions=[],uv=[],indices=[],sides=32;
-  rings.forEach(([z,w,h,lift],i)=>{
+  breamSections.forEach(([z,w,h,lift],i)=>{
     for(let j=0;j<=sides;j++) {
       const a=j*tau/sides;
       positions.push(w*sin(a),lift+h*cos(a),z);
       uv.push((z+.89)/1.76,.5+.5*(lift+h*cos(a))/.56);
-      if(i<rings.length-1 && j<sides){
+      if(i<breamSections.length-1 && j<sides){
         const k=i*(sides+1)+j;indices.push(k,k+1,k+sides+1,k+1,k+sides+2,k+sides+1);
       }
     }
@@ -58,7 +115,7 @@ function breamBody(f) {
   f.oval([-.232,.365,.29],[.064,.056,.060],'#7b8073');
 }
 function bream() {
-  const rigs=[part('bream-body',[0,.93,0],breamBody)];
+  const rigs=[part('bream-body',[0,.93,0],breamBody),courtGarb('bream',[0,.93,0])];
   rigs.push(part('bream-tail',[0,.815,-.78],f=>{
     const tail=[v(0,.055,.065),v(0,.15,-.13),v(.012,.31,-.36),v(.018,.33,-.49),
       v(.014,.15,-.42),v(0,-.011,-.33),v(-.012,-.26,-.53),v(0,-.27,-.43),v(0,-.18,-.18),v(0,-.055,.065)];
@@ -81,10 +138,27 @@ function bream() {
 function turtle() {
   const rigs=[part('turtle-shell',[0,.85,-.14],f=>{
     f.oval([0,0,0],[.506,.59,.388],moss,[-.27,0,0]);
-    f.oval([0,.07,-.09],[.536,.646,.325],SOOT,[-.19,0,0]);
-    // Plated carapace. The top-down scute chart is tipped up with the shell
-    // so its diamond seams remain visible to a swimmer behind the musician.
-    f.oval([0,.095,-.18],[.552,.394,.69],'#fff5db',[PI/2-.22,0,0],'shell','top');
+    // A single domed carapace and its upturned marginal scutes. Each plate
+    // turns around the same rim, so a rim never cuts through the back.
+    const shell=(a,r)=>{
+      const outline=1+.017*sin(11*a+.2)*r**7,x=r*cos(a)*outline,y=r*sin(a);
+      return [.554*x,.068+.675*y,-.083+.145*y-.387*Math.sqrt(Math.max(0,1-r*r))];
+    };
+    const p=[],uv=[],ix=[],n=56,rows=15;
+    for(let j=0;j<=rows;j++)for(let i=0;i<=n;i++){
+      const r=sin(.5*PI*j/rows),a=tau*i/n;
+      p.push(...shell(a,r));uv.push(.5+.485*r*cos(a),.5+.485*r*sin(a));
+      const k=j*(n+1)+i;if(j<rows&&i<n)ix.push(k,k+1,k+n+1,k+1,k+n+2,k+n+1);
+    }
+    f.draw(surface(p,ix,uv),[0,0,0],[1,1,1],'#fff7e2',[0,0,0],'shell');
+    for(const r of [.885,.995]){
+      const points=Array.from({length:65},(_,i)=>shell(i*tau/64,r));
+      f.stroke(points,r>.9?.026:.012,r>.9?'#9a8966':'#73664e','paper',6);
+    }
+    for(let j=0;j<22;j++){
+      const a=j*tau/22;
+      f.stroke([shell(a,.888),shell(a+.025,.94),shell(a+.043,.991)],[.004,.009,.005],SOOT,'paper',5);
+    }
     f.oval([0,.004,.207],[.425,.544,.23],'#d1c394',[-.24,0,0]);
     f.stroke([[0,.48,.28],[.015,.17,.45],[0,-.23,.40],[0,-.43,.30]],[.007,.014,.013,.005],umber);
     for(const s of [-1,1])for(let j=0;j<3;j++){
@@ -122,6 +196,7 @@ function turtle() {
       fin(f,[[s*.049,-.078,-.10],[s*.257,-.102,-.12],[s*.371,-.185,-.26],toe,[s*.16,-.26,-.32],[s*.061,-.15,-.21]],'#a19c75',[s*.086,-.12,-.14]);
     }));
   }
+  rigs.push(courtGarb('seaTurtle',[0,.85,-.14]));
   rigs.push(part('turtle-drum',[0,.835,.47],f=>{
     const r=.294,z=.14;
     f.draw(new THREE.CylinderGeometry(r,r,.27,32),[0,0,z],[1,1,1],RED,[PI/2,0,0]);
@@ -162,11 +237,8 @@ function octopus() {
     f.oval([0,.016,.367],[.137,.114,.153],'#b58271',[-.21,0,0]);
     f.oval([0,.026,.496],[.088,.076,.031],SOOT,[-.21,0,0]);
     f.oval([0,.037,.515],[.057,.045,.016],INK);
-    f.oval([0,.596,-.073],[.418,.105,.397],ivory,[-.15,0,.11]);
-    f.stroke([[.304,.59,-.071],[.44,.58,-.105],[.529,.39,-.18]],[.056,.063,.014],ivory);
-    f.stroke([[.306,.59,-.071],[.43,.64,-.16],[.47,.62,-.27]],[.048,.045,.01],'#92a199');
-    f.stroke([[-.358,.547,.095],[-.17,.568,.263],[.012,.587,.31],[.22,.609,.249],[.353,.627,.128]],[.006,.015,.018,.014,.004],'#77857a');
   })];
+  rigs.push(courtGarb('octopus',[0,.86,0]));
   for(let i=0;i<8;i++){
     const angle=tau*i/8+.18,s=sin(angle),c=cos(angle), pivot=armRoot(i);
     const brush=i===1, paper=i===7;
@@ -258,7 +330,7 @@ function movement(rig,n,t,d) {
     d.quaternion.copy(raised).slerp(contact,strike);
   }else if(name.startsWith('turtle-paddle')){
     d.rotation.x=.30*sin(beat*.6+(name.endsWith('l')?0:2.8));
-  }else if(name==='octopus-mantle'){
+  }else if(name==='octopus-mantle'||name==='octopus-silk'){
     d.rotation.z=.06*sin(beat)+.12*answer;
     d.scale.set(.99+.022*sin(beat),1.01-.030*sin(beat),1);
   }else if(name==='octopus-arm-1' || name.startsWith('scribe-stroke')){
@@ -292,7 +364,7 @@ export function createRyuguPerformers(scene) {
   const rigs={},material=pigment(),base=new THREE.Object3D(),limb=new THREE.Object3D(),combined=new THREE.Matrix4(),pose={};
   for(const [kind,make] of Object.entries({bream,seaTurtle:turtle,octopus})) {
     rigs[kind]=[...make(),acknowledgement()].map(r=>{
-      const mesh=new THREE.InstancedMesh(r.geometry,material,SEA_ENSEMBLES);
+      const mesh=new THREE.InstancedMesh(r.geometry,r.material||material,SEA_ENSEMBLES);
       mesh.name=kind+' / '+r.name;mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled=false;mesh.count=0;root.add(mesh);
       return {...r,mesh};

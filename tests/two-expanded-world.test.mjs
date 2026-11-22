@@ -1,15 +1,22 @@
+import {DISTRICTS, DISTRICT_SHIFT, relocateLegacyPosition} from '../two/geography.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
 import {INARI_GATES, INARI_ROUTE} from '../two/pilgrimage-layout.js';
+import {PALACE_APPROACH} from '../two/ryugu-layout.js';
 import {kyoInfluence, kyoNight} from '../two/kyo-layout.js';
 import {measureRoute, cartPosition} from '../two/trade-routes.js';
 import {merchantPosition} from '../two/travelling-merchants.js';
 import {createGame} from '../two/game.js';
 
-test('the expanded island doubles the playable area and joins at an even ocean floor',()=>{
-  assert.ok(Math.abs((2*BOUND)**2-2*832**2)<1e-8);
+test('the expanded island doubles each horizontal dimension and joins at an even ocean floor',()=>{
+  assert.ok(Math.abs((2*BOUND)**2-8*832**2)<1e-8);
   assert.deepEqual(REGIONS.slice(0,10),ORIGINAL_REGIONS);
+  for(const a of REGIONS.slice(10)) for(const b of REGIONS.slice(10)) {
+    const oldA=DISTRICT_SHIFT[a.id],oldB=DISTRICT_SHIFT[b.id];
+    assert.equal(Math.hypot(a.x-b.x,a.z-b.z),2*Math.hypot(oldA.x-oldB.x,oldA.z-oldB.z));
+    assert.deepEqual(relocateLegacyPosition(oldA.x,oldA.z),[a.x,a.z]);
+  }
   for(let v=-BOUND+1;v<BOUND;v+=5.1){
     assert.ok(Math.abs(terrainHeight(v,-BOUND+.01)-terrainHeight(v,BOUND-.01))<.015);
     assert.ok(Math.abs(terrainHeight(-BOUND+.01,v)-terrainHeight(BOUND-.01,v))<.015);
@@ -32,8 +39,50 @@ test('the Inari route leads through a thousand open gates up to the summit seal'
   assert.equal(createGame(game.save()).restored,true);
 });
 
+test('the northern watershed has broad wooded spurs above and beyond the torii road',()=>{
+  const {x,z}=DISTRICTS.inari;
+  for(const [u,v] of [[-260,71],[-210,169],[-180,211],[58,84]]) {
+    assert.ok(terrainHeight(x+u,z+v)>28,'natural spur at '+[u,v]);
+  }
+  assert.ok(terrainHeight(x-185,z+147)>terrainHeight(x+5,z+147)+35);
+  for(const r of CONNECTING_ROADS) {
+    for(const point of r.points)assert.ok(waterDepth(...point)<.2,r.destination);
+  }
+  for(const point of PALACE_APPROACH.slice(1))assert.ok(waterDepth(...point)>1);
+});
+
+test('the peach orchard lies inside a mountain range with a low eastern pass',()=>{
+  const {x,z}=DISTRICTS.peach;
+  assert.ok(terrainHeight(x,z)<10);
+  for(const [u,v] of [[-171,0],[-145,-48],[-92,-106],[-33,-122]]) {
+    assert.ok(terrainHeight(x+u,z+v)>55,'western massif at '+[u,v]);
+  }
+  const path=CONNECTING_ROADS.find(r=>r.destination==='桃源郷').points;
+  for(let i=1;i<path.length;i++){
+    const [a,b]=path[i-1],[c,d]=path[i];
+    const gradient=Math.abs(terrainHeight(a,b)-terrainHeight(c,d))/Math.hypot(a-c,b-d);
+    assert.ok(gradient<.43,'road grade at '+[a,b]);
+  }
+});
+
+test('a fifth-edition save follows its district, including underwater depth and turtle position',()=>{
+  const game=createGame(), snap=game.save();
+  snap.version=5;snap.items.length=56;
+  for(const [id,at] of Object.entries(DISTRICT_SHIFT)){
+    const underwater=id==='ryugu';
+    Object.assign(snap.player,{x:at.x,z:at.z,y:underwater?-15:6,diveDepth:underwater?15:0});
+    Object.assign(snap.turtle,{x:at.x+3,z:at.z+2,homeX:at.x+3,homeZ:at.z+2});
+    const resumed=createGame(snap);
+    assert.equal(resumed.restored,true);
+    const next=resumed.save();
+    assert.deepEqual([next.player.x,next.player.z],[DISTRICTS[id].x,DISTRICTS[id].z]);
+    assert.deepEqual([next.turtle.x,next.turtle.z],[DISTRICTS[id].x+3,DISTRICTS[id].z+2]);
+    assert.equal(next.player.diveDepth,underwater?15:0);
+  }
+});
+
 test('city lights follow a local day and night cycle',()=>{
-  assert.equal(kyoInfluence(120,-424),1);assert.equal(kyoInfluence(0,62),0);
+  assert.equal(kyoInfluence(DISTRICTS.kyo.x,DISTRICTS.kyo.z),1);assert.equal(kyoInfluence(0,62),0);
   assert.equal(kyoNight(0),0);assert.equal(kyoNight(72),1);assert.equal(kyoNight(144),0);
 });
 

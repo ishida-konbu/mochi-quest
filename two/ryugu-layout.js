@@ -1,5 +1,11 @@
 // The procession enters from the east. Local u is north, v faces the coast.
-export const RYUGU = Object.freeze({ x: -331, z: 135 });
+import { DISTRICTS } from './geography.js';
+export const RYUGU = DISTRICTS.ryugu;
+// The same sea lane is printed on the atlas and marked with moored floats.
+export const PALACE_APPROACH = [
+  [-184,112],[-226,119],[-280,135],[-339,160],[-402,190],
+  [-471,215],[-535,243],[-584,258],[RYUGU.x+35,RYUGU.z-7],[RYUGU.x,RYUGU.z],
+];
 export const HALLS = [
   { u: 0, v: -14, w: 15, d: 7.8, tiers: 3 },
   { u: -14.7, v: -6.8, w: 7.5, d: 6.3, tiers: 2 },

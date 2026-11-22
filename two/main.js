@@ -13,6 +13,7 @@ import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS
   transferURL, decodeTransfer, storeTransfer } from './journey-transfer.js';
 import { createGame } from './game.js';
 import { SPECIES } from './bestiary.js';
+import { SCROLL_FAUNA, faunaDrawing, FAUNA_SHEET } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { seaPortrait } from './ryugu-performers.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
@@ -96,7 +97,7 @@ let pitch = 0.23,
 let goal = REGIONS.some((r) => r.id === savedSettings.goal) ? savedSettings.goal : null;
 let trackedAnimal = null, trackedHabitat = null, jumpPin = null;
 const speciesNames = { frog:'蛙', rabbit:'兎', turtle:'ミツユビハコガメ',
-  ...Object.fromEntries(Object.entries({...SPECIES,...SEA_SPECIES}).map(([type,spec])=>[type,type==='bird'?'丹頂鶴':spec.label])) };
+  ...Object.fromEntries(Object.entries({...SPECIES,...SEA_SPECIES,...SCROLL_FAUNA}).map(([type,spec])=>[type,type==='bird'?'丹頂鶴':spec.label])) };
 function nearestUndelivered(type, habitat) {
   let result = null, best = Infinity;
   for (const n of state.npcs) {
@@ -706,7 +707,13 @@ function journalDialog() {
     row.dataset.species=type;
     row.innerHTML='<i class="animal-print" aria-hidden="true"></i><span><b></b><small></small></span><strong></strong>';
     const print=row.firstElementChild;
-    if (SEA_SPECIES[type]) {
+    if (SCROLL_FAUNA[type]) {
+      const tile=faunaDrawing({type,variant:0,perched:false}).start+1;
+      const {columns,rows}=FAUNA_SHEET;
+      print.style.backgroundImage="url('./assets/residents/scroll-fauna.webp')";
+      print.style.backgroundSize=(columns*100)+'% '+(rows*100)+'%';
+      print.style.backgroundPosition=(tile%columns)/(columns-1)*100+'% '+Math.floor(tile/columns)/(rows-1)*100+'%';
+    } else if (SEA_SPECIES[type]) {
       print.style.backgroundImage='url("'+seaPortrait(type)+'")';
       print.style.backgroundSize='contain';
     } else if (SPECIES[type]) {
@@ -725,7 +732,7 @@ function journalDialog() {
       print.style.backgroundImage="url('../assets/actors/"+art+".webp')";
     }
     row.querySelector('b').textContent=name;
-    row.querySelector('small').textContent=((SPECIES[type] || SEA_SPECIES[type])?.points || 10).toLocaleString('ja-JP')+' 点';
+    row.querySelector('small').textContent=((SPECIES[type] || SEA_SPECIES[type] || SCROLL_FAUNA[type])?.points || 10).toLocaleString('ja-JP')+' 点';
     row.querySelector('strong').textContent=number+' / '+group.length;
     row.disabled=number===group.length;
     row.onclick=()=>trackDelivery(nearestUndelivered(type));
@@ -759,7 +766,7 @@ function selectMap(id) {
     autumn: '楓の枝が重なる谷道。紅葉をくぐって峡へ。',
     moon: '北の空には十五夜の月。薄のそばの三方に近づくと、月見団子を食べられます。',
     dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。',
-    kyo: '舞妓餅が行き交う都。広場の茶席で蛙が盆を差し出し、向かいの辻では兎と蛙が笛と太鼓を合わせます。茶とみたらし団子は店先で。夜は大通りから北の山に大の送り火が見えます。',
+    kyo: '舞妓餅が行き交う都。広場の茶席で蛙が盆を差し出し、向かいの辻では兎と蛙が笛と太鼓を合わせます。西の辻から北へ入ると京の評定所。白洲の奥に裁きの座があります。茶とみたらし団子は店先で。夜は大通りから北の山に大の送り火が見えます。',
     peach: '東の峠を抜け、桃の花をたどって谷底へ。木陰では兎と蛙が相撲を取り、猿が土俵をのぞきこみます。',
     ryugu: '海風の松原から西へ泳ぎ、'+(coarse?'「潜る」':'↓ キー')+'を長押しして海底へ。真珠灯籠と海亀・鯛・蛸の一座をたどり、楼門の先の御朱印所へ。'+(coarse?'「跳ぶ」':'Space キー')+'を長押しすると浮上します。',
     todaiji: '回廊の先に、蓮の座に鎮まる大餅仏。参道で鹿が兎に一礼し、脇では猿と兎が筆を運びます。',

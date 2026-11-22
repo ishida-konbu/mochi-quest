@@ -53,7 +53,7 @@ function registerVillageObjects(objects) {
 // A turning animal sweeps its entire silhouette, including muzzle or tail.
 // Padding each route sample by half its spacing covers the connecting arc.
 // Measured in each rig's local metres over its walking and resting actions.
-const footprints={rabbit:1.22,frog:.84,monkey:.68,fox:1.49,tiger:1.70,deer:2.14,boar:1.29,shishi:2.20,turtle:1.65};
+const footprints={rabbit:1.22,frog:.84,monkey:.68,fox:1.49,tiger:1.70,deer:2.14,boar:1.29,shishi:2.20,turtle:1.65,elephant:1.90,baku:1.25,ox:1.52,chicken:.66};
 export function animalRadius(n) {
   let radius=footprints[n.type] || .84;
   if(n.area) radius=n.role==='fisher' ? 1.72 : Math.max(radius,1.12);

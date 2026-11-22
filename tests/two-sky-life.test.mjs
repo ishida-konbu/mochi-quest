@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {circuitTime} from '../two/legend-flight.js';
 import {createGame} from '../two/game.js';
 import {moveWildlife, legendFlight} from '../two/bestiary.js';
 import {canopyHeight} from '../two/village-paths.js';
@@ -40,8 +41,8 @@ test('a crane at the outer turn of its ellipse streams across the player cell bo
 test('each legend traverses all 25 sectors, changing altitude above sea, ridges and village roofs',()=>{
   const journey={...createGame().save(),flightSeed:32495}, game=createGame(journey);
   for(const type of ['dragon','kirin']) {
-    const n=game.state.npcs.find(n=>n.type===type), step=type==='dragon'?24:33;
-    const samples=step*25*4*2, cells=new Set(), districts=new Set(), previous={};
+    const n=game.state.npcs.find(n=>n.type===type), period=circuitTime(n);
+    const samples=period*4*2, cells=new Set(), districts=new Set(), previous={};
     let low=Infinity,high=-Infinity,sea=0,mountain=0,ascending=0,descending=0;
     const section=delta=>(Math.round(wrapDelta(delta)/(2*BOUND/5))+5)%5;
     for(let i=0;i<samples;i++) {
@@ -65,7 +66,7 @@ test('each legend traverses all 25 sectors, changing altitude above sea, ridges 
     assert.equal(cells.size,25);assert.equal(districts.size,REGIONS.length);
     assert.ok(low<11 && high>(type==='dragon'?85:52));
     assert.ok(sea>0 && mountain>0 && ascending>40 && descending>40);
-    const next=legendFlight(n,step*25,{}), first=legendFlight(n,0,{});
+    const next=legendFlight(n,period,{}), first=legendFlight(n,0,{});
     assert.ok(Math.hypot(wrapDelta(next.x-first.x),wrapDelta(next.z-first.z))>5,'next circuit has fresh stops');
   }
 });
@@ -98,7 +99,7 @@ test('the sky seed restores a remote flight before the first frame and through o
 test('the flight velocity follows the drawn curve across route and altitude sample boundaries',()=>{
   const game=createGame({...createGame().save(),flightSeed:7}), dt=.001;
   for(const type of ['dragon','kirin']) {
-    const n=game.state.npcs.find(n=>n.type===type), period=type==='dragon'?600:825;
+    const n=game.state.npcs.find(n=>n.type===type), period=circuitTime(n);
     const vx=p=>p.speed*Math.sin(p.heading), vz=p=>p.speed*Math.cos(p.heading);
     for(const t of [0,.22,35.23,56.10,196.68,period,period+.22,2*period]) {
       const a=legendFlight(n,t-dt,{}), b=legendFlight(n,t,{}), c=legendFlight(n,t+dt,{});
@@ -112,7 +113,7 @@ test('the flight velocity follows the drawn curve across route and altitude samp
   // where the six-metre tail hangs below the dragon's centre.
   const dragon=game.state.npcs.find(n=>n.type==='dragon');
   let crossings=0;
-  for(let time=0;time<1200;time+=.25) {
+  for(let time=0;time<circuitTime(dragon);time+=.25) {
     const p=legendFlight(dragon,time,{}), pitch=dragonPitch(p);
     if(pitch>=-.3) continue;
     const offset=-6.25*Math.cos(pitch)+1.42*Math.sin(pitch);

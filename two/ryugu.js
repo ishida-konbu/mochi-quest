@@ -1,7 +1,8 @@
 import * as THREE from './vendor/three.module.min.js';
 import { terrainHeight, WATER_Y, seeded, wrapDelta } from './terrain.js';
+import { reefFans } from './reef-garden.js';
 import { prepareSeaOrnaments } from './ryugu-architecture.js';
-import { RYUGU, HALLS, GATE_V } from './ryugu-layout.js';
+import { RYUGU, HALLS, GATE_V, PALACE_APPROACH } from './ryugu-layout.js';
 
 const { sin, cos, PI } = Math;
 const vermilion='#91604d', cinnabar='#b87859', ink='#454a43', gilding='#bba374', shell='#e5dac0', jade='#687c70';
@@ -201,8 +202,8 @@ export function dressRyugu(p) {
   flagInk.fillText('竜',48,70);flagInk.fillText('宮',48,131);flagInk.font='37px serif';flagInk.fillText('↓',48,177);
   const cloth=new THREE.CanvasTexture(flagCanvas);cloth.colorSpace=THREE.SRGBColorSpace;
   const flag=new THREE.MeshLambertMaterial({map:cloth,side:THREE.DoubleSide});
-  for(const [offset,lateral] of [[104,4],[59,4],[25,12.4]]) {
-    const xx=x+offset, zz=z-lateral, surface=WATER_Y-bed;
+  for(const [xx,zz] of PALACE_APPROACH.slice(1,-1)) {
+    const offset=xx-x,lateral=z-zz,surface=WATER_Y-bed;
     for(let j=-1;j<=1;j++)put('round',lateral+j*.35,surface+.025,offset,.24,1.82,.24,'#927858',p.wood,0,PI/2);
     for(const length of [-.55,.55])put('box',lateral,surface+.23,offset+length,1.34,.11,.16,'#8c704a',p.wood);
     put('round',lateral+.39,surface+1.31,offset,.066,2.48,.066,'#725d41',p.wood);
@@ -219,7 +220,7 @@ export function dressRyugu(p) {
     p.part('shaft',sx,base+.41,sz,.36,height,.36,'#98a397');
     p.part('ball',sx,base+height+.63,sz,.30,.30,.30,'#f6e4af',0,0,0,pearl,false);
   }
-  const rng=seeded(74852),coral=['#a7826e','#a46757','#be9c7e','#988988'];
+  const rng=seeded(74852), fanPigment=reefFans(p);
   for(let i=0;i<94;i++){
     const a=rng()*PI*2,r=21+rng()*50,u=r*cos(a),v=r*sin(a);
     if(Math.abs(u)<4 && v>0)continue;
@@ -228,19 +229,8 @@ export function dressRyugu(p) {
       for(let j=0;j<3;j++)put('leaf',u+rng()-.5,base,v+rng()-.5,1+rng(),1+rng()*2.7,1+rng(),'#648d77',p.stems,rng()*PI);
       continue;
     }
-    const tint=coral[i%4],size=.7+rng()*1.3,turn=rng()*PI;
-    const branch=(offset,h,bend)=>[u+cos(turn)*offset*size,base+h*size,v+sin(turn)*offset*size+bend];
-    let stem=branch(0,0,0);
-    for(let j=0;j<4;j++) {
-      const next=branch(sin(j*.9)*.19,(j+1)*.52,0);
-      bar(stem,next,size*(.15-j*.021),tint);
-      for(const side of [-1,1]) {
-        const tip=branch(side*(.39+rng()*.34),j*.52+.69,rng()*.24),finger=branch(side*(.47+rng()*.36),j*.52+1.05,0);
-        bar(stem,tip,.073*size,tint);bar(tip,finger,.051*size,tint);
-        const off=branch(side*.92,j*.52+.81,.10);bar(tip,off,.047*size,tint);
-      }
-      stem=next;
-    }
+    const s=.71+rng()*1.21;
+    put('reefFan'+((i/3)%3),u,base,v,s,s*(.91+rng()*.22),s,'#f4e8ce',fanPigment,rng()*PI);
   }
 }
 

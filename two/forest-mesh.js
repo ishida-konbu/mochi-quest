@@ -4,9 +4,10 @@ import { TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
 const TAU = Math.PI*2;
 const vec = (x,y,z) => new THREE.Vector3(x,y,z);
 const UP = vec(0,1,0);
-export const forestTexture = name => new URL('./assets/world/'+name+'.webp',import.meta.url).href;
+export const forestTexture = name => new URL('./assets/world/'+name+'.webp'+
+  (name==='forest-crowns'?'?v=perches-1':''),import.meta.url).href;
 
-export function forestGeometry(index) {
+export function forestGeometry(index, perchOnly = false) {
   const family = Math.floor(index/TREE_FORMS_PER_FAMILY), habit = index%TREE_FORMS_PER_FAMILY;
   const [,form,spray,spread,bole,leafColor,tipColor,barkColor] = TREE_FAMILIES[family];
   let state = (index+1)*139669;
@@ -92,6 +93,19 @@ export function forestGeometry(index) {
         const swing=radius*(random()-.5)*(cane||cone?.26:.55);
         const elbow=origin.clone().add(vec(dx*radius*.37+swept*.28-dz*swing,lift*.18+.015,dz*radius*.37+dx*swing));
         const end=origin.clone().add(vec(dx*radius+swept,lift*(.8+random()*.38),dz*radius));
+        // A bare spur below the first leafy whorl provides a visible landing
+        // place. The sampled contact and the rendered bark share both rings.
+        if (!cane && stem===0 && layer===0 && j===0) {
+          const az=yaw-.64;
+          const root=origin.clone().lerp(elbow,.77);
+          const bend=root.clone().add(vec(Math.cos(az)*radius*.41,-.106,Math.sin(az)*radius*.41));
+          const tip=bend.clone().add(vec(Math.cos(az)*radius*.66,.021,Math.sin(az)*radius*.66));
+          if(perchOnly){
+            const toe=bend.clone().lerp(tip,.59);
+            return {x:toe.x,y:toe.y+.005,z:toe.z,yaw:Math.atan2(tip.x-bend.x,tip.z-bend.z)};
+          }
+          stick([root,bend,tip],[thickness*.51,.009,.0028],6);
+        }
         stick([origin,elbow,end],[thickness*.48*(1-.54*f),thickness*.27*(1-.48*f),.0014],4);
         if(!cone && !cane && (layer+j)%2===0) {
           const forkYaw=yaw+(j%2?-.85:.85), forkSize=radius*(.39+.26*random());

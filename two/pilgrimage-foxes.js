@@ -4,12 +4,14 @@ import * as T from './vendor/three.module.min.js';
 import { terrainHeight, wrapDelta } from './terrain.js';
 import { WEDDING_SITES, weddingPoint } from './pilgrimage-layout.js';
 import { brushWash, surfaceGrain } from './scroll-sculpt.js';
-import { sculpture, brushStroke } from './pilgrimage-pigment.js';
+import { sculpture } from './pilgrimage-pigment.js';
+import { costumeDistance } from './costume-distance.js';
+import { makeNPC } from './actors.js';
+import { SilkPanels, silkMaterial } from './kosode.js';
 
 const {sin,cos,PI}=Math, tau=2*PI;
-const soot='#37352e', fur='#b67e53', ivory='#eed9ae', silk='#eee5cb', cord='#ae4c39';
+const soot='#37352e', silk='#eee5cb', cord='#ae4c39';
 const roles=['lantern','groom','bride','parasol','flute'];
-const dress={lantern:'#99785a',groom:'#404f52',bride:'#eee5cb',parasol:'#71826f',flute:'#a67059'};
 
 function panel(rows,columns,point) {
   const xyz=[], faces=[];
@@ -24,65 +26,21 @@ function panel(rows,columns,point) {
   g.setIndex(faces);g.computeVertexNormals();return g;
 }
 
-// Crown and snout are one tapering profile. The muzzle markings and narrowed
-// eyes sit on the curved cheeks at both sides of the face.
-function face(role){
-  const s=sculpture(),white=role==='bride',coat=white?'#dfc8a3':fur;
-  const stations=[[-.232,.003,.007,.054],[-.158,.160,.19,.064],[-.064,.222,.21,.069],
-    [.070,.222,.184,.055],[.168,.169,.131,.009],[.302,.086,.069,-.036],
-    [.393,.054,.048,-.041],[.425,.017,.022,-.037]];
-  const profile=new T.CatmullRomCurve3(stations.map(([z,w,h])=>new T.Vector3(w,h,z)));
-  const mids=new T.SplineCurve(stations.map(([z,, ,y])=>new T.Vector2(z,y)));
-  const skin=(u,v,lift=0)=>{
-    const q=profile.getPoint(u), y=mids.getPoint(u).y;
-    return [(q.x+lift)*cos(v),y+(q.y+lift)*sin(v),q.z];
-  };
-  s.add(panel(30,32,(u,v)=>skin(v,u*tau)),coat);
-  for(const side of [-1,1]){
-    const flank=(u,v,d=.004)=>skin(u,side===1?v:PI-v,d);
-    // A pale cheek sweeps from the ear to the lip in a long taper.
-    s.add(panel(9,24,(u,v)=>{
-      const t=.14+.82*u, top=-.52+.65*sin(u*PI*.83)-.12*u;
-      return flank(t,-1.55+(top+1.55)*v,.004);
-    }),white?'#f5e7ca':ivory);
-    const ear=new T.Shape(); ear.moveTo(-.112,-.025);
-    ear.quadraticCurveTo(-.139,.094,-.087,.318);ear.quadraticCurveTo(.047,.235,.117,.007);
-    ear.quadraticCurveTo(0,-.049,-.112,-.025);
-    const earOuter=new T.ExtrudeGeometry(ear,{depth:.038,bevelEnabled:false,curveSegments:7});
-    if(!white) s.add(earOuter,coat,side*.15,.202,-.08,.94,1,1,-.1,.64*side,-.30*side);
-    if(!white) s.add(earOuter,'#735447',side*.16,.223,-.031,.57,.73,.47,-.1,.64*side,-.30*side);
-    if(!white) s.stroke(soot,[[side*.228,.213,-.018],[side*.231,.343,-.041],[side*.237,.493,-.057]],[.009,.01,.002],9);
-    const line=(knots,widths,color)=>s.stroke(color,knots.map(([u,v])=>flank(u,v,.012)),widths,13);
-    const lid=(t,v)=>.25-.105*t+(.166*v-.079)*sin(PI*t);
-    s.add(panel(5,18,(u,v)=>flank(.376+.18*u,lid(u,v),.016)),'#e4cc9d');
-    s.add(panel(5,10,(u,v)=>flank(.443+.036*u,.209+sin(PI*u)*(v-.5)*.142,.024)),soot);
-    line([[.35,.25],[.395,.292],[.455,.291],[.518,.231],[.566,.135]],[.001,.008,.011,.009,.001],soot);
-    line([[.33,.512],[.408,.558],[.512,.455]],[.002,.010,.002],white?cord:'#7c513d');
-    // Three tufts break the pale cheek line and turn the whiskers toward the muzzle.
-    for(let k=0;k<3;k++){
-      const t=.235+k*.038,v=-.26-k*.13;
-      const base=flank(t,v,.009), end=flank(t+.15,v-.094,.008);
-      const tip=[base[0]+side*(.033+k*.004),base[1]-.083+k*.012,base[2]-.06];
-      s.add(panel(2,6,(u,w)=>end.map((n,h)=>n+(base[h]-n)*u+(tip[h]-base[h])*u*w)),ivory);
-      s.stroke('#88684e',[end,tip],[.005,.0006],5);
-    }
-    line([[.52,-.48],[.66,-.53],[.82,-.39],[.94,-.20]],[.003,.014,.012,.003],soot);
-    for(let k=0;k<3;k++){
-      const q=flank(.69+k*.038,-.20,.012);
-      s.stroke('#695447',[q,[q[0]+side*.064,q[1]+.006-k*.017,q[2]+.014],
-        [q[0]+side*(.126+k*.021),q[1]+.016-k*.024,q[2]-.015]],[.006,.005,.0007],7);
-    }
-  }
-  s.ball(soot,0,-.030,.399,.054,.036,.041);
+function headwear(role){
+  const s=sculpture(),white=role==='bride';
   if(white){
     // An open hood: the turned rim frames the face, with real air behind its
     // front edge. Silk meets at the nape and hangs over the upper back.
     const hood=(u,v)=>{
       const a=u*tau,theta=.018+v*(2.09+.16*cos(a));
-      return [.359*sin(theta)*sin(a),.06+.32*sin(theta)*cos(a)-.11*v*(1-cos(a))*.5,
+      return [.348*sin(theta)*sin(a),.08+.438*sin(theta)*cos(a)-.11*v*(1-cos(a))*.5,
         -.164-.31*cos(theta)+.070*cos(a)*v];
     };
-    s.add(panel(16,54,hood),silk);
+    s.add(panel(22,54,hood),silk);
+    s.add(panel(5,54,(u,v)=>{
+      const q=hood(u,1-.091*v);
+      return [q[0]*(1-.039*v),q[1]-.023*v,q[2]-.022*v];
+    }),'#cfb89b');
     for(const d of [-1,1]){
       for(let k=0;k<5;k++){const a=k*tau/5;s.ball(k%2?cord:'#ca9270',d*.285+.012*sin(a),.25+.030*cos(a),.015+.030*sin(a),.020,.027,.025);}
       s.ball('#d2a75d',d*.304,.253,.018,.019,.017,.019);
@@ -96,7 +54,13 @@ function face(role){
       .map(([r,y])=>new T.Vector2(r,y)),16),'#363c36',0,.163,-.081,1,1,1,-.34);
     s.stroke('#82816d',[[.067,.277,-.118],[.053,.44,-.15],[.014,.608,-.215]],[.009,.006,.002],10);
   } else if(role==='lantern'){
-    s.add(new T.ConeGeometry(.46,.23,24),'#ad9364',0,.346,-.075,1,1,.89,-.29);
+    const t=(u,v)=>{
+      const a=u*tau,r=.024+v*.452;
+      return [r*sin(a),.500-.196*v+.032*v**6+.081*cos(a)*v,-.07+.88*r*cos(a)];
+    };
+    s.add(panel(7,44,t),'#bba16e');
+    for(let j=0;j<24;j++)s.stroke('#907650',[t(j/24,.03),t(j/24,.49),t(j/24,1)],[.006,.005,.004],7);
+    s.stroke('#776449',Array.from({length:41},(_,j)=>t(j/40,.995)),[.007,.009,.007],49);
   }
   return s.finish();
 }
@@ -115,7 +79,8 @@ function fan(s,x,y,z,scale){
   const edge=Array.from({length:16},(_,i)=>pts(i/15,1));s.stroke(soot,edge,[.004,.009,.004],22);
 }
 function body(role){
-  const s=sculpture(),bride=role==='bride',groom=role==='groom',dye=dress[role];
+  const s=sculpture(),weave=new SilkPanels(),bride=role==='bride',groom=role==='groom';
+  const bolt={lantern:2,groom:1,bride:3,parasol:2,flute:0}[role];
   const hem=bride?.105:groom?.226:.357;
   const radius=new T.SplineCurve([[.1,.348],[.22,.34],[.48,.285],[.72,.224],[.84,.20],[1.06,.25],[1.205,.245],[1.38,.118]]
     .map(([y,r])=>new T.Vector2(r,y)));
@@ -125,7 +90,8 @@ function body(role){
     return [sin(a)*(w+lift),hem+(1.37-hem)*(sec.y-.10)/1.28+.036*(1-v)*sin(3*a),
       cos(a)*(w*.79+lift)-.34*train+.037*v];
   };
-  s.add(panel(19,50,cloth),dye);
+  weave.cut(26,64,(u,v)=>cloth(u-.5,v),bolt);
+  weave.cut(3,64,(u,v)=>cloth(u-.5,.008+.019*v,.006),4,bride?'#d0ab82':'#a7987e');
   function clothline(coords,widths,tint,lift=.007){
     s.stroke(tint,coords.map(([u,v])=>cloth(u,v,lift)),widths,15);
   }
@@ -150,37 +116,27 @@ function body(role){
   for(const side of [-1,1]){
     const hand=bride?[side*.113,1.04,.33]:role==='flute'?[side*.245,1.34,.296]:
       [side*(role==='lantern'&&side===1?.313:.267),side>0&&!groom?1.18:.98,.285];
-    const sx=side*.21, sleeveColor=bride?'#eee1c3':dye;
+    const sx=side*.21;
     // Weighted rectangular sleeves hang off the wrist while the fox holds its prop.
     const clothSleeve=(u,v)=>{
       const a=u*tau,w=.13+.032*sin(v*PI),depth=.129;
       const xx=sx+(hand[0]-sx)*v+side*.089*sin(PI*v);
       return [xx+w*Math.sign(sin(a))*Math.abs(sin(a))**.53,
         1.25+(hand[1]-1.25)*v-.25*v*(1-cos(a))*.5,
-        .036+(hand[2]-.036)*v+depth*cos(a)];
+        .036+(hand[2]-.080)*v+depth*cos(a)];
     };
-    s.add(panel(10,28,clothSleeve),sleeveColor);
+    weave.cut(14,36,clothSleeve,bolt,'#fff',(u,v)=>[.04+.91*u,.06+.79*v]);
+    weave.cut(11,11,(u,v)=>{
+      const a=.235+.265*v,l=clothSleeve(a,1),r=clothSleeve(1-a,1);
+      return l.map((q,k)=>q+(r[k]-q)*u+(k===2?.012*sin(PI*u):0));
+    },bolt,'#fff',(u,v)=>[.05+.83*u,.10+.38*v]);
+    weave.cut(5,36,(u,v)=>{
+      const q=clothSleeve(u,1-.12*v);
+      return [q[0]*(1-.035*v),q[1]+.012*v,q[2]-.016*v];
+    },4,bride?'#c49b85':'#b9aa8e');
     s.stroke(bride?'#ac6653':'#423e35',Array.from({length:16},(_,i)=>clothSleeve(i/15,1)),
       [.012,.014,.012],21);
     paw(side,...hand);
-  }
-  const tail=[[.075,.66,-.135],[.19,.61,-.32],[.32,.53,-.51],[.403,.64,-.705],[.458,.84,-.79],[.525,.966,-.72]];
-  const rows=29,sides=16,brush=brushStroke(tail,[.057,.121,.168,.153,.084,.001],rows,sides);
-  const colors=[], tipColor=new T.Color('#f2e5c7'),baseColor=new T.Color(bride?'#d0b492':'#b38359'),tone=new T.Color();
-  const positions=brush.attributes.position;
-  const bristle=(row,rib)=>{
-    const k=row*sides+(rib%sides);return [positions.getX(k),positions.getY(k),positions.getZ(k)];
-  };
-  for(let j=0;j<=rows;j++)for(let k=0;k<sides;k++){
-    const t=j/rows,a=k*tau/sides;
-    const ivory=T.MathUtils.smoothstep(t+.060*sin(5*a)+.023*sin(3*a),.61,.70);
-    tone.copy(baseColor).lerp(tipColor,ivory).multiplyScalar(.95+.055*cos(4*a+.6*t));
-    colors.push(tone.r,tone.g,tone.b);
-  }
-  brush.setAttribute('color',new T.Float32BufferAttribute(colors,3));s.add(brush,'#fff');
-  for(let i=0;i<16;i++){
-    const start=6+(i*5)%11, points=[bristle(start,i),bristle(start+3,i),bristle(start+6,i+1)];
-    s.stroke('#86715c',points,[.001,.005,.001],8);
   }
   if(bride){
     fan(s,0,1.024,.40,.316);
@@ -232,31 +188,59 @@ function body(role){
       [.025,.028,.027,.024],15);
     for(let i=0;i<6;i++)s.ball(soot,-.29+i*.10,1.419,.350,.012,.006,.010);
   }
-  return s.finish();
+  return {trim:s.finish(),silk:weave.finish()};
 }
 
 export function foxParties(scene){
   const mat=surfaceGrain(brushWash(new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide,emissive:'#857858',emissiveIntensity:.055}),.22),3.5);
-  const obj=new T.Object3D(), batches=new Map();
-  function batch(name,geo,capacity){
-    const m=new T.InstancedMesh(geo,mat,capacity);m.count=0;m.frustumCulled=false;
+  const distance=costumeDistance(scene,roles.length*WEDDING_SITES.length);
+  const walkers=WEDDING_SITES.map(()=>roles.map((_,j)=>({costume:j+5})));
+  const obj=new T.Object3D(), combined=new T.Matrix4(), batches=new Map(),all=[];
+  function batch(name,geo,capacity,paint=mat,rest=null){
+    const m=new T.InstancedMesh(geo,paint,capacity);m.count=0;m.frustumCulled=false;
     m.instanceMatrix.setUsage(T.DynamicDrawUsage);m.name='稲荷・'+name;
-    m.castShadow=m.receiveShadow=true;scene.add(m);batches.set(name,m);
+    m.castShadow=m.receiveShadow=true;scene.add(m);
+    if(!batches.has(name))batches.set(name,[]);
+    batches.get(name).push({m,rest});all.push(m);
   }
-  for(const role of roles){batch(role,body(role),3);batch(role+'Face',face(role),3);}
+  // Borrow the actual fox mask and brush from the resident rig, including the
+  // UV-mapped pelt, folded ears, ink silhouette, whiskers and sculpted eyelids.
+  // Each original mesh draws all nearby procession members in one instance batch.
+  const original=makeNPC({type:'fox',stature:1},new T.Group()).limbs;
+  for(const [key,node,scale,offset] of [
+    ['面相',original.mask,1.20,[0,-.038,-.012]],['尾',original.tail,.88,[.035,.59,-.169]],
+  ]){
+    node.updateWorldMatrix(true,true);
+    const inverse=node.matrixWorld.clone().invert();
+    const fit=new T.Matrix4().compose(new T.Vector3(...offset),new T.Quaternion(),new T.Vector3(scale,scale,scale));
+    node.traverse(part=>{
+      if(!part.isMesh)return;
+      const rest=fit.clone().multiply(inverse).multiply(part.matrixWorld);
+      batch(key,part.geometry,roles.length*WEDDING_SITES.length,part.material,rest);
+    });
+  }
+  for(const role of roles){
+    const robe=body(role);
+    batch(role,robe.trim,WEDDING_SITES.length);
+    batch(role,robe.silk,WEDDING_SITES.length,silkMaterial());
+    if(['bride','groom','lantern'].includes(role))batch(role+'装束',headwear(role),WEDDING_SITES.length);
+  }
   const shoe=sculpture();
   shoe.stroke('#957556',[[0,.31,-.022],[0,.226,-.072],[0,.132,.008],[0,.06,.074]],
     [.057,.042,.038,.052],10);
   shoe.ball('#ae9c71',0,.046,.071,.064,.04,.13);
   shoe.stroke(soot,[[-.047,.074,.12],[0,.085,.089],[.052,.071,.13]],[.007,.012,.006],7);
-  batch('sandals',shoe.finish(),30);
+  batch('sandals',shoe.finish(),2*roles.length*WEDDING_SITES.length);
   function place(key,x,y,z,yaw,pitch,roll,size){
-    const m=batches.get(key);
     obj.position.set(x,y,z);obj.scale.setScalar(size);obj.rotation.set(pitch,yaw,roll,'YXZ');
-    obj.updateMatrix();m.setMatrixAt(m.count++,obj.matrix);
+    obj.updateMatrix();
+    for(const {m,rest} of batches.get(key)){
+      m.setMatrixAt(m.count++,rest?combined.multiplyMatrices(obj.matrix,rest):obj.matrix);
+    }
   }
-  return (time,player,active)=>{
-    for(const m of batches.values()) m.count=0;
+  return (time,player,active,camera)=>{
+    distance.begin(time,player,camera);
+    for(const m of all) m.count=0;
     if(active) for(const [i,site] of WEDDING_SITES.entries()){
       for(const [j,role] of roles.entries()){
         const walked=time*.82+(site.rx-site.rz)*1.04+i*2.2-j*1.44;
@@ -265,13 +249,16 @@ export function foxParties(scene){
         const x=player.x+dx,z=player.z+dz,size=role==='lantern'?1.045:role==='groom'?1.12:1.075;
         const phase=time*3.52+j*.87+i*.6,stride=sin(phase),sway=.024*stride;
         const y=terrainHeight(q.x,q.z), bob=.027+.024*Math.abs(stride);
+        if(!distance.close(walkers[i][j],x,y+bob,z,q.yaw,size))continue;
         const bow=role==='bride'?.115:role==='parasol'?.057:role==='flute'?-.043:.023;
         place(role,x,y+bob,z,q.yaw,bow+.011*cos(phase*2),sway,size);
+        place('尾',x,y+bob,z,q.yaw+.105*stride,bow+.038*cos(phase),sway,size);
         const headY=1.48*size, lean=Math.sin(bow)*headY;
         const glance=role==='bride'?.23+.29*sin(time*.26):role==='groom'?.23:role==='flute'?.31:-.12;
-        place(role+'Face',x+lean*sin(q.yaw)-sway*headY*cos(q.yaw),y+bob+headY,
-          z+lean*cos(q.yaw)+sway*headY*sin(q.yaw),q.yaw+glance+.09*sin(time*.72+j),
-          bow+.041*cos(phase*2),sway*.58,size);
+        const headX=x+lean*sin(q.yaw)-sway*headY*cos(q.yaw),headZ=z+lean*cos(q.yaw)+sway*headY*sin(q.yaw);
+        const turn=q.yaw+glance+.09*sin(time*.72+j),nod=bow+.041*cos(phase*2);
+        place('面相',headX,y+bob+headY,headZ,turn,nod,sway*.58,size);
+        if(batches.has(role+'装束'))place(role+'装束',headX,y+bob+headY,headZ,turn,nod,sway*.58,size);
         for(const side of [-1,1]){
           const u=side*.121*size,v=side*stride*.151*size;
           place('sandals',x+u*cos(q.yaw)+v*sin(q.yaw),y+Math.max(0,.047*side*cos(phase)),
@@ -279,7 +266,8 @@ export function foxParties(scene){
         }
       }
     }
-    for(const m of batches.values()){
+    distance.end();
+    for(const m of all){
       m.visible=m.count>0;
       if(!m.visible)continue;
       m.instanceMatrix.clearUpdateRanges();m.instanceMatrix.addUpdateRange(0,m.count*16);

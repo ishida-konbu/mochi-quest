@@ -1,5 +1,9 @@
-import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, seeded } from './terrain.js';
-const SIZE = 768, SPAN = 2 * BOUND, adj = SIZE / SPAN;
+import { DAIBUTSU, INARI_SANCTUARY } from './pilgrimage-layout.js';
+import { PALACE_APPROACH, RYUGU, HALLS, GATE_V } from './ryugu-layout.js';
+import { DISTRICTS } from './geography.js';
+import { COURT } from './retreat-layout.js';
+import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, seeded } from './terrain.js';
+const SIZE = 1536, SPAN = 2 * BOUND, adj = SIZE / SPAN;
 export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾', '十一', '十二', '十三', '十四', '十五'];
 const toX = (x) => SIZE / 2 + x * adj;
 const pigments = [
@@ -12,7 +16,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=15', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=16', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -62,7 +66,7 @@ export function paintMapPaper() {
         const k = weights[key];
         r += (rgb[0] - r) * k; g1 += (rgb[1] - g1) * k; blue += (rgb[2] - blue) * k;
       }
-      const blush = Math.max(0,1-Math.hypot((x+390)/78,(z+91)/60));
+      const blush = Math.max(0,1-Math.hypot((x-DISTRICTS.peach.x)/78,(z-DISTRICTS.peach.z)/60));
       r+=(239-r)*blush; g1+=(182-g1)*blush; blue+=(181-blue)*blush;
       const relief = Math.min(26, a * .48) + Math.max(-10, Math.min(10, (b-a)*2));
       g.fillStyle = 'rgb(' + [r-relief,g1-relief*.85,blue-relief*.62].map(Math.round).join(',') + ')';
@@ -72,6 +76,31 @@ export function paintMapPaper() {
       g.fillStyle = '#78775b38';
       g.fillRect(toX(x), toX(z), step * adj, 1);
     }
+  }
+  // Tiny tapering ink strokes pick out real stands of trees at atlas scale.
+  // The ground survey supplies the facing of the dry-brush marks on rock.
+  for(const t of TREES){
+    if(t.seed%6!==0) continue;
+    const u=toX(t.x),v=toX(t.z),h=t.h*adj*.64;
+    const broad=t.kind==='oak'||t.kind==='zelkova';
+    g.fillStyle=broad?'#59674b66':'#435a4d65';g.beginPath();
+    if(broad)g.ellipse(u,v-h*.37,h*.41,h*.56,-.22,0,2*Math.PI);
+    else {
+      g.moveTo(u,v-h);g.lineTo(u-h*.34,v-h*.2);g.lineTo(u-h*.12,v-h*.24);
+      g.lineTo(u-h*.44,v);g.quadraticCurveTo(u,v+h*.10,u+h*.42,v);
+      g.lineTo(u+h*.12,v-h*.26);g.lineTo(u+h*.32,v-h*.22);g.closePath();
+    }
+    g.fill();
+  }
+  const rockInk=seeded(73167);
+  g.strokeStyle='#54574884';g.lineWidth=.85;
+  for(let i=0;i<1900;i++){
+    const x=DISTRICTS.inari.x-400+rockInk()*610,z=DISTRICTS.inari.z-75+rockInk()*395;
+    const y=terrainHeight(x,z),dx=(terrainHeight(x+1,z)-y),dz=(terrainHeight(x,z+1)-y);
+    if(y<31 || Math.hypot(dx,dz)<.60) continue;
+    const u=toX(x),v=toX(z),w=2.15+2.9*rockInk();
+    g.beginPath();g.moveTo(u-dz*.65,v+dx*.65);
+    g.quadraticCurveTo(u-dx*w*.45+dz*.7,v-dz*w*.45,u-dx*w,v-dz*w);g.stroke();
   }
   for (const road of ROADS) {
     g.beginPath();
@@ -89,13 +118,18 @@ export function paintMapPaper() {
   }
   // Inked roofs and a stippled orchard make the five new destinations readable
   // even on the small travelling map. All footprints use the ground coordinates.
-  for (const b of BUILDINGS) {
-    g.save(); g.translate(toX(b.x),toX(b.z)); g.rotate(-b.yaw);
-    g.fillStyle=b.kind==='temple'||b.kind==='pagoda'?'#845645':'#8d8068';
-    g.fillRect(-b.w*adj/2,-b.d*adj/2,b.w*adj,b.d*adj);
-    g.strokeStyle='#ede0b9'; g.lineWidth=.85;
-    g.beginPath();g.moveTo(-b.w*adj*.40,0);g.lineTo(b.w*adj*.40,0);g.stroke();g.restore();
+  function roof(x,z,w,d,yaw,tint) {
+    g.save();g.translate(toX(x),toX(z));g.rotate(-yaw);
+    g.fillStyle=tint;g.fillRect(-w*adj/2,-d*adj/2,w*adj,d*adj);
+    g.strokeStyle='#ede0b9';g.lineWidth=.85;
+    g.beginPath();g.moveTo(-w*adj*.40,0);g.lineTo(w*adj*.40,0);g.stroke();g.restore();
   }
+  for(const b of BUILDINGS)roof(b.x,b.z,b.w,b.d,b.yaw,b.kind==='temple'||b.kind==='pagoda'?'#845645':'#8d8068');
+  roof(DAIBUTSU.x,DAIBUTSU.z,40,29,0,'#685a4b');
+  for(const side of [-1,1])roof(DAIBUTSU.x+side*22,DAIBUTSU.z+9,34,7,Math.PI/2,'#827560');
+  roof(INARI_SANCTUARY.x,INARI_SANCTUARY.z,10,8,0,'#815744');
+  for(const hall of HALLS)roof(RYUGU.x+hall.v,RYUGU.z-hall.u,hall.w,hall.d,Math.PI/2,'#5f7169');
+  roof(RYUGU.x+GATE_V,RYUGU.z,13,4,Math.PI/2,'#a36b52');
   const random=seeded(190720);
   for(let i=0;i<1700;i++) {
     const x=(random()-.5)*SPAN,z=(random()-.5)*SPAN,y=terrainHeight(x,z);
@@ -107,12 +141,17 @@ export function paintMapPaper() {
     }
   }
   for(let i=0;i<125;i++) {
-    const x=-390+(random()-.5)*144,z=-91+(random()-.5)*115;
-    if(Math.hypot((x+390)/75,(z+91)/58)>1) continue;
+    const x=DISTRICTS.peach.x+(random()-.5)*144,z=DISTRICTS.peach.z+(random()-.5)*115;
+    if(Math.hypot((x-DISTRICTS.peach.x)/75,(z-DISTRICTS.peach.z)/58)>1) continue;
     g.fillStyle=i%3?'#be89868c':'#f5d2be'; g.beginPath();g.arc(toX(x),toX(z),.8+random()*1.6,0,2*Math.PI);g.fill();
   }
+  g.save();g.translate(toX(COURT.x),toX(COURT.z));
+  g.fillStyle='#6f5543';g.fillRect(-17*adj,-8*adj,34*adj,16*adj);
+  g.strokeStyle='#d5bd94';g.lineWidth=1.6;g.strokeRect(-16*adj,-7*adj,32*adj,14*adj);
+  g.beginPath();g.moveTo(-11*adj,0);g.lineTo(11*adj,0);g.stroke();g.restore();
   // The bathymetric approach from the pine shore is marked as a dotted sea lane.
-  g.beginPath();g.moveTo(toX(-184),toX(112));g.bezierCurveTo(toX(-223),toX(118),toX(-275),toX(145),toX(-331),toX(135));
+  g.beginPath();
+  PALACE_APPROACH.forEach(([x,z],i) => i ? g.lineTo(toX(x),toX(z)) : g.moveTo(toX(x),toX(z)));
   g.setLineDash([2.5,4]);g.strokeStyle='#537e80';g.lineWidth=1.6;g.stroke();g.setLineDash([]);
   return c;
 }
@@ -137,6 +176,22 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     if (map && left < w && top < h && left + side > 0 && top + side > 0)
       g.drawImage(map, left, top, side, side);
   }
+  // The baths remain legible at both atlas and walking scales; names appear on arrival.
+  for(const site of [COURT,...state.objects.filter(o=>o.retreat)]){
+    const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
+    if(x<0||x>w||y<0||y>h)continue;
+    g.font='bold '+(large?15:17)+'px serif';g.textAlign='center';g.textBaseline='middle';
+    g.lineWidth=3;g.strokeStyle='#fff2d6';g.fillStyle=site===COURT?'#685449':'#8c5140';
+    const glyph=site===COURT?'裁':'♨', labelX=site===COURT && large?x-4:x;
+    g.strokeText(glyph,labelX,y);g.fillText(glyph,labelX,y);
+  }
+  // With the original settlements close together on the full scroll, take
+  // their labels out into the margins on short callouts.
+  const callouts=[
+    [0,28,'center'],[-16,-7,'right'],[-6,-21,'right'],[3,-28,'center'],
+    [11,-12,'left'],[-13,11,'right'],[-5,-19,'center'],[17,-3,'left'],
+    [-2,21,'center'],[16,8,'left'],
+  ];
   for (const [i, r] of REGIONS.entries()) {
     const x = w / 2 + wrapDelta(r.x - midX) * scale,
       y = h / 2 + wrapDelta(r.z - midZ) * scale,
@@ -166,8 +221,15 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
       g.fillStyle = '#463d2c';
       g.lineWidth = 3;
       g.strokeStyle = '#f8f1db';
-      g.strokeText(r.name, x, y + 22);
-      g.fillText(r.name, x, y + 22);
+      const [dx,dy,anchor]=callouts[i] || [0,22,'center'];
+      const lx=x+dx, ly=y+dy;
+      if(i<10) {
+        const length=Math.hypot(dx,dy);
+        g.beginPath();g.moveTo(x+dx*rad/length,y+dy*rad/length);
+        g.lineTo(lx,ly);g.lineWidth=1;g.strokeStyle='#827966';g.stroke();
+      }
+      g.textAlign=anchor;g.lineWidth=3;g.strokeStyle='#f8f1db';
+      g.strokeText(r.name,lx,ly);g.fillText(r.name,lx,ly);
     }
   }
   const selectedPort = large && regionPort(state, goal);
@@ -224,9 +286,12 @@ export function mapHit(canvas, e) {
     x = ((e.clientX - b.left) / b.width) * canvas.width,
     z = ((e.clientY - b.top) / b.height) * canvas.height;
   const scale = Math.min(canvas.width, canvas.height) / SPAN;
-  return REGIONS.find(
-    (r) => Math.hypot(canvas.width / 2 + r.x * scale - x, canvas.height / 2 + r.z * scale - z) < 25,
-  );
+  let nearest=null, distance=25;
+  for(const r of REGIONS) {
+    const d=Math.hypot(canvas.width/2+r.x*scale-x,canvas.height/2+r.z*scale-z);
+    if(d<distance){distance=d;nearest=r;}
+  }
+  return nearest;
 }
 
 export function mapCoordinates(canvas, event) {

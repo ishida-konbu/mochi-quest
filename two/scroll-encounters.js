@@ -1,3 +1,4 @@
+import { DISTRICTS, districtPoint } from './geography.js';
 // Each group has a subject: look at the other wrestler, the tea tray, or the
 // hand raised in blessing. Positions are offsets on either side of the walk.
 import { groundHeight } from './terrain.js';
@@ -9,49 +10,52 @@ const groups = [];
 function scene(habitat, name, x, z, cast) {
   groups.push({ habitat, name, x, z, cast });
 }
+function districtScene(habitat, name, x, z, cast) {
+  scene(habitat, name, ...districtPoint(habitat,x,z), cast);
+}
 // Species, action, and position in the group. Pairs share their beat.
-scene('kyo','tea',114.3,-414.3,[
+districtScene('kyo','tea',114.3,-414.3,[
   ['frog','tea',-1.1,0], ['rabbit','bow',1.3,.8], ['monkey','read',-.6,3],
 ]);
-scene('kyo','music',126.2,-435.6,[
+districtScene('kyo','music',126.2,-435.6,[
   ['rabbit','flute',-.8,.1], ['frog','drum',1.5,-.6], ['monkey','listen',2.6,2.6],
 ]);
-scene('kyo','gate',117,-381,[
+districtScene('kyo','gate',117,-381,[
   ['rabbit','lantern',-2,.5], ['frog','fan',.8,2],
 ]);
-scene('peach','pass',-350,-101,[
+districtScene('peach','pass',-350,-101,[
   ['rabbit','porter',-3,0], ['monkey','read',.5,2], ['deer','listen',4,-1],
 ]);
-export const PEACH_BOUT = {x:-384,z:-94};
+export const PEACH_BOUT = {x:DISTRICTS.peach.x+6,z:DISTRICTS.peach.z-3};
 scene('peach','bout',PEACH_BOUT.x,PEACH_BOUT.z,[
   ['rabbit','sumo',-.94,0], ['frog','sumo',.94,0], ['monkey','listen',-.6,-3.4],
   ['frog','drum',3,-2.8], ['rabbit','cheer',-3.2,-1.9],
 ]);
-scene('peach','orchard',-403,-84,[
+districtScene('peach','orchard',-403,-84,[
   ['rabbit','flowers',-2,-.5], ['deer','browse',.7,1.8], ['deer','listen',4.8,1.4],
 ]);
-scene('peach','picnic',-422,-103,[
+districtScene('peach','picnic',-422,-103,[
   ['frog','flute',-1.7,0], ['rabbit','fan',1.8,-.2], ['monkey','read',-1.1,3.1],
 ]);
-scene('peach','hillside',-375,-117,[
+districtScene('peach','hillside',-375,-117,[
   ['boar','browse',-3,.5], ['boar','browse',1.2,2.9],
 ]);
-scene('todaiji','south',194,444,[
+districtScene('todaiji','south',194,444,[
   ['deer','bow',-3,-.5], ['rabbit','bow',1,1.4], ['frog','lantern',4.2,-.9],
 ]);
-scene('todaiji','steps',211,426,[
+districtScene('todaiji','steps',211,426,[
   ['deer','bow',-2.6,.8], ['rabbit','bow',1.1,.5], ['monkey','write',-1,4],
 ]);
-scene('todaiji','courtyard',222,421,[
+districtScene('todaiji','courtyard',222,421,[
   ['rabbit','flowers',-2.4,0], ['frog','flute',1.5,.7], ['deer','listen',4.9,2.5],
 ]);
-scene('todaiji','copyists',201,431,[
+districtScene('todaiji','copyists',201,431,[
   ['monkey','write',0,1.3], ['rabbit','scribe',-2.5,-.4], ['frog','lantern',2.4,-1.3],
 ]);
-scene('todaiji','grove',237,439,[
+districtScene('todaiji','grove',237,439,[
   ['deer','browse',-3,-.4], ['deer','browse',1.8,1.5], ['boar','browse',5.5,-2.5],
 ]);
-scene('inari','foot',-151,-382,[
+districtScene('inari','foot',-151,-382,[
   ['fox','greet',-.4,1.1], ['rabbit','lantern',2.5,-.1], ['fox','roam',-.7,-3.1],
 ]);
 // Follow the alternating switchbacks. A fox at the start, another further
@@ -65,7 +69,7 @@ for (let row=0; row<8; row++) {
     ]);
   }
 }
-scene('inari','summit',-150,-534,[
+districtScene('inari','summit',-150,-534,[
   ['fox','greet',-2,1.8], ['fox','listen',2,-1], ['rabbit','bow',3.5,2.4],
 ]);
 

@@ -1,6 +1,7 @@
 // The illustrated menagerie ranges through the same ten districts as the procession.
 import { ORIGINAL_REGIONS as REGIONS, groundHeight, waterDepth, solidHeightAt, terrainHeight, WATER_Y, seeded, wrapCoord, wrapDelta } from './terrain.js';
 
+import { SCROLL_FAUNA } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { canopyHeight, walkCircuit } from './village-paths.js';
 import { legendary, legendPath } from './legend-flight.js';
@@ -161,15 +162,26 @@ const bodyVolumes = {
 // The seated hare's feet straddle the deer. Aim at its chest to reach it
 // independently from the flank below the saddle.
 const seatedHareVolumes=[[0,1.03,.03,.32,.38,.31],[0,1.52,.06,.24,.24,.26]];
+const wingTargets=[[0,0,0,.56,.15,.29],[0,0,0,.56,.15,.29]];
+const hawkTargets=[...SCROLL_FAUNA.hawk.volumes,...wingTargets];
+function hawkContact(n) {
+  if(n.spread<.55)return SCROLL_FAUNA.hawk.volumes;
+  for(const [i,s] of [-1,1].entries()){
+    const wing=wingTargets[i],angle=(n.bank||0)*n.spread;
+    wing[0]=s*(.15+.57*Math.cos(angle)*n.spread);wing[1]=.405+.55*Math.sin(angle);
+    wing[2]=-.10-.22*(1-n.spread);wing[3]=.57*n.spread;wing[4]=.12+.27*Math.abs(Math.sin(angle));
+  }
+  return hawkTargets;
+}
 export function recipientContact(n,shot,dx,dz,length) {
   const rx=wrapDelta(shot.x-n.x),rz=wrapDelta(shot.z-n.z);
-  const volumes=n.ridesDeer ? seatedHareVolumes : bodyVolumes[n.type] || SEA_SPECIES[n.type]?.volumes;
+  const volumes=n.ridesDeer ? seatedHareVolumes : n.type==='hawk'?hawkContact(n):bodyVolumes[n.type] || SEA_SPECIES[n.type]?.volumes || SCROLL_FAUNA[n.type]?.volumes;
   if (!volumes) {
     if(shot.y<n.y-.1 || shot.y>n.y+2.15) return Infinity;
     const along=Math.max(0,Math.min(length,-rx*dx-rz*dz));
     return (rx+along*dx)**2+(rz+along*dz)**2<.64 ? along : Infinity;
   }
-  const scale=n.stature||1, extent=((SPECIES[n.type] || SEA_SPECIES[n.type])?.frame || 2)*scale;
+  const scale=n.stature||1, extent=((SPECIES[n.type] || SEA_SPECIES[n.type] || SCROLL_FAUNA[n.type])?.frame || 2)*scale;
   if(Math.abs(rx)>extent+length || Math.abs(rz)>extent+length || Math.abs(shot.y-n.y)>extent) return Infinity;
   const c=Math.cos(n.heading),s=Math.sin(n.heading);
   const dragon=n.type==='dragon', pitch=dragon ? dragonPitch(n) : 0;

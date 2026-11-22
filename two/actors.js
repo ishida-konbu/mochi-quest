@@ -16,6 +16,7 @@ import { createSkyLife } from './sky-life.js';
 import { createCraneFlight } from './crane-flight.js';
 import { buildBeast, beastRig, poseBeast } from './beast-art.js';
 import { updateScrollResident } from './scroll-encounters.js';
+import { createScrollFaunaView } from './scroll-fauna-view.js';
 import { createRyuguPerformers } from './ryugu-performers.js';
 import { dressArtisan, poseArtisan } from './trade-tools.js';
 import { makeRiceModel, poseRice } from './mochi-model.js';
@@ -1630,7 +1631,13 @@ export function animateNPC(record, n, t) {
 }
 function makeObject(o, parent) {
   let mesh, feature, steam, flumes;
-  if(o.grand) {
+  if(o.retreat) {
+    mesh=new THREE.Group();
+    addSpringSurface(mesh,o.retreat.rx,o.retreat.rz,.52,o.retreat);
+    steam=particles('steam',30);
+    steam.position.y=.51;
+    mesh.add(steam);
+  } else if(o.grand) {
     mesh=new THREE.Group();
     addSpringSurface(mesh,SNOW_SPRING.rx,SNOW_SPRING.rz,SNOW_SPRING.level-o.y);
     steam=particles('steam',87);
@@ -1665,6 +1672,7 @@ export function createActors(scene, renderer) {
   const h = makeHero();
   const skyLife = createSkyLife(root);
   const seaPerformers = createRyuguPerformers(root);
+  const faunaView = createScrollFaunaView(root,batch,shadowMap());
   h.spin = 0;
   h.held = {
     read: accessory('manga'),
@@ -1750,7 +1758,7 @@ export function createActors(scene, renderer) {
     const nearest=[...state.npcs].sort((a,b)=>nearDistance(a)-nearDistance(b));
     const bodies=new Set(), tools=new Set(), stage=new THREE.Group();
     for (const n of nearest) {
-      if(n.seaResident || n.atMortar || n.type==='bird') continue;
+      if(n.scrollFauna || n.seaResident || n.atMortar || n.type==='bird') continue;
       const key=n.type+'-'+(n.area?'artisan':n.role)+(n.type==='shishi' ? n.variant : '');
       if(bodies.has(key) && (!n.area || tools.has(n.craft || n.role))) continue;
       bodies.add(key);
@@ -1763,10 +1771,11 @@ export function createActors(scene, renderer) {
   function* prepareTravellersAndItems(state) {
     prepareCranes();
     yield;
+    yield* faunaView.prepare();
     yield* prepareRigs(state);
     const kinds = new Set();
     for (const item of state.objects) {
-      const kind = item.grand ? 'snow-spring' : item.type;
+      const kind = item.grand ? 'snow-spring' : item.retreat ? 'wayside-spring' : item.type;
       if (!objectModels[item.type] || kinds.has(kind)) continue;
       kinds.add(kind);
       const record = makeObject(item, root);
@@ -1785,6 +1794,7 @@ export function createActors(scene, renderer) {
     gaitHero(h, p, t, dt, state);
     skyLife(t,state,camera,state.photo ? atPhotoTime : null);
     seaPerformers(t,p,camera,state.nearbyNpcs);
+    faunaView.update(state,camera,viewport?.height || window.innerHeight);
     if (!processionView) processionView=distantProcession(root,shadowMap(),state.npcs.length);
     if (!beastView) beastView=distantProcession(root,shadowMap(),state.npcs.filter(n=>SPECIES[n.type]).length,true);
     prepareCranes();
@@ -1795,7 +1805,7 @@ export function createActors(scene, renderer) {
     const focalPixels=(viewport?.height || window.innerHeight)*camera.projectionMatrix.elements[5]*.5;
     visible.length=0; selected.clear();
     for (const n of state.nearbyNpcs) {
-      if(n.mounted || n.seaResident || n.atMortar) continue;
+      if(n.mounted || n.scrollFauna || n.seaResident || n.atMortar) continue;
       const view=state.photo ? atPhotoTime(n,t) : n;
       const dx=wrapDelta(view.x-p.x),dz=wrapDelta(view.z-p.z);
       const distance=Math.hypot(dx,dz);
@@ -1875,7 +1885,7 @@ export function createActors(scene, renderer) {
         rec.feature.position.y = 0.395 + 0.011 * Math.sin(t * 2 + o.x);
         rec.feature.rotation.y = 0.15 * Math.sin(t * 0.8 + o.z);
       }
-      if (rec.steam) mistAt(rec.steam, t + 0.01 * o.x, true, o.grand ? 12.5 : 1.65);
+      if (rec.steam) mistAt(rec.steam, t + 0.01 * o.x, true, o.grand ? 12.5 : o.retreat ? o.retreat.rx*.78 : 1.65);
       if (rec.flumes) rec.flumes(t);
       if (o.type === 'port') {
         rec.mesh.getObjectByName('park0').visible = o.bikes > 0;

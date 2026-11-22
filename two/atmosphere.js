@@ -1,3 +1,4 @@
+import { DISTRICTS } from './geography.js';
 import * as THREE from './vendor/three.module.min.js';
 import { HDRLoader } from './vendor/HDRLoader.js';
 import { kyoNight, kyoInfluence } from './kyo-layout.js';
@@ -57,6 +58,7 @@ function mountainSky(scene, panorama) {
     ridges: { value: panorama },
     climate: { value: new THREE.Vector4() },
     clock: { value: 0 },
+    horizonInk: { value: 1 },
   };
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
@@ -70,7 +72,7 @@ function mountainSky(scene, panorama) {
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
       }`,
     fragmentShader: `
-      varying vec3 direction; uniform sampler2D ridges; uniform vec4 climate; uniform float clock;
+      varying vec3 direction; uniform sampler2D ridges; uniform vec4 climate; uniform float clock,horizonInk;
       float hash(vec2 p) {
         vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);
         return fract((p3.x+p3.y)*p3.z);
@@ -136,7 +138,7 @@ function mountainSky(scene, panorama) {
         vec3 ink=mix(vec3(.185,.21,.17),vec3(.27,.38,.49),snow);
         ink=mix(ink,vec3(.012,.024,.051),night);
         ink=mix(ink,vec3(.42,.248,.245),dawn);
-        vec3 col=mix(sky,ink,ridge*.75);
+        vec3 col=mix(sky,ink,ridge*.75*horizonInk);
         col=mix(col,low,(1.-smoothstep(-.13,.01,ray.y)));
         gl_FragColor=vec4(col,1.);
         #include <colorspace_fragment>
@@ -177,7 +179,15 @@ export function createAtmosphere(scene) {
         .lerp(palette.fallFog, s.autumn)
         .lerp(palette.nightFog, s.moon)
         .lerp(palette.dawnFog, s.dawn);
-      scene.fog.density = 0.0057 + 0.003 * s.snow - 0.0008 * s.dawn;
+      // Keep a distinct near slope, middle spur and pale far divide above
+      // the valley mist. Fade the painted horizon behind the real mountains.
+      const mountainDistance=Math.min(
+        Math.hypot((player.x-DISTRICTS.peach.x+55)/244,(player.z-DISTRICTS.peach.z+42)/184),
+        Math.hypot((player.x-DISTRICTS.inari.x+88)/292,(player.z-DISTRICTS.inari.z-99)/206));
+      const mountain=1-THREE.MathUtils.smoothstep(mountainDistance,.6,1.35);
+      const clearAir=mountain*(.67+.33*THREE.MathUtils.smoothstep(player.y,8,65));
+      dome.material.uniforms.horizonInk.value=1-.42*clearAir;
+      scene.fog.density = 0.0057 - .0025*clearAir + 0.003 * s.snow - 0.0008 * s.dawn;
       scene.environmentIntensity = 0.67 - 0.51 * s.moon;
     },
   };

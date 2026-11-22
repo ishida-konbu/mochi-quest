@@ -42,7 +42,7 @@ function washHide(b,stations,base,rows,marks) {
     pigment.computeVertexNormals();b.add(pigment,'#61584e');pigment.dispose();
   }},stations,base,rows);
 }
-export function pullingOx(b) {
+export function pullingOx(b, reins=true) {
   // A single continuous hide follows the barrel, shoulders and lifted nape.
   washHide(b,[[0,1.04,1.96,.036,.10],[0,1.10,2.09,.28,.37],[0,1.12,2.31,.453,.53],
     [0,1.10,2.60,.492,.55],[0,1.12,2.95,.51,.57],[0,1.18,3.21,.493,.595],
@@ -75,7 +75,7 @@ export function pullingOx(b) {
     inkVolume(b,horn.slice(-3),'#62574b',12);
     b.stroke([[side*.167,1.466,4.484],[side*.241,1.50,4.32],[side*.303,1.598,4.11],
       [side*.30,1.71,3.92],[side*.19,1.829,3.75]],.027,rust);
-    b.stroke([[side*.228,1.49,4.34],[side*.45,1.22,3.72],[side*.56,1.17,3.01],[side*.59,1.3,2.55]],
+    if(reins)b.stroke([[side*.228,1.49,4.34],[side*.45,1.22,3.72],[side*.56,1.17,3.01],[side*.59,1.3,2.55]],
       .022,'#a58153');
   }
   for(let j=-4;j<=4;j++)
@@ -85,20 +85,31 @@ export function pullingOx(b) {
   b.stroke(tail,.038,'#8f7b61');
   b.ball(-.36,.50,1.84,.073,.141,.071,'#564d43',[0,0,-.38]);
   // A plaited breast collar carries inset bronze bells near the shoulder.
-  b.stroke([[-.49,1.407,3.22],[-.39,.994,3.47],[0,.811,3.56],[.39,.994,3.47],[.49,1.407,3.22]],.041,rust);
+  const collar=[[0,1.802,3.16],[.301,1.684,3.19],[.471,1.437,3.25],[.447,1.219,3.39],
+    [.352,.966,3.52],[.213,.85,3.55],[0,.811,3.56]];
+  b.stroke([...collar.map(([x,y,z])=>[-x,y,z]),...collar.slice(0,-1).reverse()],.031,rust);
   for(const s of [-1,1]){
     b.rod([s*.433,1.115,3.427],[s*.433,1.037,3.427],.015,'#795744');
     b.ball(s*.433,1.01,3.427,.057,.065,.054,gold);
   }
 }
 export function oxLeg(b,side,front) {
-  const direction=front?1:-1;
-  inkVolume(b,[[0,.172,0,.14,.143],[0,.06,0,.145,.137],[side*.009,-.14,-.022,.105,.11],
-    [side*.014,-.29,direction*.045,.087,.085],[0,-.41,-direction*.024,.073,.075],
-    [-side*.018,-.57,-.038,.050,.064],[-side*.017,-.668,.016,.063,.064]],fur,30);
-  for(const toe of [-1,1])
-    b.ball(toe*.044-side*.017,-.701,.063,.044,.077,.103,ink,[-.11,0,toe*.06]);
-  furStroke(b,[[side*.097,-.20,.028],[side*.086,-.280,.050],[side*.072,-.345,.026]],.008,'#736958');
+  // The fore cannon falls straight from the knee. The hind shin turns at a
+  // projecting hock before both pasterns lean forwards into the cloven hoof.
+  const hock=front?-.014:-.096,knee=front?.026:.06;
+  inkVolume(b,[[-side*.066,.43,-.03,.063,.082],[-side*.037,.294,-.022,.148,.163],
+    [-side*.014,.145,-.015,.145,.154],[0,-.039,-.018,.119,.127],[side*.008,-.191,knee,.091,.097],
+    [side*.011,-.285,knee,.089,.089],[side*.01,-.431,hock,.061,.072],
+    [side*.005,-.57,hock+.013,.049,.054],[-side*.009,-.637,.006,.059,.064],
+    [-side*.012,-.674,.036,.060,.067]],fur,38);
+  for(const toe of [-1,1]){
+    const x=toe*.035-side*.012;
+    inkVolume(b,[[x,-.641,.039,.033,.055],[x,-.674,.051,.045,.077],
+      [x+toe*.007,-.713,.067,.046,.088],[x+toe*.011,-.758,.082,.045,.106],
+      [x+toe*.011,-.778,.082,.041,.10]],'#514b40',18);
+  }
+  furStroke(b,[[side*.087,-.19,knee+.012],[side*.086,-.259,knee+.032],
+    [side*.073,-.324,knee+.01]],.007,'#736958');
 }
 
 export function courtCurtains(b){

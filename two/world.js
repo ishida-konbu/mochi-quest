@@ -1,6 +1,10 @@
+import { dressOutcrops } from './outcrops.js';
+import { DISTRICTS } from './geography.js';
 import { scrollCoverage } from './scroll-paper.js';
 import { createKyo, kyoPavingMaterial } from './kyo.js';
 import { dressPilgrimage, pilgrimageLife } from './pilgrimage.js';
+import { dressCourt } from './magistrates-hall.js';
+import { dressWaysideBaths } from './wayside-baths.js';
 import { dressRyugu, createRyuguLife } from './ryugu.js';
 import { createTravellers } from './travelling-merchants.js';
 import { noren } from './craftwork.js';
@@ -109,13 +113,19 @@ function* landscape(scene, art) {
     const rad = tree.h*.67+2.3;
     for (let i=Math.floor((tree.x-rad)/18); i<=Math.floor((tree.x+rad)/18); i++)
       for (let j=Math.floor((tree.z-rad)/18); j<=Math.floor((tree.z+rad)/18); j++) {
-        const key=i*100+j;
+        const key=i*256+j;
         if (!bins.has(key)) bins.set(key,[]);
         bins.get(key).push(tree);
       }
   }
-  const grid=40, tiles=12, span=2*BOUND/tiles;
+  const tiles=24, span=2*BOUND/tiles;
   for (let row=0; row<tiles; row++) for (let column=0; column<tiles; column++) {
+    // Deep ocean is a level shelf. Keep the fine lattice for shores, roads,
+    // palace and cliffs, without allocating a million detailed sea vertices.
+    const midX=(column+.5)*span-BOUND, midZ=(row+.5)*span-BOUND;
+    const deep=shoreDistance(midX,midZ)<-span*1.6 &&
+      Math.hypot(midX-DISTRICTS.ryugu.x,midZ-DISTRICTS.ryugu.z)>span*1.8;
+    const grid=deep ? 1 : 40;
     const p=[], ix=[], uv=[], col=[], surface=[], seasons=[], scroll=[];
     for (let j=0; j<=grid; j++) for (let i=0; i<=grid; i++) {
       const x=(column+i/grid)*span-BOUND, z=(row+j/grid)*span-BOUND, y=h(x,z);
@@ -126,7 +136,7 @@ function* landscape(scene, art) {
       c.lerp(stone, max(0,min(1,(y-15)/30))*.68);
       c.multiplyScalar(.96+.042*cos(x*.076+sin(z*.044))+.039*sin(z*.115+sin(x*.093)));
       let canopy=0;
-      for (const tree of bins.get(Math.floor(x/18)*100+Math.floor(z/18)) || []) {
+      for (const tree of bins.get(Math.floor(x/18)*256+Math.floor(z/18)) || []) {
         const radius=tree.h*.67+2.3;
         canopy=max(canopy,1-((x-tree.x)**2+(z-tree.z)**2)/(radius*radius));
       }
@@ -145,7 +155,7 @@ function* landscape(scene, art) {
     ground.setAttribute('scrollAmount',new THREE.Float32BufferAttribute(scroll,1));
     ground.setAttribute('seasons',new THREE.Float32BufferAttribute(seasons,4));
     const land=new THREE.Mesh(ground,mat);
-    land.receiveShadow=true;
+    land.receiveShadow=true;land.userData.range=475;
     scene.add(land);
     yield;
   }
@@ -235,8 +245,13 @@ function makeWater(scene, art, panorama) {
         float eastBand=(p.y-176.)/99.;float eastX=374.-48.*exp(-eastBand*eastBand)+7.*sin(p.y/36.);
         float end=375.+7.*sin(p.x/41.)+4.*cos(p.x/22.);
         float shoreDist=min(min(p.x-shoreX,eastX-p.x),end-abs(p.y));
+        float erosion=5.9*sin(p.x*.048+p.y*.025)+3.8*cos(p.y*.062-p.x*.033)+2.3*sin(p.x*.109-p.y*.089);
         ${PENINSULAS.map(([x,z,rx,rz]) =>
-          `shoreDist=max(shoreDist,(1.-length((p-vec2(${x}.,${z}.))/vec2(${rx}.,${rz}.)))*${Math.min(rx,rz)}.);`).join('\n')}
+          `{vec2 delta=p-vec2(${x}.,${z}.);
+            if(all(lessThan(abs(delta),vec2(${rx+62}.,${rz+62}.)))) {
+              float edge=(1.-length(delta/vec2(${rx}.,${rz}.)))*${Math.min(rx,rz)}.+erosion;
+              float seam=max(0.,1.-abs(shoreDist-edge)/24.);shoreDist=max(shoreDist,edge)+6.*seam*seam;
+            }}`).join('\n')}
         float inside=max(halfBank-abs(p.y-river),-shoreDist);
         if (p.x>278. && p.y < -104. && p.y > -152.) inside=max(inside,3.1-abs(p.y+130.-3.3*sin((p.x-292.)/15.)));
         float depth=smoothstep(-1.8,6.8,inside);
@@ -1416,7 +1431,9 @@ function paddies(p) {
 }
 function details(p) {
   const r = seeded(27158);
+  dressOutcrops(p,ROCKS,h);
   for (const rock of ROCKS) {
+    if(rock.stratum!==undefined)continue;
     const y = h(rock.x, rock.z);
     p.part(
       'rock',
@@ -1706,6 +1723,9 @@ export function* prepareWorld(scene) {
   dressPlaces(painter);
   yield;
   dressSeasonalPlaces(painter);
+  yield;
+  dressCourt(painter);
+  dressWaysideBaths(painter);
   yield;
   const updateKyo=createKyo(scene,painter);
   yield;

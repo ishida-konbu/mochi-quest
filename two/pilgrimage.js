@@ -1,10 +1,12 @@
+import { DISTRICTS } from './geography.js';
+import { summitJoinery, orchardCarving, kesaMaterial } from './pilgrimage-carving.js';
 import { sculpture, brushStroke } from './pilgrimage-pigment.js';
 import { paintPeachCliffs } from './pilgrimage-cliffs.js';
 import { foxParties } from './pilgrimage-foxes.js';
 import { brushWash, surfaceGrain } from './scroll-sculpt.js';
 import * as T from './vendor/three.module.min.js';
 import { terrainHeight, seeded, wrapDelta } from './terrain.js';
-import { DAIBUTSU, PEACH, PEACH_TREES, WEDDING_SITES, weddingPoint, CEDAR_GROVES, MOON_GATE, INARI_GATES, INARI_SANCTUARY, TEMPLE_COLUMNS } from './pilgrimage-layout.js';
+import { DAIBUTSU, PEACH, PEACH_TREES, WEDDING_SITES, weddingPoint, MOON_GATE, INARI_GATES, INARI_SANCTUARY, TEMPLE_COLUMNS } from './pilgrimage-layout.js';
 
 const { sin,cos,PI,abs,hypot,min,max } = Math, TAU=PI*2;
 const vec=(...v)=>new T.Vector3(...v);
@@ -96,6 +98,7 @@ function summit(p) {
     f.part('round',side*2.16,1.75,3.53,.12,3.54,.12,vermilion);
     lantern(f,side*5,3.9);
   }
+  summitJoinery(p,f);
   const sign=inscription('稲荷','#47554d');
   f.part('plane',0,3.08,2.77,.51,.94,1,'#ffffff',sign);
 }
@@ -272,6 +275,7 @@ function groveShrine(p){
   p.shapes.gardenMoonRim=new T.TorusGeometry(2.095,.102,8,61);
   for(const side of [-1,1]) f.part('gardenMoonRim',0,1.75,side*.274,1,1,1,'#858b80');
   f.part('hipRoof',0,4.63,0,10.17,.72,1.37,'#788279',p.roofs);
+  orchardCarving(p,f);
   for(const side of [-1,1]){
     f.part('box',side*4.61,1.73,.027,.38,5.29,.70,'#c6c6b2');
     f.part('box',side*4.64,4.29,.03,.63,.22,.86,'#858a7b');
@@ -302,24 +306,6 @@ function fallenBlossoms(p) {
     p.part(id,b.x,0,b.z,1,1,1,'#fff',0,0,0,material,false,true);
   }
 }
-function cedarWoods(p){
-  // Ragged layered boughs leave a clear view of the red gates between trunks.
-  const rng=seeded(90426);
-  for(const t of CEDAR_GROVES){
-    const f=frame(p,t.x,t.z,t.yaw), h=t.h;
-    f.line([0,-.47,0],[.065,h*.94,.045],h*.024,'#6e5946');
-    for(let i=0;i<5;i++){
-      const frac=.32+i*.127, scale=h*(.29-.038*i);
-      for(let j=0;j<4;j++){
-        const a=j*PI/2+i*2.4+rng()*.57;
-        const reach=scale*(.32+rng()*.14);
-        f.part('plane',sin(a)*reach,h*frac,cos(a)*reach,scale*1.83,scale*1.40,1,
-          i>2?'#9da28b':'#7f8c72',p.sprays.pine,a,.57+rng()*.27,(rng()-.5)*.3,false);
-      }
-    }
-  }
-}
-
 function daibutsuden(p) {
   const {x,z}=DAIBUTSU, f=frame(p,x,z);
   const pillars='#9e5941', beam='#74503a', roof='#5c6862';
@@ -386,18 +372,20 @@ function vestment(p,f) {
     return vec(sin(a)*(lo.x+(hi.x-lo.x)*q+fold),y,-.14+cos(a)*(lo.z+(hi.z-lo.z)*q+fold));
   }
   for(const cloth of [true,false]){
-    const pos=[],ix=[],col=[],color=new T.Color(cloth?'#78998b':rice);
+    const pos=[],ix=[],col=[],uv=[],color=new T.Color(cloth?'#78998b':rice);
     const rows=cloth?41:17,sides=76;
     for(let j=0;j<=rows;j++)for(let k=0;k<=sides;k++){
       const a=TAU*k/sides,t=j/rows,cut=collar(a),y=cloth?4.52+t*(cut-4.52):cut+t*(12.90-cut);
       const q=surface(a,y,cloth), shade=cloth?.94+.055*sin(4.18*y+3*cos(a)+1.14*sin(2*a)):1;
+      uv.push(k/sides*10,y*.43);
       pos.push(q.x,q.y,q.z);col.push(color.r*shade,color.g*shade,color.b*shade);
       if(j<rows&&k<sides){const i=j*(sides+1)+k;ix.push(i,i+1,i+sides+1,i+1,i+sides+2,i+sides+1);}
     }
     const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));
     g.setAttribute('color',new T.Float32BufferAttribute(col,3));g.setIndex(ix);g.computeVertexNormals();
+    g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
     const name=cloth?'patinatedKesa':'riceShoulder';p.shapes[name]=g;
-    f.part(name,0,0,0,1,1,1,'#fff',new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide}));
+    f.part(name,0,0,0,1,1,1,'#fff',cloth?kesaMaterial():brushWash(new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide}),.13));
   }
   const stitch=(points,widths,tint,name)=>{
     p.shapes[name]=brushStroke(points,widths,26);
@@ -539,7 +527,6 @@ function greatBuddha(p) {
 
 export function* dressPilgrimage(painter) {
   yield* inari(painter);
-  cedarWoods(painter);
   yield;
   yield* paintPeachCliffs(painter,washTexture('peach-valley-rock'));
   yield* peachGrove(painter);
@@ -647,7 +634,7 @@ export function pilgrimageLife(scene){
   // Low banks gather just below the ridge. From the ridge top the sanctuary
   // stands clear, with strips of mist still visible in the valley below.
   for(let i=0;i<90;i++) {
-    const x=-358+rng()*284, z=-531+rng()*120, y=36+rng()*8;
+    const x=DISTRICTS.inari.x-270+rng()*410, z=DISTRICTS.inari.z-22+rng()*212, y=42+rng()*12;
     if(terrainHeight(x,z)>y+1.6) continue;
     clouds.push({x,z,y,w:32+rng()*59,h:6+rng()*10});
   }
@@ -657,10 +644,10 @@ export function pilgrimageLife(scene){
   }
   const cloud=banks(scene,map,clouds,'#f0ece3',.64), mist=banks(scene,map,valley,'#ead9d0',.47);
   const foxes=foxParties(scene), rain=sunshower(scene), petals=fallingPetals(scene);
-  return (time,player)=>{
-    const nearInari=abs(wrapDelta(player.x+213))<207 && abs(wrapDelta(player.z+453))<187;
+  return (time,player,camera)=>{
+    const nearInari=abs(wrapDelta(player.x-DISTRICTS.inari.x+60))<260 && abs(wrapDelta(player.z-DISTRICTS.inari.z-82))<217;
     const nearPeach=hypot(wrapDelta(player.x-PEACH.x),wrapDelta(player.z-PEACH.z))<157;
-    cloud(time,player,nearInari);mist(time,player,nearPeach);foxes(time,player,nearInari);
+    cloud(time,player,nearInari);mist(time,player,nearPeach);foxes(time,player,nearInari,camera);
     rain(time,player,nearInari);petals(time,player,nearPeach);
   };
 }

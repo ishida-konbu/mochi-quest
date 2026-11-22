@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createGame} from '../two/game.js';
-import {groundHeight} from '../two/terrain.js';
+import {BOUND,groundHeight} from '../two/terrain.js';
 
 const tick = (game,seconds,input={}) => {
   for(let frame=0; frame<Math.round(seconds*60); frame++) game.step(1/60,input);
@@ -26,7 +26,9 @@ test('a turtle ride reaches five times its former top speed, with a continuous r
   const game=createGame(),p=game.state.player, turtle=game.state.npcs.find(n=>n.type==='turtle');
   place(p,turtle.x,turtle.z);
   assert.ok(game.act('interact'));
-  place(p,310,380);
+  // The earlier eastern run now crosses a planted peninsula. An open sea
+  // lane measures the ride's acceleration without hitting trees or rocks.
+  place(p,0,BOUND-90);
   tick(game,.15,{x:1}); const start=p.speed;
   tick(game,.9,{x:1}); const cruise=p.speed;
   tick(game,3.5,{x:1});

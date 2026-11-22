@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
+import { sitePoint, retreatStones } from './retreat-layout.js';
 import { GLTFLoader } from './vendor/GLTFLoader.min.js';
 import { wetStone, contactRipples } from './stone-water.js';
 import { WATER_Y, BRIDGES, coastX, riverZ, riverHalfWidth, seeded, terrainHeight } from './terrain.js';
@@ -88,6 +89,19 @@ export function setRiverStones(scene, objects) {
       const yaw = pool.heading || 0,
         cy = Math.cos(yaw),
         sy = Math.sin(yaw);
+      if(pool.retreat) {
+        const site=pool.retreat;
+        for(const q of retreatStones(site).filter(q=>q.scanned)){
+          const [x,z]=sitePoint(site,q.u,q.v);
+          transform.position.set(x,pool.y+.49-.31*q.h,z);
+          transform.scale.set(q.w*2.08,q.h*1.49,q.d*2.11);
+          transform.rotation.set(.03*Math.sin(q.i),yaw+q.angle,.05*Math.cos(q.i));
+          transform.updateMatrix();
+          rim[(q.i+site.index)%shapes.length].push(transform.matrix.clone());
+        }
+        drawGroups(rim,pool.y+.52);
+        continue;
+      }
       for (let i = 0; i < 23; i++) {
         const a = (i * Math.PI * 2) / 23,
           dx = 1.91 * Math.cos(a),

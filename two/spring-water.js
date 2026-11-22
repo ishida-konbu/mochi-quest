@@ -1,3 +1,4 @@
+import { springLip } from './retreat-layout.js';
 import { waterSurfaceAt } from './terrain.js';
 import * as T from './vendor/three.module.min.js';
 
@@ -10,7 +11,7 @@ const uniforms = {
   occupied: { value: 0 },
 };
 let poolMaterial, disc;
-export function addSpringSurface(parent, rx=1.96, rz=1.56, level=poolLevel) {
+export function addSpringSurface(parent, rx=1.96, rz=1.56, level=poolLevel, site=null) {
   if (!poolMaterial) {
     disc = new T.CircleGeometry(1, 80);
     disc.rotateX(-Math.PI / 2);
@@ -89,7 +90,17 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=poolLevel) {
         );
     };
   }
-  const surface = new T.Mesh(disc, poolMaterial);
+  let shape=disc;
+  if(site) {
+    shape=disc.clone();
+    const points=shape.attributes.position;
+    for(let i=1;i<points.count;i++){
+      const x=points.getX(i),z=points.getZ(i),r=springLip(site.index,Math.atan2(z,x));
+      points.setXYZ(i,x*r,0,z*r);
+    }
+    shape.computeBoundingSphere();
+  }
+  const surface = new T.Mesh(shape, poolMaterial);
   surface.scale.set(rx, 1, rz);
   surface.position.y = level;
   surface.receiveShadow = true;

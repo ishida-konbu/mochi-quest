@@ -83,17 +83,18 @@ export function pigment(){return paint??=pigments();}
 const sphere=new THREE.SphereGeometry(1,22,16),small=new THREE.SphereGeometry(1,12,8);
 const dummy=new THREE.Object3D(),vec=new THREE.Vector3(),normal=new THREE.Vector3(),nm=new THREE.Matrix3();
 export class InkForm {
+  constructor(patches=tiles,columns=3,rows=2) {this.patches=patches;this.columns=columns;this.rows=rows;}
   p=[];n=[];c=[];ix=[];uv=[];
   draw(geo,pos,scale,tint,rotation=[0,0,0],tile='paper',uvMode) {
     dummy.position.fromArray(pos);dummy.scale.fromArray(scale);
     if(rotation.isQuaternion)dummy.quaternion.copy(rotation);else dummy.rotation.set(...rotation);
     dummy.updateMatrix();nm.getNormalMatrix(dummy.matrix);
-    const base=this.p.length/3,color=new THREE.Color(tint),id=tiles[tile],u0=id%3,v0=1-Math.floor(id/3);
+    const base=this.p.length/3,color=new THREE.Color(tint),id=this.patches[tile],u0=id%this.columns,v0=this.rows-1-Math.floor(id/this.columns);
     const p=geo.attributes.position,n=geo.attributes.normal,uv=geo.attributes.uv;
     for(let i=0;i<p.count;i++){
       vec.fromBufferAttribute(p,i);
       const a=uvMode==='top' ? .5+vec.x*.49:uv.getX(i), b=uvMode==='top' ? .5+vec.z*.49:uv.getY(i);
-      this.uv.push((u0+.015+a*.97)/3,(v0+.014+b*.972)/2);
+      this.uv.push((u0+.015+a*.97)/this.columns,(v0+.014+b*.972)/this.rows);
       vec.applyMatrix4(dummy.matrix);normal.fromBufferAttribute(n,i).applyNormalMatrix(nm);
       this.p.push(vec.x,vec.y,vec.z);this.n.push(normal.x,normal.y,normal.z);this.c.push(color.r,color.g,color.b);
     }

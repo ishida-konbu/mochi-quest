@@ -1,10 +1,17 @@
 import * as THREE from './vendor/three.module.min.js';
 
 // Feather the paper ground into the older roads as the traveller approaches.
-const districts = [[120,-430,89,87],[-390,-91,117,102],[-319,135,94,66],
-  [215,425,88,77],[-213,-457,121,125]];
+import { DISTRICTS } from './geography.js';
+const districts = [
+  [DISTRICTS.kyo.x,DISTRICTS.kyo.z-6,108,115],
+  [DISTRICTS.peach.x,DISTRICTS.peach.z,132,114],
+  [DISTRICTS.ryugu.x+12,DISTRICTS.ryugu.z,94,66],
+  [DISTRICTS.todaiji.x,DISTRICTS.todaiji.z,88,77],
+  [DISTRICTS.inari.x-63,DISTRICTS.inari.z+113,304,210],
+];
 export function scrollCoverage(x,z) {
-  let weight=0;
+  const beyond=Math.max(Math.abs(x)/407,Math.abs(z)/420);
+  let weight=.61*Math.min(1,Math.max(0,(beyond-.86)/.46));
   for(const [cx,cz,rx,rz] of districts) {
     const r=((x-cx)/rx)**2+((z-cz)/rz)**2;
     const t=Math.min(1,Math.max(0,(1.44-r)/.67));

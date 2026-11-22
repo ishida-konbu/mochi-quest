@@ -1,9 +1,10 @@
 // One repeatable planting plan per 26 m square. All coordinates here are canonical.
+import { COURT, RETREATS, reservedScenery } from './retreat-layout.js';
 import { scrollCoverage } from './scroll-paper.js';
 import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, MARKET_STALLS, ROCKS, REGIONS, WATER_Y,
   nearRoad, seeded, seasonAt, shoreDistance, riverZ, riverHalfWidth, terrainHeight } from './terrain.js';
 
-export const MEADOW_TILES = 45;
+export const MEADOW_TILES = 90;
 export const MEADOW_TILE = 2 * BOUND / MEADOW_TILES;
 const rows = 29;
 const {abs, sin, cos, floor, hypot} = Math;
@@ -35,6 +36,8 @@ export function meadowExclusions(objects,residents=[]) {
       }
   };
   const circle = (x,z,r) => add(x,z,r,(u,v)=>(u-x)**2+(v-z)**2 < r*r);
+  add(COURT.x,COURT.z+7,30,reservedScenery);
+  for(const s of RETREATS)add(s.x,s.z,11,reservedScenery);
   add(SNOW_SPRING.x,SNOW_SPRING.z,17,(x,z)=>springRadius(x,z)<1.18);
   for (const b of BUILDINGS) add(b.x,b.z,hypot(b.w,b.d)*.65+5,(x,z)=>{
     const dx=x-b.x, dz=z-b.z;
@@ -59,6 +62,8 @@ export function meadowExclusions(objects,residents=[]) {
 // Each plant is emitted once, independent of camera, travel direction and budgets.
 export function visitMeadowTile(i,j,clearings,visit) {
   const rng=seeded((i+1)*44017 ^ (j+8)*52973), x0=i*MEADOW_TILE-BOUND,z0=j*MEADOW_TILE-BOUND;
+  // Skip deep-water tiles before sampling 841 individual plants.
+  if(shoreDistance(x0+MEADOW_TILE/2,z0+MEADOW_TILE/2) < -MEADOW_TILE) return 0;
   const masks=clearings.get(tileKey(x0+1,z0+1))||[];
   const scroll=scrollCoverage(x0+MEADOW_TILE/2,z0+MEADOW_TILE/2);
   const season={}; let count=0;

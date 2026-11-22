@@ -3,34 +3,65 @@ import { batchActorParts as paint } from './actors.js';
 import { CONNECTING_ROADS, WATER_Y, riverZ, coastX, eastCoastX, terrainHeight, wrapDelta } from './terrain.js';
 import { pullingOx, oxLeg, courtCurtains, ferryCrew } from './kyo-procession-art.js';
 import { illustratedMesh, scrollPigment } from './kyo-scrollwork.js';
+import { kosode, silkMaterial, SilkPanels } from './kosode.js';
+import { dressedRiceFace } from './mochi-model.js';
+import { brushStroke } from './pilgrimage-pigment.js';
 import { measureRoute, cartPosition } from './trade-routes.js';
 
 const { PI, sin, cos }=Math;
-const ink='#3c3935', lacquer='#653c31', straw='#b2915b', pine='#526551', gold='#cba861', ivory='#ede4cd';
+const ink='#3c3935', lacquer='#653c31', straw='#b2915b', pine='#526551', gold='#cba861';
 const hoop=new THREE.TorusGeometry(1,.072,8,40);
 
-function traveller(b,x,y,z,noble) {
-  const robe=noble?'#73576f':'#596f70';
-  b.ball(x,y+.44,z,.51,.53,.46,robe);
-  b.ball(x,y+.77,z,.43,.34,.4,'#fff3d8');
-  for(const side of [-1,1]) {
-    b.ball(x+side*.145,y+.80,z+.383,.026,.039,.015,ink,[0,side*.31,0]);
-    b.ball(x+side*.232,y+.73,z+.337,.059,.024,.019,'#d9a38e',[0,side*.34,0]);
-    b.rod([x+side*.31,y+.51,z+.16],[x+side*.22,y+.38,z+.47],.14,robe,.115);
-  }
-  b.stroke([[x-.068,y+.717,z+.39],[x,y+.698,z+.397],[x+.067,y+.719,z+.39]],.011,ink);
-  b.stroke([[x-.23,y+.56,z+.26],[x+.04,y+.34,z+.47],[x+.20,y+.49,z+.37]],.034,ivory);
-  if(noble) {
-    b.ball(x,y+1.09,z-.015,.29,.135,.28,ink);
-    b.ball(x,y+1.29,z-.07,.15,.21,.13,ink,[.32,0,0]);
-    b.rod([x+.02,y+.37,z+.47],[x+.16,y+.64,z+.45],.05,gold,.082);
-  } else {
-    b.rod([x,y+1.035,z],[x,y+1.29,z],.61,straw,.052);
-    for(let k=0;k<12;k++){
-      const a=k*PI/6;
-      b.rod([x+.044*cos(a),y+1.28,z+.044*sin(a)],[x+.60*cos(a),y+1.038,z+.60*sin(a)],.009,'#846a48');
+function traveller(parent,noble){
+  const root=new THREE.Group();root.name=noble?'御簾の公達餅':'網代笠の問屋餅';
+  parent.add(root);
+  const kind=noble?5:6,head=dressedRiceFace(kind);
+  head.scale.set(.43,.352,.351);head.position.set(0,.765,-.009);root.add(head);
+  const robe=new THREE.Mesh(kosode(kind),silkMaterial());robe.castShadow=true;root.add(robe);
+  paint(root,b=>{
+    for(const side of [-1,1]){
+      const forward=side===1?.194:.08;
+      b.ball(side*.5,.701,forward+.196,.083,.075,.084,'#efe2cb');
     }
-  }
+    if(noble){
+      // A folded lacquered eboshi rises out of its bound headband, with the
+      // ridge of each rear fold visible above the blinds of the carriage.
+      const profile=[[.03,0],[.24,.012],[.30,.041],[.299,.084],[.257,.13],
+        [.194,.205],[.126,.362],[.089,.445],[.023,.483],[.01,.479]];
+      const cap=new THREE.LatheGeometry(profile.map(q=>new THREE.Vector2(...q)),32);
+      const pos=cap.attributes.position;
+      for(let i=0;i<pos.count;i++){
+        const y=pos.getY(i);pos.setZ(i,pos.getZ(i)*.8-.29*y*y);pos.setX(i,pos.getX(i)+.075*y);
+      }
+      cap.computeVertexNormals();b.add(cap,'#3f393b',[0,1.494,-.032]);
+      b.stroke([[-.252,1.548,-.063],[-.190,1.628,-.081],[-.106,1.776,-.119],[.028,1.959,-.141]],.009,'#746f6a');
+      b.stroke([[-.487,.767,.174],[-.464,.797,.293],[-.394,.934,.336]],.022,'#b6a17a');
+      b.rod([-.395,.924,.332],[-.271,1.206,.37],.024,'#b99c68',.058);
+    }else{
+      // Bamboo ribs bend into an upturned woven brim. Several concentric
+      // stitches bind the plaits; a chin cord passes behind the raised cheek.
+      const hat=(t,a)=>{
+        const r=.04+.569*t;
+        return [r*cos(a),1.854-.314*t+.046*(t**7)+.012*t*sin(2*a),.9*r*sin(a)-.042];
+      };
+      const crown=new SilkPanels();
+      crown.cut(11,48,(u,v)=>hat(v,u*2*PI),4);
+      b.add(crown.finish(),straw);
+      for(let i=0;i<30;i++){
+        const a=i*2*PI/30;
+        b.stroke([hat(0,a),hat(.30,a+.013),hat(.72,a+.021),hat(1,a)].map(([x,y,z])=>[x,y+.006,z]),
+          .0068,i%3?'#aa9167':'#79694e');
+      }
+      for(const [t,shade] of [[.22,'#c0ae83'],[.72,'#ad9770'],[.974,'#776449']]){
+        const pts=Array.from({length:37},(_,i)=>hat(t,i*2*PI/36));
+        b.stroke(pts,.009,shade,48,5);
+      }
+      for(const side of [-1,1])
+        b.add(brushStroke([[side*.401,1.595,.04],[side*.414,1.326,.139],
+          [side*.307,1.115,.242],[side*.157,1.025,.269]],[.007,.012,.009,.003],16),'#78654c');
+    }
+  },'旅装と手回り品').material=scrollPigment();
+  return root;
 }
 function oxCarriage() {
   const root=new THREE.Group(), wheels=[], legs=[];
@@ -74,8 +105,8 @@ function oxCarriage() {
     pullingOx(b);
   },'御簾の牛車');
   wagon.material=scrollPigment();
-  const noble=paint(root,b=>traveller(b,0,0,0,true),'簾を上げて道を眺める公達', [.13,1.39,-.45]);
-  noble.material=scrollPigment();noble.rotation.y=.66;
+  const noble=traveller(root,true);
+  noble.position.set(.13,1.38,-.45);noble.scale.setScalar(.71);noble.rotation.y=.66;
   const back=illustratedMesh(root,2,'curtain');
   back.position.set(0,2.211,-1.619);back.scale.set(1.65,1.03,.38);back.rotation.y=Math.PI;
   for(const side of [-1,1]) {
@@ -136,10 +167,10 @@ function marketBoat(tint,index) {
       b.ball(side*.30,.65,z,.26,.28,.39,'#bda172');
       for(const dz of [-.12,.14]) b.loop(side*.30,.66,z+dz,.26,.34,.048,'#7d6b4d');
     }
-    traveller(b,0,.46,.56,false);
     b.rod([-.42,1.25,.78],[-1.24,.04,1.75],.039,lacquer);
   },'帆掛けの餅問屋');
   hull.material=scrollPigment();
+  const merchant=traveller(root,false);merchant.position.set(0,.45,.56);merchant.scale.setScalar(.87);
   const row=ferryCrew(root,index);
   return {root,row};
 }

@@ -1,6 +1,9 @@
+import { relocateLegacyPosition } from './geography.js';
+import { RETREATS, bathRadius } from './retreat-layout.js';
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
 import { KYO_FOOD, KYO_ANIMALS, kyoNight, kyoInfluence } from './kyo-layout.js';
 import { makeScrollResidents, updateScrollResident } from './scroll-encounters.js';
+import { SCROLL_FAUNA, makeScrollFauna, moveScrollFauna } from './scroll-fauna.js';
 import { SEA_SPECIES, makeRyuguResidents, updateRyuguResident } from './ryugu-residents.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
 import { ORIGINAL_REGIONS, terrainHeight, shoreDistance, WATER_Y, groundHeight, landscapeFloor, solidHeightAt, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
@@ -127,8 +130,13 @@ function makeWorld() {
     const { type, role, x, z, phase } = resident;
     npc(type,role,x,z,phase);
   }
+  // Append to the item inventory after every legacy port and shop counter.
+  for(const site of RETREATS) {
+    object('onsen',site.x,site.z,site.yaw);
+    objects.at(-1).retreat=site;
+  }
   prepareVillageRoutes(npcs,objects);
-  npcs.push(...makeScrollResidents(), ...makeRyuguResidents());
+  npcs.push(...makeScrollResidents(), ...makeRyuguResidents(), ...makeScrollFauna());
   return { objects, npcs };
 }
 
@@ -173,6 +181,11 @@ export function createGame(snapshot = null) {
     return true;
   }
   function gap(target) { return distance(player, target); }
+  function insideBath(target, leaving = false) {
+    if (target.retreat) return bathRadius(target.retreat, player.x, player.z) <= (leaving ? 1.07 : .92);
+    if (target.grand) return springRadius(player.x, player.z) <= (leaving ? 1 : .88);
+    return gap(target) <= (leaving ? 3.35 : 3.1);
+  }
   function nearest() {
     if (player.activity || !player.grounded) return null;
     if (player.mount === 'turtle') return { target: turtle, label: 'カメから降りる', action: 'dismount', distance: 0 };
@@ -193,8 +206,13 @@ export function createGame(snapshot = null) {
         label = 'カメに乗る'; radius = 2.8;
       } else if (PICKUP_ACTION[target.type] && target !== lastBath) {
         label = PICKUP_ACTION[target.type].label;
-        radius = target.grand ? (springRadius(player.x,player.z)<.88 ? SNOW_SPRING.rx : 0) : target.type === 'onsen' ? 3.1 : 2.2;
-        if(target.grand) label='雪見の大露天風呂につかる';
+        radius = 2.2;
+        if (target.type === 'onsen') {
+          if (!insideBath(target)) continue;
+          radius = Infinity;
+          if (target.retreat) label = target.retreat.name + 'につかる';
+          if (target.grand) label = '雪見の大露天風呂につかる';
+        }
       } else {
         continue;
       }
@@ -212,7 +230,7 @@ export function createGame(snapshot = null) {
   function collect(target) {
     if (target.type === 'onsen') {
       lastBath = target;
-      if (!target.grand) {
+      if (!target.grand && !target.retreat) {
         player.x = target.x; player.z = target.z; player.y = target.y;
       }
       player.h = player.vy = 0;
@@ -230,7 +248,7 @@ export function createGame(snapshot = null) {
     } else {
       beginActivity(pickup.activity, pickup.duration);
       const lines = { tea: '香ばしいお茶を、両手でひと口。', mitarashi: '炙った団子に、とろりと甘いみたらしのたれ。', tsukimi: '満月を眺めながら、月見団子をひとくち。', bath: 'ほかほかの湯に、ひと休み。', read: '夢中で漫画を読んでいる。', drink: '日本酒をごくごく。', eat: '背脂ラーメンをもぐもぐ。' };
-      message(lines[pickup.activity]);
+      message(target.retreat ? target.retreat.name+'に身を沈めた。' : lines[pickup.activity]);
     }
   }
   function finishActivity() {
@@ -477,7 +495,7 @@ export function createGame(snapshot = null) {
     crowdCellX=cx; crowdCellZ=cz;
     const cellX=(cx+.5)*32, cellZ=(cz+.5)*32;
     state.nearbyNpcs=npcs.filter(n=>{
-      if(n===turtle || legendary(n.type))return true;
+      if(n===turtle || n.type==='hawk' || legendary(n.type))return true;
       // A crane's ellipse can swing two radii away from its original perch.
       // Stream the whole route before its edge reaches the 128 m view radius.
       const reach=n.type==='bird' ? 128+16+2*n.radius : 150;
@@ -492,6 +510,7 @@ export function createGame(snapshot = null) {
       n.flash = Math.max(0, n.flash - dt);
       if (n === turtle || n.atMortar || n.ridesDeer) continue;
       if (n.encounter) {updateScrollResident(n,state.time);continue;}
+      if (n.scrollFauna) {moveScrollFauna(n,state.time);continue;}
       if (n.seaResident) {updateRyuguResident(n,state.time);continue;}
       if (SPECIES[n.type]) {
         const far=Math.abs(wrapDelta(n.x-player.x))+Math.abs(wrapDelta(n.z-player.z))>55;
@@ -556,7 +575,7 @@ export function createGame(snapshot = null) {
       shot.x = wrapCoord(shot.x + dx*length); shot.z = wrapCoord(shot.z + dz*length);
       shot.age += dt; shot.life -= dt;
       if (hit) {
-        const points=(SPECIES[hit.type] || SEA_SPECIES[hit.type])?.points ?? 10;
+        const points=(SPECIES[hit.type] || SEA_SPECIES[hit.type] || SCROLL_FAUNA[hit.type])?.points ?? 10;
         hit.flash=.58; state.score+=points;
         state.delivered.add(hit.id);
         emit('score', { value:points, text:'+'+points, x:hit.x, z:hit.z, y:shot.y+1 });
@@ -682,17 +701,17 @@ export function createGame(snapshot = null) {
     }
   }
   function checkContact() {
-    if (lastBath && (lastBath.grand ? springRadius(player.x,player.z)>1 : gap(lastBath)>3.35)) lastBath=null;
+    if (lastBath && !insideBath(lastBath, true)) lastBath = null;
     if (player.activity || player.h > 1.15 || player.mode === 'kusa') return;
     if (!player.mount && player.grounded) {
       for (const o of objects) {
-        if (!o.grand && !['tsukimi','kyoTea','mitarashi'].includes(o.type) && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
+        if (!o.grand && !o.retreat && !['tsukimi','kyoTea','mitarashi'].includes(o.type) && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
             gap(o) <= (o.type === 'onsen' ? 1.55 : .83)) { collect(o); return; }
       }
     }
     if (player.invulnerable > 0) return;
     for (const n of state.nearbyNpcs) {
-      if (n.area || n.encounter || n.seaResident || n.atMortar || n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
+      if (n.area || n.encounter || n.scrollFauna || n.seaResident || n.atMortar || n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
       player.invulnerable = 2.1;
       if (!protectedVitals()) player.hp = Math.max(0,player.hp-7);
       if (player.hp === 0) {
@@ -796,7 +815,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 5, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 6, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: objects.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -807,14 +826,14 @@ export function createGame(snapshot = null) {
   function restore(data) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
     const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
-    if (!data || ![2,3,4,5].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
-    const p = data.player, t = data.turtle;
+    if (!data || ![2,3,4,5,6].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    let p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
     // The original six districts occupy the prefix of the inventory. New
     // stops start stocked even when an old journey resumes on a borrowed bike.
     const old = data.version === 2;
     const savedPorts = old ? 6 : data.version <= 4 ? 10 : ports.length;
-    const validItemCounts = old ? [36] : data.version <= 4 ? [48,50] : [objects.length];
+    const validItemCounts = old ? [36] : data.version <= 4 ? [48,50] : data.version===5 ? [56] : [objects.length];
     if (!finite(data.time,0,1e9) || !Number.isSafeInteger(data.score) || data.score<0 ||
         !data.visited.every(id=>REGIONS.some(region=>region.id===id)) ||
         !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,CEILING+160) ||
@@ -830,6 +849,13 @@ export function createGame(snapshot = null) {
         data.bikes.reduce((total,n)=>total+n,p.mount==='bike'?1:0)!==savedPorts*2 ||
         !point(t.x,t.z) || !point(t.homeX,t.homeZ) || !finite(t.pause,0,12) ||
         !Number.isInteger(t.leg) || !finite(t.leg,0,3)) return;
+    if(data.version===5) {
+      const [x,z]=relocateLegacyPosition(p.x,p.z);
+      p={...p,x,z};
+      const [tx,tz]=relocateLegacyPosition(t.x,t.z);
+      const [homeX,homeZ]=relocateLegacyPosition(t.homeX,t.homeZ);
+      t={...t,x:tx,z:tz,homeX,homeZ};
+    }
     for (const key of Object.keys(player)) {
       if (!['idleTime','buffs','landing','impact','airStretch','night','inWater','diveDepth'].includes(key)) player[key]=p[key];
     }
@@ -859,7 +885,8 @@ export function createGame(snapshot = null) {
     const previousReward = (data.version === 3 || data.kagamiUnlocked === true) &&
       npcs.slice(0,623).every(n => state.delivered.has(n.id));
     const completeFourthEdition = data.version === 4 && npcs.slice(0,675).every(n=>state.delivered.has(n.id));
-    state.kagamiUnlocked = state.delivered.size === state.recipientTotal || previousReward || completeFourthEdition;
+    const completeFifthEdition = data.version === 5 && npcs.slice(0,794).every(n=>state.delivered.has(n.id));
+    state.kagamiUnlocked = state.delivered.size === state.recipientTotal || previousReward || completeFourthEdition || completeFifthEdition;
     if(player.mode==='kagami' && !state.kagamiUnlocked) player.mode='normal';
     state.score=data.score; state.time=data.time;
     state.visited=[...new Set(data.visited)];
@@ -879,6 +906,7 @@ export function createGame(snapshot = null) {
   state.flightSeed=restored ? (validSeed?savedSeed:0x82c6710b) : Math.floor(Math.random()*0x100000000);
   for(const n of npcs) {
     if(n.encounter) updateScrollResident(n,state.time);
+    else if(n.scrollFauna) moveScrollFauna(n,state.time);
     else if(n.seaResident) updateRyuguResident(n,state.time);
     else if(SPECIES[n.type]) {
       if(legendary(n.type)) n.flightSeed=state.flightSeed;

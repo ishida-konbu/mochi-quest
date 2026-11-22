@@ -1,12 +1,12 @@
 // Both travellers visit the whole toroidal map. Each saved journey has its
 // own sequence of destinations, times, headings and flight levels.
-import { BOUND, seeded, wrapCoord, wrapDelta } from './terrain.js';
+import { BOUND, REGIONS, seeded, wrapCoord, wrapDelta } from './terrain.js';
 
 export const legendary=type=>type==='dragon' || type==='kirin';
-const grid=5, stops=grid*grid, width=2*BOUND/grid;
+const grid=5, sectors=grid*grid, stops=sectors+REGIONS.length, width=2*BOUND/grid;
 const cache=new WeakMap();
 const mod=(value,size)=>(value%size+size)%size;
-const circuitTime=n=>n.type==='dragon'?600:825;
+export const circuitTime=n=>n.type==='dragon'?1380:1860;
 
 function circuitSeed(n,lap) {
   return n.flightSeed ^ (n.type==='dragon'?0x51fa87:0x72bc39) ^ Math.imul(lap+1,0x9e3779b1);
@@ -19,11 +19,16 @@ function location(n,seed,cell) {
   };
 }
 function startCell(seed) {
-  return Math.floor(seeded(seed ^ 0x67ae3f1)()*stops);
+  return Math.floor(seeded(seed ^ 0x67ae3f1)()*sectors);
 }
 function drawCircuit(n,lap) {
   const seed=circuitSeed(n,lap), random=seeded(seed), points=[], durations=[], arrivals=[];
-  const cells=Array.from({length:stops},(_,i)=>location(n,seed,i));
+  const cells=Array.from({length:sectors},(_,i)=>location(n,seed,i));
+  // The larger island has a wide open sea. Link the open-sky turns with one
+  // approach over each landmark so every district can still see the travellers.
+  for(const place of REGIONS) {
+    cells.push({x:place.x+(random()-.5)*27,z:place.z+(random()-.5)*27});
+  }
   const nextSeed=circuitSeed(n,lap+1), nextStart=location(n,nextSeed,startCell(nextSeed));
   const levels=n.type==='dragon'?[7,25,55,83,102]:[3.2,6,18,38,66];
   const deck=cells.map((_,i)=>levels[i%levels.length]);
@@ -57,7 +62,7 @@ function drawCircuit(n,lap) {
     const length=Math.hypot(wrapDelta(to.x-from.x),wrapDelta(to.z-from.z));
     durations.push(length);sum+=length;
   }
-  const tourTime=circuitTime(n), pause=n.type==='dragon'?4:7;
+  const tourTime=circuitTime(n), pause=n.type==='dragon'?3:5;
   let elapsed=0;
   for(let i=0;i<stops;i++) {
     arrivals.push(elapsed);
