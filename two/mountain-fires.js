@@ -94,10 +94,13 @@ export function mountainFires(scene,hearths,cx,cz,east=false) {
     vertexShader:`
       attribute vec3 hearth;attribute float seed;
       uniform float clock,size;
-      varying vec2 flameUv;varying float wick;
+      varying vec2 flameUv;varying float wick,eyeFade;
       void main(){
         flameUv=uv;wick=seed;
         vec4 spot=modelViewMatrix*vec4(hearth,1.);
+        // A player can walk between the firebeds. Dissolve the one crossing
+        // the eye before its flat projection covers the whole view.
+        eyeFade=smoothstep(1.45,3.15,-spot.z);
         float flicker=.88+.13*sin(3.3*clock+seed)+.09*sin(6.7*clock+.31*seed);
         float breadth=size*(.91+.13*sin(2.6*seed));
         spot.x+=position.x*2.55*breadth;
@@ -105,7 +108,7 @@ export function mountainFires(scene,hearths,cx,cz,east=false) {
         gl_Position=projectionMatrix*spot;
       }`,
     fragmentShader:`
-      varying vec2 flameUv;varying float wick;
+      varying vec2 flameUv;varying float wick,eyeFade;
       uniform float clock,intensity;
       float noise(vec2 q){
         vec2 ip=floor(q),f=fract(q);f=f*f*(3.-2.*f);
@@ -147,7 +150,7 @@ export function mountainFires(scene,hearths,cx,cz,east=false) {
         vec2 spark=p-vec2(.10*sin(7.*age+wick)*age,.31+.66*age);
         float ember=(1.-smoothstep(.006,.032,length(spark*vec2(1.4,1.))))*
                     sin(3.14159*age)*.9;
-        float alpha=(halo+(.74+.25*plume)*fire+ember)*intensity;
+        float alpha=(halo+(.74+.25*plume)*fire+ember)*intensity*eyeFade;
         if(alpha<.009)discard;
         vec3 color=mix(vec3(.99,.19,.042),emission,fire);
         gl_FragColor=vec4(mix(color,vec3(1.,.67,.17),ember),min(1.,alpha));
