@@ -2,7 +2,7 @@ import {DISTRICTS, FIFTH_EDITION_CENTRES, relocateLegacyPosition} from '../two/g
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, roadSurfaceHeight, groundHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
-import {RETREATS,sitePoint} from '../two/retreat-layout.js';
+import {RETREATS,bathRadius,sitePoint} from '../two/retreat-layout.js';
 import {INARI_GATES, INARI_ROUTE, PEACH_TREES, MOON_GATE} from '../two/pilgrimage-layout.js';
 import {PALACE_APPROACH} from '../two/ryugu-layout.js';
 import {HIGASHIYAMA} from '../two/higashiyama.js';
@@ -84,7 +84,7 @@ test('flowering peach colonies follow the wooded slopes and gorge while keeping 
   assert.ok(aspects.every(n=>n>=25),'blooming slopes in all eight directions: '+aspects);
   for(const t of PEACH_TREES){
     assert.ok(Math.hypot(t.x-MOON_GATE.x,t.z-MOON_GATE.z)>8.9);
-    assert.ok(Math.hypot(t.x-spring.x,t.z-spring.z)>9.5);
+    assert.ok(bathRadius(spring,t.x,t.z)>=1.38);
     assert.equal(waterDepth(t.x,t.z),0);
     assert.ok(terrainHeight(t.x,t.z)>0);
   }

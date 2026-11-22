@@ -12,6 +12,13 @@ const innerRoads=[
   [4,'月見の棚田','湯けむり峠',[156,105],[144,-107]],
 ];
 
+// Only streets with a market at both ends carry trade. Pilgrims can still
+// follow the peach gorge and the shrine approach on the same physical roads.
+const marketRoads=[
+  ['capital-road',1.98],['temple-road',1.98],
+  ['tsuruga-road',1.12],['sakai-road',1.12,[142,-802]],
+];
+
 function stopIndex(road,stop) {
   let nearest=0,least=Infinity;
   for(const [i,[x,z]] of road.points.entries()){
@@ -24,20 +31,21 @@ function itinerary(road,origin,destination,lane,first,last) {
   const points=road.points.slice(first?stopIndex(road,first):0,last?stopIndex(road,last)+1:undefined);
   const xs=points.map(p=>p[0]),zs=points.map(p=>p[1]);
   const bounds={west:Math.min(...xs),east:Math.max(...xs),north:Math.min(...zs),south:Math.max(...zs)};
-  return {...measureRoute(points),origin,destination,lane,width:road.width,bounds,merchants:road.merchants};
+  return {...measureRoute(points),origin,destination,lane,width:road.width,bounds};
 }
 export const MERCHANT_ROUTES=[
   // The western bridge has a skewed approach and inset timber rails.
   ...innerRoads.map(([road,from,to,first,last])=>itinerary(ROADS[road],from,to,road===2?.85:1.12,first,last)),
-  ...CONNECTING_ROADS.map((road,i)=>itinerary(road,road.origin,road.destination,
-    i<2?1.98:i===2?.68:1.12,
-    i===5?[142,-802]:null,i===3?[402,-425]:null)),
+  ...marketRoads.map(([id,lane,first])=>{
+    const road=CONNECTING_ROADS.find(r=>r.id===id);
+    return itinerary(road,road.origin,road.destination,lane,first);
+  }),
 ];
 
 // Same pace on each road keeps neighbours from overtaking in a narrow pass.
 // The two halves of each period already contain the outward and return trips.
 export const ROAD_MERCHANTS=MERCHANT_ROUTES.flatMap((route,index)=>{
-  const count=route.merchants ?? Math.max(2,Math.ceil(route.length/110)),speed=.94+(index%4)*.09;
+  const count=Math.max(2,Math.ceil(route.length/110)),speed=.94+(index%4)*.09;
   const period=2*(route.length/speed+townStop);
   return Array.from({length:count},(_,i)=>({
     route,speed,offset:period*((.073+index*.317+i/count)%1),

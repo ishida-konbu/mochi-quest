@@ -66,19 +66,26 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 const distance = (a, b) => Math.hypot(wrapDelta(a.x - b.x), wrapDelta(a.z - b.z));
 
+// Editions through v11 saved cooldowns by position and used that position in
+// each landmark ID. Keep the retired pass-side pool and kettle slots vacant.
+const RETIRED_BATH_SLOTS = new Set([58, 64]);
+
 function makeWorld() {
   const objects = [];
+  const inventory = [];
   const npcs = [];
-  function object(type, x, z, heading = 0) {
-    const landmark = { id: type + '-' + objects.length, type, x, z, y: groundHeight(x, z), heading, active: true, cooldown: 0 };
+  function object(type, x, z, heading = 0, namedId) {
+    if (!namedId && RETIRED_BATH_SLOTS.has(inventory.length)) inventory.push(null);
+    const id = namedId ?? type + '-' + inventory.length;
+    const landmark = { id, type, x, z, y: groundHeight(x, z), heading, active: true, cooldown: 0 };
+    if (!namedId) inventory.push(landmark);
     if (type === 'port') landmark.bikes = 2;
     objects.push(landmark);
+    return landmark;
   }
   function placeSpring(site) {
-    object('onsen',site.x,site.z,site.yaw);
-    const pool=objects.at(-1);
+    const pool=object('onsen',site.x,site.z,site.yaw,site.regional ? 'onsen-'+site.id : undefined);
     pool.retreat=site;
-    if(site.regional)pool.id='onsen-'+site.id;
   }
   function npc(type, role, x, z, phase, side = 1) {
     const heading = role === 'sumo' ? side * Math.PI / 2 : phase;
@@ -157,13 +164,14 @@ function makeWorld() {
     objects.at(-1).region=harbour.id;
   }
   for(const hut of WAYSIDE_HUTS){
+    if(!hut.bath)continue;
     object('onsen',hut.bath.x,hut.bath.z,hut.yaw);
     objects.at(-1).goemon=hut;
   }
   for(const site of RETREATS)if(site.regional)placeSpring(site);
   prepareVillageRoutes(npcs,objects);
   npcs.push(...makeScrollResidents(), ...makeRyuguResidents(), ...makeScrollFauna());
-  return { objects, npcs };
+  return { objects, npcs, inventory };
 }
 
 // Reopen older journals in the same room or yard of the relocated court.
@@ -214,10 +222,7 @@ function restoreGateVisitor(p,edition) {
 }
 
 export function createGame(snapshot = null) {
-  const { objects, npcs } = makeWorld();
-  // Permanent regional baths only persist the occupied site's ID in lastBath.
-  // Keep the original positional cooldown array readable by existing journeys.
-  const inventory=objects.filter(o=>!o.retreat?.regional);
+  const { objects, npcs, inventory } = makeWorld();
   const riverRider = pairRiverTravellers(npcs);
   const turtle = npcs.find(n => n.type === 'turtle');
   // A tea service is always available. Only portable items have cooldowns in a journey save.
@@ -1152,7 +1157,7 @@ export function createGame(snapshot = null) {
     return {
       version: 11, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
-      items: inventory.map(o => o.cooldown),
+      items: inventory.map(o => o?.cooldown ?? 0),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
       turtle: { x:turtle.x, z:turtle.z, homeX:turtle.homeX, homeZ:turtle.homeZ, pause:turtlePause, leg:turtleLeg },
       lastBath: lastBath?.id ?? null
@@ -1253,11 +1258,18 @@ export function createGame(snapshot = null) {
     if(player.mode==='kagami' && !state.kagamiUnlocked) player.mode='normal';
     state.score=data.score; state.time=data.time;
     state.visited=[...new Set(data.visited)];
-    inventory.forEach((o,i)=>{o.cooldown=data.items[i] ?? 0; o.active=o.cooldown===0;});
+    inventory.forEach((o,i)=>{
+      if(!o)return;
+      o.cooldown=data.items[i] ?? 0; o.active=o.cooldown===0;
+    });
     ports.forEach((o,i)=>{o.bikes=data.bikes[i] ?? 2;});
     Object.assign(turtle, {x:t.x,z:t.z,homeX:t.homeX,homeZ:t.homeZ,y:groundHeight(t.x,t.z),mounted:p.mount==='turtle'});
     turtlePause=t.pause; turtleLeg=t.leg; recoverRider=turtle.mounted;
     lastBath=objects.find(o=>o.type==='onsen' && o.id===data.lastBath)??null;
+    if(player.activity==='bath' && data.lastBath && !lastBath) {
+      player.activity=null;
+      player.activityTime=0;
+    }
     updateRegion(false);
     return true;
   }

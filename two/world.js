@@ -1803,9 +1803,11 @@ function createWaysideHuts(scene) {
         if(s.kind==='chaya')root=buildDangoChaya(s.variant);
         else{
           root=buildWaysideHut(s.kind,s.variant);
-          const bath=buildGoemonBath(s.variant);
-          bath.position.set(BATH_YARD[0],0,BATH_YARD[1]);
-          root.add(bath);
+          if(s.bath){
+            const bath=buildGoemonBath(s.variant);
+            bath.position.set(BATH_YARD[0],0,BATH_YARD[1]);
+            root.add(bath);
+          }
         }
         root.rotation.y=s.yaw;root.position.y=h(s.x,s.z);
         models.set(s,root);scene.add(root);

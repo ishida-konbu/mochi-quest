@@ -66,12 +66,10 @@ function divides(u,v){
   }
   return rise;
 }
-const streams=[...localPass.slice(0,-1).map((p,i)=>[p,localPass[i+1]]),
-  // A low side cove retains the old peach spring beside the public trail.
-  [[188,41],[194,26]],[[188,41],[195,49]]].map(([[x,z],[ex,ez]])=>{
-    const dx=ex-x,dz=ez-z;
-    return {x,z,dx,dz,inv:1/(dx*dx+dz*dz)};
-  });
+const streams=localPass.slice(1).map(([ex,ez],i)=>{
+  const [x,z]=localPass[i],dx=ex-x,dz=ez-z;
+  return {x,z,dx,dz,inv:1/(dx*dx+dz*dz)};
+});
 function riverbedDistance(u,v){
   let best=Infinity;
   for(const s of streams){

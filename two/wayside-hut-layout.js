@@ -2,7 +2,7 @@
 import { sitePoint } from './retreat-layout.js';
 
 const clearings=[
-  ['charcoal','桃山道の炭焼き小屋',-305,-140,-.319],
+  ['charcoal','桃山道の炭焼き小屋',-305,-140,-.319,false],
   ['charcoal','雪街道の炭焼き小屋',-132,-217,1.856],
   ['charcoal','京へ上る炭焼き小屋',187,-690,-2.312],
   ['charcoal','大仏道の炭焼き小屋',144,421,2.218],
@@ -16,10 +16,12 @@ export const KETTLE={widthScale:1.22,radius:1.08,lip:1.15,board:.84,water:1.035}
 export const KETTLE_STEPS=[
   {z:2.65,top:.23},{z:2.15,top:.46},{z:1.65,top:.69},{z:1.23,top:.92},
 ];
-export const WAYSIDE_HUTS=clearings.map(([kind,name,x,z,yaw],i)=>{
+export const WAYSIDE_HUTS=clearings.map(([kind,name,x,z,yaw,hasBath=true],i)=>{
   const hut={kind,name,x,z,yaw,variant:i%4};
-  const [bx,bz]=sitePoint(hut,...BATH_YARD);
-  hut.bath={x:bx,z:bz,yaw};
+  if(hasBath){
+    const [bx,bz]=sitePoint(hut,...BATH_YARD);
+    hut.bath={x:bx,z:bz,yaw};
+  }
   return hut;
 });
 // Surveyed from the painted road centrelines, with the bench facing passing travellers.
@@ -87,6 +89,7 @@ export function hutSolids(height,put){
     }else{
       add(-4.35,.30,3.02,2.88,1.65,'oval',true);
     }
+    if(!s.bath)continue;
     // A real circular rim leaves a hollow over the submerged wooden footboard.
     const {x,z}=s.bath;
     const scale=KETTLE.widthScale,radius=KETTLE.radius*scale;

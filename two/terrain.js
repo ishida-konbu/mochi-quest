@@ -685,8 +685,8 @@ for (const t of emptySites) {
 }
 // Add new roads after laying out the established groves. Clear only the
 // actual verges of the connecting roads, preserving old woodland elsewhere.
-export const CONNECTING_ROADS = TRADE_ROADS.map(({width,knots,destination,origin,merchants})=>({
-  ...road(width,knots),destination,origin,merchants,
+export const CONNECTING_ROADS = TRADE_ROADS.map(({id,width,knots,destination,origin})=>({
+  ...road(width,knots),id,destination,origin,
 }));
 const extensions = [...CONNECTING_ROADS, ...KYO_ROADS.map(([width,knots,paved])=>({...road(width,knots),paved})), {width:3.7,points:INARI_ROUTE}];
 for (const avenue of extensions) { ROADS.push(avenue); indexRoad(avenue); }

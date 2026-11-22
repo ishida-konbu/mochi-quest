@@ -5,7 +5,7 @@ import { PALACE_APPROACH, RYUGU, HALLS, GATE_V } from './ryugu-layout.js';
 import { DISTRICTS } from './geography.js';
 import { SEAPORTS, PORT_BUILDINGS, QUAY_CENTER, QUAY_LENGTH, portPoint } from './seaport-layout.js';
 import { SEAWAYS, FLEET, vesselPose } from './ocean-voyage.js';
-import { CHAYA_SITES } from './wayside-hut-layout.js';
+import { WAYSIDE_SITES } from './wayside-hut-layout.js';
 import { KIYOMIZU, OTOWA_ROOFS, PAGODA } from './kiyomizu-layout.js';
 import { COURT } from './retreat-layout.js';
 import { HIGASHIYAMA, KITAYAMA, FIRE_TRAILS, westRidgeHeight } from './higashiyama.js';
@@ -284,11 +284,9 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   // Keep the fire characters at their surveyed summits at both map scales.
   const marks=[[KIYOMIZU,large?'清':'清水寺'],[COURT,'裁'],[KITAYAMA,'大'],[HIGASHIYAMA,'福']];
   for(const {fall} of MOUNTAIN_STREAMS)marks.push([fall.toe,'滝']);
-  for(const site of CHAYA_SITES)marks.push([site,'茶']);
-  for(const site of state.objects){
-    if(site.retreat)marks.push([site,'♨']);
-    if(site.goemon)marks.push([site,site.goemon.kind==='charcoal'?'炭':'漁']);
-  }
+  const hutGlyph={chaya:'茶',charcoal:'炭',fisher:'漁'};
+  for(const site of WAYSIDE_SITES)marks.push([site,hutGlyph[site.kind]]);
+  for(const site of state.objects)if(site.retreat)marks.push([site,'♨']);
   for(const [site,glyph] of marks){
     const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
     if(x<0||x>w||y<0||y>h)continue;

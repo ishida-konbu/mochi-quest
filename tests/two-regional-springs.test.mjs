@@ -30,16 +30,17 @@ function walk(game,destination,label){
   assert.fail(label+' stopped at '+[p.x,p.z]+' heading to '+destination);
 }
 
-test('the playable spring inventory doubles and retains every historical item ID',()=>{
+const retiredIds=new Set(['onsen-58','onsen-64']);
+test('the spring inventory preserves the historical IDs around the retired trail baths',()=>{
   const {objects}=createGame().state;
-  const old=objects.slice(0,historicIds.length);
-  assert.deepEqual(old.map(o=>o.id),historicIds);
+  const old=objects.filter(o=>!o.retreat?.regional);
+  assert.deepEqual(old.map(o=>o.id),historicIds.filter(id=>!retiredIds.has(id)));
   const oldSprings=old.filter(o=>o.type==='onsen'),springs=objects.filter(o=>o.type==='onsen');
   const added=springs.filter(o=>o.retreat?.regional);
-  assert.equal(oldSprings.length,22);
-  assert.equal(oldSprings.filter(o=>o.goemon).length,8);
-  assert.equal(springs.length,2*oldSprings.length);
-  assert.equal(added.length,oldSprings.length);
+  assert.equal(oldSprings.length,20);
+  assert.equal(oldSprings.filter(o=>o.goemon).length,7);
+  assert.equal(springs.length,41);
+  assert.equal(added.length,21);
   for(const o of added)assert.equal(o.id,'onsen-'+o.retreat.id);
   assert.deepEqual(new Set(added.map(o=>o.retreat)),new Set(regional()));
   assert.equal(new Set(objects.map(o=>o.id)).size,objects.length);
@@ -75,7 +76,7 @@ test('regional basins have distinct shorelines, continuous water and a dry appro
 
 test('a walker enters, bathes, resumes, leaves and bathes again at every regional spring',()=>{
   const sites=regional();
-  assert.equal(sites.length,22);
+  assert.equal(sites.length,21);
   for(const s of sites){
     const game=createGame(),p=game.state.player;
     const entry=sitePoint(s,0,s.rz*springLip(s.index,Math.PI/2)+3.3);
@@ -146,7 +147,8 @@ test('an original v11 inventory and an in-progress Goemon bath retain their mean
   assert.ok(restored.restored);assert.equal(restored.state.score,2130);
   for(const [i,id] of historicIds.entries()){
     const o=restored.state.objects.find(o=>o.id===id);
-    assert.equal(o.cooldown,originalItems[i],id);
+    if(retiredIds.has(id))assert.equal(o,undefined,id);
+    else assert.equal(o.cooldown,originalItems[i],id);
   }
   assert.ok(restored.state.objects.filter(o=>o.retreat?.regional).every(o=>o.active && o.cooldown===0));
   const again=restored.save();

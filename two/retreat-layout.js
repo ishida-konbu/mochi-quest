@@ -23,16 +23,22 @@ function wayside(id, fraction, offset) {
   const yaw=p.yaw-Math.sign(offset)*Math.PI/2;
   return {x:p.x-Math.sin(yaw)*Math.abs(offset),z:p.z-Math.cos(yaw)*Math.abs(offset),yaw};
 }
+// Original survey numbers seed the basin outline, stone rims and planting.
+// Keep the two retired peach approach numbers vacant.
+const springSurvey=[];
 export const RETREATS=[
   {...wayside('capital-road',.50,16),name:'杉木立の湯',kind:'cedar',hut:true,rx:4.65,rz:3.55},
   {...wayside('temple-road',.56,-16),name:'薄明の湯',kind:'reed',rx:5.9,rz:3.08},
-  // The hut stays beside the original approach, upstream of the new turns in the gorge.
-  {x:-591.6889655674,z:-140.8950292397,yaw:-3.6774038916,name:'桃霞の湯',kind:'peach',hut:true,rx:4.68,rz:3.94},
   {...wayside('inari-road',.64,-16),name:'雲間の湯',kind:'slate',rx:5.36,rz:3.30},
   {x:-127,z:146,yaw:2.42,name:'潮待ちの湯',kind:'coast',hut:true,rx:5.12,rz:3.82},
   {x:229,z:-172,yaw:.71,name:'楓の岩湯',kind:'maple',rx:4.77,rz:4.02},
   ...REGIONAL_SPRINGS,
-].map((site,index)=>({...site,index}));
+].map(site=>{
+  if(springSurvey.length===2 || springSurvey.length===23)springSurvey.push(null);
+  const index=springSurvey.length;
+  springSurvey.push(site);
+  return {...site,index};
+});
 
 export function sitePoint(site,u,v) {
   return [site.x+u*Math.cos(site.yaw)+v*Math.sin(site.yaw),
@@ -61,7 +67,7 @@ export function nearbyRetreat(x,z) {
   return nearest;
 }
 export function springLip(index,a) {
-  const shape=RETREATS[index]?.shape;
+  const shape=springSurvey[index]?.shape;
   return shape ? regionalSpringLip(shape,a) :
     1+.103*Math.sin(3*a+index*.95)+.051*Math.cos(2*a-index*.62)+.026*Math.cos(5*a);
 }

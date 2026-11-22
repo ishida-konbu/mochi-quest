@@ -21,7 +21,6 @@ export const REGIONAL_SPRINGS = [
   ['sakai-tsuboguchi', '堺の壺口湯', 'sakai', 'sakai', 'inkstone', -165.25,-594.50,2.5147, 4.80,3.05],
   // Longer journeys have intermediate stops beyond the settled centres.
   ['snow-nagoriyuki', '峠の名残雪', 'snow', 'snow', 'cleft', 36.08,-328.20,4.0083, 4.53,3.68],
-  ['peach-iwakubo', '桃峡の岩窪湯', 'peach', 'peach', 'cleft', -471.25,-134,.7537, 4.70,3.00],
   ['temple-kongoseki', '参詣道の金剛石湯', 'todaiji', 'temple', 'terrace', 272.54,636.24,2.6673, 5.40,3.61],
   ['inari-kitsunebi', '狐火の湯', 'inari', 'inari', 'leaf', 509,-601.25,1.5070, 4.65,3.25],
   ['tsuruga-funami', '敦賀峠の船見湯', 'tsuruga', 'tsuruga', 'fan', 453,-1338.25,-1.7269, 4.20,2.78],
