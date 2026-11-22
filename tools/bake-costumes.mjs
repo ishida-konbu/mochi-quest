@@ -29,18 +29,19 @@ export async function bakeCostumes(){
   const crowd=actors.getObjectByName('京の辻をゆく餅たち');
   const footwear=crowd.getObjectByName('鼻緒と下駄'),robes=crowd.children.filter(o=>o.name==='都の装束');
   const faces=crowd.children.filter(o=>o.name==='にっこり餅の面相');
+  const crowns=crowd.children.filter(o=>o.name==='都のかぶりもの');
   const names=TOWNSFOLK;
   for(const [k,name] of names.entries()){
     const trim=crowd.getObjectByName(name),group=person(trim);
-    piece(group,trim);piece(group,robes[k]);piece(group,faces[k]);
+    piece(group,trim);piece(group,robes[k]);piece(group,crowns[k]);piece(group,faces[k]);
     for(const foot of [0,1])piece(group,footwear,2*k*faces[0].count+foot);
   }
   for(const [i,role] of ['lantern','groom','bride','parasol','flute'].entries()){
     const group=person(actors.getObjectByName('稲荷・'+role));
     for(const part of actors.children){
       const name=part.name.slice(3);
-      if(name===role||name===role+'装束')piece(group,part);
-      if(name==='面相'||name==='尾')piece(group,part,i);
+      if(name===role||name===role+'装束'||name===role+'面相')piece(group,part);
+      if(name==='尾')piece(group,part,i);
       if(name==='sandals'){piece(group,part,i*2);piece(group,part,i*2+1);}
     }
   }

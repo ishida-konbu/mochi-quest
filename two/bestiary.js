@@ -11,7 +11,7 @@ export const SPECIES = Object.freeze({
   monkey: { count:90, points:30, label:'猿', stature:1, frame:2.7, center:.88 },
   bird:   { count:40, points:30, label:'丹頂', stature:1, frame:3.5, center:.13 },
   fox:    { count:40, points:50, label:'狐', stature:1, frame:2.7, center:.72 },
-  tiger:  { count:10, points:100, label:'虎', stature:1.22, frame:3.6, center:.84 },
+  tiger:  { count:10, points:100, label:'虎', stature:2.44, frame:3.6, center:.84 },
   dragon: { count:1, points:1000, label:'龍', stature:2.1, frame:6.2, center:1.18 },
   kirin:  { count:1, points:1000, label:'麒麟', stature:1.75, frame:4.9, center:1.72 },
   deer:   { count:32, points:60, label:'鹿', stature:1.16, frame:3.8, center:1.24 },

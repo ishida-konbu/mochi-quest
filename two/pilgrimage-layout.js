@@ -265,8 +265,12 @@ export function pilgrimageSolids(height, putSolid) {
   for(const side of [-1,1]) putSolid(MOON_GATE.x,MOON_GATE.z+side*3.23,.31,1.42,0,
     height(MOON_GATE.x,MOON_GATE.z)+4.8,'wall',false);
   const {x,z}=DAIBUTSU, base=height(x,z);
-  putSolid(x,z,6,4.65,0,base+3.05,'oval',false);
-  putSolid(x,z-.35,4.6,3.05,0,base+17.4,'oval',false,0,base+2.8);
+  // Follow the seated knees and the narrower, forward-tilted head as the
+  // player or camera rises alongside the statue.
+  putSolid(x,z,6.48,5.09,0,base+3.14,'oval',false);
+  putSolid(x,z+.28,6.30,3.68,0,base+7.53,'oval',false,0,base+3.00);
+  putSolid(x,z,4.47,2.48,0,base+13.27,'oval',false,0,base+7.32);
+  putSolid(x,z+.39,2.39,2.33,0,base+18.45,'oval',false,0,base+13.03);
   for(const [u,v] of TEMPLE_COLUMNS) putSolid(x+u,z+v,.58,.58,0,base+22,'oval',false);
   // Worshippers approach through the open front of the hall.
   putSolid(x,z-11.4,16,.45,0,base+20.2,'wall',false);

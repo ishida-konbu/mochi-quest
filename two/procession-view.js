@@ -49,7 +49,7 @@ function plate(filename,color) {
   if (!plates.has(filename)) {
     let texture;
     const ready=new Promise((resolve,reject)=>{
-      texture=new THREE.TextureLoader().load(new URL('./assets/residents/'+filename+(filename==='costumes.webp'?'?v=heian-1':''),import.meta.url).href,resolve,undefined,reject);
+      texture=new THREE.TextureLoader().load(new URL('./assets/residents/'+filename,import.meta.url).href,resolve,undefined,reject);
     });
     // Weight the RGB by coverage before generating mip levels, then unweight
     // it in the shader. Transparent WebP texels otherwise introduce a black
@@ -69,7 +69,7 @@ export const costumeFrame=role=>role<5 ? 2.28:role===8 ? 4.45:3.18;
 export const costumeCentre=role=>role<5 ? .94:1.39;
 
 export async function preparePlates(renderer) {
-  const entries=[plate('procession.webp',true),plate('procession-dyes.webp',false),plate('beasts.webp',true),plate('scroll-fauna.webp',true),plate('costumes.webp',true)];
+  const entries=[plate('procession.webp',true),plate('procession-dyes.webp',false),plate('beasts.webp',true),plate(FAUNA_SHEET.atlas,true),plate('emaki-costumes.webp',true)];
   await Promise.all(entries.map(entry=>entry.ready));
   function* upload() {
     for (const {texture} of entries) {renderer?.initTexture(texture);yield;}
@@ -85,7 +85,7 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   geometry.setAttribute('tileCell',cells);
   const motion=new THREE.InstancedBufferAttribute(new Float32Array(capacity*3),3).setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('nextPose',motion);
-  const atlas=plate(costumes?'costumes.webp':scroll?'scroll-fauna.webp':beasts?'beasts.webp':'procession.webp',true).texture;
+  const atlas=plate(costumes?'emaki-costumes.webp':scroll?FAUNA_SHEET.atlas:beasts?'beasts.webp':'procession.webp',true).texture;
   const cloth=beasts ? null : plate('procession-dyes.webp',false).texture;
   const material=new THREE.MeshBasicMaterial({map:atlas,transparent:true,alphaTest:.035});
   material.onBeforeCompile=shader=>{

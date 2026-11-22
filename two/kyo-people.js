@@ -3,8 +3,8 @@ import { districtPoint, DISTRICTS } from './geography.js';
 import * as THREE from './vendor/three.module.min.js';
 import { batchActorParts } from './actors.js';
 import { scrollPigment } from './kyo-scrollwork.js';
-import { silkMaterial } from './kosode.js';
-import { ancientClothing, townBody, TOWNSFOLK } from './heian-dress.js';
+import { townPortrait, paintedSilk } from './emaki-costume.js';
+import { ancientClothing, townBody, townHeadwear, TOWNSFOLK } from './heian-dress.js';
 import { kyoNight } from './kyo-layout.js';
 import { dressedRiceFace } from './mochi-model.js';
 import { terrainHeight, wrapDelta } from './terrain.js';
@@ -59,19 +59,22 @@ export function createStreetCrowd(scene) {
     b.ball(0,.101,-.006,.059,.038,.096,'#f4e7cb');
     b.stroke([[-.049,.103,-.025],[0,.135,.058],[.048,.103,-.024]],.009,'#9d5a4b');
   });
-  const perKind=19, faces=[],counts=new Uint8Array(TOWNSFOLK.length);
+  const perKind=19, faces=[],headwear=[],counts=new Uint8Array(TOWNSFOLK.length);
   const distance=costumeDistance(scene,perKind*TOWNSFOLK.length);
   const faceFrame=new THREE.Matrix4().compose(new THREE.Vector3(0,.768,-.011),new THREE.Quaternion(),
     new THREE.Vector3(.423,.352,.347));
-  const facePose=new THREE.Matrix4();
+  const facePose=new THREE.Matrix4(),look=new THREE.Object3D(),crownPose=new THREE.Matrix4();
+  const fromNeck=new THREE.Matrix4().makeTranslation(0,-1.17,0);
   const footwear=instances(crowd,shoes.geometry,shoes.material,TOWNSFOLK.length*perKind*2,'鼻緒と下駄');
   for(let kind=0;kind<TOWNSFOLK.length;kind++){
     const model=batchActorParts(reference,b=>townBody(b,kind));
+    const crown=batchActorParts(reference,b=>townHeadwear(b,kind));
+    headwear.push(instances(crowd,crown.geometry,scrollPigment(),perKind,'都のかぶりもの'));
     parts.push([
       instances(crowd,model.geometry,scrollPigment(),perKind,TOWNSFOLK[kind]),
-      instances(crowd,ancientClothing(kind),silkMaterial(),perKind,'都の装束'),
+      instances(crowd,ancientClothing(kind),paintedSilk(),perKind,'都の装束'),
     ]);
-    const face=dressedRiceFace(kind,perKind);
+    const face=dressedRiceFace(kind,perKind,townPortrait(kind));
     crowd.add(face);faces.push(face);
     for(let i=0;i<perKind;i++){
       const dye=new THREE.Color().setHSL((kind*.18+i*.21)%1,.12,.91);
@@ -110,11 +113,22 @@ export function createStreetCrowd(scene) {
       if(!distance.close(w,at.x+crowd.position.x,y+bob,at.z+crowd.position.z,yaw,w.scale))continue;
       const instance=counts[w.kind]++;
       dummy.position.set(at.x,y+bob,at.z);
-      dummy.rotation.set(0,yaw,.026*ripple,'YXZ');dummy.scale.setScalar(w.scale);
+      const bend=w.kind===3?.081:w.kind===4?.049:w.kind===0?.033:.012;
+      dummy.rotation.set(bend+.009*Math.cos(gait*2),yaw,.026*ripple,'YXZ');dummy.scale.setScalar(w.scale);
       dummy.updateMatrix();
       for(const m of parts[w.kind])m.setMatrixAt(instance,dummy.matrix);
       parts[w.kind][1].setColorAt(instance,w.dye);
-      faces[w.kind].setMatrixAt(instance,facePose.multiplyMatrices(dummy.matrix,faceFrame));
+      // The carrier inclines under his load while the market seller glances
+      // from her basket to the next stall. The hat and veil follow the neck.
+      const notice=(1-THREE.MathUtils.smoothstep(Math.hypot(dx,dz),.7,3.8));
+      const glance=Math.sin(time*.81+w.phase*TAU)*(w.kind===2?.22:.11);
+      look.position.set(0,1.17,0);
+      look.rotation.set((w.kind===1?.055:w.kind===3?-.085:0)+.019*Math.cos(gait),
+        glance+THREE.MathUtils.clamp(Math.atan2(across,ahead),-.7,.7)*notice*.42,.012*ripple,'YXZ');
+      look.updateMatrix();
+      crownPose.multiplyMatrices(dummy.matrix,look.matrix).multiply(fromNeck);
+      headwear[w.kind].setMatrixAt(instance,crownPose);
+      faces[w.kind].setMatrixAt(instance,facePose.multiplyMatrices(crownPose,faceFrame));
       for(const side of [-1,1]){
         const across=side*.17*w.scale, along=Math.cos(gait)*side*.164*w.scale;
         dummy.position.set(at.x+Math.cos(yaw)*across+Math.sin(yaw)*along,y+Math.max(0,ripple*side)*.062,
@@ -124,7 +138,7 @@ export function createStreetCrowd(scene) {
       }
     }
     for(let k=0;k<parts.length;k++){
-      for(const mesh of [...parts[k],faces[k]]){
+      for(const mesh of [...parts[k],headwear[k],faces[k]]){
         mesh.count=counts[k];mesh.visible=mesh.count>0;
         if(mesh.count){mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;}
       }

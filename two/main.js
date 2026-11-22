@@ -714,7 +714,7 @@ function journalDialog() {
     if (SCROLL_FAUNA[type]) {
       const tile=faunaDrawing({type,variant:0,perched:false}).start+1;
       const {columns,rows}=FAUNA_SHEET;
-      print.style.backgroundImage="url('./assets/residents/scroll-fauna.webp')";
+      print.style.backgroundImage="url('./assets/residents/"+FAUNA_SHEET.atlas+"')";
       print.style.backgroundSize=(columns*100)+'% '+(rows*100)+'%';
       print.style.backgroundPosition=(tile%columns)/(columns-1)*100+'% '+Math.floor(tile/columns)/(rows-1)*100+'%';
     } else if (SEA_SPECIES[type]) {

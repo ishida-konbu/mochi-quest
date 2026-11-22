@@ -8,14 +8,16 @@ import { walkingScore } from './animal-motion.js';
 import { forestGeometry } from './forest-mesh.js';
 
 export const SCROLL_FAUNA = {
-  elephant:{count:2,label:'象',points:150,stature:1.42,center:1.04,frame:4.0,
-    volumes:[[0,1.15,-.05,.60,.68,1.04],[0,1.59,.91,.46,.49,.49],[0,1.02,1.35,.19,.61,.19]]},
+  elephant:{count:2,label:'象',points:150,stature:3.04,center:1.04,frame:4.0,
+    volumes:[[0,1.15,-.05,.60,.68,1.04],[0,1.59,.91,.46,.49,.49],[0,1.02,1.35,.19,.61,.19],
+      ...[-.36,.36].flatMap(x=>[-.72,.56].map(z=>[x,.47,z,.155,.47,.16]))]},
   baku:{count:10,label:'獏',points:90,stature:1.10,center:.88,frame:3.4,
     volumes:[[0,.90,-.05,.41,.49,.87],[0,1.16,.69,.29,.34,.42]]},
   hawk:{count:10,label:'鷹',points:70,stature:1.17,center:.38,frame:3.1,
     volumes:[[0,.33,.03,.19,.29,.43],[0,.51,.28,.17,.20,.20]]},
-  ox:{count:10,label:'牛',points:65,stature:1.04,center:1.06,frame:3.8,
-    volumes:[[0,1.11,-.17,.48,.56,.94],[0,1.55,.90,.28,.31,.52]]},
+  ox:{count:10,label:'牛',points:65,stature:2.08,center:1.06,frame:3.8,
+    volumes:[[0,1.11,-.17,.48,.56,.94],[0,1.55,.90,.28,.31,.52],
+      ...[-.28,.28].flatMap(x=>[-.62,.44].map(z=>[x,.40,z,.095,.39,.11]))]},
   chicken:{count:40,label:'鶏',points:25,stature:1.03,center:.56,frame:1.95,
     volumes:[[0,.45,-.04,.25,.25,.43],[0,.75,.24,.15,.23,.20]]},
   fishfolk:{count:10,label:'魚人',points:55,stature:1.02,center:1.07,frame:2.9,
@@ -199,7 +201,7 @@ export function moveScrollFauna(n,time) {
 
 // Four movement phases and eight views of every silhouette, including the
 // closed wings of a perched hawk and the shorter tail of a hen.
-export const FAUNA_SHEET={columns:16,rows:16,width:144,height:144,poses:4};
+export const FAUNA_SHEET={atlas:'scroll-fauna.webp?v=otsu-1',columns:16,rows:16,width:144,height:144,poses:4};
 export const faunaPrints=['elephant','baku','hawk','ox','chicken','hen','fishfolk','hawk-perched'];
 export function faunaDrawing(n) {
   const kind=n.type==='hawk' && n.perched?'hawk-perched':n.type==='chicken' && n.variant%4!==0?'hen':n.type;

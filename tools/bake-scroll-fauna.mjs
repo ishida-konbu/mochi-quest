@@ -1,6 +1,5 @@
 // Eight viewpoints of each articulated model become its journal and distant ink plate.
 import * as T from '../two/vendor/three.module.min.js';
-import { batchActorParts } from '../two/actors.js';
 import { buildFaunaParts, poseFaunaPart, faunaPigment } from '../two/scroll-fauna-art.js';
 import { SCROLL_FAUNA, FAUNA_SHEET, faunaPrints, faunaFrequency } from '../two/scroll-fauna.js';
 export async function bakeScrollFauna(){
@@ -12,13 +11,20 @@ export async function bakeScrollFauna(){
   scene.add(new T.HemisphereLight(0xfff2d9,0xad9d88,1.30),sun,fill);
   const sheet=document.createElement('canvas');sheet.width=columns*width;sheet.height=rows*height;
   const ctx=sheet.getContext('2d');ctx.imageSmoothingQuality='high';
-  const textureReady=new Promise(resolve=>{T.DefaultLoadingManager.onLoad=resolve;});
-  const models=faunaPrints.map(kind=>buildFaunaParts(kind==='hawk-perched'?'hawk':kind,batchActorParts));
-  faunaPigment();await textureReady;
+  const models=faunaPrints.map(kind=>buildFaunaParts(kind==='hawk-perched'?'hawk':kind)
+    .map(part=>({...part,material:part.material||faunaPigment()})));
+  const maps=new Set(models.flat().map(part=>part.material.map));
+  if([...maps].some(map=>!map.image)){
+    const manager=T.DefaultLoadingManager,previous=manager.onLoad;
+    await new Promise(resolve=>{
+      manager.onLoad=()=>{manager.onLoad=previous;previous?.call(manager);resolve();};
+    });
+  }
+  if([...maps].some(map=>!map.image))throw new Error('Could not load the animal pigments');
   for(const [i,form] of faunaPrints.entries()){
     const type=form==='hen'?'chicken':form==='hawk-perched'?'hawk':form,spec=SCROLL_FAUNA[type];
     const n={type,variant:form==='hen'?1:0,phase:.31,speed:.68,gesture:.10,spread:form==='hawk'?1:0,perched:form==='hawk-perched'};
-    const meshes=models[i].map(p=>{const mesh=new T.Mesh(p.geometry,p.material||faunaPigment());scene.add(mesh);return mesh;});
+    const meshes=models[i].map(p=>{const mesh=new T.Mesh(p.geometry,p.material);scene.add(mesh);return mesh;});
     const h=spec.frame/2,camera=new T.OrthographicCamera(-h,h,h,-h,.05,50);
     for(let pose=0;pose<poses;pose++) {
       const time=(pose*2*Math.PI/poses-n.phase)/faunaFrequency(type);

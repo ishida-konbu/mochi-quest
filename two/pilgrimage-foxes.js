@@ -7,7 +7,9 @@ import { brushWash, surfaceGrain } from './scroll-sculpt.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { costumeDistance } from './costume-distance.js';
 import { makeNPC } from './actors.js';
-import { SilkPanels, silkMaterial } from './kosode.js';
+import { SilkPanels } from './kosode.js';
+import { foldMark, paintedSilk } from './emaki-costume.js';
+import { weddingVisage } from './wedding-visages.js';
 
 const {sin,cos,PI}=Math, tau=2*PI;
 const soot='#37352e', silk='#eee5cb', cord='#ae4c39';
@@ -32,27 +34,48 @@ function headwear(role){
     // An open hood: the turned rim frames the face, with real air behind its
     // front edge. Silk meets at the nape and hangs over the upper back.
     const hood=(u,v)=>{
-      const a=u*tau,theta=.018+v*(2.09+.16*cos(a));
-      return [.348*sin(theta)*sin(a),.08+.438*sin(theta)*cos(a)-.11*v*(1-cos(a))*.5,
-        -.164-.31*cos(theta)+.070*cos(a)*v];
+      const a=u*tau,theta=.014+v*(2.06+.16*cos(a)),lower=(1-cos(a))*.5;
+      const pleat=.023*sin(6*a+1.7*v)*lower*v;
+      return [(.310+pleat)*sin(theta)*sin(a)+.021*(1-v),
+        .066+.425*sin(theta)*cos(a)-.173*v*lower,
+        -.139-.295*cos(theta)+.068*cos(a)*v-.038*lower*v];
     };
-    s.add(panel(22,54,hood),silk);
+    s.add(panel(26,56,hood),silk);
     s.add(panel(5,54,(u,v)=>{
-      const q=hood(u,1-.091*v);
-      return [q[0]*(1-.039*v),q[1]-.023*v,q[2]-.022*v];
-    }),'#cfb89b');
+      const q=hood(u,1-.078*v);
+      return [q[0]*(1-.03*v),q[1]-.012*v,q[2]+.004-.011*v];
+    }),'#d1bfa0');
+    for(const side of [-1,1]) {
+      for(let j=0;j<5;j++) {
+        const u=.18+j*.056;
+        const trace=[[u+.11,.15],[u+.051,.43],[u+.020,.71],[u,.934]];
+        s.stroke(j%2?'#a89379':'#beab8b',trace.map(([a,v])=>hood(side*a,v)),
+          [.0006,.0035,.006,.0005],13);
+      }
+    }
     for(const d of [-1,1]){
       for(let k=0;k<5;k++){const a=k*tau/5;s.ball(k%2?cord:'#ca9270',d*.285+.012*sin(a),.25+.030*cos(a),.015+.030*sin(a),.020,.027,.025);}
       s.ball('#d2a75d',d*.304,.253,.018,.019,.017,.019);
     }
     const rim=Array.from({length:23},(_,i)=>hood(i/22,1));
-    s.stroke('#ae6952',rim,[.003,.023,.027,.026,.003],41);
+    s.stroke('#ac7a60',rim,[.002,.008,.010,.008,.002],41);
     for(const side of [-1,1])s.stroke('#baa889',[[side*.27,.18,.157],[side*.31,.101,.132],
       [side*.335,-.031,.02],[side*.304,-.16,-.094]],[.002,.009,.011,.002],12);
   } else if(role==='groom'){
-    s.add(new T.LatheGeometry([[.138,0],[.155,.045],[.112,.15],[.088,.29],[.029,.49],[.004,.51]]
-      .map(([r,y])=>new T.Vector2(r,y)),16),'#363c36',0,.163,-.081,1,1,1,-.34);
-    s.stroke('#82816d',[[.067,.277,-.118],[.053,.44,-.15],[.014,.608,-.215]],[.009,.006,.002],10);
+    // Folded lacquered eboshi bends away from the forehead. Its side crease
+    // runs up to a backward-pointing crown rather than a circular cone.
+    const cap=(u,v)=>{
+      const a=tau*u,r=.158*(1-.39*v-.59*v**3);
+      return [r*sin(a)-.040*v*v,.167+.347*v+.014*cos(a)*v,
+        -.066-.173*v*v+r*.90*cos(a)-.030*sin(a)**2*sin(PI*v)];
+    };
+    s.add(panel(19,36,cap),'#42413b');
+    for(const side of [-1,1]){
+      const knots=[[.17,.03],[.18,.30],[.155,.65],[.10,.95]];
+      s.stroke('#817966',knots.map(([u,v])=>cap(side*u,v)),[.001,.005,.004,.001],13);
+      s.stroke('#887657',[[side*.123,.19,-.051],[side*.159,.075,-.073],[side*.126,-.076,-.062],
+        [side*.047,-.168,-.022]],[.008,.007,.005,.003],14);
+    }
   } else if(role==='lantern'){
     const t=(u,v)=>{
       const a=u*tau,r=.024+v*.452;
@@ -81,17 +104,36 @@ function fan(s,x,y,z,scale){
 function body(role){
   const s=sculpture(),weave=new SilkPanels(),bride=role==='bride',groom=role==='groom';
   const bolt={lantern:2,groom:1,bride:3,parasol:2,flute:0}[role];
-  const hem=bride?.105:groom?.226:.357;
+  const hem=bride?.105:groom?.226:role==='parasol'?.42:.357;
   const radius=new T.SplineCurve([[.1,.348],[.22,.34],[.48,.285],[.72,.224],[.84,.20],[1.06,.25],[1.205,.245],[1.38,.118]]
     .map(([y,r])=>new T.Vector2(r,y)));
   const cloth=(u,v,lift=0)=>{
     const a=u*tau,sec=radius.getPointAt(v),w=sec.x+(.018+.024*(1-v))*cos(7*a+.9*v)*Math.sin(v*PI+.32);
-    const train=bride?Math.max(0,-cos(a))**2*(1-v)**5:0;
-    return [sin(a)*(w+lift),hem+(1.37-hem)*(sec.y-.10)/1.28+.036*(1-v)*sin(3*a),
-      cos(a)*(w*.79+lift)-.34*train+.037*v];
+    const skirt=(1-v)**3,train=bride?Math.max(0,-cos(a+.21))**2*skirt:0;
+    const gather=skirt*(.034*sin(4*a+2.2*v)+.013*cos(11*a+v));
+    return [sin(a)*(w+lift+gather)+.029*skirt,hem+(1.37-hem)*(sec.y-.10)/1.28+.036*(1-v)*sin(3*a),
+      cos(a)*(w*.79+lift+gather)-.39*train+.037*v];
   };
   weave.cut(26,64,(u,v)=>cloth(u-.5,v),bolt);
   weave.cut(3,64,(u,v)=>cloth(u-.5,.008+.019*v,.006),4,bride?'#d0ab82':'#a7987e');
+  // Overlapping fronts turn separately at the knee. The bride's three lower
+  // silks spread backward on the train, revealing darker turned-under edges.
+  for(let j=0;j<(bride?3:1);j++) {
+    weave.cut(5,64,(u,v)=>{
+      const a=(u-.5)*tau,q=cloth(u-.5,.002+.048*v,.010+.009*j);
+      q[1]+=.005+.027*j+.017*sin(a+.22*j);
+      q[2]-=.026*j*Math.max(0,-cos(a));return q;
+    },4,bride?['#876453','#c8a488','#e9daba'][j]:'#93836f');
+  }
+  for(const side of [-1,1]){
+    for(let j=0;j<5;j++){
+      const u=side*(.032+.083*j),drift=.018*sin(j*1.81);
+      const trace=[[u*.71,.57],[u*.85+drift,.42],[u+.008,.22],[u+drift-.006,.043]];
+      foldMark(weave,cloth,trace,.0065,bride?'#b1a08a':groom?'#66665e':'#97856c',.008);
+      if(j%2===0)foldMark(weave,cloth,trace.map(([x,y])=>[x+side*.008,y-.013]),
+        .007,bride?'#f4ead3':'#baa98c',.009);
+    }
+  }
   function clothline(coords,widths,tint,lift=.007){
     s.stroke(tint,coords.map(([u,v])=>cloth(u,v,lift)),widths,15);
   }
@@ -101,11 +143,7 @@ function body(role){
     clothline([[u(.262),.955],[u(.153),.904],[u(.068),.817],[u(-.020),.729]], [.032,.037,.031,.018],
       bride?'#bda575':'#e1d4b3',.015);
     clothline([[u(.25),.954],[u(.14),.897],[u(.061),.81],[u(-.022),.722]],[.002,.010,.009,.002],soot,.042);
-    for(let i=0;i<3;i++){
-      const q=.053+.097*i;
-      clothline([[u(q*.74),.598],[u(q*.82+.014),.44],[u(q+.013),.19],[u(q+.021),.031]],
-        [.002,.011,.017,.002],bride?'#beab8b':'#464941');
-    }
+
   }
   s.add(panel(2,42,(u,v)=>cloth(u,.59+v*.099,.018)),bride?'#d2ba81':groom?'#b8a786':'#a86948');
   const paw=(d,xx,yy,zz)=>{
@@ -114,15 +152,19 @@ function body(role){
       [xx+d*(.028+k*.021),yy+.015,zz+.096-k*.013]],[.006,.001],5);
   };
   for(const side of [-1,1]){
-    const hand=bride?[side*.113,1.04,.33]:role==='flute'?[side*.245,1.34,.296]:
-      [side*(role==='lantern'&&side===1?.313:.267),side>0&&!groom?1.18:.98,.285];
+    const hand=bride?[side*.113,1.04,.33]:role==='flute'?
+      [side<0?-.151:.252,side<0?1.405:1.437,side<0?.416:.405]:
+      role==='parasol'?(side<0?[-.232,1.12,.266]:[-.162,1.36,.337]):
+      role==='lantern'&&side>0?[.323,1.187,.161]:[side*.267,.98,.285];
     const sx=side*.21;
     // Weighted rectangular sleeves hang off the wrist while the fox holds its prop.
     const clothSleeve=(u,v)=>{
       const a=u*tau,w=.13+.032*sin(v*PI),depth=.129;
-      const xx=sx+(hand[0]-sx)*v+side*.089*sin(PI*v);
+      const fall=(1-cos(a))*.5;
+      const xx=sx+(hand[0]-sx)*v+side*(.108+.047*fall)*sin(PI*v);
+      const drag=(bride?.195:groom?.134:.084)*fall*sin(PI*v*.72);
       return [xx+w*Math.sign(sin(a))*Math.abs(sin(a))**.53,
-        1.25+(hand[1]-1.25)*v-.25*v*(1-cos(a))*.5,
+        1.25+(hand[1]-1.25)*v-.25*v*fall-drag,
         .036+(hand[2]-.080)*v+depth*cos(a)];
     };
     weave.cut(14,36,clothSleeve,bolt,'#fff',(u,v)=>[.04+.91*u,.06+.79*v]);
@@ -134,8 +176,14 @@ function body(role){
       const q=clothSleeve(u,1-.12*v);
       return [q[0]*(1-.035*v),q[1]+.012*v,q[2]-.016*v];
     },4,bride?'#c49b85':'#b9aa8e');
-    s.stroke(bride?'#ac6653':'#423e35',Array.from({length:16},(_,i)=>clothSleeve(i/15,1)),
-      [.012,.014,.012],21);
+    s.stroke(bride?'#a97964':'#77644e',Array.from({length:16},(_,i)=>clothSleeve(i/15,1)),
+      [.004,.006,.004],21);
+    for(let j=0;j<3;j++){
+      const at=side>0?.17+j*.11:.83-j*.11;
+      const knots=[[at,.17],[at+.042*side,.42],[at+.047*side,.68],[at+.012*side,.91]];
+      s.stroke(bride?'#b5a48b':'#786d5e',knots.map(([u,v])=>clothSleeve(u,v)),
+        [.0007,.003,.005,.0005],11);
+    }
     paw(side,...hand);
   }
   if(bride){
@@ -144,18 +192,15 @@ function body(role){
       const motifs=[[.21,.13],[.235,.22],[.19,.32],[.212,.42],[.247,.49]];
       clothline(motifs.map(([u,v])=>[u*d,v]),[.006,.012,.010,.007,.002],'#ad7a60',.017);
       for(let j=1;j<4;j++){
-        const [u,v]=motifs[j],q=cloth(d*(u+.024),v+.037,.020);
-        for(let k=0;k<5;k++){const a=k*tau/5;s.ball('#b88068',q[0]+.018*sin(a),q[1]+.024*cos(a),
-          q[2]+.018*sin(a),.018,.024,.017,0,0,a);}
+        const [u,v]=motifs[j];
+        for(let k=0;k<5;k++){
+          const a=tau*k/5+.3*j;
+          foldMark(weave,cloth,[[d*u,v],[d*(u+.008*sin(a)),v+.015*cos(a)],
+            [d*(u+.016*sin(a)),v+.029*cos(a)]],.009,'#ae8871',.010);
+        }
       }
       clothline([[d*.45,.033],[d*.34,.039],[d*.23,.042],[d*.12,.034],[0,.029]],
         [.010,.015,.016,.014,.005],'#bc9d71',.014);
-    }
-    for(const side of [-1,1]){
-      for(let j=0;j<3;j++){
-        const u=side*(.079+j*.042),v=.185+.070*j,[x,y,z]=cloth(u,v,.009);
-        for(let k=0;k<5;k++){const a=k*tau/5;s.ball('#c38b71',x+.025*sin(a),y+.021*cos(a),z+.012,.02,.026,.008,0,0,-a);}
-      }
     }
   } else if(groom){
     for(const d of [-1,1]){
@@ -179,14 +224,27 @@ function body(role){
   } else if(role==='lantern'){
     s.stroke('#725c40',[[.30,.92,.20],[.33,1.59,.15],[.37,2.42,.09],[.38,2.51,.40]],[.025,.023,.019,.012],17);
     s.stroke(soot,[[.38,2.51,.40],[.38,2.43,.41]],[.008,.008],5);
-    s.ball('#efce91',.38,2.14,.42,.183,.275,.17);
-    for(let i=0;i<8;i++){const q=(i+.5)/8*PI;
-      s.post(i===0||i===7?'#53493a':'#a88759',.38,2.14+.27*cos(q),.42,.183*sin(q),.016,.17*sin(q));}
+    const lantern=(u,v,pad=0)=>{
+      const a=tau*u,r=.069+.106*sin(PI*v)**.73+.003*cos(tau*v*14)+pad;
+      return [.38+r*sin(a),1.89+.505*v,.42+r*.91*cos(a)];
+    };
+    s.add(panel(38,36,lantern),'#e4c699');
+    for(const v of [.008,.956])s.add(panel(2,36,(u,f)=>lantern(u,v+f*.034,.004)),'#655843');
+    for(const side of [-1,1]){
+      // A single stalk on the lantern follows the round paper, crossed by
+      // successively lighter ears of rice. It reads at processional distance.
+      const stalk=[[.06,.26],[.021,.43],[-.026,.59],[-.075,.70]];
+      s.stroke('#805e42',stalk.map(([u,v])=>lantern(side*.23+u,v,.004)),[.001,.004,.004,.001],12);
+      for(let k=0;k<4;k++)for(const d of [-1,1]){
+        const u=side*.23+.006-.018*k,v=.44+k*.061,leaf=[[u,v],[u+.014*d,v-.006],[u+.025*d,v-.048]];
+        s.stroke('#8b7050',leaf.map(([u,y])=>lantern(u,y,.004)),[.001,.007,.0006],8);
+      }
+    }
     s.stroke('#953e30',[[.39,1.89,.42],[.385,1.79,.428],[.398,1.70,.432]],[.026,.033,.009],9);
   } else {
-    s.stroke('#715039',[[-.416,1.385,.264],[-.196,1.405,.328],[.082,1.424,.34],[.417,1.45,.318]],
-      [.025,.028,.027,.024],15);
-    for(let i=0;i<6;i++)s.ball(soot,-.29+i*.10,1.419,.350,.012,.006,.010);
+    s.stroke('#6d503c',[[-.372,1.390,.415],[-.176,1.407,.429],[.121,1.434,.426],[.451,1.462,.395]],
+      [.018,.022,.022,.017],15);
+    for(let i=0;i<6;i++)s.ball(soot,-.24+i*.096,1.42+i*.005,.444-.003*i,.009,.004,.006);
   }
   return {trim:s.finish(),silk:weave.finish()};
 }
@@ -203,16 +261,16 @@ export function foxParties(scene){
     if(!batches.has(name))batches.set(name,[]);
     batches.get(name).push({m,rest});all.push(m);
   }
-  // Borrow the actual fox mask and brush from the resident rig, including the
-  // UV-mapped pelt, folded ears, ink silhouette, whiskers and sculpted eyelids.
-  // Each original mesh draws all nearby procession members in one instance batch.
+  // The wandering fox and its kin share the same painted, curled brush tail.
   const original=makeNPC({type:'fox',stature:1},new T.Group()).limbs;
   for(const [key,node,scale,offset] of [
-    ['面相',original.mask,1.20,[0,-.038,-.012]],['尾',original.tail,.88,[.035,.59,-.169]],
+    ['尾',original.tail,.72,[.055,.488,-.201]],
   ]){
     node.updateWorldMatrix(true,true);
     const inverse=node.matrixWorld.clone().invert();
-    const fit=new T.Matrix4().compose(new T.Vector3(...offset),new T.Quaternion(),new T.Vector3(scale,scale,scale));
+    // The brush trails below the sash, swept out to the side of the train.
+    const fall=new T.Quaternion().setFromEuler(new T.Euler(-.63,-.56,.035,'YXZ'));
+    const fit=new T.Matrix4().compose(new T.Vector3(...offset),fall,new T.Vector3(scale,scale,scale));
     node.traverse(part=>{
       if(!part.isMesh)return;
       const rest=fit.clone().multiply(inverse).multiply(part.matrixWorld);
@@ -222,10 +280,17 @@ export function foxParties(scene){
   for(const role of roles){
     const robe=body(role);
     batch(role,robe.trim,WEDDING_SITES.length);
-    batch(role,robe.silk,WEDDING_SITES.length,silkMaterial());
+    batch(role,robe.silk,WEDDING_SITES.length,paintedSilk());
+    batch(role+'面相',weddingVisage(role),WEDDING_SITES.length);
     if(['bride','groom','lantern'].includes(role))batch(role+'装束',headwear(role),WEDDING_SITES.length);
   }
   const shoe=sculpture();
+  const trouser=(u,v)=>{
+    const a=tau*u,r=.050+.065*v+.010*cos(5*a+v)*sin(PI*v);
+    return [r*sin(a),.22+.346*v+.009*cos(3*a)*(1-v),-.031+r*.81*cos(a)];
+  };
+  shoe.add(panel(11,24,trouser),'#8e7d66');
+  shoe.add(panel(2,24,(u,v)=>trouser(u,.023+.061*v)),'#ada082');
   shoe.stroke('#957556',[[0,.31,-.022],[0,.226,-.072],[0,.132,.008],[0,.06,.074]],
     [.057,.042,.038,.052],10);
   shoe.ball('#ae9c71',0,.046,.071,.064,.04,.13);
@@ -243,7 +308,7 @@ export function foxParties(scene){
     for(const m of all) m.count=0;
     if(active) for(const [i,site] of WEDDING_SITES.entries()){
       for(const [j,role] of roles.entries()){
-        const walked=time*.82+(site.rx-site.rz)*1.04+i*2.2-j*1.44;
+        const walked=time*.82+(site.rx-site.rz)*1.04+i*2.2-j*1.70;
         const q=weddingPoint(site,walked), dx=wrapDelta(q.x-player.x),dz=wrapDelta(q.z-player.z);
         if(dx*dx+dz*dz>95**2)continue;
         const x=player.x+dx,z=player.z+dz,size=role==='lantern'?1.045:role==='groom'?1.12:1.075;
@@ -254,10 +319,10 @@ export function foxParties(scene){
         place(role,x,y+bob,z,q.yaw,bow+.011*cos(phase*2),sway,size);
         place('尾',x,y+bob,z,q.yaw+.105*stride,bow+.038*cos(phase),sway,size);
         const headY=1.48*size, lean=Math.sin(bow)*headY;
-        const glance=role==='bride'?.23+.29*sin(time*.26):role==='groom'?.23:role==='flute'?.31:-.12;
+        const glance=role==='bride'?.23+.29*sin(time*.26):role==='groom'?.23:role==='flute'?-.033:-.12;
         const headX=x+lean*sin(q.yaw)-sway*headY*cos(q.yaw),headZ=z+lean*cos(q.yaw)+sway*headY*sin(q.yaw);
         const turn=q.yaw+glance+.09*sin(time*.72+j),nod=bow+.041*cos(phase*2);
-        place('面相',headX,y+bob+headY,headZ,turn,nod,sway*.58,size);
+        place(role+'面相',headX,y+bob+headY,headZ,turn,nod,sway*.58,size);
         if(batches.has(role+'装束'))place(role+'装束',headX,y+bob+headY,headZ,turn,nod,sway*.58,size);
         for(const side of [-1,1]){
           const u=side*.121*size,v=side*stride*.151*size;

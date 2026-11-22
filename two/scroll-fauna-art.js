@@ -2,9 +2,9 @@
 // carries its own UVs; moving parts from one species share an instanced draw.
 import * as T from './vendor/three.module.min.js';
 import { InkForm, surface } from './ryugu-ink.js';
+import { courtFowl } from './court-fowl.js';
 import { brushWash } from './scroll-sculpt.js';
-import { pullingOx, oxLeg } from './kyo-procession-art.js';
-import { scrollPigment } from './kyo-scrollwork.js';
+import { otsuParts } from './otsu-beasts.js';
 
 const {sin,cos,PI}=Math,tau=2*PI;
 const ink='#403b34',smoke='#71685a',silk='#eee4c9',horn='#e9d9b8',ochre='#b39b6b';
@@ -82,133 +82,6 @@ function blade(f,points,widths,across,depth,tile,tint='#fff9e8',rib=true) {
   }
   f.draw(surface(v,ix,uv),origin,unit,tint,origin,tile);
   if(rib)line(f,points,points.map((_,i)=>i===points.length-1?.003:.009),'#80725b');
-}
-function mantle(f) {
-  // A saddle-length brocade, with a curved top and weighted, fringed hems.
-  const v=[],uv=[],ix=[],nz=17,na=24;
-  const point=(u,t)=>{
-    const z=-.58+u*.88,theta=t*1.91;
-    return [sin(theta)*(.646+.021*cos((u*6+t)*PI)),1.20+cos(theta)*(.63+.036*sin(u*PI)),z+.024*sin(t*3+u*7)];
-  };
-  for(let i=0;i<=nz;i++)for(let j=0;j<=na;j++){
-    const u=i/nz,t=2*j/na-1;v.push(...point(u,t));uv.push(u,(t+1)/2);
-    if(i<nz && j<na){const k=i*(na+1)+j;ix.push(k,k+1,k+na+1,k+1,k+na+2,k+na+1);}
-  }
-  f.draw(surface(v,ix,uv),origin,unit,'#fdf6e1',origin,'lotus');
-  for(const s of [-1,1]){
-    line(f,Array.from({length:9},(_,i)=>point(i/8,s)),.019,ochre);
-    for(let i=0;i<8;i++){
-      const [x,y,z]=point((i+.35)/8,s);
-      tube(f,[[x,y,z],[x+s*.012,y-.053,z],[x+s*.022,y-.11,z+.012]],[.009,.017,.005],i%2?ochre:'#a17756');
-    }
-  }
-}
-function elephant(){
-  const parts=[part('body',origin,f=>{
-    loft(f,'z',[[0,1.12,-1.13,.035,.15],[0,1.13,-1.02,.35,.47],[0,1.15,-.77,.54,.63],
-      [0,1.16,-.32,.60,.64],[0,1.19,.12,.615,.63],[0,1.24,.55,.55,.62],[0,1.35,.79,.41,.50],[0,1.47,.95,.24,.36]],'hide');
-    mantle(f);
-    tube(f,[[0,1.48,-1.01],[-.065,1.20,-1.18],[-.13,.83,-1.20],[-.22,.54,-1.16]],[.056,.043,.031,.016],'#a59a87');
-    blade(f,[[-.22,.63,-1.17],[-.23,.49,-1.16],[-.32,.39,-1.11]],[.027,.061,.005],[1,0,0],.004,'plume');
-    for(const s of [-1,1]) {
-      line(f,[[s*.46,1.56,.51],[s*.55,1.18,.55],[s*.45,.95,.65],[s*.27,.78,.65]],[.024,.029,.025,.018],'#985e4d');
-      f.oval([s*.26,.743,.64],[.055,.079,.052],ochre);
-    }
-  }),part('head',[0,1.51,.80],f=>{
-    loft(f,'z',[[0,.022,-.18,.19,.27],[0,.09,-.04,.36,.44],[0,.17,.15,.406,.48],
-      [0,.188,.33,.35,.422],[0,.136,.46,.276,.36],[0,.09,.565,.174,.24]],'hide');
-    for(const s of [-1,1]){
-      eye(f,s,.313,.205,.343,.072);
-      line(f,[[s*.345,.32,.22],[s*.315,.36,.325],[s*.26,.32,.433]],[.007,.016,.004]);
-      tube(f,[[s*.207,-.056,.405],[s*.254,-.14,.565],[s*.286,-.173,.78],[s*.30,-.123,.956],[s*.291,-.071,1.01]],[.091,.089,.064,.026,.003],horn);
-      for(let j=0;j<3;j++)line(f,[[s*.336,.11-j*.047,.13],[s*.355,.076-j*.039,.224],[s*.326,.065-j*.034,.301]],[.003,.010,.003],'#83796a');
-    }
-    for(let j=0;j<3;j++)line(f,[[-.093,.44-j*.069,.426+j*.048],[.014,.413-j*.069,.475+j*.039],[.10,.436-j*.071,.427+j*.048]],[.002,.010,.002],'#918572');
-  }),part('trunk',[0,1.61,1.307],f=>{
-    const p=[[0,.11,-.044],[.015,-.06,.059],[.042,-.33,.102],[.035,-.64,.121],[-.028,-.82,.221],[-.141,-.85,.365],[-.214,-.762,.429],[-.222,-.692,.385]];
-    tube(f,p,[.178,.161,.134,.112,.092,.075,.059,.035],'#e5dfcc','hide');
-    const contour=new T.CatmullRomCurve3(p.map(q=>new T.Vector3(...q)));
-    const radii=[.178,.161,.134,.112,.092,.075,.059,.035];
-    for(let k=0;k<10;k++){
-      const u=.10+k*.045,at=contour.getPointAt(u),idx=u*7,j=Math.min(6,Math.floor(idx));
-      const r=radii[j]+(radii[j+1]-radii[j])*(idx-j);
-      const crease=Array.from({length:9},(_,i)=>{
-        const a=-1.01+i*.255;return [at.x+r*sin(a),at.y-.013*cos(a),at.z+r*cos(a)+.001];
-      });
-      line(f,crease,[.002,.004,.005,.006,.007,.006,.005,.004,.002],'#827c70');
-    }
-  })];
-  for(const s of [-1,1]){
-    parts.push(part('ear'+s,[s*.333,1.84,.931],f=>{
-      const rim=[[0,.14,.20],[s*.085,.19,.07],[s*.169,.155,-.172],[s*.219,.061,-.319],
-        [s*.257,-.062,-.345],[s*.244,-.203,-.292],[s*.223,-.279,-.245],[s*.180,-.37,-.22],
-        [s*.136,-.475,-.117],[s*.078,-.499,-.024],[s*.052,-.381,.108],[s*.027,-.21,.144],[0,.021,.19]];
-      // A dished, fan-shaped pinna with a scalloped rim and radial folds.
-      const pinna=[s*.151,-.11,.025],v=[...pinna],uv=[.51,.56],ix=[];
-      rim.forEach((p,i)=>{v.push(...p);uv.push((p[2]+.35)/.56,(p[1]+.52)/.72);ix.push(0,i+1,(i+1)%rim.length+1);});
-      f.draw(surface(v,ix,uv),origin,unit,'#dbd0bc',origin,'hide');
-      line(f,[...rim,rim[0]],.010,'#857a69');
-      for(const j of [2,4,6,8,10]){
-        const q=rim[j],x=s*.154;
-        line(f,[[s*.053,.058,.163],[x,-.054,.047],[s*.167+q[0]*.18,(q[1]-.07)*.57,q[2]*.56],
-          [q[0],q[1],q[2]]],[.004,.012,.011,.003],'#9a8f7e');
-      }
-    }));
-    for(const front of [-1,1])parts.push(part('leg'+s+','+front,[s*.36,.96,front===1?.55:-.69],f=>{
-      loft(f,'y',[[-s*.07,.56,-front*.09,.046,.068],[-s*.055,.37,-front*.056,.149,.186],[-s*.034,.19,0,.199,.223],[0,-.019,0,.207,.216],[s*.01,-.24,-front*.041,.164,.174],
-        [s*.014,-.40,-front*.044,.138,.154],[0,-.60,-.009,.137,.146],[0,-.80,.016,.143,.143],
-        [0,-.90,.045,.158,.176],[0,-.947,.055,.142,.151]],'hide');
-      for(let i=-1;i<=1;i++) f.oval([i*.077,-.91,.175-.021*Math.abs(i)],[.043,.044,.036],'#ccbfa6');
-      for(let j=0;j<3;j++)line(f,[[s*.145,-.42+j*.050,-.105],[s*.154,-.405+j*.050,-.015],[s*.145,-.397+j*.050,.058]],
-        [.002,.011,.003],'#968b79');
-    }));
-  }
-  return parts;
-}
-function baku(){
-  const parts=[part('body',origin,f=>{
-    loft(f,'z',[[0,.94,-.91,.013,.08],[0,.96,-.80,.246,.361],[0,.95,-.58,.374,.497],
-      [0,.91,-.22,.41,.47],[0,.92,.12,.377,.454],[0,1.04,.38,.395,.49],
-      [0,1.13,.55,.316,.411],[0,1.20,.68,.189,.224],[0,1.20,.76,.086,.106]],'beast');
-    for(let j=0;j<10;j++){
-      const z=.50-j*.059,y=1.48-j*.012;
-      blade(f,[[0,y-.064,z],[.012*sin(j),y+.057,z-.045],[0,y+.097+(j%3)*.022,z-.15]],
-        [.033,.064,.003],[1,0,0],.021,'mane');
-    }
-    tube(f,[[0,1.19,-.78],[0,1.32,-.96],[.034,1.46,-1.10],[.09,1.48,-1.20]],[.076,.056,.035,.018],'#8a7862');
-    for(let j=0;j<4;j++)blade(f,[[.082,1.46,-1.13],[.107+j*.012,1.53+j*.019,-1.23],[.12+j*.02,1.47+j*.036,-1.34]],
-      [.018,.038,.002],[1,0,0],.013,'plume');
-  }),part('head',[0,1.19,.56],f=>{
-    loft(f,'z',[[0,.04,-.12,.155,.22],[0,.091,.014,.26,.32],[0,.12,.19,.268,.285],
-      [0,.114,.33,.210,.199],[0,.071,.444,.128,.132],[0,.011,.504,.086,.086]],'mane');
-    // Elephant snout, curling mane, paired tusks and soft-padded tiger feet.
-    tube(f,[[0,.126,.351],[0,.044,.463],[0,-.141,.51],[.023,-.279,.56],[.08,-.30,.69],[.116,-.21,.731]],
-      [.134,.116,.084,.062,.043,.022],'#ccbaa0','hide');
-    for(const s of [-1,1]){
-      eye(f,s,.224,.164,.236,.082);
-      tube(f,[[s*.13,-.02,.347],[s*.19,-.117,.423],[s*.218,-.12,.505],[s*.23,-.079,.558]],
-        [.050,.044,.024,.002],horn);
-      blade(f,[[s*.19,.27,-.027],[s*.266,.389,-.05],[s*.299,.494,-.09],[s*.269,.545,-.112]],
-        [.097,.133,.079,.004],[0,0,1],s*.036,'mane');
-      blade(f,[[s*.238,.336,-.019],[s*.29,.417,-.049],[s*.299,.492,-.085]], [.047,.069,.009],[0,0,1],s*.012,'paper','#937860');
-      // A hooked brow, the sweep of a whisker and a layered lion's ruff.
-      line(f,[[s*.196,.286,.279],[s*.25,.277,.197],[s*.27,.235,.139],[s*.282,.257,.093]],[.009,.020,.014,.004],ink);
-      line(f,[[s*.204,.018,.362],[s*.302,.038,.336],[s*.358,.087,.244],[s*.369,.16,.234]],[.014,.011,.007,.002],smoke);
-      for(let j=0;j<5;j++)blade(f,[[s*.198,.211-j*.052,.021],[s*.299,.174-j*.066,-.084],[s*.317,.185-j*.071,-.185],
-        [s*(.343+.014*sin(j)),.241-j*.091,-.327]], [.035,.086,.073,.002],[0,1,0],.016*s,'mane');
-    }
-  })];
-  for(const s of [-1,1])for(const d of [-1,1])parts.push(part('leg'+s+','+d,[s*.25,.79,d===1?.42:-.57],f=>{
-    const hock=d===1?-.038:-.139;
-    loft(f,'y',[[-s*.08,.46,-d*.05,.027,.042],[-s*.049,.32,-d*.035,.128,.149],[-s*.016,.132,0,.164,.173],[s*.013,-.071,-.018,.146,.152],[s*.022,-.246,.036,.113,.123],
-      [s*.032,-.424,hock,.086,.094],[s*.027,-.596,hock+.035,.063,.079],[s*.011,-.695,.011,.076,.108]],'mane');
-    f.oval([0,-.704,.074],[.104,.068,.128],'#c5ad89');
-    for(let j=-1;j<=1;j++){
-      f.oval([j*.055,-.742,.144],[.044,.044,.071],'#b8a185');
-      tube(f,[[j*.055,-.725,.182],[j*.055,-.739,.22],[j*.053,-.761,.239]],[.014,.011,.002],horn);
-    }
-  }));
-  return parts;
 }
 function toes(f,hawk,offset=origin){
   const bend=hawk?.074:.092;
@@ -289,58 +162,6 @@ function hawk(){
   }
   return parts;
 }
-function chicken(hen){
-  const body=part('body',origin,f=>{
-    loft(f,'z',[[0,.49,-.43,.029,.054],[0,.465,-.34,.153,.169],[0,.43,-.18,.214,.235],
-      [0,.424,.027,.227,.229],[0,.475,.164,.174,.206],[0,.552,.212,.133,.164],[0,.605,.231,.111,.141],[0,.642,.24,.061,.099]],hen?'coverts':'bib');
-    for(const s of [-1,1]){
-      for(let i=0;i<6;i++){
-        const y=.51-i*.020,z=.14-i*.028;
-        blade(f,[[s*.184,y+.043,z],[s*.237,y+.020,z-.10],[s*(.254-.004*i),y-.021,z-.252],
-          [s*(.194-.006*i),y-.064,z-.389]], [.014,.063,.058,.004],[0,1,0],.015*s,hen?'bib':'feather');
-      }
-      for(let j=0;j<(hen?4:6);j++){
-        const x=s*(.01+j*.03),top=hen?.73-j*.027:1.04-j*.073;
-        blade(f,[[x,.50,-.25],[x*1.17,.627,-.338],[x*1.3,top,-.475-j*.011],
-          [x*1.38,top-(hen?.02:.072),-.579+j*.011],[x*1.43,top-(hen?.065:.245),-.638+j*.024]],
-          [.017,.047,.053,.030,.002],[s*.34,.87,.34],.014,hen?'feather':j>3?'coverts':'plume');
-      }
-    }
-  });
-  const parts=[body,part('head',[0,.53,.17],f=>{
-    loft(f,'y',[[0,.397,.103,.043,.05],[0,.357,.104,.107,.110],[0,.289,.115,.118,.139],
-      [0,.218,.109,.109,.105],[0,.125,.097,.108,.107],[0,.056,.066,.128,.125],[0,-.012,.039,.141,.143],[0,-.103,-.01,.100,.121],[0,-.157,-.055,.045,.067]],
-      hen?'bib':'mane');
-    // Comb drawn as a single irregular edge; the two wattles hang independently.
-    const w=hen?.55:1,corners=[[0,.338,.205],[0,.411,.197],[0,.461,.176],[0,.431,.11],
-      [0,.497,.073],[0,.45,.029],[0,.48,-.021],[0,.415,-.04],[0,.434,-.086],[0,.372,-.062],[0,.344,-.005]];
-    const curve=new T.CatmullRomCurve3(corners.map(p=>new T.Vector3(...p)),true,'catmullrom',.32);
-    const outline=curve.getPoints(60).slice(0,-1).map(v=>v.toArray());
-    const verts=[],uv=[],ix=[];
-    for(const s of [-1,1]){
-      verts.push(s*.039*w,.38,.076);uv.push(.5,.5);
-      for(const [,y,z] of outline) {verts.push(s*.012*w,.34+(y-.34)*w,z*.82+.012);uv.push((z+.10)/.35,(y-.30)/.20);}
-    }
-    const m=outline.length+1;
-    for(let i=0;i<outline.length;i++){const a=1+i,b=1+(i+1)%outline.length;ix.push(0,a,b,m,b+m,a+m,a,b,a+m,a+m,b,b+m);}
-    f.draw(surface(verts,ix,uv),origin,unit,'#a95743',origin,'paper');
-    tube(f,[[0,.257,.20],[0,.251,.252],[0,.23,.318]],[.059,.041,.002],ochre);
-    for(const s of [-1,1]){
-      eye(f,s,.103,.305,.153,.040);
-      f.oval([s*.036,.191,.218],[.032,.079*w,.046],'#a75e4b',[-.22,0,s*.12]);
-      line(f,[[s*.038,.237,.29],[s*.025,.231,.302],[0,.230,.312]],[.002,.005,.002]);
-      for(let j=0;j<8;j++)blade(f,[[s*.100,.25-j*.031,.075],[s*(.112+j*.005),.182-j*.029,.042],[s*(.124+j*.005),.134-j*.031,-.048]],
-        [.009,.032,.002],[0,0,1],.004,'feather');
-    }
-  })];
-  for(const s of [-1,1])parts.push(part('foot'+s,[s*.087,.278,.005],f=>{
-    tube(f,[[0,.014,-.023],[s*.012,-.064,-.049],[s*.017,-.139,-.023],[s*.018,-.24,.01]],
-      [.039,.032,.019,.016],ochre);
-    toes(f,false,[s*.018,-.259,.011]);
-    for(let j=0;j<4;j++)line(f,[[-.005,-.22+j*.024,.019],[.017,-.22+j*.024,.031],[.030,-.22+j*.024,.023]],.003,'#8a795a');
-  }));
-  return parts;
-}
 function fishfolk(){
   const parts=[part('body',origin,f=>{
     // Underskirt and kosode leave a stepped hem and an open wrap at the ankle.
@@ -396,38 +217,48 @@ function fishfolk(){
   }));
   return parts;
 }
-function ox(batch) {
-  const g=new T.Group(),mat=scrollPigment();
-  const body=batch(g,b=>pullingOx(b,false)).geometry;body.translate(0,0,-3.02);
-  const parts=[{name:'body',pivot:origin,geometry:body,material:mat}];
-  for(const s of [-1,1])for(const d of [-1,1]){
-    const shape=batch(g,b=>oxLeg(b,s,d===1)).geometry;
-    parts.push({name:'leg'+s+','+d,pivot:[s*.28,.8,d===1?.44:-.62],geometry:shape,material:mat});
-  }
-  return parts;
-}
 export const faunaForms=['elephant','baku','hawk','ox','chicken','hen','fishfolk'];
 export function faunaForm(n){return n.type==='chicken' && n.variant%4!==0?'hen':n.type;}
-export function buildFaunaParts(kind,batch) {
-  return kind==='ox'?ox(batch):kind==='chicken'||kind==='hen'?chicken(kind==='hen'):{elephant,baku,hawk,fishfolk}[kind]();
+export function buildFaunaParts(kind) {
+  if(kind==='elephant'||kind==='baku'||kind==='ox')return otsuParts(kind);
+  return kind==='chicken'||kind==='hen'?courtFowl(kind==='hen'):{hawk,fishfolk}[kind]();
 }
+const fowlLateral=new T.Vector3(1,0,0);
 const elephantPivot=new T.Vector3(0,1.51,.80),headTurn=new T.Euler(),headQuat=new T.Quaternion();
 export function poseFaunaPart(part,n,t,out) {
   const q=t*(n.type==='chicken'?6.5:3.2)+n.phase,walk=Math.min(1,n.speed*1.55),bow=n.gesture||0;
   const ack=Math.min(1,(n.flash||0)*2.2),key=part.name,s=key.endsWith('-1')?-1:1;
   out.position.fromArray(part.pivot);out.rotation.set(0,0,0,'XYZ');out.scale.setScalar(1);
+  if(n.type==='chicken'){
+    const peck=bow*(.5+.5*sin(q*1.6))**2;
+    const pitch=.082*walk*sin(q)+peck*.30;
+    if(key==='head'){
+      out.rotation.set(.042+1.40*peck+.060*walk*sin(q),.15*sin(t*.77+n.phase)+.22*ack,.045*cos(t*1.2+n.phase));
+      out.position.y-=(n.variant%4===0?.28:.307)*peck;
+      out.position.z+=.17*peck;
+    }else if(key==='body'){
+      out.rotation.x=pitch;
+      out.position.y-=.044*peck;
+    }else if(key==='sickles'){
+      // Follow the rump around the same origin as the body before the plumes sway.
+      out.position.applyAxisAngle(fowlLateral,pitch);
+      out.position.y-=.044*peck;
+      out.rotation.x=pitch+.065*sin(q-.55)*walk;
+      out.rotation.z=.030*sin(q*.5);
+    }else if(key.startsWith('foot')){
+      out.rotation.x=s*.52*sin(q)*walk;
+      out.position.y+=Math.max(0,s*cos(q))*.033*walk;
+    }
+    out.updateMatrix();
+    return;
+  }
   if(key.startsWith('leg')){
     const [side,fore]=key.slice(3).split(',').map(Number);
     out.rotation.x=side*fore*sin(q)*walk*(n.type==='elephant'?.18:.31);
-  }else if(key.startsWith('foot'))out.rotation.x=s*.45*sin(q)*walk;
-  else if(key==='head'){
+  }else if(key==='head'){
     out.rotation.y=.12*sin(t*.77+n.phase)+.16*ack;
     out.rotation.z=.035*cos(t*1.2+n.phase);
-    if(n.type==='chicken'){
-      const peck=bow*(.5+.5*sin(q*1.6))**2;
-      out.rotation.x=.15+.93*peck+.093*walk*sin(q);
-      out.position.y-=.15*peck;out.position.z+=.078*peck;
-    }else if(n.type==='hawk')out.rotation.y=n.perched?.68*sin(t*.73+n.phase):.06*cos(q);
+    if(n.type==='hawk')out.rotation.y=n.perched?.68*sin(t*.73+n.phase):.06*cos(q);
     else if(n.type==='fishfolk')out.rotation.x=.13*sin(t*1.1+n.phase)+.22*ack;
     else out.rotation.x=.19*bow+.034*sin(q)*walk;
   }else if(key.startsWith('wing')){

@@ -132,6 +132,7 @@ function settlePredator(n, workers, objects) {
   const point={}, clearance=pad+.24;
   n.homeX=trail.x; n.homeZ=trail.z;
   findSite(n,(x,z)=>{
+    if(n.type==='tiger' && REGIONS[regionAt(x,z)].id!==n.habitat)return false;
     if(nearRoad(x,z,24+reach))return false;
     if(BUILDINGS.some(b=>Math.hypot(x-b.x,z-b.z)<47+reach+.72*Math.hypot(b.w,b.d)))return false;
     if(REGIONS.some(r=>Math.hypot(x-r.x,z-r.z)<59+reach))return false;

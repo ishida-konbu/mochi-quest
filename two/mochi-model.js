@@ -190,7 +190,7 @@ export function dressedRiceFace(kind,capacity=0,portrait=null) {
       if(portrait){
         material.defines={...material.defines,RICE_BRUSH_PORTRAIT:1};
         uniforms.riceFaces.value=portrait;
-        uniforms.riceTint.value.set('#e4d7b7');
+        uniforms.riceTint.value.set(portrait.userData.riceTint ?? '#e4d7b7');
         material.roughness=.66;material.clearcoat=.09;
       }
       residentMaterials.set(costume,material);

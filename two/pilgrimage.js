@@ -1,7 +1,8 @@
 import { blossomGeometry, peachMaterials, createPeachOrchard } from './flowering-peaches.js';
 import { DISTRICTS } from './geography.js';
-import { summitJoinery, orchardCarving, kesaMaterial } from './pilgrimage-carving.js';
-import { sculpture, brushStroke } from './pilgrimage-pigment.js';
+import { summitJoinery, orchardCarving } from './pilgrimage-carving.js';
+import { sculpture } from './pilgrimage-pigment.js';
+import { drawDaibutsu } from './daibutsu.js';
 import { paintPeachCliffs } from './pilgrimage-cliffs.js';
 import { foxParties } from './pilgrimage-foxes.js';
 import { brushWash, surfaceGrain } from './scroll-sculpt.js';
@@ -11,7 +12,7 @@ import { DAIBUTSU, PEACH, PEACH_TREES, WEDDING_SITES, weddingPoint, MOON_GATE, I
 
 const { sin,cos,PI,abs,hypot,min,max } = Math, TAU=PI*2;
 const vec=(...v)=>new T.Vector3(...v);
-const rice='#efe3c7', ochre='#be9457', vermilion='#cd492d';
+const ochre='#be9457', vermilion='#cd492d';
 
 function drawing(width,height,paint) {
   const canvas=document.createElement('canvas');
@@ -310,176 +311,6 @@ function daibutsuden(p) {
   }
   for(const u of [-7.1,7.1]) for(const v of [13.6,22.5,31.6]) lantern(f,u,v,1.26);
 }
-// Tailor the kesa and exposed neck to a common, asymmetric set of sections.
-// The folds belong to the surface; their ridges turn into the collar at the shoulder.
-function vestment(p,f) {
-  const sections=new T.CatmullRomCurve3([[4.5,3.32,2.0],[5.3,3.97,2.39],[6.9,4.18,2.64],
-    [8.3,4.01,2.54],[9.65,3.94,2.42],[10.42,3.96,2.29],[11.18,3.48,1.98],
-    [11.67,2.79,1.66],[12.05,1.98,1.38],[12.43,1.66,1.29],[12.92,1.55,1.23]]
-    .map(([y,w,d])=>vec(w,y,d)));
-  const profile=sections.getPoints(88);
-  const collar=a=>10.92+1.10*sin(a)-.32*cos(a)+.25*sin(2*a);
-  function surface(a,y,clothed){
-    const i=profile.findIndex(q=>q.y>=y);
-    const hi=profile[i<0?profile.length-1:i],lo=profile[max(0,(i<0?profile.length-1:i)-1)];
-    const q=max(0,min(1,(y-lo.y)/(hi.y-lo.y||1)));
-    const fold=clothed?.06+.094*sin(4.18*y+3*cos(a)+1.14*sin(2*a)):0;
-    return vec(sin(a)*(lo.x+(hi.x-lo.x)*q+fold),y,-.14+cos(a)*(lo.z+(hi.z-lo.z)*q+fold));
-  }
-  for(const cloth of [true,false]){
-    const pos=[],ix=[],col=[],uv=[],color=new T.Color(cloth?'#78998b':rice);
-    const rows=cloth?41:17,sides=76;
-    for(let j=0;j<=rows;j++)for(let k=0;k<=sides;k++){
-      const a=TAU*k/sides,t=j/rows,cut=collar(a),y=cloth?4.52+t*(cut-4.52):cut+t*(12.90-cut);
-      const q=surface(a,y,cloth), shade=cloth?.94+.055*sin(4.18*y+3*cos(a)+1.14*sin(2*a)):1;
-      uv.push(k/sides*10,y*.43);
-      pos.push(q.x,q.y,q.z);col.push(color.r*shade,color.g*shade,color.b*shade);
-      if(j<rows&&k<sides){const i=j*(sides+1)+k;ix.push(i,i+1,i+sides+1,i+1,i+sides+2,i+sides+1);}
-    }
-    const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));
-    g.setAttribute('color',new T.Float32BufferAttribute(col,3));g.setIndex(ix);g.computeVertexNormals();
-    g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
-    const name=cloth?'patinatedKesa':'riceShoulder';p.shapes[name]=g;
-    f.part(name,0,0,0,1,1,1,'#fff',cloth?kesaMaterial():brushWash(new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide}),.13));
-  }
-  const stitch=(points,widths,tint,name)=>{
-    p.shapes[name]=brushStroke(points,widths,26);
-    f.part(name,0,0,0,1,1,1,tint);
-  };
-  // A kesa is stitched from rectangular pieces of cloth. Their long edges
-  // turn with the body and gather in diagonals below the raised hand.
-  for(let j=-3;j<=3;j++){
-    const mid=j*.364,lo=5.63+.28*cos(mid*2.4),hi=collar(mid)-.26;
-    const path=Array.from({length:12},(_,k)=>{
-      const t=k/11,a=mid+.085*sin(t*PI+mid),q=surface(a,lo+(hi-lo)*t,true);
-      q.x+=.035*sin(a);q.z+=.035*cos(a);return q.toArray();
-    });
-    stitch(path,[.007,.050,.038,.011],j%2?'#4d625b':'#a79569','kesaPanel'+j);
-    if(j===3)continue;
-    for(let k=0;k<2;k++){
-      const endpoints=Array.from({length:8},(_,n)=>{
-        const t=n/7,a=mid+.36*t+.05,y=lo+(hi-lo)*(.30+.34*k)+.13*sin(a*2);
-        const q=surface(a,y,true);q.x+=.035*sin(a);q.z+=.035*cos(a);return q.toArray();
-      });
-      stitch(endpoints,[.009,.043,.011],'#ad9c75','kesaSeam'+j+'_'+k);
-    }
-  }
-  for(const [offset,r,color] of [[0,.111,'#c4a46c'],[-.20,.054,'#9e926c']]){
-    const points=Array.from({length:80},(_,j)=>{const a=TAU*j/80;return surface(a,collar(a)+offset,true);});
-    const name=offset?'kesaBraid':'kesaHem';
-    p.shapes[name]=new T.TubeGeometry(new T.CatmullRomCurve3(points,true),112,r,8,true);
-    f.part(name,0,0,0,1,1,1,color);
-  }
-}
-function greatBuddha(p) {
-  const f=frame(p,DAIBUTSU.x,DAIBUTSU.z);
-  p.shapes.mochiStone=new T.SphereGeometry(1,36,23);
-  p.shapes.nimbus=new T.TorusGeometry(1,.021,7,85);
-  const lotus=new T.LatheGeometry([[-1,.015],[-.79,.55],[-.43,.90],[-.08,1],[.23,.92],[.54,.65],[.81,.32],[1,.015]]
-    .map(([y,r])=>new T.Vector2(r,y)),16);
-  const petals=lotus.attributes.position;
-  for(let i=0;i<petals.count;i++){
-    const y=petals.getY(i),z=petals.getZ(i);
-    petals.setZ(i,z*.81+.32*(1-y*y)+.19*y+.14*(1-Math.abs(petals.getX(i)))*Math.max(0,z));
-  }
-  lotus.computeVertexNormals();p.shapes.bronzeLotus=lotus;
-  const smooth=(u,v,z,w,h,d,tint,roll=0)=>f.part(max(w,h,d)>.9?'mochiStone':'ball',u,v,z,w,h,d,tint,p.fine,0,0,roll);
-  const patina='#658278';
-  // A double lotus seat on a faceted bronze drum.
-  f.part('round',0,.41,0,6.6,.62,5.26,'#687a6b');
-  f.part('round',0,.83,0,6.29,.42,5.03,'#b29766');
-  f.part('round',0,1.85,0,5.99,1.81,4.78,'#8c927b');
-  for(let ring=0;ring<2;ring++)for(let j=0;j<30;j++){
-    const a=(j+ring*.5)*TAU/30;
-    f.part('bronzeLotus',sin(a)*(5.87+.21*ring),1.41+ring*.75,cos(a)*(4.66+.17*ring),
-      .72,.88,.34,ring?'#bba16c':'#889786',p.fine,a,ring?.37:-.27,ring?0:PI);
-    f.part('ball',sin(a)*(6.15+.19*ring),1.44+ring*.75,cos(a)*(4.97+.15*ring),
-      .038,.60,.037,ring?'#dcc58a':'#b1ad87',p.fine,a,ring?.37:-.27);
-  }
-  f.part('round',0,2.93,0,6.1,.42,4.9,'#a18e62');
-  // Broad, openwork flame aureole. Each upturned tongue is pierced so
-  // offering animals on the screen can be seen through the bronze.
-  const flame=new T.Shape();
-  flame.moveTo(-.29,0);flame.bezierCurveTo(-.57,.65,-.37,1.24,.29,1.86);
-  flame.bezierCurveTo(.20,1.47,.25,1.19,.52,1.11);flame.bezierCurveTo(.12,.74,.60,.43,.27,.08);
-  flame.quadraticCurveTo(0,-.10,-.29,0);
-  const hole=new T.Path();hole.moveTo(.012,.29);hole.bezierCurveTo(-.20,.47,-.15,.81,.06,1.04);
-  hole.quadraticCurveTo(-.012,.74,.15,.57);hole.quadraticCurveTo(.22,.41,.012,.29);flame.holes.push(hole);
-  p.shapes.haloFlame=new T.ExtrudeGeometry(flame,{depth:.084,bevelEnabled:true,bevelThickness:.017,bevelSize:.017,bevelSegments:1,curveSegments:9});
-  for(const [w,h] of [[7.53,8.81],[7.22,8.54],[5.01,5.84],[4.69,5.55]]){
-    f.part('nimbus',0,h>8?10.58:14.03,-3.65,w,h,3.25,'#aa864b');
-  }
-  for(let i=0;i<40;i++){
-    const a=(i+.5)*TAU/40,u=sin(a)*7.37,v=10.58+cos(a)*8.71;
-    f.part('haloFlame',u,v,-3.59,1.1,i%2?1.05:.81,1,'#ba9b5e',p.fine,0,0,-a);
-    smooth(u,v,-3.43,.145,.19,.088,'#d7b474',-a);
-  }
-  for(let i=0;i<18;i++){
-    const a=(i+.5)*TAU/18,u=sin(a)*4.91,v=14.03+cos(a)*5.72;
-    f.part('bronzeLotus',u,v,-3.49,.21,.47,.11,'#d5b371',p.fine,0,0,-a);
-  }
-  smooth(0,4.55,.12,5.55,1.71,3.89,patina);
-  smooth(-1.85,4.17,1.55,3.85,1.04,2.13,'#708c7e',.085);
-  smooth(1.86,4.23,1.71,3.63,.96,1.81,'#849787',-.115);
-  vestment(p,f);
-  const head=p.shapes.mochiStone.clone(), face=head.attributes.position;
-  const fullness=y=>1+.146*Math.exp(-((y+.24)**2)/.22)-.075*Math.max(0,y);
-  for(let i=0;i<face.count;i++)face.setX(i,face.getX(i)*fullness(face.getY(i)));
-  head.computeVertexNormals();p.shapes.riceBuddhaFace=head;
-  const complexion=brushWash(new T.MeshLambertMaterial({color:'#fff'}),.13);
-  f.part('riceBuddhaFace',0,14.63,.09,3.22,3.18,2.48,rice,complexion);
-  for(const side of [-1,1]){
-    smooth(side*3.05,14.42,.22,.48,.91,.47,'#e6d7b8',side*-.14);
-    smooth(side*3.09,13.77,.21,.33,.68,.37,'#e3d3b3',side*.12);
-    smooth(side*3.19,14.47,.53,.17,.45,.12,'#c5b38d',side*-.18);
-  }
-  function faceZ(u,v){
-    return .09+2.48*Math.sqrt(max(0,1-(u/(3.22*fullness((v-14.63)/3.18)))**2-((v-14.63)/3.18)**2));
-  }
-  let stroke=0;
-  function faceStroke(coords,r,color){
-    const curve=new T.CatmullRomCurve3(coords.map(q=>vec(...q,faceZ(...q)+.049)));
-    const name='buddhaBrush'+stroke++;
-    p.shapes[name]=brushStroke(curve.getPoints(18).map(q=>q.toArray()),[r*.14,r,r*1.13,r*.74,r*.09],32);
-    f.part(name,0,0,0,1,1,1,color);
-  }
-  for(const d of [-1,1]){
-    faceStroke([[d*.53,14.83],[d*.83,14.72],[d*1.18,14.68],[d*1.5,14.73],[d*1.72,14.86]],.132,'#55493c');
-    faceStroke([[d*.44,15.48],[d*.79,15.65],[d*1.17,15.7],[d*1.57,15.64],[d*1.80,15.49]],.127,'#695744');
-  }
-  smooth(0,14.54,2.49,.30,.59,.30,'#e4d3ad');
-  smooth(0,15.61,faceZ(0,15.61),.16,.16,.11,'#c7a463');
-  faceStroke([[-.69,13.66],[-.4,13.54],[0,13.49],[.41,13.55],[.69,13.68]],.058,'#926c58');
-  // Snail curls follow the part line, descending behind the long ears.
-  for(let row=0;row<8;row++) {
-    const lat=.045+row*.182, count=max(6,Math.floor(35*cos(lat)));
-    for(let j=0;j<count;j++){
-      const a=(j+(row%2)*.5)*TAU/count;
-      if(lat<.65 && cos(a)>.90*lat-.17) continue;
-      smooth(sin(a)*3.16*cos(lat),14.66+3.12*sin(lat),.09+cos(a)*2.47*cos(lat),
-        .32,.315,.30,row%3===1?'#727a66':'#646e60');
-    }
-  }
-  smooth(0,17.89,0,.99,.87,.95,'#697161');
-  for(let k=0;k<12;k++) smooth(sin(k*TAU/12)*.76,18.02,cos(k*TAU/12)*.72,.28,.29,.27,'#737b69');
-  smooth(0,18.71,.03,.31,.26,.28,ochre);
-
-  // The right palm gives reassurance. The other rests open above the crossed legs.
-  smooth(-3.77,9.09,.92,1.11,2.16,1.16,patina,-.35);
-  smooth(-4.44,10.25,1.76,.65,1.49,.74,'#e4d6b6',-.18);
-  smooth(-4.65,11.68,2.04,.74,.96,.36,rice,-.12);
-  for(let j=0;j<4;j++){
-    const u=-5.19+j*.316, y=12.56+.22*sin(j*PI/3);
-    smooth(u,y,2.09,.192,.75+.12*sin(j*PI/3),.19,rice,(j-1.4)*-.11);
-  }
-  smooth(-3.94,11.61,2.14,.24,.57,.24,rice,-.67);
-  smooth(3.57,7.43,1.23,1.26,1.79,1.51,'#749183',.45);
-  smooth(2.95,6.31,2.53,1.31,.64,.75,'#e3d4b3',.20);
-  smooth(2.11,6.37,2.93,.86,.34,.66,rice,.08);
-  for(let j=0;j<4;j++) smooth(1.52+j*.09,6.46,2.50+j*.27,.65-j*.034,.16,.16,rice,.17);
-  daibutsuden(p);
-}
-
 export function* dressPilgrimage(painter) {
   yield* inari(painter);
   yield;
@@ -488,7 +319,8 @@ export function* dressPilgrimage(painter) {
   fallenBlossoms(painter);
   groveShrine(painter);
   yield;
-  greatBuddha(painter);
+  drawDaibutsu(painter,frame(painter,DAIBUTSU.x,DAIBUTSU.z));
+  daibutsuden(painter);
   yield;
 }
 

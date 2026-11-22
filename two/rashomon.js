@@ -3,7 +3,8 @@ import { RASHOMON,GATE_STEPS } from './kyo-layout.js';
 import { terrainHeight,wrapDelta } from './terrain.js';
 import { workshopFrame,inscriptionMaterial } from './civic-art.js';
 import { sculpture } from './pilgrimage-pigment.js';
-import { SilkPanels,silkMaterial } from './kosode.js';
+import { SilkPanels } from './kosode.js';
+import { foldMark,paintedSilk } from './emaki-costume.js';
 import { dressedRiceFace } from './mochi-model.js';
 import { scrollPigment } from './kyo-scrollwork.js';
 
@@ -38,6 +39,14 @@ function oldWoman(){
       .76*r*cos(a)+.041+.22*v**2-.078*sin(Math.PI*v)];
   }
   p.cut(23,48,fold,4,'#69654f');
+  // Long silent folds collect at the crouched knees, with a few pale slips
+  // where the patched hemp reverses under the old woman's combing hand.
+  for(const d of [-1,1])for(let i=0;i<6;i++){
+    const u=.5+d*(.044+i*.073),v=.59+.12*cos(i);
+    const knots=[[u-.043*d,v],[u-.022*d,v*.71],[u+.014*d,.22],[u+.026*d,.054]];
+    foldMark(p,fold,knots,.006+(i%2)*.002,'#514f40',.007);
+    if(i%3===1)foldMark(p,fold,knots.slice(1).map(([x,y])=>[x+d*.010,y+.024]),.004,'#958972',.007);
+  }
   for(const side of [-1,1]){
     p.cut(13,5,(u,v)=>fold(.5+side*(.197-.28*v)+.026*u,.96-.47*v,.012),4,'#c0ab87');
     p.cut(14,18,(u,v)=>{
@@ -84,7 +93,7 @@ function oldWoman(){
     const u=.40+.014*k;art.stroke('#c1b8a1',[hood(u,.88),hood(u,.66),hood(u,.40),hood(u,.08)],
       [.001,.003,.006,.002],9);
   }
-  const coat=new T.Mesh(p.finish(),silkMaterial());coat.castShadow=true;root.add(coat);
+  const coat=new T.Mesh(p.finish(),paintedSilk());coat.castShadow=true;root.add(coat);
   const head=dressedRiceFace(1,0,elderPortrait());
   head.position.set(0,.618,.20);head.rotation.x=.17;head.scale.set(.37,.32,.32);root.add(head);
   // An asymmetrical brow and crow's feet sit on the original rice face.

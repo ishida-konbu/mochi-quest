@@ -1,10 +1,12 @@
 import * as THREE from './vendor/three.module.min.js';
 import { batchActorParts as paint } from './actors.js';
 import { CONNECTING_ROADS, WATER_Y, riverZ, coastX, eastCoastX, terrainHeight, wrapDelta } from './terrain.js';
-import { pullingOx, oxLeg, courtCurtains, ferryCrew } from './kyo-procession-art.js';
+import { courtCurtains, ferryCrew } from './kyo-procession-art.js';
+import { harnessBeast, capitalHorse } from './otsu-travellers.js';
 import { illustratedMesh, scrollPigment } from './kyo-scrollwork.js';
 import { kosode, silkMaterial, SilkPanels } from './kosode.js';
 import { dressedRiceFace } from './mochi-model.js';
+import { paintedSilk,townPortrait } from './emaki-costume.js';
 import { brushStroke } from './pilgrimage-pigment.js';
 import { measureRoute, cartPosition } from './trade-routes.js';
 
@@ -15,9 +17,9 @@ const hoop=new THREE.TorusGeometry(1,.072,8,40);
 export function traveller(parent,noble){
   const root=new THREE.Group();root.name=noble?'御簾の公達餅':'網代笠の問屋餅';
   parent.add(root);
-  const kind=noble?5:6,head=dressedRiceFace(kind);
+  const kind=noble?5:6,head=dressedRiceFace(kind,0,noble?townPortrait(kind):null);
   head.scale.set(.43,.352,.351);head.position.set(0,.765,-.009);root.add(head);
-  const robe=new THREE.Mesh(kosode(kind),silkMaterial());robe.castShadow=true;root.add(robe);
+  const robe=new THREE.Mesh(kosode(kind),noble?paintedSilk():silkMaterial());robe.castShadow=true;root.add(robe);
   paint(root,b=>{
     for(const side of [-1,1]){
       const forward=side===1?.194:.08;
@@ -64,12 +66,12 @@ export function traveller(parent,noble){
   return root;
 }
 function oxCarriage() {
-  const root=new THREE.Group(), wheels=[], legs=[];
+  const root=new THREE.Group(), wheels=[];
   const wagon=paint(root,b=>{
     b.box(0,1.21,-.54,1.99,.22,2.53,lacquer);
     b.box(0,1.36,-.56,1.88,.12,2.47,straw);
     for(const side of [-1,1]) {
-      b.rod([side*.87,1.13,-1.95],[side*.52,1.26,2.61],.065,'#766342');
+      b.rod([side*.87,1.13,-1.95],[side*1.09,2.96,4.47],.065,'#766342');
       b.box(side*.93,1.63,-.53,.09,.45,2.17,pine);
       for(const z of [-1.58,.53]) b.box(side*.93,2.09,z,.086,1.48,.086,lacquer);
       // Rolled misu blinds frame both side windows and leave a view of the passenger.
@@ -101,8 +103,12 @@ function oxCarriage() {
     }
     courtCurtains(b);
     b.box(0,1.46,-.12,1.03,.12,1.04,'#a37657');
-    b.rod([-.59,1.32,2.57],[.59,1.32,2.57],.078,'#886849');
-    pullingOx(b);
+    // A wooden bow passes over the enlarged withers. The shafts meet its
+    // low ends; the plaited strap follows the brisket below the yoke.
+    b.stroke([[-1.10,2.96,4.47],[-.80,3.25,4.51],[-.42,3.72,4.53],[0,3.79,4.54],
+      [.42,3.72,4.53],[.80,3.25,4.51],[1.10,2.96,4.47]],.075,'#80674d');
+    b.stroke([[-1.09,2.98,4.47],[-.97,2.34,4.57],[-.68,1.77,4.66],[0,1.47,4.68],
+      [.68,1.77,4.66],[.97,2.34,4.57],[1.09,2.98,4.47]],.045,'#976c54');
   },'御簾の牛車');
   wagon.material=scrollPigment();
   const noble=traveller(root,true);
@@ -118,12 +124,9 @@ function oxCarriage() {
       }
       b.rod([-.14,0,0],[.14,0,0],.15,lacquer);
     },'車輪',[side*1.055,1.035,-.63]));
-    for(const z of [2.40,3.46]) legs.push(paint(root,b=>{
-      oxLeg(b,side,z>3);
-    },'牛の脚',[side*.28,.8,z]));
   }
-  for(const mesh of legs)mesh.material=scrollPigment();
-  return {root,wheels,legs,noble};
+  const ox=harnessBeast(root,'ox',2,3.78);
+  return {root,wheels,ox,noble};
 }
 function boatHull() {
   const v=[],ix=[];
@@ -185,6 +188,7 @@ export function merchantPosition(index,time) {
   return {x:coast+(index===0?-1:1)*(23+12*cos(a)),z};
 }
 export function createTravellers(scene) {
+  const horse=capitalHorse(scene);
   const carts=CONNECTING_ROADS.slice(0,2).map((road,i)=>{
     const cart=oxCarriage();
     scene.add(cart.root);
@@ -198,7 +202,8 @@ export function createTravellers(scene) {
     return root.visible;
   }
   return (time,player)=>{
-    for(const {route,root,wheels,legs,noble,speed,offset} of carts){
+    horse(time,player);
+    for(const {route,root,wheels,ox,noble,speed,offset} of carts){
       const q=cartPosition(route,time,speed,offset), bed=terrainHeight(q.x,q.z);
       if(!place(root,player,q.x,q.z,bed,q.yaw)) continue;
       const fore=terrainHeight(q.x+3*sin(q.yaw),q.z+3*cos(q.yaw));
@@ -207,7 +212,7 @@ export function createTravellers(scene) {
       noble.rotation.y=Math.max(-1.22,Math.min(1.22,Math.atan2(sin(look),cos(look))))+.08*sin(time*.56);
       noble.rotation.z=.036*cos(time*1.23+offset);
       wheels.forEach(w=>w.rotation.x=q.travelled/.98);
-      legs.forEach((leg,i)=>leg.rotation.x=q.moving?.30*sin(q.distance*3+(i===0||i===3?0:PI)):0);
+      ox.pose(time,Number(q.moving),q.travelled*1.72);
     }
     boats.forEach(({root:m,row},i)=>{
       const a=merchantPosition(i,time),b=merchantPosition(i,time+.08);
