@@ -201,7 +201,7 @@ export function moveScrollFauna(n,time) {
 
 // Four movement phases and eight views of every silhouette, including the
 // closed wings of a perched hawk and the shorter tail of a hen.
-export const FAUNA_SHEET={atlas:'scroll-fauna.webp?v=otsu-1',columns:16,rows:16,width:144,height:144,poses:4};
+export const FAUNA_SHEET={atlas:'scroll-fauna.webp?v=otsu-eyes-1',columns:16,rows:16,width:144,height:144,poses:4};
 export const faunaPrints=['elephant','baku','hawk','ox','chicken','hen','fishfolk','hawk-perched'];
 export function faunaDrawing(n) {
   const kind=n.type==='hawk' && n.perched?'hawk-perched':n.type==='chicken' && n.variant%4!==0?'hen':n.type;

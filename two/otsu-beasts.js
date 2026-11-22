@@ -1,6 +1,7 @@
 // The brush follows anatomy: broad flank washes, pressure at the shoulder,
 // split hair on the fetlocks and a wet, unbroken stroke along each eyelid.
 import { piece, hide, eye, leaf, lock, pen, stem, skinLines, foldedTrunk, ink, grey, pale } from './otsu-hide.js';
+import { elephantEye, oxEye, bakuEye } from './otsu-eyes.js';
 const zero=[0,0,0], sides=[-1,1], {sin,cos,PI}=Math;
 const ivory='#fff8dd', soot='#544d42';
 const profile=rows=>rows.map(([z,y,w,h,x=0])=>[x,y,z,w,h]);
@@ -19,8 +20,7 @@ function elephantHead(f){
   for(const s of sides){
     // Domed temples and a fine central furrow leave the brow open around the eye.
     skinLines(f,skin,s,[[.25,.53,.35,-.27,-.04,.014],[.47,.72,.26,.12,-.14,.014],[.57,1.74,.16,.34,.16,.015],[.56,1.80,.11,.27,.13,.007]],'#706a5c');
-    const p=skin(.694,s*1.38,.006);eye(f,s,p,.089,.10);
-    pen(f,[[p[0]-s*.012,p[1]+.057,p[2]-.095],[p[0]+s*.008,p[1]+.078,p[2]-.028],[p[0]-s*.012,p[1]+.070,p[2]+.063],[p[0]-s*.047,p[1]+.060,p[2]+.115]],[.002,.012,.015,.002],ink);
+    elephantEye(f,skin,s);
     const tusk=[[s*.197,-.077,.407],[s*.253,-.152,.557],[s*.303,-.200,.723],[s*.337,-.178,.901],[s*.331,-.102,1.045],[s*.306,-.052,1.102]];
     stem(f,tusk,[.086,.089,.063,.040,.014,.0016],ivory);
     pen(f,tusk.map(([x,y,z],i)=>[x+s*[.067,.066,.049,.030,.010,0][i],y-.022*(1-i/5),z]),[.003,.011,.008,.005,.002,.0008],'#766c58');
@@ -64,7 +64,7 @@ function oxHead(f){
   const skin=hide(f,'z',profile([[-.18,.042,.132,.188],[-.06,.110,.248,.293],[.088,.146,.311,.322],[.229,.119,.294,.282],[.379,.042,.245,.235],[.531,-.046,.184,.166],[.603,-.094,.166,.12],[.661,-.106,.121,.088]]),'ox',pale,.04);
   const muzzle=hide(f,'z',profile([[.499,-.061,.146,.102],[.556,-.087,.189,.125],[.629,-.098,.202,.131],[.699,-.100,.167,.110],[.731,-.101,.109,.077],[.737,-.107,.015,.038]]),'paper','#c1b29e');
   for(const s of sides){
-    eye(f,s,skin(.472,s*1.26,.008),.081,.12);
+    oxEye(f,skin,s);
     skinLines(f,skin,s,[[.30,.81,.23,.25,-.18,.018],[.45,1.64,.36,.46,.13,.014],[.56,1.74,.24,.37,.14,.006]],soot);
     const lip=muzzle(.70,s*1.34,-.004);
     f.oval(lip,[.017,.023,.046],ink,[.22,s*.38,s*.2]);
@@ -116,7 +116,7 @@ function bakuHead(f){
   stem(f,nose,[.142,.122,.091,.066,.057,.044,.037,.013],'#dacbb1');
   for(let j=0;j<4;j++)pen(f,[[-.069,.108-j*.056,.454+j*.027],[0,.072-j*.055,.533+j*.028],[.068-j*.009,.109-j*.056,.462+j*.025]],[.001,.008,.0015],grey);
   for(const s of sides){
-    const p=skin(.611,s*1.43,.013);eye(f,s,p,.101,.20);
+    bakuEye(f,skin,s);
     const brow=[[s*.139,.280,.355],[s*.220,.323,.293],[s*.277,.343,.213],[s*.293,.301,.159],[s*.281,.287,.120],[s*.261,.319,.105]];
     lock(f,brow,[.005,.011,.018,.014,.007,.001],[s,0,0],soot,true);
     const ear=[[.126,.286,.032],[.176,.404,-.026],[.235,.491,-.084],[.293,.509,-.123],[.320,.448,-.143],[.305,.333,-.124],[.252,.267,-.080],[.191,.250,-.012]].map(([x,y,z])=>[s*x,y,z]);
