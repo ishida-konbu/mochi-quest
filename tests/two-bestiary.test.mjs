@@ -4,12 +4,12 @@ import { createGame } from '../two/game.js';
 import { SPECIES, recipientContact } from '../two/bestiary.js';
 import { groundHeight } from '../two/terrain.js';
 
-test('the recipient ledger covers all 623 individuals and gives the two legends a hundredfold score',()=>{
+test('the recipient ledger covers all 675 individuals and gives the two legends a hundredfold score',()=>{
   const {state}=createGame();
-  assert.equal(state.recipientTotal,623);
+  assert.equal(state.recipientTotal,675);
   assert.equal(new Set(state.npcs.map(n=>n.id)).size,state.recipientTotal);
   assert.deepEqual(Object.fromEntries(Object.keys(SPECIES).map(type=>[type,state.npcs.filter(n=>n.type===type).length])),
-    {monkey:90,bird:40,fox:40,tiger:10,dragon:1,kirin:1});
+    {monkey:90,bird:40,fox:40,tiger:10,dragon:1,kirin:1,deer:32,boar:18,shishi:2});
   assert.equal(SPECIES.monkey.points,SPECIES.bird.points);
   assert.ok(10<SPECIES.bird.points && SPECIES.bird.points<SPECIES.fox.points && SPECIES.fox.points<SPECIES.tiger.points);
   assert.equal(SPECIES.dragon.points,1000);assert.equal(SPECIES.kirin.points,1000);
@@ -19,13 +19,13 @@ test('notices intersect the actual airborne volume, and unique recipients and ol
   for(const type of ['bird','dragon']){
     let game=createGame();
     const n=game.state.npcs.find(n=>n.type===type), p=game.state.player,scale=n.stature;
-    const height=n.y+(type==='bird'?.13:1.02)*scale;
     Object.assign(p,{x:n.x,z:n.z-2,heading:0,y:n.y,h:n.y-groundHeight(n.x,n.z),grounded:false,mode:'habutae'});
     game.step(1/60);
     const wrongHeight=n.y-2;
     assert.equal(recipientContact(n,{x:n.x,y:wrongHeight,z:n.z-1},0,1,2),Infinity);
     const savedTime=game.state.time;
     function throwAtAltitude(){
+      const height=n.y+(type==='bird'?.13:.54)*scale;
       Object.assign(p,{x:n.x,z:n.z-2,y:height-.93,h:height-.93-groundHeight(n.x,n.z),grounded:false,heading:0,vy:0});
       assert.ok(game.act('throw'));
       for(let i=0;i<25;i++)game.step(1/60);
@@ -48,10 +48,47 @@ test('delivery to the last turtle unlocks Kagami once; duplicate and unknown IDs
   snap.delivered=base.state.npcs.filter(n=>n!==t).map(n=>n.id);
   snap.delivered.push(snap.delivered[0],'not-an-animal');
   const game=createGame(snap),p=game.state.player;
-  assert.equal(game.state.delivered.size,622);assert.equal(game.state.kagamiUnlocked,false);
+  assert.equal(game.state.delivered.size,674);assert.equal(game.state.kagamiUnlocked,false);
   Object.assign(p,{x:t.x,z:t.z-1.45,y:t.y,h:0,heading:0});
   assert.ok(game.act('throw'));for(let i=0;i<15;i++)game.step(1/60);
   assert.ok(game.state.delivered.has(t.id));assert.ok(game.state.kagamiUnlocked);
   assert.ok(game.state.events.some(e=>e.text?.includes('全員に三条通知')));
   const saved=game.save();assert.ok(createGame(saved).state.kagamiUnlocked);
+});
+
+test('a completed historic delivery book retains the earned Kagami mode across new saves', () => {
+  const game=createGame(), legacy=game.save();
+  legacy.version=3;
+  delete legacy.kagamiUnlocked;
+  legacy.player.mode='kagami';
+  legacy.delivered=game.state.npcs.slice(0,623).map(n=>n.id);
+  const resumed=createGame(legacy);
+  assert.equal(resumed.state.kagamiUnlocked,true);
+  assert.equal(resumed.state.player.mode,'kagami');
+  assert.equal(resumed.state.delivered.size,623);
+  assert.equal(createGame(resumed.save()).state.kagamiUnlocked,true);
+  assert.equal(createGame({...legacy,delivered:legacy.delivered.slice(1)}).state.kagamiUnlocked,false);
+  assert.equal(createGame({...legacy,version:4}).state.kagamiUnlocked,false);
+});
+
+test('the mounted hare and its deer receive separate letters while travelling together', () => {
+  const game=createGame(), hare=game.state.npcs.find(n=>n.ridesDeer), deer=hare.ridesDeer;
+  const p=game.state.player;
+  function deliverTo(n,height) {
+    // Cross the saddle from the side, avoiding the deer's projecting neck.
+    const dx=Math.cos(deer.heading),dz=-Math.sin(deer.heading);
+    p.x=n.x-2*dx;p.z=n.z-2*dz;
+    p.y=n.y+height-.93;
+    p.h=p.y-groundHeight(p.x,p.z);
+    p.heading=Math.atan2(dx,dz);p.vy=0;p.grounded=false;
+    assert.ok(game.act('throw'));
+    for(let i=0;i<24;i++) game.step(1/60);
+  }
+  deliverTo(deer,.69*deer.stature);
+  assert.ok(game.state.delivered.has(deer.id));
+  assert.ok(!game.state.delivered.has(hare.id));
+  deliverTo(hare,1.39);
+  assert.ok(game.state.delivered.has(hare.id));
+  assert.ok(Math.hypot(deer.x-hare.x,deer.z-hare.z)<.14);
+  assert.equal(deer.heading,hare.heading);
 });

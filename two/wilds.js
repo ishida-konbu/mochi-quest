@@ -6,6 +6,7 @@ import {
   ROADS,
   TREES,
   LANDMARK_TREES,
+  hasAutumnLeaves,
   WATER_Y,
   nearRoad,
   seasonAt,
@@ -247,7 +248,7 @@ function inkTree(brush, p, t) {
         );
       }
       const spread = height * (pine ? 0.255 : willow ? 0.205 : 0.248) * (1 - level * 0.24) * (0.83 + r() * 0.37);
-      const autumn = kind === 'maple' && (t.autumn>.4 || t === TREES[1] || seed % 4 !== 1);
+      const autumn = kind === 'maple' && hasAutumnLeaves(t);
       const material = p.sprays[t.snow>.5 && pine ? 'snow' : t.autumn>.45 && autumn ? 'autumn' :
         willow ? 'bamboo' : autumn ? 'maple' : pine ? 'pine' : 'oak'];
       for (let face = 0; face < (near ? 4 : 3); face++) {

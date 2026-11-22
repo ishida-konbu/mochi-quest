@@ -9,7 +9,10 @@ import { inkVolume, sculptHead, scrollParasol, scrollShell, sculptTurtleHead } f
 import { DYES } from './procession.js';
 import { distantProcession, preparePlates, VILLAGERS, beastFrame } from './procession-view.js';
 import { finishInSlices } from './preparation.js';
-import { SPECIES } from './bestiary.js';
+import { SPECIES, dragonVisible, isFlying, moveWildlife } from './bestiary.js';
+import { poseHareRider } from './scroll-riders.js';
+import { createSkyLife } from './sky-life.js';
+import { createCraneFlight } from './crane-flight.js';
 import { buildBeast, beastRig, poseBeast } from './beast-art.js';
 import { dressArtisan, poseArtisan } from './trade-tools.js';
 import { makeRiceModel, poseRice } from './mochi-model.js';
@@ -1501,7 +1504,8 @@ const dyedCloth=new Map();
 export function makeNPC(entity, root) {
   const kind = entity.type;
   if (SPECIES[kind]) {
-    const mesh=model('emaki-'+kind,p=>buildBeast(p,kind,{group,batch}));
+    const variant = kind === 'shishi' ? (entity.variant || 0) : 0;
+    const mesh=model('emaki-'+kind+variant,p=>buildBeast(p,kind,{group,batch},variant));
     root.add(mesh);
     const limbs=beastRig(mesh,entity);
     const shadowMesh=shadow(mesh,kind==='dragon'?2.4:1.1,kind==='dragon'?4.5:1.5);
@@ -1541,7 +1545,12 @@ export function animateNPC(record, n, t) {
   mesh.rotation.y = n.heading || 0;
   if (SPECIES[n.type]) {
     poseBeast(limbs,n,t);
-    if(n.altitude)record.shadow.position.y=(.04-n.altitude)/mesh.scale.y;
+    if(n.altitude) {
+      const contact=Math.max(0,1-n.altitude/12);
+      record.shadow.visible=contact>0;
+      record.shadow.position.y=(.04-n.altitude)/mesh.scale.y;
+      record.shadow.scale.set(1.1*contact,1.5*contact,1);
+    }
     return;
   }
   if (isTurtle) {
@@ -1577,7 +1586,46 @@ export function animateNPC(record, n, t) {
     0.15 * Math.sin(t * 1.3 + (n.phase || 0)),
     0.025 * bend,
   );
+  if(sumo) {
+    // A bout starts with a deep crouch; one wrestler then lifts while
+    // the other tips back. The two partners exchange roles next round.
+    const beat=(t+(n.phase||0))*.82, grip=.5-.5*Math.cos(beat);
+    const tilt=Math.sin(beat*.5)*n.side, tumble=Math.max(0,tilt)*grip;
+    body.position.y-=.19*grip-.14*tumble;
+    body.rotation.x+=.43*grip-.80*tumble;
+    body.rotation.z+=n.side*.29*tumble;
+    limbs.head.rotation.x-=.29*grip;
+    for(const side of [-1,1]) {
+      limbs['arm'+side].rotation.x-=.56*grip+.32*tumble;
+      limbs['leg'+side].rotation.x+=side*.38*tumble;
+    }
+  } else if (!n.area && !n.ridesDeer && n.gesture) {
+    const pause=n.gesture;
+    if(n.role==='porter') {
+      // The free sleeve salutes a passer-by while the other balances the pole.
+      const hand=limbs[n.type==='rabbit'?'arm1':'arm-1'];
+      hand.rotation.x-=.92*pause;
+      hand.rotation.z+=pause*(.26*Math.sin(t*3.8)+.12);
+      body.rotation.x+=.19*pause;limbs.head.rotation.z-=.15*pause;
+    } else if(n.variation===1) {
+      body.rotation.x+=.46*pause;
+      for(const side of [-1,1]) limbs['arm'+side].rotation.x-=.35*pause;
+    } else {
+      // A spectator throws up a sleeve or claps along with the field dancers.
+      const clap=.5+.5*Math.sin(t*3.3);
+      for(const side of [-1,1]) {
+        const arm=limbs['arm'+side];
+        arm.rotation.x-=pause*(.38+.28*clap);
+        arm.rotation.z-=side*pause*(.21+.28*clap);
+      }
+      limbs.head.rotation.y+=.32*pause*Math.sin(t*.85);
+    }
+  }
   if (n.area) poseArtisan(limbs,n,t);
+  if (n.ridesDeer) {
+    poseHareRider(limbs,n,t);
+    record.shadow.visible = false;
+  }
   if (n.flash > 0) {
     mesh.position.y += 0.11 * Math.abs(Math.sin(n.flash * 12));
     limbs.head.rotation.z += 0.16;
@@ -1618,6 +1666,7 @@ function within(entity, player, limit) {
 export function createActors(scene, renderer) {
   const root = group(scene, '旅の仲間');
   const h = makeHero();
+  const skyLife = createSkyLife(root);
   h.spin = 0;
   h.held = {
     read: accessory('manga'),
@@ -1646,18 +1695,38 @@ export function createActors(scene, renderer) {
     objects = new Map(),
     notices = new Map(),
     spares = [];
-  let processionView,beastView;
+  let processionView,beastView,craneFlight;
+  function prepareCranes() {
+    if (craneFlight) return;
+    const unit = makeNPC({type:'bird',stature:1}, new THREE.Group());
+    unit.mesh.removeFromParent();
+    craneFlight = createCraneFlight(root, unit, SPECIES.bird.count);
+  }
   const viewFrustum=new THREE.Frustum(), viewProjection=new THREE.Matrix4();
   const actorBounds=new THREE.Sphere(), restingNpcs=new Map();
   const slots=new WeakMap(), visible=[], selected=new Set();
   const viewport=renderer?.domElement || document.getElementById('scene');
+  const cameraFlight = new WeakMap();
+  function atPhotoTime(n, time) {
+    if(n.type!=='kirin' && !isFlying(n.type))return n;
+    let view=cameraFlight.get(n);
+    if(!view) {view=Object.create(n);cameraFlight.set(n,view);}
+    moveWildlife(view,time);
+    return view;
+  }
   const byCoverage=(a,b)=>b.priority-a.priority;
   const backToFront=(a,b)=>b.depth-a.depth;
 
   function park(record) {
     record.mesh.removeFromParent();
     restingNpcs.set(record.entity.id,record);
-    if (restingNpcs.size>40) restingNpcs.delete(restingNpcs.keys().next().value);
+    if (restingNpcs.size>40) {
+      const oldest=restingNpcs.keys().next().value;
+      const evicted=restingNpcs.get(oldest);
+      evicted.limbs.flight?.geometry.dispose();
+      evicted.mesh.getObjectByName('絵巻の一枚皮')?.skeleton?.dispose();
+      restingNpcs.delete(oldest);
+    }
   }
 
   // Each species/occupation template is shared by all its live skeletons.
@@ -1668,8 +1737,8 @@ export function createActors(scene, renderer) {
     const nearest=[...state.npcs].sort((a,b)=>nearDistance(a)-nearDistance(b));
     const bodies=new Set(), tools=new Set(), stage=new THREE.Group();
     for (const n of nearest) {
-      if(n.atMortar) continue;
-      const key=n.type+'-'+(n.area?'artisan':n.role);
+      if(n.atMortar || n.type==='bird') continue;
+      const key=n.type+'-'+(n.area?'artisan':n.role)+(n.type==='shishi' ? n.variant : '');
       if(bodies.has(key) && (!n.area || tools.has(n.role))) continue;
       bodies.add(key);
       if(n.area) tools.add(n.role);
@@ -1679,6 +1748,8 @@ export function createActors(scene, renderer) {
     }
   }
   function* prepareTravellersAndItems(state) {
+    prepareCranes();
+    yield;
     yield* prepareRigs(state);
     const kinds = new Set();
     for (const item of state.objects) {
@@ -1699,32 +1770,43 @@ export function createActors(scene, renderer) {
     const p = state.player,
       t = state.time;
     gaitHero(h, p, t, dt, state);
+    skyLife(t,state,camera,state.photo ? atPhotoTime : null);
     if (!processionView) processionView=distantProcession(root,shadowMap(),state.npcs.length);
     if (!beastView) beastView=distantProcession(root,shadowMap(),state.npcs.filter(n=>SPECIES[n.type]).length,true);
+    prepareCranes();
+    craneFlight.begin();
     processionView.begin(p);beastView.begin(p);
     viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
     const eye=camera.matrixWorldInverse.elements;
     const focalPixels=(viewport?.height || window.innerHeight)*camera.projectionMatrix.elements[5]*.5;
     visible.length=0; selected.clear();
     for (const n of state.nearbyNpcs) {
-      if(n.mounted || n.atMortar) continue;
-      const dx=wrapDelta(n.x-p.x),dz=wrapDelta(n.z-p.z);
+      if(n.mounted || n.atMortar || (n.type==='dragon' && !dragonVisible(p))) continue;
+      const view=state.photo ? atPhotoTime(n,t) : n;
+      const dx=wrapDelta(view.x-p.x),dz=wrapDelta(view.z-p.z);
       const distance=Math.hypot(dx,dz);
       if(distance>=128) continue;
       const x=p.x+dx,z=p.z+dz,spec=SPECIES[n.type],scale=n.stature||1;
-      const center=n.y+(spec?.center??(n.type==='turtle'?.78:VILLAGERS.center))*scale;
+      const center=view.y+(spec?.center??(n.type==='turtle'?.78:VILLAGERS.center))*scale;
       const span=(spec?beastFrame(n.type):VILLAGERS.frameY)*scale;
       actorBounds.center.set(x,center,z);
       actorBounds.radius=span*.65;
       if (!viewFrustum.intersectsSphere(actorBounds)) continue;
+      if (n.type==='bird') {
+        craneFlight.add(view,x,z,t,Math.min(1,(128-distance)/16));
+        continue;
+      }
       let slot=slots.get(n);
       if (!slot) {slot={n};slots.set(n,slot);}
       const depth=-(eye[2]*x+eye[6]*center+eye[10]*z+eye[14]);
       const pixels=span*focalPixels/Math.max(camera.near,depth);
       // The depth of the focused camera subject and its framebuffer size are
       // what determine whether an atlas cell would be visibly magnified.
-      slot.x=x;slot.z=z;slot.depth=depth;slot.fade=Math.min(1,(128-distance)/16);
-      slot.priority=n.type==='turtle' ? Infinity : pixels*(npcs.has(n.id)?1.23:1);
+      slot.view=view;slot.x=x;slot.z=z;slot.depth=depth;slot.fade=Math.min(1,(128-distance)/16);
+      // Keep singular performances articulated, including the hare's seat and the
+      // kirin's four individual cloud contacts.
+      const performanceRig = n.ridesDeer || n.carriesHare || ['dragon','kirin','shishi','turtle'].includes(n.type);
+      slot.priority = performanceRig ? 10000+pixels : pixels*(npcs.has(n.id)?1.23:1);
       visible.push(slot);
     }
     visible.sort(byCoverage);
@@ -1746,7 +1828,7 @@ export function createActors(scene, renderer) {
         npcs.set(n.id,rec);
       }
       selected.add(n);
-      animateNPC(rec,n,t);
+      animateNPC(rec,slot.view,t);
       rec.mesh.position.x=slot.x;rec.mesh.position.z=slot.z;
     }
     for(const [id,rec] of npcs) if(!selected.has(rec.entity)) {
@@ -1754,11 +1836,11 @@ export function createActors(scene, renderer) {
     }
     // Antialiased coverage can blend at silhouettes of overlapping figures.
     visible.sort(backToFront);
-    for(const {n,x,z,fade} of visible) {
+    for(const {n,view,x,z,fade} of visible) {
       if(selected.has(n) || n.type==='turtle') continue;
-      (SPECIES[n.type]?beastView:processionView).add(n,x,z,camera,t,fade);
+      (SPECIES[n.type]?beastView:processionView).add(view,x,z,camera,t,fade);
     }
-    processionView.end();beastView.end();
+    processionView.end();beastView.end();craneFlight.end();
     for (const o of state.objects) {
       if (!objectModels[o.type]) continue;
       let rec = objects.get(o.id);

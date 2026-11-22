@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
-import { inkVolume } from './scroll-sculpt.js';
+import { inkVolume, brushWash } from './scroll-sculpt.js';
 
 const TAU = Math.PI * 2;
 const indigo = '#5c7377';
@@ -49,7 +49,7 @@ function paintedMaterial(base, kind) {
       );
   };
   material.customProgramCacheKey = () => base.customProgramCacheKey() + '-scroll-resident-' + kind;
-  return material;
+  return brushWash(material,.48);
 }
 
 // The cloned NPCs share their species' one opaque material and original draw batches.

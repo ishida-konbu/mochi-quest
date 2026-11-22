@@ -1,7 +1,9 @@
+import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
 import { groundHeight, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
 import { POUNDING, POUNDING_CREW } from './festival.js';
 import { procession } from './procession.js';
+import { walkingScore } from './animal-motion.js';
 import { SPECIES, wildlifeHomes, moveWildlife, recipientContact } from './bestiary.js';
 
 const MAX_VITAL = 100;
@@ -110,6 +112,7 @@ function makeWorld() {
 
 export function createGame(snapshot = null) {
   const { objects, npcs } = makeWorld();
+  const riverRider = pairRiverTravellers(npcs);
   const turtle = npcs.find(n => n.type === 'turtle');
   const player = {
     x: 0, z: 62, y: groundHeight(0,62), h: 0, vx: 0, vz: 0, vy: 0, speed: 0, heading: 0,
@@ -389,25 +392,32 @@ export function createGame(snapshot = null) {
     turtle.x = at.x; turtle.z = at.z; turtle.y = groundHeight(at.x,at.z);
     if (turtle.speed < .015) { turtlePause = 5; turtleLeg = (turtleLeg+1) % route.length; }
   }
-  // The dragon can range 30 m from home. Keep a margin around the current
-  // 32 m cell for both its flight path and the detailed view across a seam.
+  // Include both the width of a cell and the roaming range around each home.
   let crowdCellX, crowdCellZ;
   function refreshCrowd() {
     const cx=Math.floor(player.x/32), cz=Math.floor(player.z/32);
     if (cx===crowdCellX && cz===crowdCellZ) return;
     crowdCellX=cx; crowdCellZ=cz;
-    state.nearbyNpcs=npcs.filter(n=>n===turtle ||
-      (Math.abs(wrapDelta(n.homeX-(cx+.5)*32))<150 && Math.abs(wrapDelta(n.homeZ-(cz+.5)*32))<150));
+    const cellX=(cx+.5)*32, cellZ=(cz+.5)*32;
+    state.nearbyNpcs=npcs.filter(n=>{
+      if(n===turtle || n.type==='dragon')return true;
+      // A crane's ellipse can swing two radii away from its original perch.
+      // Stream the whole route before its edge reaches the 128 m view radius.
+      const reach=n.type==='bird' ? 128+16+2*n.radius : n.type==='kirin' ? 165 : 150;
+      return Math.abs(wrapDelta(n.homeX-cellX))<reach && Math.abs(wrapDelta(n.homeZ-cellZ))<reach;
+    });
   }
+  const streetScore={};
   function updateNPCs(dt) {
     moveTurtle(dt);
     refreshCrowd();
     for (const n of state.nearbyNpcs) {
       n.flash = Math.max(0, n.flash - dt);
-      if (n === turtle || n.atMortar) continue;
+      if (n === turtle || n.atMortar || n.ridesDeer) continue;
       if (SPECIES[n.type]) {
         const far=Math.abs(wrapDelta(n.x-player.x))+Math.abs(wrapDelta(n.z-player.z))>55;
-        if(!far || Math.floor((state.time+n.phase)*6)!==Math.floor((state.time+n.phase-dt)*6)) moveWildlife(n,state.time);
+        const continuous=n.type==='bird'||n.type==='dragon'||n.type==='kirin';
+        if(continuous || !far || Math.floor((state.time+n.phase)*6)!==Math.floor((state.time+n.phase-dt)*6)) moveWildlife(n,state.time);
         continue;
       }
       // Stationary workers face the passers-by. A short sidestep keeps dancers
@@ -426,11 +436,16 @@ export function createGame(snapshot = null) {
         }
         continue;
       }
-      const t = state.time * (n.role === 'porter' ? .32 : .44) + n.phase;
+      n.walkStart ??= walkingScore(0,n,streetScore).travel;
+      walkingScore(state.time,n,streetScore);
+      n.gesture=streetScore.gesture;
+      n.variation=streetScore.variation;
+      const t = (streetScore.travel-n.walkStart) * (n.role === 'porter' ? .32 : .44) + n.phase;
       let x, z;
       if (n.role === 'sumo') {
         const sway = state.time * 1.55 + n.phase;
-        x = n.homeX + Math.sin(sway) * .19 + n.side * (.07 + Math.sin(sway * 2) * .08);
+        const bout=.5-.5*Math.cos((state.time+n.phase)*.82);
+        x = n.homeX + Math.sin(sway) * .12 + n.side * (.18 + bout*.25);
         z = n.homeZ + Math.cos(sway) * .14;
         n.heading = n.side * Math.PI / 2;
       } else {
@@ -445,6 +460,7 @@ export function createGame(snapshot = null) {
       n.speed = Math.min(2.3, distance(n,at)/dt);
       n.x = at.x; n.z = at.z; n.y = groundHeight(n.x,n.z);
     }
+    updateHareRider(riverRider, state.time);
   }
   function updateShots(dt) {
     for (let i=state.shots.length-1;i>=0;i--) {
@@ -672,7 +688,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 3, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 4, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: objects.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -683,7 +699,7 @@ export function createGame(snapshot = null) {
   function restore(data) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
     const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
-    if (!data || ![2,3].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    if (!data || ![2,3,4].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
     const p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
     // The original six districts occupy the prefix of the inventory. New
@@ -718,7 +734,11 @@ export function createGame(snapshot = null) {
     // Older journals recorded points without identifying recipients. The score survives.
     const ids=new Set(npcs.map(n=>n.id));
     if(Array.isArray(data.delivered)) state.delivered=new Set(data.delivered.filter(id=>ids.has(id)));
-    state.kagamiUnlocked=state.delivered.size===state.recipientTotal;
+    // The first 623 stable recipient IDs make up the complete third-edition scroll.
+    // Keep an earned transformation when that traveller opens the new pages.
+    const previousReward = (data.version === 3 || data.kagamiUnlocked === true) &&
+      npcs.slice(0,623).every(n => state.delivered.has(n.id));
+    state.kagamiUnlocked = state.delivered.size === state.recipientTotal || previousReward;
     if(player.mode==='kagami' && !state.kagamiUnlocked) player.mode='normal';
     state.score=data.score; state.time=data.time;
     state.visited=[...new Set(data.visited)];

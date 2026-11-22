@@ -55,23 +55,46 @@ def smooth(a,b,x):
     t = min(1,max(0,(x-a)/(b-a)))
     return t*t*(3-2*t)
 
+# These two profiles describe the length and local thickness of the dough.
+def lifted(h):
+    return .10*h + .90*smooth(.055,.475,h)
+
+def radial(h):
+    heel = math.exp(-((h-.178)/.122)**2)
+    waist = math.exp(-((h-.311)/.084)**2)
+    return .91 + .145*heel - .205*waist + .082*smooth(.35,.58,h)
+
 def pulled(co):
     x,y,z = co
     h = min(1,max(0,z/2.32))
-    # A continuous oval of dough with a heavy crown. Distribute tension
-    # below the cheeks; the lower flanks draw in without forming a neck.
-    rise = .20*h + .80*smooth(.035,.44,h)
-    # Carry the little palms with their surrounding flank. A height-only
-    # pull would turn the hands themselves into strips. This continuous
-    # field spans both the hand and its attachment on the skin.
-    palm = smooth(.55,.91,abs(x))*smooth(.19,.42,-y)*math.exp(-((h-.326)/.21)**4)
-    palm_rise = .20*.326 + .80*smooth(.035,.44,.326)
-    rise += (palm_rise + .12*(h-.326) - rise)*palm
-    belly = math.exp(-((h-.20)/.21)**2)
-    radius = .82-.062*belly+.17*smooth(.08,.61,h)
-    curve = .115*rise+.046*math.sin(math.pi*h)*smooth(.035,.50,h)
-    return Vector((x*radius+curve, y*(radius+.025)-.045*rise,
-                   z+1.33*rise))
+    rise = lifted(h)
+    palm_height = .326
+    palm = smooth(.49,.91,abs(x))*smooth(.12,.42,-y)*math.exp(-((h-palm_height)/.22)**4)
+    # The mitts move with their centre while the body flows through the wrist.
+    support = lifted(palm_height) + .12*(h-palm_height)
+    rise += (support-rise)*palm
+    top = z + 1.33*rise
+    radius = radial(h)
+    if palm > .00001:
+        # Match the circumference at the displaced height to the rest of the
+        # ring. A hand that rises earlier otherwise carves a long groove into
+        # the soft cushion under it. The rest silhouette here is near-ovoid.
+        lo,hi=0.,1.
+        for _ in range(14):
+            middle=(lo+hi)*.5
+            if 2.32*middle + 1.33*lifted(middle) < top:
+                lo=middle
+            else:
+                hi=middle
+        shell=(lo+hi)*.5
+        radius=radial(shell)*math.sqrt(max(.001,shell*(1-shell))/max(.001,h*(1-h)))
+    # Keep the tiny hands plump as the waist narrows. Expand around each
+    # palm centre only within the mitt; the lower flank stays continuous.
+    mitten = palm * math.exp(-((h-palm_height)/.101)**4) * (1-radius)
+    hand_x = mitten*(x-math.copysign(1.,x))
+    hand_y = mitten*(y+.63)
+    curve = .082*rise + .035*math.sin(math.pi*h)*smooth(.035,.50,h)
+    return Vector((x*radius+hand_x+curve, y*radius+hand_y-.032*rise, top))
 
 def pressed(co):
     x,y,z = co

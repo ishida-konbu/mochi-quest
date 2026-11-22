@@ -57,3 +57,45 @@ test('the exported skinned hands stay rounded through every pull of a long jump'
     assert.ok(strain.at(-1)<3.65, 'no isolated hand edge can form a long fin');
   }
 });
+
+test('each pull draws a soft waist between the round crown and the cushion above the feet', () => {
+  const [smile, pull] = geometry.morphAttributes.position;
+  // Intersect the actual surface with a horizontal plane in the front and
+  // side projections. Seam vertices alone would bias a slice toward the UVs.
+  function diameters(vertices, height) {
+    const min = [Infinity, Infinity], max = [-Infinity, -Infinity];
+    for (let i=0; i<indices.length; i+=3) {
+      for (let edge=0; edge<3; edge++) {
+        const a=vertices[indices[i+edge]], b=vertices[indices[i+(edge+1)%3]];
+        if ((a.y < height) === (b.y < height)) continue;
+        const t=(height-a.y)/(b.y-a.y);
+        for (const [axis,key] of ['x','z'].entries()) {
+          const q=a[key]+t*(b[key]-a[key]);
+          min[axis]=Math.min(min[axis],q);
+          max[axis]=Math.max(max[axis],q);
+        }
+      }
+    }
+    return max.map((q,i)=>q-min[i]);
+  }
+
+  const previous=[0,0];
+  for (const stretch of [0,.23,.46,.69,.92,1]) {
+    const vertices=Array.from({length:position.count}, (_,i)=>
+      point(position,i).add(point(smile,i)).addScaledVector(point(pull,i),stretch));
+    const lower=Math.min(...vertices.map(p=>p.y)), upper=Math.max(...vertices.map(p=>p.y));
+    const section=u=>diameters(vertices,lower+(upper-lower)*u);
+    const heel=section(.25), waist=section(.425), cheeks=section(.675);
+    for (let axis=0; axis<2; axis++) {
+      const fullness=heel[axis]/waist[axis];
+      assert.ok(fullness > previous[axis], 'the waist appears progressively over repeated taps');
+      previous[axis]=fullness;
+      if (stretch >= .69) assert.ok(fullness > 1.025, 'the lower cushion flares above the feet');
+      if (stretch === 1) {
+        assert.ok(fullness > 1.10 && fullness < 1.22, 'the lower lobe remains round at full extension');
+        assert.ok(cheeks[axis]/waist[axis] > 1.27 && cheeks[axis]/waist[axis] < 1.47,
+          'the cheeks retain their volume around a gently narrowed middle');
+      }
+    }
+  }
+});

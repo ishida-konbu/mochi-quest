@@ -11,7 +11,8 @@ import { loadRiceModel } from './mochi-model.js';
 import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS_KEY as settingsKey,
   transferURL, decodeTransfer, storeTransfer } from './journey-transfer.js';
 import { createGame } from './game.js';
-import { SPECIES } from './bestiary.js';
+import { SPECIES, dragonVisible } from './bestiary.js';
+import { BEASTS, beastDrawing } from './procession-view.js';
 import { preloadBeastCoats } from './beast-art.js';
 import { REGIONS, groundHeight, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
 import { createMeadow } from './meadow.js';
@@ -90,7 +91,11 @@ let pitch = 0.23,
   photoMode = false;
 let goal = REGIONS.some((r) => r.id === savedSettings.goal) ? savedSettings.goal : null;
 let trackedAnimal = null, jumpPin = null;
-const speciesNames = { frog:'蛙', rabbit:'兎', turtle:'ミツユビハコガメ', monkey:'猿', bird:'丹頂鶴', fox:'狐', tiger:'虎', dragon:'龍', kirin:'麒麟' };
+const speciesNames = { frog:'蛙', rabbit:'兎', turtle:'ミツユビハコガメ',
+  ...Object.fromEntries(Object.entries(SPECIES).map(([type,spec])=>[type,type==='bird'?'丹頂鶴':spec.label])) };
+function visibleRecipient() {
+  return trackedAnimal?.type === 'dragon' && !dragonVisible(p) ? null : trackedAnimal;
+}
 function nearestUndelivered(type) {
   let result = null, best = Infinity;
   for (const n of state.npcs) {
@@ -536,18 +541,21 @@ function updateHUD() {
     el.classList.toggle('major', n % 3 === 0);
     el.firstElementChild.textContent = n % 3 === 0 ? directions[(((n / 3) % 8) + 8) % 8] : '';
   });
-  const dest = trackedAnimal || REGIONS.find((r) => r.id === goal);
-  $('target').hidden = !dest;
-  if (dest) {
+  const recipient = visibleRecipient();
+  const dest = recipient || REGIONS.find(r => r.id === goal);
+  $('target').hidden = !dest && !trackedAnimal;
+  if (trackedAnimal && !recipient) {
+    $('target').textContent = '龍　十五夜の薄野で、羽二重餅に変身して上空へ';
+  } else if (dest) {
     const dx = wrapDelta(dest.x - p.x),
       dz = wrapDelta(dest.z - p.z),
       heading = Math.atan2(dx, -dz) + yaw;
     const pointer = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][
       ((Math.round(heading / (Math.PI / 4)) % 8) + 8) % 8
     ];
-    $('target').textContent = pointer + '　' + (trackedAnimal ? speciesNames[dest.type] : dest.name) + '　' + Math.round(Math.hypot(dx, dz)) + ' m' + (trackedAnimal && dest.y-p.y>2 ? '　↑ ' + Math.round(dest.y-p.y) + ' m' : '');
+    $('target').textContent = pointer + '　' + (trackedAnimal ? speciesNames[dest.type] : dest.name) + '　' + Math.round(Math.hypot(dx, dz)) + ' m' + (recipient && Math.abs(dest.y-p.y)>2 ? (dest.y>p.y ? '　↑ ' : '　↓ ') + Math.round(Math.abs(dest.y-p.y)) + ' m' : '');
   }
-  if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, trackedAnimal);
+  if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, recipient);
 }
 function openDialog(kind) {
   if (!renderer || dialog.open) return;
@@ -631,7 +639,7 @@ function journalDialog() {
   body.innerHTML='<div id="delivery-book"><div class="ledger-head"><p id="ledger-note"></p><span id="ledger-count"></span></div><div class="ledger-animals"></div></div>';
   const count=state.delivered.size, total=state.recipientTotal;
   $('ledger-count').textContent=count+' / '+total;
-  $('ledger-note').textContent=state.kagamiUnlocked ? '全員に配達しました。鏡餅で十景の旅をどうぞ。' : '動物を選ぶと、まだ届いていない一匹へご案内します。全員に届けると鏡餅が開きます。';
+  $('ledger-note').textContent=count===total ? '全員に配達しました。鏡餅で十景の旅をどうぞ。' : state.kagamiUnlocked ? '鏡餅が使えます。新しく加わった動物にも通知を届けてみましょう。' : '動物を選ぶと、まだ届いていない一匹へご案内します。全員に届けると鏡餅が開きます。';
   for (const [type,name] of Object.entries(speciesNames)) {
     const group=state.npcs.filter(n=>n.type===type);
     const number=group.filter(n=>state.delivered.has(n.id)).length;
@@ -640,13 +648,16 @@ function journalDialog() {
     row.innerHTML='<i class="animal-print" aria-hidden="true"></i><span><b></b><small></small></span><strong></strong>';
     const print=row.firstElementChild;
     if (SPECIES[type]) {
-      const sheetRow=Object.keys(SPECIES).indexOf(type)*4;
+      const drawing = beastDrawing(type);
       print.style.backgroundImage="url('./assets/residents/beasts.webp')";
-      // Crop each atlas cell to its ink silhouette; a crane and a long dragon fill the frame differently.
-      const [col, box, centerX, centerY]={monkey:[1,63,44,50], bird:[1,61,54,43], fox:[2,72,54,49],
-        tiger:[2,73,54,50], dragon:[2,79,53,43], kirin:[1,65,52,53]}[type];
-      print.style.backgroundSize=(768/box*100)+'% '+(2304/box*100)+'%';
-      print.style.backgroundPosition=((col*96+centerX-box/2)/(768-box)*100)+'% '+((sheetRow*96+centerY-box/2)/(2304-box)*100)+'%';
+      const [angle,box,cx,cy] = {
+        monkey:[1,63,44,50], bird:[1,61,54,43], fox:[2,72,54,49], tiger:[2,73,54,50],
+        dragon:[2,80,52,43], kirin:[1,67,52,53], deer:[1,73,46,46], boar:[2,73,46,53], shishi:[1,68,47,48],
+      }[type];
+      const cell = drawing.start + angle, width = BEASTS.columns*96, height = BEASTS.rows*96;
+      const x = cell%BEASTS.columns*96+cx-box/2, y = Math.floor(cell/BEASTS.columns)*96+cy-box/2;
+      print.style.backgroundSize=(width/box*100)+'% '+(height/box*100)+'%';
+      print.style.backgroundPosition=(x/(width-box)*100)+'% '+(y/(height-box)*100)+'%';
     } else {
       const art=type==='turtle' ? 'turtle' : type+'-wander';
       print.style.backgroundImage="url('../assets/actors/"+art+".webp')";
@@ -665,7 +676,7 @@ function journalDialog() {
 }
 function redrawAtlas() {
   const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
-  drawMap($('atlas'),state,yaw,selectedPlace,true,point,trackedAnimal);
+  drawMap($('atlas'),state,yaw,selectedPlace,true,point,visibleRecipient());
 }
 function selectMap(id) {
   selectedPlace = id;

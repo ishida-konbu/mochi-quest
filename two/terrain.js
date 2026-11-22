@@ -531,6 +531,29 @@ for (const t of regular.slice().sort((a,b)=>a.seed-b.seed)) {
   if (keep.size >= Math.ceil(regular.length/2)) break;
   if (springRadius(t.x,t.z)>1.4) keep.add(t);
 }
+export function hasAutumnLeaves(tree) {
+  return tree.kind === 'ginkgo' || tree.kind === 'larch' ||
+    (tree.kind === 'maple' && (tree.form !== undefined || tree.autumn > .4 || tree.seed % 4 !== 1));
+}
+// Replant the original clear sites in the maple valley. Roads, landing places
+// and bamboo elsewhere keep the same spacing as the original planting.
+const valley = trees.filter(t => REGIONS[regionAt(t.x,t.z)].id === 'autumn');
+let autumnNeeded = valley.filter(t => keep.has(t) && hasAutumnLeaves(t)).length;
+const emptySites = valley.filter(t => !keep.has(t) && !isBamboo(t));
+const mapleFamily = TREE_FAMILIES.findIndex(f => f[0] === 'maple');
+for (const t of emptySites.filter(hasAutumnLeaves)) {
+  if (!autumnNeeded) break;
+  keep.add(t);
+  autumnNeeded--;
+}
+for (const t of emptySites) {
+  if (!autumnNeeded) break;
+  if (keep.has(t) || t.form === undefined) continue;
+  t.kind = 'maple';
+  t.form = mapleFamily * TREE_FORMS_PER_FAMILY + t.form % TREE_FORMS_PER_FAMILY;
+  keep.add(t);
+  autumnNeeded--;
+}
 export const TREES = trees.filter(t => isBamboo(t) || keep.has(t));
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 

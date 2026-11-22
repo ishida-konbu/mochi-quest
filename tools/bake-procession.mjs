@@ -31,7 +31,7 @@ export async function bakeProcession() {
   for(const type of ['rabbit','frog']) {
     for (const role of ['porter','wander','sumo',...TRADES]) {
       const area=TRADES.includes(role);
-      const n={type,role,area,dye:0,stature:1,build:1,heading:0,x:0,y:0,z:0,speed:.17,phase:.4};
+      const n={type,role,area,dye:0,stature:1,build:1,heading:0,x:0,y:0,z:0,speed:.17,phase:.4,side:type==='rabbit'?-1:1};
       const actor=makeNPC(n,scene);
       animateNPC(actor,n,1.2);
       actor.shadow.visible=false;

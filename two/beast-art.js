@@ -1,11 +1,14 @@
 // Scroll silhouettes are lofted through painted cross-sections. A single atlas per
 // pelt wraps continuously across both flanks; the mane, joints and toes retain volume.
+import { prepareDragon, poseDragon } from './dragon-flight.js';
+import { kirinFrequency, hoofPhase, poseKirinLeg, poseKirinTrunk } from './animal-motion.js';
 import * as THREE from './vendor/three.module.min.js';
-import { inkVolume } from './scroll-sculpt.js';
+import { buildScrollBeast, buildQuadrupedTrunk, bindScrollSkin } from './handscroll-beasts.js';
+import { inkVolume, brushWash, brushContour } from './scroll-sculpt.js';
 import { SPECIES } from './bestiary.js';
 
 const TAU=Math.PI*2, soot='#493d35', paper='#eadbc0', ivory='#efdfbc', cinnabar='#a75142';
-const pigment={monkey:'#957057',bird:'#eae4d4',fox:'#bd7445',tiger:'#c18b49',dragon:'#648575',kirin:'#c5a46c'};
+const pigment={monkey:'#957057',bird:'#eae4d4',fox:'#bd7445',tiger:'#c18b49',dragon:'#648575',kirin:'#c5a46c',deer:'#bbae92',boar:'#968d74',shishi:'#d0bfa2'};
 const coats = new Map(), coatLoads = new Map();
 const coatLoader = new THREE.TextureLoader();
 const coatParts = {
@@ -15,6 +18,7 @@ const coatParts = {
   tiger: ['body', 'face', 'leg'],
   dragon: ['body', 'face'],
   kirin: ['body', 'face', 'leg'],
+  deer: ['body'], boar: ['body'], shishi: ['body','mane'],
 };
 
 function coat(type, detail) {
@@ -27,6 +31,7 @@ function coat(type, detail) {
       shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
         'float margin=1.-smoothstep(.015,.23,abs(dot(normalize(normal),normalize(vViewPosition))));outgoingLight*=1.-.48*margin;\n#include <opaque_fragment>');
     };
+    brushWash(material,.68);
     coats.set(key, material);
   }
   if (!coatLoads.has(key)) {
@@ -37,6 +42,7 @@ function coat(type, detail) {
       material.map = image;
       material.color.set(0xffffff);
       material.needsUpdate = true;
+      return image;
     });
     coatLoads.set(key, ready);
     // A transient fetch can retry against the same material, including clones already on stage.
@@ -74,6 +80,8 @@ function pelt(parent,type,sections,mask=false) {
   const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
   geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geo.setIndex(indices);geo.computeVertexNormals();
   const mesh=new THREE.Mesh(geo,coat(type,mask));mesh.castShadow=mesh.receiveShadow=true;parent.add(mesh);
+  // The dragon deforms the whole body in its own swimming shader.
+  if(type!=='dragon' && mask!=='leg' && mask!=='wing')brushContour(mesh);
   return mesh;
 }
 const volume=(b,s,col,steps=16)=>inkVolume(b,s,col,steps);
@@ -162,40 +170,6 @@ function antler(b,s,y,z,k=1) {
   tusk(b,[points[1],[s*.19,y+.33*k,z+.022],[s*.25,y+.44*k,z+.02]],.035*k,ivory);
   tusk(b,[points[2],[s*.4,y+.56*k,z-.20],[s*.45,y+.65*k,z-.235]],.029*k,ivory);
 }
-function paw(leg,s,h,front,type,batch) {
-  const hoof=type==='kirin',tiger=type==='tiger',back=front<0;
-  const r=tiger?.125:hoof?.072:.071;
-  const knee=back?.12:-.055, hock=back?-.128:-.009;
-  const stations=[
-    [0,.115,-.016,.058,.074],[s*.006,.038,-.004,r*1.10,r*1.22],
-    [s*.021,-h*.17,.027,r*(back?1.48:1.14),r*(back?1.64:1.19)],
-    [s*.016,-h*.40,knee,r*.85,r*(back?1.08:.85)],
-    [s*.02,-h*.58,(knee+hock)*.5,r*.66,r*.75],
-    [s*.019,-h*.71,hock,r*.57,r*.68],
-    [s*.016,-h*.82,hock+.003,r*.48,r*.51],
-    [s*.018,-h*.905,hock+.020,r*.52,r*.56],
-    [s*.016,-h*.955,hock+.060,r*.63,r*.43]
-  ];
-  pelt(leg,type,stations,'leg');
-  batch(leg,b=>{
-    const z=hock+.07, pad=hoof?'#625449':tiger?'#c49760':'#5d493d';
-    if(hoof){
-      for(const d of [-1,1]){
-        volume(b,[[s*.016+d*.023,-h*.91,z-.015,.027,.037],
-          [s*.016+d*.025,-h*.951,z,.032,.049],[s*.018+d*.026,-h*.969,z+.064,.026,.019],
-          [s*.016+d*.028,-h*.975,z+.080,.002,.003]],pad,10);
-      }
-      lock(b,[[0,-h*.43,knee-.03],[s*.030,-h*.39,knee-.112],[s*.027,-h*.33,knee-.20]],
-        .028,[s,0,.17],['#996848','#bc8b56','#765941']);
-    }else{
-      const size=tiger?1:.62;
-      b.ball(s*.017,-h*.938,z,.100*size,.056*size,.108*size,pad);
-      for(let digit=-1;digit<=1;digit++){
-        b.ball(s*.017+digit*.051*size,-h*.959,z+(.072-.014*Math.abs(digit))*size,.041*size,.031*size,.061*size,pad);
-      }
-    }
-  });
-}
 function tailBrush(b,type) {
   if(type==='tiger'){
     const path=[[0,0,0],[.03,.08,-.28],[.17,.1,-.57],[.29,.25,-.77],[.28,.48,-.91],[.21,.56,-.97]];
@@ -227,11 +201,8 @@ function quadruped(root,type,{group,batch}){
     [0,high+.035,length*.43,wide*1.04,wide*1.20],[0,high+.11,length*.69,wide*.86,wide*.91],
     [0,high+.14,length*.88,wide*.43,wide*.69]
   ];
-  pelt(body,type,trunk);
-  for(const s of [-1,1])for(const front of [-1,1]) {
-    const leg=group(body,'leg'+s+','+front,s*wide*.68,high-.047,front*length*.59);
-    paw(leg,s,high-.047,front,type,batch);
-  }
+  const neckTop=kirin?2.15:fox?.93:1.15;
+  const head=buildQuadrupedTrunk(body,type,trunk,neckTop,length,wide,group,batch,coat);
   const tail=group(body,'tail',0,high+.03,-length*.74);
   if(fox){
     pelt(tail,type,[[0,0,0,.084,.101],[.026,.018,-.22,.122,.145],[.15,.06,-.41,.175,.198],
@@ -247,14 +218,7 @@ function quadruped(root,type,{group,batch}){
       }
     });
   }else batch(tail,b=>tailBrush(b,type));
-  const neckTop=kirin?2.15:fox?.93:1.15;
-  const neck=[
-    [0,high-.06,length*.30,wide*.80,wide*.91],[0,high+.14,length*.54,wide*.86,wide*.87],
-    [0,(high+neckTop)*.5+.04,length*.73,wide*.68,wide*.74],[0,neckTop,length*.89,wide*.53,wide*.57]
-  ];
-  if(kirin)pelt(body,type,neck);
   batch(body,b=>{
-    if(!kirin)volume(b,neck,pigment[type]);
     if(kirin){
       for(let k=0;k<9;k++) {
         const t=k/8,y=high+.14+t*(neckTop-high),z=length*(.43+.39*t);
@@ -287,7 +251,6 @@ function quadruped(root,type,{group,batch}){
       b.ball(0,.747,.565,.046,.052,.043,'#c3a163');tusk(b,[[0,.73,.606],[0,.753,.611],[.006,.771,.608]],.006,soot);
     }
   });
-  const head=group(body,'mask',0,neckTop,length*.86);
   const mask=fox?.18:kirin?.22:.29, snout=fox?.38:kirin?.45:.37;
   const headStations=fox?[
     [0,.028,-.175,.037,.064],[0,.075,-.09,.146,.16],[0,.089,-.005,.183,.163],
@@ -598,16 +561,10 @@ const dragonSpine=[[-.78,1.21,-2.95,.004,.004],[-.80,.98,-3.12,.061,.073],[-.65,
   [.54,.66,-.79,.279,.291],[.45,.50,-.35,.301,.318],[.10,.52,.04,.315,.323],
   [-.24,.75,.40,.312,.32],[-.44,1.06,.70,.286,.301],[-.45,1.45,.87,.27,.284],
   [-.35,1.74,1.08,.239,.264],[-.13,1.88,1.42,.214,.243]];
-const swimming={value:0};
 function dragon(root,{group,batch}){
   const body=group(root,'trunk');
   const skin=pelt(body,'dragon',dragonSpine);
-  skin.material.onBeforeCompile=shader=>{
-    shader.uniforms.swimming=swimming;
-    shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nuniform float swimming;')
-      .replace('#include <begin_vertex>','#include <begin_vertex>\n transformed.x+=.19*sin(.98*position.z+swimming);transformed.y+=.08*cos(.82*position.z+swimming);');
-    shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>','outgoingLight*=1.-.48*(1.-smoothstep(.015,.23,abs(dot(normalize(normal),normalize(vViewPosition)))));\n#include <opaque_fragment>');
-  };
+  skin.name='龍の胴';
   const curve=new THREE.CatmullRomCurve3(dragonSpine.map(s=>new THREE.Vector3(...s.slice(0,3))));
   for(let i=0;i<18;i++){
     const t=.05+i*.051,pt=curve.getPoint(t),r=dragonSpine[Math.round(t*(dragonSpine.length-1))][4];
@@ -685,53 +642,141 @@ function dragon(root,{group,batch}){
   });
 }
 
-export function buildBeast(parent,type,builders) {
-  if(type==='monkey')simian(parent,builders);
+const brushMaterials=new WeakMap();
+export function buildBeast(parent,type,builders,variant=0) {
+  if(type==='deer'||type==='boar'||type==='shishi')buildScrollBeast(parent,type,builders,variant,coat);
+  else if(type==='monkey')simian(parent,builders);
   else if(type==='bird')crane(parent,builders);
   else if(type==='dragon')dragon(parent,builders);
-  else quadruped(parent,type,builders);
+  else {quadruped(parent,type,builders);bindScrollSkin(parent);}
+  // The studio's shared vertex-colour material also paints the buildings.
+  // Give these brush details their own reusable ink response.
+  parent.traverse(part=>{
+    const source=part.material;
+    if(!source?.vertexColors || !source.isMeshStandardMaterial)return;
+    if(!brushMaterials.has(source)) {
+      const copy=source.clone();
+      copy.onBeforeCompile=source.onBeforeCompile;copy.customProgramCacheKey=source.customProgramCacheKey;
+      brushMaterials.set(source,brushWash(copy,.57));
+    }
+    part.material=brushMaterials.get(source);
+  });
+}
+// The open-mouthed lion follows a little copper butterfly, as in scroll B.
+let butterflyWing, butterflyPaint;
+function lionButterfly(trunk) {
+  if(!butterflyWing) {
+    const outline=new THREE.Shape();
+    outline.moveTo(0,0);outline.bezierCurveTo(.09,.12,.26,.135,.30,.095);
+    outline.bezierCurveTo(.31,.043,.235,-.018,.154,-.035);
+    outline.bezierCurveTo(.20,-.075,.152,-.118,.106,-.099);
+    outline.bezierCurveTo(.044,-.09,.026,-.025,0,0);
+    butterflyWing=new THREE.ShapeGeometry(outline,16);
+    const ink=[];
+    for(let i=0;i<butterflyWing.attributes.position.count;i++){
+      const a=butterflyWing.attributes.position,x=a.getX(i),y=a.getY(i);
+      const pigment=new THREE.Color(x>.19 || y<-.071?'#534336':'#e9a641');
+      ink.push(pigment.r,pigment.g,pigment.b);
+    }
+    butterflyWing.setAttribute('color',new THREE.Float32BufferAttribute(ink,3));
+    butterflyPaint=new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide});
+  }
+  const insect=new THREE.Group();
+  for(const side of [-1,1]){
+    const wing=new THREE.Mesh(butterflyWing,butterflyPaint);wing.scale.x=side;insect.add(wing);
+  }
+  trunk.add(insect);return insect;
 }
 export function beastRig(mesh,n) {
+  bindScrollSkin(mesh);
   const joints={};mesh.traverse(o=>{if(o.isGroup&&o.name)joints[o.name]=o;});
+  if(n.type==='dragon')prepareDragon(mesh,joints);
+  if(n.type==='shishi' && !n.variant)joints.butterfly=lionButterfly(joints.trunk);
   mesh.scale.setScalar(n.stature||SPECIES[n.type].stature);
   return joints;
 }
 export function poseBeast(j,n,time) {
   const t=time+(n.phase||0),g=j.trunk,head=j.mask;
-  const walk=Math.min(1,n.speed||0),p=t*(n.type==='tiger'?2.8:3.8);
-  if(n.type==='dragon') {
-    swimming.value=t*1.12;
-    for(let i=0;i<19;i++){
-      const bone=i===18?head:j['spine'+i];
-      if(!bone.userData.bind)bone.userData.bind=bone.position.clone();
-      const bind=bone.userData.bind;
-      bone.position.x=bind.x+.19*Math.sin(.98*bind.z+swimming.value);
-      bone.position.y=bind.y+.08*Math.cos(.82*bind.z+swimming.value);
-      if(i===18)bone.rotation.y=.12*Math.cos(t*.82);
-    }
-    return;
-  }
+  const walk=Math.min(1,n.speed??1),p=t*(n.type==='tiger'?2.8:3.8);
+  const hold=n.gesture||0, variation=n.variation||0;
+  if(n.type==='dragon') {poseDragon(j,n,time);return;}
   if(n.type==='bird') {
-    const flap=t*4.35, stroke=(.24+.76*(.5+.5*Math.cos(t*.69))**2)*Math.sin(flap);
+    const flap=t*4.35, thermal=.5+.5*Math.cos(t*.51);
+    const amplitude=.18+.82*thermal*thermal;
+    const stroke=amplitude*(.79*Math.sin(flap)+.21*Math.sin(2*flap-.32));
     for(const s of [-1,1]){
-      j['wing'+s].rotation.z=s*(.11+stroke*.56);
-      j['wing'+s].rotation.y=s*(.06+.10*Math.cos(flap));
+      j['wing'+s].rotation.z=s*(.15+stroke*.69);
+      j['wing'+s].rotation.y=s*(.05+amplitude*.13*Math.cos(flap-.39));
+      j['wing'+s].rotation.x=-.07*amplitude*Math.cos(flap);
     }
-    g.rotation.z=.10*Math.sin(t*.67);g.position.y=.035*Math.cos(flap);
-    head.rotation.x=-.036*Math.cos(flap);return;
+    g.rotation.z=.11+.19*Math.sin(t*.53);
+    g.position.y=.045*amplitude*Math.cos(flap-.3);
+    head.rotation.x=-.055*amplitude*Math.cos(flap-.63);
+    head.rotation.y=.05*Math.sin(t*.62);return;
+  }
+  if(n.type==='kirin') {
+    const phase=t*kirinFrequency;
+    for(const s of [-1,1])for(const f of [-1,1]){
+      poseKirinLeg(j['leg'+s+','+f],s,phase-hoofPhase(s,f));
+    }
+    poseKirinTrunk(g,phase);
+    head.rotation.x=.030*Math.sin(phase)+.045*Math.sin(t*.48);
+    head.rotation.y=.15*Math.sin(t*.64);j.tail.rotation.y=.22*Math.sin(t*.93);return;
   }
   for(const s of [-1,1]){
     if(n.type==='monkey'){
       j['leg'+s+',1'].rotation.x=s*.45*Math.sin(p)*walk;
-      j['arm'+s].rotation.x=-s*(s===1?.16:.24)*Math.sin(p)*walk-.06;
-      j['arm'+s].rotation.z=s===1?.075*Math.sin(t*1.7):.035*Math.cos(t*1.5);
+      const arm=j['arm'+s];
+      arm.rotation.x=-s*(s===1?.16:.24)*Math.sin(p)*walk-.06;
+      arm.rotation.z=s===1?.075*Math.sin(t*1.7):.035*Math.cos(t*1.5);
+      // The scribe raises the sheet to read it, or traces a character.
+      if(s===1) {
+        arm.rotation.x-=hold*(.28+.11*Math.sin(t*3.8));
+        arm.rotation.z+=hold*(.12+.08*Math.sin(t*5));
+      } else arm.rotation.x-=hold*(variation===1?.52:.25);
     }else for(const f of [-1,1]){
       const stride=Math.sin(p+(s<0?Math.PI:0)+(f<0?Math.PI*.73:0));
-      j['leg'+s+','+f].rotation.x=stride*.31*walk;
+      const leg=j['leg'+s+','+f];
+      leg.rotation.set(stride*.31*walk,0,0);
     }
   }
-  g.position.y=.023*walk*Math.abs(Math.cos(p));g.rotation.z=.025*walk*Math.sin(p);
-  head.rotation.y=.18*Math.sin(t*.88);head.rotation.x=.032*Math.cos(p)*walk;
-  if(n.flash>0)head.rotation.z=.15*Math.sin(n.flash*6);
-  if(j.tail){j.tail.rotation.y=.24*Math.sin(t*1.43);j.tail.rotation.x=.10*Math.sin(p*.6);}
+  g.position.y=.023*walk*Math.abs(Math.cos(p));g.rotation.set(0,0,.025*walk*Math.sin(p));
+  head.rotation.set(.032*Math.cos(p)*walk,.18*Math.sin(t*.88),0);
+  if(n.type==='monkey') {
+    head.rotation.x+=hold*(.22+.11*Math.cos(t*2));head.rotation.z=.13*hold;
+  } else if(n.type==='deer'){
+    head.rotation.x+=hold*(variation===1?-.29:.88);
+    head.rotation.y+=hold*.16*Math.sin(t*2.2);
+    g.rotation.x+=.13*hold;
+  } else if(n.type==='boar'){
+    g.rotation.x=.15*hold;
+    head.rotation.x+=hold*(.44+.15*Math.cos(t*3.9));
+    head.rotation.y+=hold*.26*Math.sin(t*2.4);
+  } else if(n.type==='tiger'){
+    g.position.y-=.09*hold;g.rotation.x=.06*hold;
+    head.rotation.y+=hold*.46*Math.sin(t*.8);
+    j['leg1,1'].rotation.x-=.28*hold;
+  } else if(n.type==='fox'){
+    head.rotation.z=hold*(.32+.1*Math.sin(t*.91));
+    j['leg-1,1'].rotation.x-=hold*.60;
+  } else if(n.type==='shishi'){
+    if(n.variant===1){
+      head.rotation.z=.42*hold;head.rotation.y=-.46*hold;
+      g.rotation.z=-.11*hold;
+      const hind=j['leg-1,-1'];
+      hind.rotation.x-=hold*(1.7+.17*Math.sin(t*9));hind.rotation.z=-.71*hold;
+    } else {
+      if(j.butterfly) {
+        const insect=j.butterfly;
+        insect.position.set(.55*Math.sin(t*1.8),1.85+.24*Math.cos(t*2.4),1.54+.26*Math.cos(t*1.73));
+        insect.rotation.set(-.33,.66*Math.cos(t*1.8),.25*Math.sin(t*2.4));
+        for(const [i,wing] of insect.children.entries())wing.rotation.y=(i?1:-1)*(.77+.66*Math.sin(t*14));
+      }
+      g.rotation.x=-.19*hold;g.position.y+=hold*.075;
+      j['leg1,1'].rotation.x-=hold*(.57+.13*Math.cos(t*2.7));
+      head.rotation.x-=.27*hold;head.rotation.y+=.44*hold*Math.sin(t*1.8);
+    }
+  }
+  if(n.flash>0)head.rotation.z+=.15*Math.sin(n.flash*6);
+  if(j.tail){j.tail.rotation.y=.24*Math.sin(t*1.43)+hold*.18*Math.sin(t*2);j.tail.rotation.x=.10*Math.sin(p*.6);}
 }

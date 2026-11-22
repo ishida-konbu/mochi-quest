@@ -3,7 +3,7 @@
 // with the left and right flanks meeting the spine at 1/4 of a revolution.
 import { seeded } from '../two/terrain.js';
 const TAU=Math.PI*2;
-const pigment={monkey:'#87664e',bird:'#e6e0cc',fox:'#bd6d3f',tiger:'#c08640',dragon:'#547c74',kirin:'#8a9f86'};
+const pigment={monkey:'#87664e',bird:'#e6e0cc',fox:'#bd6d3f',tiger:'#c08640',dragon:'#547c74',kirin:'#8a9f86',deer:'#bcaa90',boar:'#9d967f',shishi:'#cbbfa1'};
 
 function paintMask(g,type) {
   const monkey=type==='monkey', tiger=type==='tiger', dragon=type==='dragon', fox=type==='fox';
@@ -189,7 +189,9 @@ export function paintBeastCoat(type,part) {
   const g=canvas.getContext('2d');g.scale(4/3,4/3);g.lineCap=g.lineJoin='round';
   const rng=seeded(318+type.charCodeAt(2)*103+part.charCodeAt(0));
   g.fillStyle=pigment[type];g.fillRect(0,0,768,384);
-  if(part==='wing')vanes(g,rng);
+  if(part==='mane')lionMane(g);
+  else if(['deer','boar','shishi'].includes(type))scrollHide(g,type,rng);
+  else if(part==='wing')vanes(g,rng);
   else if(part==='leg')legs(g,type);
   else if(part==='face')paintMask(g,type);
   else if(part==='brush')tail(g,rng);
@@ -257,4 +259,73 @@ function vanes(g,rng) {
     g.globalAlpha=1;flick(g,0,49,765,-1.5,1.5,ink);flick(g,0,47.8,743,-.3,1.8,shaft);
     g.restore();
   });
+}
+
+function scrollHide(g,type,rng) {
+  const boar=type==='boar',lion=type==='shishi';
+  const tones=boar?['#827b67','#a59c84','#b9af94','#d0c6ac']:
+    lion?['#b6ac93','#d4cab4','#e0d8c1','#eee6cf']:['#a69a7e','#bcaa8c','#d1bea1','#e5d9c0'];
+  flanks(g,()=>{
+    const wash=g.createLinearGradient(0,0,0,192);
+    [0,.37,.69,1].forEach((v,i)=>wash.addColorStop(v,tones[i]));
+    g.fillStyle=wash;g.fillRect(0,0,603,192);
+    // A reserved mane line and the flexors on the haunch and shoulder echo
+    // the shifts in pressure in the original single-colour brush drawing.
+    const strokes=lion?[[16,44,55,12,97,18],[45,67,90,51,107,45],[91,34,140,10,180,16],
+      [219,24,259,42,283,70],[244,27,282,36,307,85],[206,105,218,89,247,89]]:
+      boar?[[19,45,53,25,95,19],[42,58,102,44,122,16],[93,83,104,102,131,114],
+        [195,15,242,5,287,40],[191,76,233,92,260,113],[293,19,339,39,371,72]]:
+      [[26,62,53,36,97,25],[45,80,86,55,109,51],[38,111,51,101,59,91],
+        [195,21,243,19,267,52],[232,104,240,86,256,79],[261,101,280,88,300,91],[291,61,318,42,355,39]];
+    for(const [x,y,cx,cy,ex,ey] of strokes){
+      g.globalAlpha=.63;g.fillStyle=boar?'#554f42':'#746b55';g.beginPath();g.moveTo(x,y);
+      g.quadraticCurveTo(cx,cy-3,ex,ey);g.quadraticCurveTo(cx,cy+3,x,y);g.fill();
+    }
+    g.globalAlpha=1;
+    if(lion || !boar){
+      const spots=lion?[[62,34,3.7,5],[73,43,2.4,3.9],[75,32,2,3],[83,49,1.7,2.7],
+        [132,22,2.4,3.6],[144,29,1.7,3.6],[211,31,3,4],[223,35,1.9,3],[234,43,1.8,3],[255,56,2.4,3.7]]:[];
+      if(!lion)for(let i=0;i<59;i++){
+        const x=21+(i%19)*11.25+((i/19)|0)*2+rng()*6;
+        const y=23+Math.sin(x*.018)*10+Math.floor(i/19)*17+5*rng();
+        spots.push([x,y,2+rng()*2,1.7+rng()*1.4]);
+      }
+      for(const [x,y,rx,ry] of spots){
+        g.fillStyle=lion?'#554f42':'#e0d6bd';g.beginPath();g.ellipse(x,y,rx,ry,-.42,0,TAU);g.fill();
+        flick(g,x-rx*1.4,y+ry*.48,rx*2.15,ry*.18,.8,lion?'#a4987f':'#96886d');
+      }
+    }
+    const marks=boar?940:lion?200:330;
+    for(let k=0;k<marks;k++){
+      const x=rng()*600,y=rng()*177,base=boar?-17-rng()*29:-8-rng()*18;
+      const strokeTone=k%4?tones[1]:boar?'#645f4f':'#988d73';
+      g.globalAlpha=boar?.39:.31;
+      flick(g,x,y,base,(x<200?9:-1)+6*Math.cos(x*.016)+4*rng(),boar?1.9:1.15,strokeTone);
+    }
+    g.globalAlpha=1;
+    for(let k=0;k<11;k++){
+      const x=310+k*8.2,y=64+5*Math.cos(k);
+      flick(g,x,y,-18-3*Math.cos(k),13+k*.47,1.1,'#8c816a');
+    }
+    // Narrow bands above the fetlock and a brush dragged through its wet wash.
+    const legs=g.createLinearGradient(615,0,768,0);
+    legs.addColorStop(0,tones[1]);legs.addColorStop(.48,tones[2]);legs.addColorStop(.72,tones[1]);
+    legs.addColorStop(1,lion?'#b6aa8e':'#756e5e');g.fillStyle=legs;g.fillRect(605,0,163,192);
+    for(let k=0;k<110;k++){const x=616+rng()*145,y=rng()*190;flick(g,x,y,6+rng()*12,-2.6,1.1,k%3?tones[1]:'#756d58');}
+  });
+}
+
+function lionMane(g){
+  const wash=g.createLinearGradient(0,0,768,0);
+  wash.addColorStop(0,'#b4a58b');wash.addColorStop(.30,'#c9bba0');wash.addColorStop(.76,'#bbb099');wash.addColorStop(1,'#ad9e82');
+  g.fillStyle=wash;g.fillRect(0,0,768,384);
+  const curve=(x,i)=>i*3.7+11*Math.sin(x*.010+i*.079)+5*Math.sin(x*.018+i*.175)+7*Math.sin(i*.44+x*.004);
+  for(let i=-8;i<113;i++){
+    const wide=i%7===0?2.3:i%3===0?1.35:.72;
+    const begin=i%4*3+(i%7)*11,end=768-(i%6)*8;
+    const path=new Path2D();path.moveTo(begin,curve(begin,i));
+    for(let x=begin+7;x<end;x+=7)path.lineTo(x,curve(x,i));
+    g.strokeStyle=i%7===0?'#645c4c':i%3?'#9c907a':'#e1d4b7';
+    g.lineWidth=wide;g.stroke(path);
+  }
 }

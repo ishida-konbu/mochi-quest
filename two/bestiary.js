@@ -1,6 +1,9 @@
 // The illustrated menagerie ranges through the same ten districts as the procession.
 import { REGIONS, groundHeight, waterDepth, solidHeightAt, terrainHeight, WATER_Y, seeded, wrapCoord, wrapDelta } from './terrain.js';
 
+import { dragonWave, dragonPhase, kirinPath, walkingScore } from './animal-motion.js';
+export { dragonVisible } from './animal-motion.js';
+
 export const SPECIES = Object.freeze({
   monkey: { count:90, points:30, label:'猿', stature:1, frame:2.7, center:.88 },
   bird:   { count:40, points:30, label:'丹頂', stature:1, frame:3.5, center:.13 },
@@ -8,16 +11,20 @@ export const SPECIES = Object.freeze({
   tiger:  { count:10, points:100, label:'虎', stature:1.22, frame:3.6, center:.84 },
   dragon: { count:1, points:1000, label:'龍', stature:2.1, frame:6.2, center:1.18 },
   kirin:  { count:1, points:1000, label:'麒麟', stature:1.75, frame:4.9, center:1.72 },
+  deer:   { count:32, points:60, label:'鹿', stature:1.16, frame:3.8, center:1.24 },
+  boar:   { count:18, points:60, label:'猪', stature:1.08, frame:3.4, center:.8 },
+  shishi: { count:2, points:350, label:'獅子', stature:2.5, frame:4.4, center:1.09 },
 });
 export const isFlying = type => type==='bird' || type==='dragon';
 
+const clearanceBands=[9,25,48,73];
 let homes;
 export function wildlifeHomes(fixed) {
   if (homes) return homes;
   const random=seeded(0x81b6e), result=[];
   for (const [type, species] of Object.entries(SPECIES)) {
     for (let i=0;i<species.count;i++) {
-      const region=REGIONS[type==='dragon'?8:type==='kirin'?1:i%REGIONS.length];
+      const region=REGIONS[type==='dragon'?8:type==='kirin'?1:type==='shishi'?(i===0?2:7):i%REGIONS.length];
       let x,z;
       for (let attempt=0; ;attempt++) {
         if (attempt===2000) throw new Error('No habitat for '+type);
@@ -33,29 +40,82 @@ export function wildlifeHomes(fixed) {
       }
       const phase=random()*Math.PI*2;
       result.push({type,role:'roam',habitat:region.id,x,z,phase,stature:species.stature*(species.count===1?1:.91+random()*.18),
-        radius:type==='dragon'?15:type==='bird'?6+random()*5:1.2+random()*1.7,
-        cruise:type==='dragon'?.16:type==='bird'?.36+random()*.12:.25+random()*.16});
+        variant:type==='shishi'?i:0, manner:i%3,
+        flightBand:type==='bird'?Math.floor(i/REGIONS.length):0,
+        radius:type==='dragon'?25:type==='bird'?9+random()*6:1.2+random()*1.7,
+        cruise:type==='dragon'?.105:type==='bird'?.26+random()*.12:.25+random()*.16});
     }
   }
   homes=result;
   return homes;
 }
 
+const motion = {}, wave = {}, samplePath={};
+const altitudeCourses=new WeakMap();
+function requiredHeight(n,time) {
+  if(n.type==='kirin') kirinPath(n,time,samplePath);
+  else {
+    const angle=time*n.cruise+n.phase;
+    samplePath.x=n.homeX+n.radius*(Math.sin(angle)-Math.sin(n.phase));
+    samplePath.z=n.homeZ+n.radius*.66*(Math.cos(angle)-Math.cos(n.phase));
+    samplePath.clearance=clearanceBands[0]+3.1*Math.sin(angle*.57+n.phase)+1.5*Math.cos(angle*1.17);
+  }
+  const {x,z,clearance}=samplePath;
+  return Math.max(Math.max(WATER_Y,terrainHeight(x,z))+clearance,solidHeightAt(x,z,1.45)+2.15);
+}
+// Follow a smooth vertical envelope above the entire route. A solitary roof
+// or boulder must be cleared on approach, not with a vertical pop at its edge.
+function courseHeight(n,time) {
+  const spacing=.6, u=time/spacing, i=Math.floor(u), f=u-i;
+  let course=altitudeCourses.get(n);
+  if(!course) {course={samples:new Map(),index:NaN,levels:[]};altitudeCourses.set(n,course);}
+  if(course.index!==i) {
+    course.index=i;
+    for(const k of course.samples.keys()) if(k<i-13||k>i+14)course.samples.delete(k);
+    for(let k=i-13;k<=i+14;k++) if(!course.samples.has(k))course.samples.set(k,requiredHeight(n,k*spacing));
+    for(let j=0;j<4;j++) {
+      const middle=i+j-1;let highest=-Infinity;
+      for(let k=middle-12;k<=middle+12;k++){
+        const drop=Math.max(0,Math.abs(k-middle)-1)*spacing*(n.type==='kirin'?1.05:2.35);
+        highest=Math.max(highest,course.samples.get(k)-drop);
+      }
+      course.levels[j]=highest;
+    }
+  }
+  const [a,b,c,d]=course.levels;
+  return b+.5*f*(c-a+f*(2*a-5*b+4*c-d+f*(3*b-a-3*c+d)))+.08;
+}
+export function kirinFlight(n,time,out) {
+  kirinPath(n,time,out);
+  out.y=courseHeight(n,time);
+  out.altitude=out.y-Math.max(WATER_Y,terrainHeight(out.x,out.z));
+  return out;
+}
+
 export function moveWildlife(n,time) {
-  const angle=time*n.cruise+n.phase, air=isFlying(n.type);
+  if(n.type==='kirin') {kirinFlight(n,time,n);return;}
+  const air=isFlying(n.type);
+  if(!air) walkingScore(time,n,motion);
+  const angle=(air?time:motion.travel)*n.cruise+n.phase;
   const tx=n.homeX+n.radius*(Math.sin(angle)-Math.sin(n.phase));
   const tz=n.homeZ+n.radius*.66*(Math.cos(angle)-Math.cos(n.phase));
-  if(!air && (waterDepth(tx,tz)>.12 || solidHeightAt(tx,tz,.65)>groundHeight(tx,tz)+.22)) {
-    n.speed=0; return;
+  if(!air) {
+    n.gesture=motion.gesture;n.variation=motion.variation;
+    if(waterDepth(tx,tz)>.12 || solidHeightAt(tx,tz,.65)>groundHeight(tx,tz)+.22) {
+      n.speed=0; return;
+    }
   }
   n.x=wrapCoord(tx); n.z=wrapCoord(tz);
   n.heading=Math.atan2(Math.cos(angle),-.66*Math.sin(angle));
-  n.speed=n.radius*n.cruise*Math.hypot(Math.cos(angle),.66*Math.sin(angle));
+  n.speed=n.radius*n.cruise*Math.hypot(Math.cos(angle),.66*Math.sin(angle))*(air?1:motion.pace);
   if (air) {
     const terrain=Math.max(WATER_Y,terrainHeight(n.x,n.z));
-    const clearance=n.type==='dragon'?12.5+4.1*Math.sin(angle*.72):3.9+1.35*Math.sin(angle*1.35+n.phase);
-    n.y=Math.max(terrain+clearance, solidHeightAt(n.x,n.z,.8)+1.3);
+    const dragon=n.type==='dragon', band=n.flightBand||0;
+    const clearance=dragon?91+7*Math.sin(angle*.72)+3.5*Math.sin(angle*1.65+n.phase)
+      :clearanceBands[band]+(3.1+band*1.9)*Math.sin(angle*.57+n.phase)+1.5*Math.cos(angle*1.17);
+    n.y=dragon||band>0 ? terrain+clearance : courseHeight(n,time);
     n.altitude=n.y-terrain;
+    if(dragon) n.wavePhase=dragonPhase(time,n);
   } else n.y=groundHeight(n.x,n.z);
 }
 
@@ -69,11 +129,17 @@ const bodyVolumes = {
   dragon:[[-.59,.60,-2.86,.32,.55,.53],[-.25,.35,-2.27,.33,.39,.64],[-.09,.92,-1.66,.41,.38,.59],
           [.43,.79,-.97,.44,.48,.75],[.27,.54,-.14,.51,.42,.7],[-.28,.88,.51,.42,.53,.55],
           [-.43,1.46,.90,.39,.56,.49],[-.14,1.91,1.62,.49,.45,.83]],
+  deer:[[0,.88,0,.31,.53,.79],[0,1.39,.56,.23,.44,.31],[0,1.73,.72,.24,.23,.34]],
+  boar:[[0,.72,-.05,.4,.49,.83],[0,.58,.72,.28,.30,.44]],
+  shishi:[[0,.96,-.08,.53,.64,1.1],[0,1.39,.69,.47,.51,.51]],
   turtle:[[0,.4,.07,.58,.55,.69]],
 };
+// The seated hare's feet straddle the deer. Aim at its chest to reach it
+// independently from the flank below the saddle.
+const seatedHareVolumes=[[0,1.03,.03,.32,.38,.31],[0,1.52,.06,.24,.24,.26]];
 export function recipientContact(n,shot,dx,dz,length) {
   const rx=wrapDelta(shot.x-n.x),rz=wrapDelta(shot.z-n.z);
-  const volumes=bodyVolumes[n.type];
+  const volumes=n.ridesDeer ? seatedHareVolumes : bodyVolumes[n.type];
   if (!volumes) {
     if(shot.y<n.y-.1 || shot.y>n.y+2.15) return Infinity;
     const along=Math.max(0,Math.min(length,-rx*dx-rz*dz));
@@ -87,9 +153,11 @@ export function recipientContact(n,shot,dx,dz,length) {
   let first=Infinity;
   for(const [cx,cy,cz,w,h,d] of volumes) {
     // The sheet itself has width and a little flutter at its leading edge.
-    const a=w+.105,b=h+.14,e=d+.105, up=(y-cy)/b;
+    const dragon=n.type==='dragon';
+    if(dragon) dragonWave(cz,n.wavePhase||0,wave);
+    const a=w+.105,b=h+.14,e=d+.105, up=(y-cy-(dragon?wave.y:0))/b;
     if(Math.abs(up)>1) continue;
-    const xx=(x-cx)/a,zz=(z-cz)/e,ux=vx/a,uz=vz/e;
+    const xx=(x-cx-(dragon?wave.x:0))/a,zz=(z-cz)/e,ux=vx/a,uz=vz/e;
     const C=xx*xx+zz*zz+up*up-1;
     if(C<=0) return 0;
     const A=ux*ux+uz*uz,B=xx*ux+zz*uz,D=B*B-A*C;

@@ -40,6 +40,7 @@ function illustrationMaterial() {
     `,
       );
   };
+  brushWash(painted,.23);
   return painted;
 }
 function paintedMesh(parent, name, region, evaluate, rows = 32, sides = 48, closed = true) {
@@ -102,6 +103,7 @@ function paintedMesh(parent, name, region, evaluate, rows = 32, sides = 48, clos
   mesh.name = name;
   mesh.castShadow = mesh.receiveShadow = true;
   parent.add(mesh);
+  if(region==='hare'||region==='frog')brushContour(mesh);
   return mesh;
 }
 
@@ -210,7 +212,50 @@ const frogJaw = [
   [404, 79, 80, 0.006],
 ];
 
+// The profile texture comes from the first game's picture. These tapered lines
+// wrap its nose and lips so a three-quarter view still reads as brushwork.
+let faceInk;
+function finishFace(parent, kind) {
+  const hare=kind==='rabbit',table=hare?hareHead:frogCrown;
+  const [ox,oy,scale]=hare?[294,79,.0053]:[302,73,.00365],xyz=[],ix=[];
+  const surface=(u,angle)=>{
+    const [px,top,bottom,w]=sections(table,u),h=(bottom-top)*.5;
+    return new THREE.Vector3((w+.002)*Math.cos(angle),
+      (oy-(top+bottom)*.5)*scale+(h*scale+.002)*Math.sin(angle),(px-ox)*scale);
+  };
+  function line(points,width,out) {
+    const curve=new THREE.CatmullRomCurve3(points),start=xyz.length/3;
+    for(let i=0;i<=18;i++){
+      const t=i/18,p=curve.getPoint(t),side=curve.getTangent(t).cross(out).normalize();
+      const w=width*(.06+.94*Math.sin(t*Math.PI)**.65);
+      xyz.push(...p.clone().addScaledVector(side,w).toArray(),...p.addScaledVector(side,-w).toArray());
+      if(i){const k=start+2*i;ix.push(k-2,k-1,k,k-1,k+1,k);}
+    }
+  }
+  for(const s of [-1,1]){
+    const out=new THREE.Vector3(s,.04,.25).normalize(), on=(u,a)=>surface(u,s===1?a:Math.PI-a);
+    if(hare){
+      line([on(.976,.26),on(.933,.19),on(.894,.13),on(.863,.19)],.007,out);
+      line([on(.980,-.32),on(.929,-.69),on(.854,-.81),on(.755,-.79)],.0048,out);
+      for(let i=0;i<3;i++){
+        const p=on(.823-.020*i,-.29-.115*i);
+        line([p,p.clone().add(new THREE.Vector3(s*.068,.018-.008*i,.032)),
+          p.clone().add(new THREE.Vector3(s*(.124+.017*i),.043-.029*i,.029-.012*i))],.0019,out);
+      }
+    }else{
+      line([on(.93,-.87),on(.84,-.86),on(.72,-.81),on(.62,-.75)],.0064,out);
+      line([on(.837,.54),on(.852,.65),on(.874,.67),on(.887,.60)],.0066,out);
+      line([on(.32,-.33),on(.36,-.47),on(.405,-.54)],.0038,out);
+    }
+  }
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(xyz,3));
+  geo.setIndex(ix);geo.computeVertexNormals();
+  faceInk ||= new THREE.MeshStandardMaterial({color:'#554d40',side:THREE.DoubleSide,roughness:1});
+  parent.add(new THREE.Mesh(geo,faceInk));
+}
+
 export function sculptHead(parent, kind, role) {
+  finishFace(parent,kind);
   if (kind === 'rabbit') {
     tracedVolume(parent, '面相', 'hare', hareHead, { origin: [294, 79], scale: 0.0053 });
     for (const s of [-1, 1]) {
@@ -222,6 +267,8 @@ export function sculptHead(parent, kind, role) {
           const fan = 1 - t;
           p[0] += s * (0.077 + fan * 0.27 + fan * fan * 0.12);
           p[1] += 0.133 + fan * (s > 0 ? 0.25 : 0.14) + 0.13 * Math.sin(fan * Math.PI);
+          p[0] += s*.019*Math.sin(Math.PI*t)*level*level;
+          p[1] += .016*Math.sin(Math.PI*t)*side*side;
           p[2] -= 0.032;
           return p;
         },
@@ -447,4 +494,42 @@ export function inkVolume(b, stations, pigment, steps = 24, markings) {
   brush.computeVertexNormals();
   b.add(brush, spot ? '#89805c' : '#9c866e');
   brush.dispose();
+}
+
+export function brushWash(material,strength=.50) {
+  const prior=material.onBeforeCompile,program=material.customProgramCacheKey();
+  material.onBeforeCompile=function(shader,renderer) {
+    prior.call(this,shader,renderer);
+    shader.fragmentShader=shader.fragmentShader
+      .replace('#include <color_fragment>',`#include <color_fragment>
+        float density=dot(diffuseColor.rgb,vec3(.27,.59,.14));
+        vec3 paperInk=vec3(1.055,1.008,.877)*density;
+        paperInk=mix(paperInk,vec3(.84,.77,.62),.24*smoothstep(.076,.5,density));
+        diffuseColor.rgb=mix(diffuseColor.rgb,paperInk,${strength.toFixed(2)});`)
+      .replace('#include <opaque_fragment>',`
+        float slope=abs(dot(normalize(normal),normalize(vViewPosition)));
+        float penWidth=clamp(.045+1.55*fwidth(slope),.05,.25);
+        float line=1.-smoothstep(.012,penWidth,slope);
+        outgoingLight=mix(outgoingLight,outgoingLight*.17+vec3(.009,.007,.004),line*.86);
+        #include <opaque_fragment>`);
+  };
+  material.customProgramCacheKey=()=>program+'-emaki-pen-'+strength;
+  return material;
+}
+
+let contourMaterial;
+export function brushContour(surface) {
+  if(!contourMaterial) {
+    contourMaterial=new THREE.MeshBasicMaterial({color:'#574f40',side:THREE.BackSide});
+    contourMaterial.onBeforeCompile=shader=>{
+      shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+        float grain=.75+.19*sin(position.y*9.+position.z*4.)+.06*sin(position.x*17.);
+        transformed+=normal*(.0085*grain);`);
+    };
+  }
+  const edge=surface.isSkinnedMesh ? new THREE.SkinnedMesh(surface.geometry,contourMaterial) :
+    new THREE.Mesh(surface.geometry,contourMaterial);
+  edge.name='墨の輪郭';edge.castShadow=edge.receiveShadow=false;
+  surface.add(edge);
+  return edge;
 }
