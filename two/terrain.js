@@ -4,7 +4,7 @@ import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint, WORLD_BOUND, wrapWorld } from './geography.js';
 import { RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
-import { KYO_BUILDINGS, KYO_ROADS, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, RASHOMON } from './kyo-layout.js';
+import { KYO_BUILDINGS, KYO_ROADS, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
 import { CEDAR_GROVES, INARI_ROUTE, PEACH_TREES, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS } from './trade-routes.js';
 import { STREET_BEATS } from './street-watch-layout.js';
@@ -226,6 +226,11 @@ export function terrainHeight(x,z) {
   const r = springRadius(x,z);
   const bed = SNOW_SPRING.level-.61+smooth(.70,1.03,r)*.87;
   return bed+(native-bed)*smooth(1.08,1.60,r);
+}
+// Street processions follow the stone walking level beneath the gatehouse.
+export function roadSurfaceHeight(x,z) {
+  const step=gateStoneRise(x-RASHOMON.x,z-RASHOMON.z);
+  return step>0 ? terrainHeight(RASHOMON.x,RASHOMON.z)+step : terrainHeight(x,z);
 }
 export function waterSurfaceAt(x,z) {
   const hut=nearbyHut(x,z);
@@ -961,6 +966,7 @@ function surfaceHeight(s, x, z, pad) {
     return s.top+s.roofRise*((1-t)**1.59+.17*corner**3.8*t**1.7);
   }
   if (s.kind === 'roof') {
+    if (s.form === 'leanTo') return s.top + s.roofRise * sat(.5 - .5*b/s.rz);
     if (s.form === 'hip') return s.top + s.roofRise * hipHeight(a / s.rx, b / s.rz);
     const v = min(1, abs(b) / (s.rz * 1.12)),
       end = min(1, abs(a) / s.rx);

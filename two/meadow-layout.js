@@ -1,7 +1,7 @@
 import { WAYSIDE_HUTS,inHutYard } from './wayside-hut-layout.js';
 import { SEAPORTS,portReserved } from './seaport-layout.js';
 // One repeatable planting plan per 26 m square. All coordinates here are canonical.
-import { RASHOMON } from './kyo-layout.js';
+import { RASHOMON, GATE_STONE, GATE_WING, gateStoneRise } from './kyo-layout.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { COURT, RETREATS, reservedScenery } from './retreat-layout.js';
 import { scrollCoverage } from './scroll-paper.js';
@@ -40,7 +40,12 @@ export function meadowExclusions(objects,residents=[]) {
       }
   };
   const circle = (x,z,r) => add(x,z,r,(u,v)=>(u-x)**2+(v-z)**2 < r*r);
-  add(RASHOMON.x,RASHOMON.z,16,(x,z)=>abs(x-RASHOMON.x)<12 && abs(z-RASHOMON.z)<9);
+  const gateRadius=Math.hypot(GATE_STONE.width/2+GATE_STONE.count*GATE_STONE.going,
+    GATE_STONE.depth/2+GATE_STONE.count*GATE_STONE.going+GATE_STONE.apronDepth);
+  add(RASHOMON.x,RASHOMON.z,gateRadius,(x,z)=>{
+    const u=x-RASHOMON.x,v=z-RASHOMON.z;
+    return gateStoneRise(u,v)>0 || (abs(abs(u)-GATE_WING.x)<GATE_WING.w/2 && abs(v-GATE_WING.z)<GATE_WING.d/2+.12);
+  });
   add(COURT.x,COURT.z+11.5,29,reservedScenery);
   for(const s of RETREATS)add(s.x,s.z,11,reservedScenery);
   for(const s of WAYSIDE_HUTS)add(s.x,s.z,14,inHutYard);

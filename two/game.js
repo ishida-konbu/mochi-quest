@@ -4,7 +4,7 @@ import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
 import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
 import { SEAPORTS,relocateOldQuay } from './seaport-layout.js';
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
-import { KYO_FOOD, KYO_ANIMALS, KYO_DAY_SECONDS, kyoNight, kyoInfluence } from './kyo-layout.js';
+import { RASHOMON, GATE_STONE, GATE_WING, GATE_LEAF, KYO_FOOD, KYO_ANIMALS, KYO_DAY_SECONDS, kyoNight, kyoInfluence } from './kyo-layout.js';
 import { makeScrollResidents, updateScrollResident } from './scroll-encounters.js';
 import { SCROLL_FAUNA, makeScrollFauna, moveScrollFauna } from './scroll-fauna.js';
 import { SEA_SPECIES, makeRyuguResidents, updateRyuguResident } from './ryugu-residents.js';
@@ -174,6 +174,27 @@ function restoreKyotoLot(p,edition) {
       const heading=Math.atan2(-Math.sin(p.heading),-Math.cos(p.heading));
       return {...p,x:shop.x-dx,z:shop.z-dz,y:p.y+shop.y-base,heading,vx:-p.vx,vz:-p.vz};
     }
+  }
+  return p;
+}
+
+// Keep travellers on their original gallery, wooden stair or roof when the
+// masonry is inserted underneath. New street-level floors are resolved by
+// groundHeight during normal restore, including the stone treads.
+function restoreGateVisitor(p,edition) {
+  if(edition<7 || edition>=10 || p.mode==='kusa')return p;
+  const u=p.x-RASHOMON.x,v=p.z-RASHOMON.z,wing=GATE_WING;
+  if(Math.abs(u)>wing.x+wing.w/2+.35 || Math.abs(v)>5)return p;
+  const ground=terrainHeight(RASHOMON.x,RASHOMON.z),feet=p.y-p.h-ground;
+  const hall=Math.abs(u)<=9.80 && Math.abs(v)<=4.55;
+  const gallery=u>=4.13 && u<=10.47 && Math.abs(v+4.04)<=.80;
+  const steps=u>=8.56 && u<=10.48 && v>=-4.06 && v<=4.21;
+  if(feet>.08 && (hall || gallery || steps))p={...p,y:p.y+GATE_STONE.height};
+  // The new plaster wings and closed gate leaves both occupy formerly passable ground.
+  for(const [wall,top] of [[wing,wing.eave],[GATE_LEAF,GATE_LEAF.y+GATE_LEAF.h/2]]){
+    if(Math.abs(Math.abs(u)-wall.x)<=wall.w/2+.28 && Math.abs(v-wall.z)<=wall.d/2+.28 &&
+       p.y<ground+GATE_STONE.height+top)
+      return {...p,z:RASHOMON.z+wall.z+(v<wall.z?-1:1)*(wall.d/2+.34)};
   }
   return p;
 }
@@ -928,6 +949,7 @@ export function createGame(snapshot = null) {
       const [x,z]=relocateOldQuay(t.x,t.z),[homeX,homeZ]=relocateOldQuay(t.homeX,t.homeZ);
       t={...t,x,z,homeX,homeZ};
     }
+    visitor=restoreGateVisitor(visitor,data.version);
     if(visitor!==p && p.mount==='turtle')t={...t,x:visitor.x,z:visitor.z,homeX:visitor.x,homeZ:visitor.z};
     p=visitor;
     for (const key of Object.keys(player)) {

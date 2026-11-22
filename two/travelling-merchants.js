@@ -1,6 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { batchActorParts as paint } from './actors.js';
-import { CONNECTING_ROADS, WATER_Y, riverZ, coastX, eastCoastX, terrainHeight, wrapDelta } from './terrain.js';
+import { CONNECTING_ROADS, WATER_Y, riverZ, coastX, eastCoastX, roadSurfaceHeight, wrapDelta } from './terrain.js';
 import { courtCurtains, ferryCrew } from './kyo-procession-art.js';
 import { harnessBeast, capitalHorse } from './otsu-travellers.js';
 import { OX_SCALE } from './scroll-fauna.js';
@@ -210,9 +210,9 @@ export function createTravellers(scene) {
     walkers(time,player,camera);
     horse(time,player);
     for(const {route,root,wheels,ox,noble,speed,offset} of carts){
-      const q=cartPosition(route,time,speed,offset), bed=terrainHeight(q.x,q.z);
+      const q=cartPosition(route,time,speed,offset), bed=roadSurfaceHeight(q.x,q.z);
       if(!place(root,player,q.x,q.z,bed,q.yaw)) continue;
-      const fore=terrainHeight(q.x+3*sin(q.yaw),q.z+3*cos(q.yaw));
+      const fore=roadSurfaceHeight(q.x+3*sin(q.yaw),q.z+3*cos(q.yaw));
       root.rotation.order='YXZ';root.rotation.x=-Math.atan2(fore-bed,3);
       const look=Math.atan2(wrapDelta(player.x-q.x),wrapDelta(player.z-q.z))-q.yaw;
       noble.rotation.y=Math.max(-1.22,Math.min(1.22,Math.atan2(sin(look),cos(look))))+.08*sin(time*.56);

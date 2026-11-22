@@ -1,5 +1,6 @@
 import * as T from './vendor/three.module.min.js';
-import { RASHOMON,GATE_STEPS } from './kyo-layout.js';
+import { RASHOMON, GATE_STEPS, GATE_STONE, GATE_WING, GATE_LEAF, GATE_FRONT_EAVE } from './kyo-layout.js';
+import { drawRashomonStone } from './rashomon-stone.js';
 import { terrainHeight,wrapDelta } from './terrain.js';
 import { workshopFrame,inscriptionMaterial } from './civic-art.js';
 import { sculpture } from './pilgrimage-pigment.js';
@@ -108,21 +109,103 @@ function oldWoman(){
   const trim=new T.Mesh(art.finish(),scrollPigment());trim.castShadow=true;root.add(trim);
   return root;
 }
+// A second, shallow line of kawara shelters the approach below the balustrade.
+// Each half-round cover tile flares with the swept eave and ends over a round seal.
+function gateEave(p,f){
+  const e=GATE_FRONT_EAVE,rows=6,channels=42,samples=6,cols=channels*samples;
+  const xyz=[],uv=[],faces=[];
+  function bed(u,v){
+    const x=(u-.5)*(e.w-.94*(1-v)),z=e.back+v*(e.front-e.back);
+    const upturn=.12*Math.abs(2*u-1)**6*v*v;
+    const y=e.low+(e.high-e.low)*(1-v)**1.35+upturn;
+    return [x,y,z];
+  }
+  for(let j=0;j<=rows+1;j++)for(let i=0;i<=cols;i++){
+    const u=i/cols,v=Math.min(j/rows,1),[x,y,z]=bed(u,v);
+    const rib=Math.max(0,cos(u*channels*tau))**.7;
+    xyz.push(x,y+.083*rib-(j>rows?.095:0),z);
+    uv.push(x/3.9,v*1.35);
+    if(i<cols && j<=rows){
+      const k=j*(cols+1)+i,n=k+cols+1;
+      faces.push(k,n,k+1,k+1,n,n+1);
+    }
+  }
+  const roof=new T.BufferGeometry();
+  roof.setAttribute('position',new T.Float32BufferAttribute(xyz,3));
+  roof.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+  roof.setIndex(faces);roof.computeVertexNormals();
+  p.shapes.rashomonLowerEave=roof;
+  f.put('rashomonLowerEave',0,0,0,1,1,1,'#717970',p.roofs);
+  for(let i=0;i<=channels;i++){
+    const u=i/channels,[x,y,z]=bed(u,1);
+    f.put('tileEnd',x,y-.017,z+.008,.095,.096,1,'#dedcce',p.workshopArt.tileEnd);
+    if(i%2===1){
+      const [bx,by,bz]=bed(u,.05);
+      f.bar([bx,by-.17,bz-.31],[x,y-.18,z-.079],.072,'#936549',p.wood,true);
+    }
+  }
+  // Short scarfed segments allow the fascia to rise with the corner rafters.
+  for(let i=0;i<12;i++){
+    const [x,y,z]=bed(i/12,1),[nx,ny,nz]=bed((i+1)/12,1);
+    f.bar([x,y-.136,z-.063],[nx,ny-.136,nz-.063],.085,'#85543e',p.lacquer,true);
+  }
+}
+
+function gateWings(p,f){
+  const {x,z,w,d,eave,roofW,roofD,roofRise}=GATE_WING;
+  const footingDepth=GATE_STONE.height;
+  for(const side of [-1,1]){
+    const cx=side*x;
+    // Stagger the bed joints around the end stones where the wall leaves the dais.
+    const blocks=[0,.18,.37,.62,.80,1],headers=[0,.10,.31,.53,.73,.93,1];
+    for(const [row,cut] of [blocks,headers].entries()){
+      for(let i=1;i<cut.length;i++){
+        const u=cx+side*((cut[i]+cut[i-1])*.5-.5)*w;
+        f.put('box',u,-footingDepth+(row+.5)*footingDepth/2,z,w*(cut[i]-cut[i-1])-.014,
+          footingDepth/2-.012,d+.058,i%2?'#96968a':'#a19e90',p.stone);
+      }
+    }
+    f.put('box',cx,.103,z,w+.038,.206,d+.070,'#a7a699',p.stone);
+    f.put('box',cx,1.23,z,w,2.17,d-.16,'#e1d6bf',p.workshopArt.clay);
+    for(let i=0;i<=3;i++){
+      const u=cx+side*(i/3-.5)*(w-.16);
+      f.put('box',u,1.255,z,.145,2.20,d-.100,'#99694f',p.lacquer);
+      f.put('box',u,.254,z,.174,.125,d-.074,'#715442',p.wood);
+    }
+    f.put('box',cx,eave-.12,z,w+.14,.235,d,'#846248',p.wood);
+    f.put('hipRoof',cx,eave,z,roofW,roofRise,roofD,'#757970',p.roofs);
+    f.put('box',cx,eave+roofRise+.025,z,roofW*.466,.108,.205,'#686f67',p.roofs);
+    for(let i=-8;i<=8;i++)for(const face of [-1,1]){
+      const u=cx+i*roofW/17;
+      f.put('round',u,eave+.014,z+face*roofD*.485,.065,.105,.065,'#717970',p.fine,0,Math.PI*.5);
+      f.put('tileEnd',u,eave+.014,z+face*(roofD*.485+.053),.063,.063,1,'#d6d8ca',
+        p.workshopArt.tileEnd,face===1?0:Math.PI);
+    }
+  }
+}
+
 export function createRashomon(scene,p){
-  const y=terrainHeight(RASHOMON.x,RASHOMON.z), floor=RASHOMON.base;
+  const groundY=terrainHeight(RASHOMON.x,RASHOMON.z),y=groundY+GATE_STONE.height,floor=RASHOMON.base;
+  drawRashomonStone(scene,p,groundY);
   const f=workshopFrame(p,{...RASHOMON,yaw:0},y),put=f.put,bar=f.bar;
-  const red='#915b43',black='#55493b',weathered='#a17b58',slate='#68706b';
+  const red='#a36047',black='#55493b',weathered='#a17b58',slate='#68706b';
+  gateWings(p,f);
+  gateEave(p,f);
+  // A dressed granite seat spreads the load of each timber across the pavement.
+  p.shapes.rashomonColumnFoot=new T.LatheGeometry([[.53,0],[.54,.04],[.527,.113],
+    [.493,.151],[.413,.171],[.370,.205],[.346,.222],[.335,.250],[.008,.250]]
+    .map(([r,h])=>new T.Vector2(r,h)),28);
   for(const u of [-7.30,-3.65,3.65,7.30])for(const v of [-2.18,2.18]){
-    put('rock',u,.15,v,.64,.24,.58,'#a4a396',p.stone);
-    put('round',u,2.49,v,.32,4.94,.32,red,p.lacquer);
+    put('rashomonColumnFoot',u,0,v,1,1,1,'#b5b1a1',p.stone);
+    put('round',u,2.60,v,.32,4.70,.32,red,p.lacquer);
     for(let j=0;j<3;j++){
       put('box',u,4.12+j*.255,v,.69+j*.42,.23,.68,weathered,p.wood);
       put('box',u,4.24+j*.21,v,.39,.18,.84+j*.43,red,p.wood);
     }
   }
   for(const side of [-1,1]){
-    const mid=side*5.48;
-    put('box',mid,1.32,.04,3.48,2.55,.28,'#806247',p.boarding);
+    const door=GATE_LEAF,mid=side*door.x;
+    put('box',mid,door.y,door.z,door.w,door.h,door.d,'#806247',p.boarding);
     for(let k=-2;k<=2;k++)put('box',mid+k*.58,1.35,.211,.045,2.46,.056,black,p.wood);
     for(const h of [.64,2.02])put('box',mid,h,.225,3.43,.15,.07,'#5a4f40',p.bronze);
     for(let k=-4;k<=4;k++)put('ball',mid+.32*k,2.03,.274,.052,.058,.021,'#9e9379',p.bronze);

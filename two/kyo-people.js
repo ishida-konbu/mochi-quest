@@ -7,7 +7,7 @@ import { townPortrait, paintedSilk } from './emaki-costume.js';
 import { ancientClothing, townBody, townHeadwear, TOWNSFOLK } from './heian-dress.js';
 import { kyoNight } from './kyo-layout.js';
 import { dressedRiceFace } from './mochi-model.js';
-import { terrainHeight, wrapDelta } from './terrain.js';
+import { roadSurfaceHeight, wrapDelta } from './terrain.js';
 
 const TAU = 2 * Math.PI;
 const lanes=[
@@ -108,7 +108,7 @@ export function createStreetCrowd(scene) {
         at.x+=co*offset;at.z-=si*offset;
       } else w.shoulder=undefined;
       const gait=time*w.pace*8.8+w.phase*TAU, ripple=Math.sin(gait);
-      const y=terrainHeight(at.x,at.z);
+      const y=roadSurfaceHeight(at.x,at.z);
       const bob=.012+Math.abs(ripple)*.033;
       if(!distance.close(w,at.x+crowd.position.x,y+bob,at.z+crowd.position.z,yaw,w.scale))continue;
       const instance=counts[w.kind]++;

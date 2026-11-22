@@ -1,5 +1,5 @@
 import { inHutYard } from './wayside-hut-layout.js';
-import { inCapitalWard } from './kyo-layout.js';
+import { GATE_PAVING, RASHOMON, inCapitalWard } from './kyo-layout.js';
 import { reservedScenery } from './retreat-layout.js';
 import * as THREE from './vendor/three.module.min.js';
 import {
@@ -348,7 +348,13 @@ function scatteredHerbs(p, art) {
   const rng = seeded(831453),
     patches = new Map(),
     d = new THREE.Object3D();
+  function onGateStone(x,z,padding){
+    const u=x-RASHOMON.x,v=z-RASHOMON.z;
+    return abs(u)<20+padding && abs(v)<15+padding &&
+      GATE_PAVING.some(b=>abs(u-b.x)<=b.w/2+padding && abs(v-b.z)<=b.d/2+padding);
+  }
   const plant = (kind, x, z, size, width = 1, dir = rng() * TAU, count = 2, tint = '#f1f0dc') => {
+    if(onGateStone(x,z,size*width*.68))return;
     const y = h(x, z);
     // A verge of one lane can cross the flagstones of the perpendicular one.
     if(inCapitalWard(x,z,3) && (nearRoad(x,z,1.4) || BUILDINGS.some(b=>{
@@ -375,7 +381,7 @@ function scatteredHerbs(p, art) {
     }
   };
   const stone = (x, z, s, yaw, shade) => {
-    if (inHutYard(x,z) || reservedScenery(x,z)) return;
+    if (inHutYard(x,z) || reservedScenery(x,z) || onGateStone(x,z,s*1.18)) return;
     p.part(
       'rock',
       x,
