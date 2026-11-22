@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
-import { WAYSIDE_HUTS,KETTLE } from '../two/wayside-hut-layout.js';
+import { WAYSIDE_HUTS,KETTLE,GOEMON_SCREEN } from '../two/wayside-hut-layout.js';
 import { sitePoint } from '../two/retreat-layout.js';
 import { createPickupContacts } from '../two/pickup-contacts.js';
 import { TREES, REGIONS, riverZ, riverHalfWidth, shoreDistance, nearRoad, terrainHeight, groundHeight, waterSurfaceAt, staticVolumeAt } from '../two/terrain.js';
@@ -78,4 +78,23 @@ test('the cauldron has a solid lip around an open well and no freestanding sprin
     }
   }
   assert.ok(objects.filter(o=>o.type==='onsen').every(o=>o.grand||o.retreat||o.goemon));
+});
+
+// The furled sail and woven screens have a bent plan. Sample each bay on
+// both sides to catch an inverted rotation or a scaled-twice footprint.
+test('the kettle windbreak has two solid bays and a free path to the firemouth',()=>{
+  for(const hut of WAYSIDE_HUTS){
+    const feet=terrainHeight(hut.x,hut.z)+.72,scale=KETTLE.widthScale;
+    for(let i=1;i<GOEMON_SCREEN.length;i++){
+      const [a,b]=GOEMON_SCREEN.slice(i-1,i+1);
+      for(const t of [.22,.5,.78]){
+        const u=a[0]+t*(b[0]-a[0]),v=a[1]+t*(b[1]-a[1]);
+        const solid=offset=>staticVolumeAt(...sitePoint(hut.bath,(u+offset)*scale,v*scale),feet,.04,.28);
+        assert.equal(solid(0),true,hut.name+' screen');
+        assert.equal(solid(-.29),false,hut.name+' kettle side');
+        assert.equal(solid(.29),false,hut.name+' outer side');
+      }
+    }
+    assert.equal(staticVolumeAt(...sitePoint(hut.bath,-1.65*scale,.02),feet,.22,.6),false,hut.name+' hearth');
+  }
 });

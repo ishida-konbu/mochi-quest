@@ -1,4 +1,5 @@
 import { WAYSIDE_HUTS,KETTLE,CHAYA_SITES,CHAYA_SEAT } from './wayside-hut-layout.js';
+import { SUZURI_COURT,suzuriParcel } from './kyo-bath-layout.js';
 import { SOAK_SECONDS, floatBerth, bathingPose } from './bathing.js';
 import { planTurtleLeg } from './turtle-trail.js';
 import { BELL_FIRST, BELL_INTERVAL, noticeBellDistance, templeBellHour } from './kiyomizu-bell.js';
@@ -1316,6 +1317,17 @@ export function createGame(snapshot = null) {
           feet=groundHeight(player.x,player.z);
           if(p.mount==='turtle')t={...t,x:player.x,z:player.z,homeX:player.x,homeZ:player.z};
         }
+      }
+      // A visitor saved in the old square can be inside the new plaster
+      // perimeter. Restore an obstructed stance to the open street entrance.
+      const inkstone=RETREATS.find(s=>s.shape==='suzuri');
+      const dx=player.x-inkstone.x,dz=player.z-inkstone.z,c=Math.cos(inkstone.yaw),k=Math.sin(inkstone.yaw);
+      const stance=groundHeight(player.x,player.z,feet)+player.h;
+      if(suzuriParcel(dx*c-dz*k,dx*k+dz*c,bodyRadius()+.24) &&
+         !canOccupy(player.x,player.z,stance,bodyRadius(),bodyHeight())){
+        [player.x,player.z]=sitePoint(inkstone,0,SUZURI_COURT.front+1.86);
+        feet=groundHeight(player.x,player.z);
+        if(p.mount==='turtle')t={...t,x:player.x,z:player.z,homeX:player.x,homeZ:player.z};
       }
       const ship=voyage.sample(player.x,player.z,feet);
       player.y=Math.max(groundHeight(player.x,player.z,feet),ship?.floor ?? -Infinity)+player.h;

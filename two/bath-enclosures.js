@@ -1,5 +1,8 @@
+import { hasPilgrimBathhouse,addPilgrimFurnitureSolids } from './pilgrim-lodge-plan.js';
 // The narrow end of the bath court faces the road (+v). The same carpenter's
 // dimensions locate the screens in the picture, the graded earth and the walls.
+import { suzuriParcel, suzuriTerrace, suzuriSolids } from './kyo-bath-layout.js';
+import { addVillageWorkshopSolids,addVillageYardSolids } from './village-workshop-plan.js';
 import { regionalSpringLip } from './regional-springs.js';
 
 const designs={
@@ -12,12 +15,26 @@ const designs={
   maple:   ['crag','shake','split',1.15,2.65,1.22,'#624e40','#807764','#9c5746','楓'],
   susuki:  ['moor','hip','reed',1.0,2.78,1.26,'#75644f','#978465','#786885','弓月'],
   dawn:    ['dawn','hip','bamboo',1.0,2.89,1.18,'#7a624f','#8b7c69','#a76847','暁'],
-  // The inkstone occupies the little open square in front of the painted machiya.
   peach:   ['farm','steep','woven',1.0,2.58,1.23,'#795e4b','#a18c67','#9b6175','花桃'],
   temple:  ['temple','hipTile','plaster',.66,3.18,1.50,'#644b3b','#73695a','#736573','蓮華'],
   inari:   ['grove','shake','bamboo',1.05,2.80,1.29,'#85513d','#726b55','#a05a43','稲荷'],
   tsuruga: ['harbor','shake','split',.62,3.00,1.34,'#655b4b','#706f65','#5d7480','船溜'],
   sakai:   ['town','tile','lattice',.66,3.12,1.34,'#5e5146','#716962','#4e756d','千鳥'],
+};
+// A traveller can read which road the little washing shelter serves from its
+// roofline. Dimensions also set the solid posts, dry seat and walkable roof.
+const waysideShelters={
+  cedar:   ['bark','split',2.84,1.58,1.99,.82,'#635743'],
+  reed:    ['thatch','reed',2.71,1.49,1.97,.97,'#827153'],
+  slate:   ['slate','split',2.73,1.48,1.91,.48,'#655e53'],
+  coast:   ['hull','woven',3.05,1.55,2.00,.66,'#80705b'],
+  maple:   ['shake','bamboo',2.83,1.54,2.00,.78,'#765740'],
+  susuki:  ['thatch','woven',2.97,1.50,2.11,.82,'#837058'],
+  snow:    ['snow','split',2.75,1.56,2.02,.98,'#686052'],
+  sakai:   ['tile','lattice',2.94,1.55,2.12,.77,'#655549'],
+  peach:   ['thatch','bamboo',2.79,1.49,2.04,.88,'#80674e'],
+  tsuruga: ['shake','split',2.95,1.54,1.97,.61,'#6b6153'],
+  capital: ['bark','lattice',2.86,1.51,2.13,.72,'#715d4d'],
 };
 const plans=new WeakMap();
 export function bathEnclosure(s){
@@ -64,9 +81,9 @@ export function bathEnclosure(s){
     }
     plan={style,roof,wall,wood,roofTint,dye,motif,closed,w,fore,room,segments,annex,trough};
   }else if(s.rank==='sub'){
-    // A two-person lean-to sits beyond the small pool's upstream edge.
-    const u=Math.min(1.35,s.rx*.39),v=-s.rz*1.25-1.42;
-    plan={small:true,room:{u,v,w:2.56,d:1.32,eave:1.91,rise:.42},segments:[]};
+    const [cover,wall,w,d,eave,rise,wood]=waysideShelters[s.kind];
+    const u=Math.min(1.35,s.rx*.39),v=-s.rz*1.25-.76-d/2;
+    plan={small:true,cover,wall,wood,room:{u,v,w,d,eave,rise},segments:[]};
   }
   plans.set(s,plan);return plan;
 }
@@ -94,6 +111,7 @@ function apronEdge(plan,u,v){
   return edge;
 }
 export function bathEnclosureGround(s,u,v) {
+  if(s.shape==='suzuri')return suzuriTerrace(u,v);
   const plan=bathEnclosure(s);
   if(!plan)return 0;
   // The visible hillside is sampled every 2.5 metres. Give the floor joists
@@ -105,15 +123,19 @@ export function bathEnclosureGround(s,u,v) {
   return 1-t*t*(3-2*t);
 }
 export function bathEnclosureReserved(s,u,v) {
+  if(s.shape==='suzuri')return suzuriParcel(u,v,.62);
   const plan=bathEnclosure(s);
   if(!plan)return false;
   if(plan.closed && Math.abs(u)<plan.w+.7 && v>plan.room.v-plan.room.d/2-.70 && v<plan.fore+.80)return true;
   return apronEdge(plan,u,v)<.94;
 }
 export function addBathEnclosureSolids(s,add) {
+  if(s.shape==='suzuri')return suzuriSolids(add);
   const plan=bathEnclosure(s);
   if(!plan)return;
   const r=plan.room;
+  addVillageWorkshopSolids(s,r,add);
+  addVillageYardSolids(s,plan,add);
   if(plan.annex){
     const a=plan.annex;
     for(const side of [-1,1])for(const end of [-1,1])
@@ -145,10 +167,12 @@ export function addBathEnclosureSolids(s,add) {
     add(r.u+side*r.w/2,r.v,.13,r.d,r.eave-.2,'wall');
     add(r.u+side*r.w/2,r.v+r.d/2,.14,.14,r.eave,'wall');
   }
+  addPilgrimFurnitureSolids(s,plan,add);
   add(r.u,r.v,r.w+.15,r.d+.18,.18,'floor',true);
   add(r.u,r.v-.15,r.w*.57,.39,.60,'box',true);
   add(r.u,r.v,r.w+.66,r.d+.65,r.eave,'ceiling');
-  const roof=add(r.u,r.v,r.w+.66,r.d+.65,r.eave,'roof',true);
+  const roof=add(r.u,r.v,r.w+.66,r.d+.65+(s.kind==='dawn'&&s.rank==='main'?.56:0),r.eave,'roof',true);
+  if(hasPilgrimBathhouse(s)){roof.pilgrimKind=s.kind;roof.pilgrimDepth=(r.d+.65)/2;roof.thickness=.13;}
   roof.roofRise=r.rise;
   if(plan.roof==='hip'||plan.roof==='hipTile')roof.form='hip';
   if(s.kind==='earthen'&&!plan.small)

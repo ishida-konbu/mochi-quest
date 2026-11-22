@@ -1,6 +1,10 @@
+import { hasPilgrimBathhouse } from './pilgrim-lodge-plan.js';
 import * as T from './vendor/three.module.min.js';
+import { dressSuzuriCourt } from './kyo-bath-art.js';
 import { bathEnclosure } from './bath-enclosures.js';
 import { regionalBackWall, dressRegionalCarpentry } from './regional-bath-carpentry.js';
+import { isVillageWorkshop } from './village-workshop-plan.js';
+import { dressWaysideShelter } from './wayside-bath-shelter.js';
 import { paintScrollAnimal } from './craftwork.js';
 
 const PI=Math.PI, cloths=new Map(), panels=new Map();
@@ -156,8 +160,26 @@ function hallmark(p,f,plan){
 function room(p,f,plan,s){
   const r=plan.room,{u,v,w,d,eave,rise}=r;
   const small=plan.small,wood=plan.wood??'#786952',wall=plan.wall??'reed';
+  if(isVillageWorkshop(s)){
+    washBench(p,f,r,wood);
+    if(s.kind==='susuki'){
+      // The grassland remains in moonlight. Open wicks still light the room
+      // while the city lamps follow their own clock. These share its light pool.
+      for(const [x,z,scale] of [[-2.39,-.31,1.05],[2.43,.50,.81]]){
+        const at=f.at(u+x,.18,v+z);
+        p.lamps.candle(at.x,at.y,at.z,scale);
+      }
+    }
+    return;
+  }
   f.put('box',u,-.22,v,w+.15,.78,d+.18,'#897e67',p.stone);
   f.put('box',u,.147,v,w+.17,.064,d+.21,'#b09a74',p.deck);
+  if(hasPilgrimBathhouse(s)){
+    // The bank's commissioned lodge supplies the posts, windows, roof and
+    // regional fittings. Retain the walkable deck and its shared wash bench.
+    washBench(p,f,r,wood);
+    return;
+  }
   if(!regionalBackWall(p,f,plan))screen(p,f,u,v-d/2,w,0,eave-.26,wall,wood);
   for(const side of [-1,1]){
     screen(p,f,u+side*w/2,v,d,PI/2,eave-.25,wall,wood);
@@ -168,6 +190,11 @@ function room(p,f,plan,s){
   }
   for(const z of [v-d/2,v+d/2])
     f.put('box',u,eave-.13,z,w+.24,.19,.20,wood);
+  if(small){
+    dressWaysideShelter(p,f,plan,s);
+    washBench(p,f,r,wood);
+    return;
+  }
   const hip=plan.roof==='hip'||plan.roof==='hipTile';
   const tiles=plan.roof==='tile'||plan.roof==='hipTile';
   const straw=['hip','steep'].includes(plan.roof)||small;
@@ -187,7 +214,6 @@ function room(p,f,plan,s){
     }
   }
   washBench(p,f,r,wood);
-  if(small)return;
   for(const side of [-1,1]){
     const post=u+side*w/2,front=v+d/2;
     f.bar([post, eave-.65,front],[post-side*.55,eave-.17,front],.074,wood,p.wood,true);
@@ -196,6 +222,7 @@ function room(p,f,plan,s){
   hallmark(p,f,plan);
 }
 export function dressBathEnclosure(p,f,s,level){
+  if(s.shape==='suzuri')return dressSuzuriCourt(p,f,s,level);
   const plan=bathEnclosure(s);
   if(!plan)return;
   room(p,f,plan,s);

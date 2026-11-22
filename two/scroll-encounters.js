@@ -14,7 +14,7 @@ function districtScene(habitat, name, x, z, cast) {
   scene(habitat, name, ...districtPoint(habitat,x,z), cast);
 }
 // Species, action, and position in the group. Pairs share their beat.
-districtScene('kyo','tea',114.3,-414.3,[
+districtScene('kyo','tea',114,-436,[
   ['frog','tea',-1.1,0], ['rabbit','bow',1.3,.8], ['monkey','read',-.6,3],
 ]);
 districtScene('kyo','music',126.2,-435.6,[

@@ -1958,7 +1958,7 @@ function createWaysideHuts(scene) {
         else{
           root=buildWaysideHut(s.kind,s.variant,s.bank);
           if(s.bath){
-            const bath=buildGoemonBath(s.variant);
+            const bath=buildGoemonBath(s.variant,s.kind,s.bank);
             bath.position.set(BATH_YARD[0],0,BATH_YARD[1]);
             root.add(bath);
           }

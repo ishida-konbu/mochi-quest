@@ -16,6 +16,7 @@ const clearings=[
 ];
 export const BATH_YARD=[2.35,4.25];
 export const KETTLE={widthScale:1.22,radius:1.08,lip:1.15,board:.84,water:1.035};
+export const GOEMON_SCREEN=[[1.74,-1.09],[2.15,.17],[2.19,1.58]];
 export const KETTLE_STEPS=[
   {z:2.65,top:.23},{z:2.15,top:.46},{z:1.65,top:.69},{z:1.23,top:.92},
 ];
@@ -112,6 +113,12 @@ export function hutSolids(height,put){
     const scale=KETTLE.widthScale,radius=KETTLE.radius*scale;
     put(x,z,radius,radius,s.yaw,y+KETTLE.lip,'kettleRim',true);
     put(x,z,scale,scale,s.yaw,y+KETTLE.board,'oval',true);
+    for(let bay=1;bay<GOEMON_SCREEN.length;bay++){
+      const [ax,az]=GOEMON_SCREEN[bay-1],[bx,bz]=GOEMON_SCREEN[bay];
+      const [px,pz]=sitePoint(s.bath,(ax+bx)*scale/2,(az+bz)*scale/2);
+      put(px,pz,.055*scale,Math.hypot(bx-ax,bz-az)*scale/2+.04,
+        s.yaw+Math.atan2(bx-ax,bz-az),y+1.62,'wall',false);
+    }
     for(const step of KETTLE_STEPS){
       const [sx,sz]=sitePoint(s.bath,0,step.z*scale);
       put(sx,sz,.58*scale,.27*scale,s.yaw,y+step.top,'floor',true);

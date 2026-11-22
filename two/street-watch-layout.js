@@ -10,7 +10,7 @@ const city=DISTRICTS.kyo;
 // The coordinates follow the kerbs, just outside the paving. Each man serves
 // two nearby hearths. The torch in his right hand comes down over the basket.
 const quarters=[
-  ['朱雀の辻',[4.90,-5,pi/2],[-18,4.50,0],[[3.81,3.45]],-3],
+  ['朱雀の辻',[4.90,-5,pi/2],[-18,3.91,0],[[3.81,3.45]],-3],
   ['羅生門前',[4.88,73,pi/2],[4.90,45,pi/2],[],3],
   ['北大路',[-4.85,-69,-pi/2],[-4.85,-38,-pi/2],[],4],
   ['西の市',[-85,4.60,0],[-51,4.60,0],[],-3],

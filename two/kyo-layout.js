@@ -135,8 +135,11 @@ for(const [street,v] of crossings.entries())for(const side of [-1,1]){
       'wardShop',wares[id]]);
   }
 }
-export const KYO_BUILDINGS = houses.map(([x,z,...plan]) => [...districtPoint('kyo',x,z), ...plan]);
-export const KYO_SCREENS=houses.flatMap(([x,z,w,d,,,yaw],shop)=>{
+// The dyer's full plot is now the washing wing of the inkstone bath. Keep
+// the original parcel in the street survey above, including its delivery lane.
+const wardHouses=houses.filter(([x,z,,,,,,,trade])=>!(x===94 && z===-414 && trade==='dye'));
+export const KYO_BUILDINGS = wardHouses.map(([x,z,...plan]) => [...districtPoint('kyo',x,z), ...plan]);
+export const KYO_SCREENS=wardHouses.flatMap(([x,z,w,d,,,yaw],shop)=>{
   if((z!==-445 && z!==-400) || Math.abs(x-120)!==11) return [];
   const side=Math.sign(Math.sin(yaw)*(z+424));
   const offset=side*(w*.5+1.05),width=d*.68;

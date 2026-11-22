@@ -401,5 +401,5 @@ export function dressRegionalBath(p,f,s,level) {
     const h=size*(s.kind==='susuki'?1.28:1);
     f.put('regionalPlant-'+key,u,ground-.028,v,h,h,h,'#fff',p.stems,i*2.40+s.index*.39);
   }
-  marker(p,f,s,sign,c);
+  if(!writingDesk)marker(p,f,s,sign,c);
 }

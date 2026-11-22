@@ -256,5 +256,5 @@ export function createLampCollection(p){
       }
     };
   }
-  return {shoji,uniforms,candle,covered,stoneLantern,house,hearth,finish};
+  return {shoji,uniforms,candle,andon,covered,stoneLantern,house,hearth,finish};
 }

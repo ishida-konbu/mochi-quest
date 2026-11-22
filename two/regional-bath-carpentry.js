@@ -1,6 +1,8 @@
+import { hasPilgrimBathhouse } from './pilgrim-lodge-plan.js';
 import * as T from './vendor/three.module.min.js';
 import { coveredGable } from './civic-art.js';
 import { sitePoint } from './retreat-layout.js';
+import { isVillageWorkshop } from './village-workshop-plan.js';
 import { terrainMeshHeight } from './terrain.js';
 
 const PI=Math.PI;
@@ -121,6 +123,7 @@ export function regionalBackWall(p,f,plan){
   moonWindow(p,f,plan.room,plan);return true;
 }
 function ridgeCraft(p,f,s,plan){
+  if(hasPilgrimBathhouse(s))return;
   const {room:r,wood}=plan,top=r.eave+r.rise;
   if(s.kind==='earthen'){
     // The hot jar room vents steam through an elevated slatted ridge monitor.
@@ -191,6 +194,6 @@ function steppingStones(p,f,s,plan,level){
 export function dressRegionalCarpentry(p,f,s,plan,level){
   if(plan.annex)annex(p,f,s,plan);
   if(plan.trough.length)aqueduct(p,f,s,plan);
-  ridgeCraft(p,f,s,plan);
+  if(!isVillageWorkshop(s))ridgeCraft(p,f,s,plan);
   steppingStones(p,f,s,plan,level);
 }

@@ -1,3 +1,4 @@
+import { pilgrimRoofContact,snowLamp } from './pilgrim-lodge-plan.js';
 import { SNOW_TOWN, FOREST_LAKE, SNOW_PASS, LAKE_ISLET, isletRadius, snowPoint, lakeRadius, lakePoint } from './snow-country.js';
 import { LAKE_WILLOWS, LAKE_ANIMALS } from './lake-grove-layout.js';
 import { lakeHokoraSolids } from './lake-hokora-layout.js';
@@ -1398,7 +1399,10 @@ for(const step of BATH_STEPS) putSolid(SNOW_SPRING.x,SNOW_SPRING.z+step.z,1.32,.
   SNOW_SPRING.level+step.top,'floor',true);
 // The snow pavilion has an open front and a slatted rear wall.
 const pavilionZ=SNOW_SPRING.z-8.9, pavilionBase=SNOW_SPRING.level+.52;
-putSolid(SNOW_SPRING.x,pavilionZ,4.70,2.095,0,pavilionBase+3.56,'roof',true,1.46);
+putSolid(SNOW_SPRING.x+snowLamp.x,SNOW_SPRING.z+snowLamp.z,snowLamp.w/2,snowLamp.d/2,0,
+  SNOW_SPRING.level+snowLamp.h,'springRock',true).roundHeight=1.85;
+const snowyRoof=putSolid(SNOW_SPRING.x,pavilionZ,4.70,2.36,0,pavilionBase+3.56,'roof',true,1.46);
+snowyRoof.pilgrimKind='snow';snowyRoof.pilgrimDepth=2.095;snowyRoof.thickness=.24;
 for (const dx of [-3.67,0,3.67]) for (const dz of [-1.13,1.06])
   putSolid(SNOW_SPRING.x+dx,pavilionZ+dz,.095,.095,0,pavilionBase+3.50,'wall',false);
 putSolid(SNOW_SPRING.x,pavilionZ-1.30,4.06,.11,0,pavilionBase+3,'wall',false);
@@ -1482,6 +1486,7 @@ function surfaceHeight(s, x, z, pad) {
     dz = z - s.z,
     a = dx * s.c - dz * s.s,
     b = dx * s.s + dz * s.c;
+  if (s.pilgrimKind)return pilgrimRoofContact(s,a,b,pad);
   if (s.kind === 'bell') {
     // The bronze waist narrows toward the shoulder. Each vertical line meets
     // the same piecewise-conical profile used by the cast metal and notices.

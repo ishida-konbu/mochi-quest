@@ -28,19 +28,11 @@ export function dressSnowBath(p,frame,light) {
     f.part('box',x,py+.11,pz+z,.36,.27,.37,'#8e8d81',p.stone);
   }
   for(const z of [-1.13,1.06])f.part('box',0,py+3.32,pz+z,8.35,.29,.28,'#735445',p.wood);
-  f.part('roof',0,py+3.43,pz,9.34,1.45,4.12,'#4e5d61',p.roofs);
-  f.part('roof',0,py+3.56,pz,9.40,1.46,4.19,'#e7eeef',p.fine);
-  f.part('box',0,py+5.02,pz,8.79,.16,.29,'#eaf1f1');
-  // A short linen half-curtain and fine icicles frame the washing bay; the
-  // stair on the centre line remains open beneath the snow-loaded eave.
+  // The wind-formed cornice, rafters and icicles are part of the lodge's
+  // sculpted roof. Its six posts and floor have matching winter solids.
   const cloth=washCurtain({dye:'#556877',motif:'雪灯'},'snow');
   f.link([-3.55,py+3.12,pz+1.12],[-.48,py+3.12,pz+1.12],.043,'#72644b',p.wood);
   f.part('plane',-2.02,py+2.58,pz+1.12,2.87,.98,1,'#fff',cloth);
-  p.shapes.snowEaveIce??=new T.ConeGeometry(1,1,6).rotateZ(Math.PI);
-  for(let i=0;i<22;i++){
-    const x=-4.31+.401*i,size=.13+.22*(.5+.5*Math.sin(i*2.42+.4));
-    f.part('snowEaveIce',x,py+3.51-size*.5,pz+2.00,.033,size,.029,'#dbe7df',p.fine,0,0,.02*Math.sin(i));
-  }
   for(let j=0;j<28;j++) {
     const x=(j-13.5)*.294;
     f.part('pole',x,py+1.54,pz-1.30,.102,2.91,.102,'#ae9a6d',p.wood);

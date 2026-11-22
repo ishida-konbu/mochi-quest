@@ -49,7 +49,7 @@ export function sitePoint(site,u,v) {
 const siteCells=new Map();
 for (const s of RETREATS) {
   // Beyond this rectangle bathTerrain has fully blended back to native ground.
-  const reach=Math.max(14,Math.ceil(Math.max(s.rx,s.rz)*1.32*1.86),Math.ceil(s.rz*1.25+8));
+  const reach=Math.max(s.shape==='suzuri'?24:14,Math.ceil(Math.max(s.rx,s.rz)*1.32*1.86),Math.ceil(s.rz*1.25+8));
   const entry={site:s,reach2:reach*reach};
   for(let a=Math.floor((s.x-reach)/32);a<=Math.floor((s.x+reach)/32);a++)
     for(let b=Math.floor((s.z-reach)/32);b<=Math.floor((s.z+reach)/32);b++){
@@ -183,8 +183,10 @@ export function civicAndBathSolids(height,put) {
       const {inlet,sign}=regionalBathFittings(s,springLip);
       add(inlet.u,inlet.v-.20,inlet.w,1.34,.72,'oval',true);
       add(inlet.u,inlet.v+.04,1.18,1.92,inlet.h,'box',true).bottom=level+.62;
-      add(sign.u,sign.v-.07,.13,.13,1.33,'wall');
-      add(sign.u,sign.v,sign.w,sign.d,sign.h,'wall').bottom=level+.89;
+      if(s.shape!=='suzuri'){
+        add(sign.u,sign.v-.07,.13,.13,1.33,'wall');
+        add(sign.u,sign.v,sign.w,sign.d,sign.h,'wall').bottom=level+.89;
+      }
     }else{
       for(const q of waysideBankRocks(s))add(q.u,q.v,2*q.w,2*q.d,1.20*q.h,'oval',true,q.yaw);
     }

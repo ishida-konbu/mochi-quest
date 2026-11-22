@@ -1,5 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 import { sculpture } from './pilgrimage-pigment.js';
+import { carveSuzuriStone } from './suzuri-stonecut.js';
 import { basinFinishes,rimPoint,rimSection } from './main-bath-rims.js';
 
 const tau=2*Math.PI;
@@ -54,21 +55,20 @@ export function buildBasinVessel(site){
   // Winding runs up the wet inside and faces the sky across the top.
   shell.setIndex(faces);shell.computeVertexNormals();
   const art=sculpture();art.add(shell,'#fff');
+  if(type==='slab'){
+    carveSuzuriStone(art,sectionAt);
+    return art.finish();
+  }
   const mark=basinFinishes[site.kind][6];
   // Lashing across the top and down the face gives the timber baths scale.
   // Grooves and gold-inlaid ribs pick out the fan pleats and the shell flutes.
-  const marks={lashing:24,fan:19,flute:26,petal:16,slab:18,leaf:20};
+  const marks={lashing:24,fan:19,flute:26,petal:16,leaf:20};
   for(let i=0,n=marks[type]||0;i<n;i++){
     const a=(i+.19)*tau/n,r=sectionAt(a);
     if(r.bank<.95)continue;
     const point=(d,y,slide=0)=>[r.u+r.nx*d-r.nz*slide,y,r.v+r.nz*d+r.nx*slide];
     const top=r.top+.013,w=r.width;
-    if(type==='slab'){
-      // Fine cloud curls cut into the broad grinding land of the inkstone.
-      if(Math.sin(a)>-.16)continue;
-      art.stroke(mark,[point(.25*w,top),point(.44*w,top,.12),point(.61*w,top,.06),
-        point(.62*w,top,-.07),point(.49*w,top,-.075),point(.48*w,top,-.016)],[.003,.016,.018,.016,.011,.002],12);
-    }else if(type==='lashing'||type==='fan'){
+    if(type==='lashing'||type==='fan'){
       for(const offset of type==='lashing'?[-.042,.042]:[0])
         art.stroke(mark,[point(-.27*w,top*.64,offset),point(-.25*w,top*.94,offset),
           point(-.09*w,top+.005,offset),point(.63*w,top+.005,offset),point(.80*w,top*.88,offset),point(.8*w,top*.48,offset)],
@@ -89,8 +89,9 @@ export function basinMaterial(p,site){
   const palette=materials.get(p);
   if(palette.has(type))return palette.get(type);
   const wood=type==='lashing'||type==='fan',glaze=type==='rolled'||type==='flute';
+  const slate=type==='slab';
   const mat=new T.MeshStandardMaterial({vertexColors:true,side:T.DoubleSide,
-    roughness:glaze?.38:wood?.82:.71,metalness:type==='bead'?.21:.025});
+    roughness:slate?.43:glaze?.38:wood?.82:.71,metalness:slate?.09:type==='bead'?.21:.025});
   mat.onBeforeCompile=shader=>{
     shader.uniforms.carvingGrain={value:wood?p.wood.map:p.stone.map};
     shader.vertexShader='varying vec3 carvedPoint; varying vec3 carvedNormal;\n'+shader.vertexShader
@@ -108,6 +109,11 @@ export function basinMaterial(p,site){
         diffuseColor.rgb *= ${wood?'(.72+.58*m)':'(.77+.54*field)'};
         ${glaze?`float pool=.5+.5*sin(49.*turn+10.*field+sin(34.*turn));
         diffuseColor.rgb*=.89+.15*pool*smoothstep(.09,.45,p.y);`:''}
+        ${slate?`float bedding=p.z*.78+p.y*2.1+.28*sin(.82*p.x)+.19*field;
+        float grain=sin(36.*bedding+1.3*sin(p.x*2.+field*5.));
+        float lamina=smoothstep(.80,.98,grain)*smoothstep(.09,.44,field);
+        diffuseColor.rgb*=vec3(.95,1.03,1.04)*(.94+.057*grain+.074*field);
+        diffuseColor.rgb+=vec3(.012,.013,.012)*lamina*(.28+.72*abs(carvedNormal.y));`:''}
         diffuseColor.rgb*=1.-.21*tide;
       `)
       .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(roughnessFactor-.26*tide+.10*(field-.3),.18,.96);');
