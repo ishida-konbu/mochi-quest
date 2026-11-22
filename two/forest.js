@@ -40,6 +40,14 @@ function fade(shader, far) {
     } else if(baked>0. && baked<1.) baked=step(screenSeed,baked);
     ${far?'if(baked<.5) discard;':'if(baked>.5) discard;'}`);
 }
+// A row pair gives the ink of bare wood and leaves for one form and aspect.
+// Both representations use the same palette in the changeover.
+const crownPalette = `uniform sampler2D crownWashes;
+  vec3 crownWash(vec3 color,float leaf,float row){
+    float tone=sqrt(clamp(dot(color,vec3(.28,.56,.16)),0.,1.));
+    vec2 uv=vec2((.5+255.*tone)/256.,1.-(row+leaf+.5)/${TREE_FORM_COUNT*4}.);
+    return texture2D(crownWashes,uv).rgb;
+  }`;
 export function* prepareForest(scene, clock) {
   const trees = TREES.filter(t=>t.form!==undefined);
   // Count the largest group of near trees a camera cell can actually see.
@@ -91,6 +99,11 @@ export function* prepareForest(scene, clock) {
     texture.anisotropy=4;
     return texture;
   }
+  // Keep the full-resolution geometry bake for both styles. The small palette
+  // translates its original highlights into dilute ink without blurring twigs
+  // or allocating another full crown texture on a phone.
+  const washes=read('kyo-crown-washes');
+  washes.generateMipmaps=false;washes.minFilter=THREE.LinearFilter;washes.anisotropy=1;
   const denseMaterial=forestMaterial(read('forest-sprays'));
   const heroView = {value:new THREE.Vector3()}, heroRadius = {value:new THREE.Vector2()};
   const twoSidedFoliage = denseMaterial.onBeforeCompile;
@@ -99,10 +112,19 @@ export function* prepareForest(scene, clock) {
     shader.uniforms.forestClock=clock;
     shader.uniforms.heroView=heroView;
     shader.uniforms.heroRadius=heroRadius;
-    shader.vertexShader=phaseDeclaration+'uniform float forestClock; attribute vec3 crownStyle; varying vec3 canopyView;\n'+shader.vertexShader.replace('#include <begin_vertex>',
+    shader.uniforms.crownWashes={value:washes};
+    shader.vertexShader=phaseDeclaration+'uniform float forestClock; attribute vec4 crownStyle; varying vec3 canopyView,nearWash;\n'+shader.vertexShader.replace('#include <begin_vertex>',
       `#include <begin_vertex>
        vec3 root=instanceMatrix[3].xyz;
        ${crownVertex}
+       vec2 ray=cameraPosition.xz-root.xz;
+       float aspect=step(abs(dot(ray,instanceMatrix[2].xz)),abs(dot(ray,instanceMatrix[0].xz)));
+       float tint=1.;
+       #ifdef USE_INSTANCING_COLOR
+         tint=instanceColor.r;
+       #endif
+       nearWash=vec3((crownStyle.w+aspect*${TREE_FORM_COUNT}.)*2.,tint,
+         inkTree*smoothstep(.57,.80,forestDistance/crownStyle.z));
        transformed.x+=.0055*pow(max(0.,position.y),1.6)*sin(root.x*.18+root.z*.12+forestClock*1.25+position.y*2.);
       `);
     shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>',
@@ -125,7 +147,7 @@ export function* prepareForest(scene, clock) {
     fade(shader,false);
     // Perspective-project the branch fragment onto the plane of the hero. Only
     // fragments in front of the body enter the softly feathered viewing cone.
-    shader.fragmentShader='uniform vec3 heroView; uniform vec2 heroRadius; varying vec3 canopyView;\n'+
+    shader.fragmentShader=crownPalette+'\nuniform vec3 heroView; uniform vec2 heroRadius; varying vec3 canopyView,nearWash;\n'+
       shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
         if(inkTree>0.) {
           // Near the footpath each folded spray carries a wash. Bark and the
@@ -140,8 +162,17 @@ export function* prepareForest(scene, clock) {
           vec3 culm=mix(vec3(.046,.064,.038),vec3(.35,.41,.22),lift);
           bark=mix(bark,culm,inkBamboo);
           vec3 pigment=mix(bark, wash*(1.-.52*fringe),treeLeaf);
+          if(nearWash.z>0.) {
+            // Approximate the atlas bake's diffuse exposure before looking up
+            // this form's wash. Preserve the live spray and twig coverage.
+            vec3 baked=diffuseColor.rgb*(.83/nearWash.y);
+            vec3 print=crownWash(baked,treeLeaf,nearWash.x)*nearWash.y*(.89+.11*diffuseColor.a);
+            pigment=mix(pigment,print,nearWash.z);
+          }
           diffuseColor.rgb=mix(diffuseColor.rgb,pigment,inkTree);
         }
+      `).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        normal=normalize(mix(normal,viewMatrix[1].xyz,nearWash.z));
       `).replace('#include <opaque_fragment>', `
         // A low spray touching the chase camera dissolves before its leaf card
         // fills the screen. The trunk and the high canopy still frame the path.
@@ -160,7 +191,7 @@ export function* prepareForest(scene, clock) {
   const near = [];
   for (let i=0; i<TREE_FORM_COUNT; i++) {
     const shape=forestGeometry(i);
-    shape.setAttribute('crownStyle',new THREE.InstancedBufferAttribute(new Float32Array(totals[i]*3),3)
+    shape.setAttribute('crownStyle',new THREE.InstancedBufferAttribute(new Float32Array(totals[i]*4),4)
       .setUsage(THREE.DynamicDrawUsage));
     const mesh=new THREE.InstancedMesh(shape,denseMaterial,totals[i]);
     mesh.name='Grove • '+i;
@@ -183,11 +214,6 @@ export function* prepareForest(scene, clock) {
   geo.setAttribute('treeForm',forms);
   geo.setAttribute('crownStyle',styles);
   const farMaterial=new THREE.MeshLambertMaterial({map:read('forest-crowns'),alphaTest:.30,side:THREE.FrontSide});
-  // Keep the full-resolution geometry bake for both styles. The small palette
-  // translates its original highlights into dilute ink without blurring twigs
-  // or allocating another full crown texture on a phone.
-  const washes=read('kyo-crown-washes');
-  washes.generateMipmaps=false;washes.minFilter=THREE.LinearFilter;washes.anisotropy=1;
   farMaterial.onBeforeCompile=shader=>{
     shader.uniforms.crownWashes={value:washes};
     shader.vertexShader=phaseDeclaration+'attribute vec4 rootHeight; attribute vec3 treeForm,crownStyle; varying float forestTint,washRow;\n'+
@@ -204,14 +230,12 @@ export function* prepareForest(scene, clock) {
         forestTint=treeForm.z;
         washRow=(treeForm.x+aspect*${TREE_FORM_COUNT}.)*2.;
       `).replace('#include <project_vertex>',brushProjection('rootHeight.w'));
-    shader.fragmentShader='uniform sampler2D crownWashes; varying float forestTint,washRow;\n'+
+    shader.fragmentShader=crownPalette+'\nvarying float forestTint,washRow;\n'+
       shader.fragmentShader.replace('#include <map_fragment>', `
         vec4 crown=texture2D(map,vMapUv);
         if(inkTree>0.) {
-          float tone=sqrt(dot(crown.rgb,vec3(.28,.56,.16)));
           float leaf=smoothstep(.82,.99,(crown.g+.0001)/(crown.r+.0001));
-          vec2 swatch=vec2((.5+255.*tone)/256.,1.-(washRow+leaf+.5)/${TREE_FORM_COUNT*4}.);
-          vec3 wash=texture2D(crownWashes,swatch).rgb;
+          vec3 wash=crownWash(crown.rgb,leaf,washRow);
           crown.rgb=mix(crown.rgb,wash*(.89+.11*crown.a),inkTree);
         }
         diffuseColor*=crown;
@@ -274,7 +298,7 @@ export function* prepareForest(scene, clock) {
           transform.position.set(x,ground,z);transform.rotation.y=rotation;transform.scale.setScalar(tree.h);
           transform.updateMatrix();mesh.setMatrixAt(idx,transform.matrix);
           mesh.setColorAt(idx,tint.setRGB(brightness,brightness,brightness));
-          mesh.geometry.attributes.crownStyle.setXYZ(idx,wash,bambooWash,reach);
+          mesh.geometry.attributes.crownStyle.setXYZW(idx,wash,bambooWash,reach,tree.form);
         }
         if(d2>(detailStart-STEP-1)**2) {
           roots.setXYZW(used,x,ground,z,tree.h);
@@ -291,7 +315,7 @@ export function* prepareForest(scene, clock) {
       mesh.instanceColor.clearUpdateRanges();mesh.instanceColor.addUpdateRange(0,3*mesh.count);
       mesh.instanceColor.needsUpdate=true;
       const style=mesh.geometry.attributes.crownStyle;
-      style.clearUpdateRanges();style.addUpdateRange(0,3*mesh.count);style.needsUpdate=true;
+      style.clearUpdateRanges();style.addUpdateRange(0,4*mesh.count);style.needsUpdate=true;
     }
     geo.instanceCount=used;
     for(const attribute of [roots,forms,styles]){
