@@ -8,6 +8,7 @@ import { SNOW_SPRING, wrapDelta } from './terrain.js';
 import * as THREE from './vendor/three.module.min.js';
 import { buildPounding } from './mochi-pounding.js';
 import { addSpringSurface } from './spring-water.js';
+import { addSazaeBath } from './ryugu-shell-bath-art.js';
 import { finishResident, residentLimb, residentTorso } from './resident-art.js';
 import { inkVolume, sculptHead, scrollParasol } from './scroll-sculpt.js';
 import { buildTurtle } from './turtle-art.js';
@@ -1642,13 +1643,15 @@ function makeObject(o, parent) {
     steam.position.y=line;mesh.add(steam);
   } else if(o.retreat) {
     mesh=new THREE.Group();
-    addSpringSurface(mesh,o.retreat.rx,o.retreat.rz,.52,o.retreat);
+    const offset=o.retreat.level!=null?o.retreat.level-o.y:.52;
+    if(o.retreat.kind==='sazae')addSazaeBath(mesh);
+    addSpringSurface(mesh,o.retreat.rx,o.retreat.rz,offset,o.retreat);
     const pools=bathPools(o.retreat);
     if(pools){
       smallerMist=pools.map((q,i)=>{
         const heat=q.mist??1;
         const mist=particles('steam',Math.round((7+3*q.rx)*heat));
-        mist.position.set(q.u,.52+q.y,q.v);
+        mist.position.set(q.u,offset+q.y,q.v);
         mist.scale.set(1,.83*heat,q.rz/q.rx);
         mesh.add(mist);
         return {mist,spread:q.rx*.80,phase:i*.58};

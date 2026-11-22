@@ -2,8 +2,9 @@ import { villagePools,villageStations,villagePoolLip } from './village-bath-cour
 import { pilgrimPools,pilgrimStations,pilgrimPoolLip,pilgrimCustomInlet } from './pilgrim-bathing-plan.js';
 import { isVillageWorkshop } from './village-workshop-plan.js';
 import { suzuriStations } from './kyo-bath-layout.js';
+import { SAZAE_POOLS } from './ryugu-shell-bath.js';
 
-export function bathPools(site){return villagePools(site) ?? pilgrimPools(site);}
+export function bathPools(site){return site.kind==='sazae'?SAZAE_POOLS:villagePools(site) ?? pilgrimPools(site);}
 export function bathStations(site){return villageStations(site) ?? pilgrimStations(site) ?? suzuriStations(site);}
 export function hasOwnInlet(site){
   return isVillageWorkshop(site) || pilgrimCustomInlet(site);

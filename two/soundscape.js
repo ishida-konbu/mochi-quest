@@ -7,6 +7,7 @@ import { kyoNight, kyoInfluence } from './kyo-layout.js';
 import { MOUNTAIN_STREAMS } from './mountain-streams.js';
 import { POUNDING } from './festival.js';
 import { createTempleBell } from './kiyomizu-bell.js';
+import { palaceInteriorAt } from './ryugu-layout.js';
 
 const places = Object.fromEntries(REGIONS.map(place => [place.id, place]));
 const loops = { bamboo: 27, river: 24, wind: 23, crickets: 25, shore: 29, paddy: 21,
@@ -64,7 +65,7 @@ const steps = {
 
 export function footSurface(p) {
   if (p.inWater) return 'water';
-  if (bridgeAt(p.x, p.z) || Number.isFinite(overheadHeight(p.x, p.z, p.y))) return 'wood';
+  if (palaceInteriorAt(p.x,p.z,p.y) || bridgeAt(p.x, p.z) || Number.isFinite(overheadHeight(p.x, p.z, p.y))) return 'wood';
   const climate = seasonAt(p.x, p.z);
   if (climate.snow > .44) return 'snow';
   if (shoreDistance(p.x, p.z) < 8) return 'sand';
@@ -215,12 +216,13 @@ export function createSoundscape(ctx, master) {
     const weights = landscapeMix(p,climate,state.inariWeather);
     // A narrow torii lintel catches drops but admits sound from both sides.
     // Only a roof or bridge deck muffles the outdoor mix along the ascent.
-    const roof = Number.isFinite(overheadHeight(p.x, p.z, p.y, 0, state.regionId === 'inari'));
+    const inPalace=palaceInteriorAt(p.x,p.z,p.y);
+    const roof = inPalace || Number.isFinite(overheadHeight(p.x, p.z, p.y, 0, state.regionId === 'inari'));
     inside=roof;
     const submerged=clamp((p.diveDepth||0)/4);
     outdoor.frequency.setTargetAtTime((roof?1250:14000)*(1-submerged)+690*submerged,now,.22);
     for (const layer of layers) mixBed(layer, weights[layer.name] * (roof ? .4 : 1), now);
-    const scoreId=state.regionId==='ryugu' && !p.diveDepth ? 'coast' : state.regionId;
+    const scoreId=state.regionId==='ryugu' && !p.diveDepth && !inPalace ? 'coast' : state.regionId;
     for (const score of scores) mixBed(score, score.id === scoreId ? (roof ? .087 : .105) : 0, now);
     if (objectList !== state.objects) {
       objectList = state.objects;
@@ -228,7 +230,7 @@ export function createSoundscape(ctx, master) {
     }
     bathGain = 0;
     for (const bath of baths) {
-      const volume = proximity(p, bath, 13);
+      const volume = reach(Math.hypot(wrapDelta(bath.x-p.x),wrapDelta(bath.z-p.z),(bath.y??p.y)-p.y),13);
       if (volume > bathGain) { nearestBath = bath; bathGain = volume; }
     }
     load('footfalls', now);

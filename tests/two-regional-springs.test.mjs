@@ -8,6 +8,7 @@ import { addSpringSurface } from '../two/spring-water.js';
 import { bankSculpture } from '../two/main-bath-art.js';
 import { tableauFooting } from '../two/main-bath-rims.js';
 import { KYO_SCREENS } from '../two/kyo-layout.js';
+import { SAZAE_SPRING,SAZAE_POOL } from '../two/ryugu-shell-bath.js';
 import { WAYSIDE_HUTS } from '../two/wayside-hut-layout.js';
 import { REGIONS, SNOW_SPRING, groundHeight, regionAt, staticVolumeAt, terrainHeight, terrainMeshHeight, springLevel,waterSurfaceAt } from '../two/terrain.js';
 import { RETREATS, bathRadius, sitePoint, springLip } from '../two/retreat-layout.js';
@@ -39,14 +40,40 @@ function walk(game,destination,label){
 }
 
 const retiredIds=new Set([0,6,12,18,24,30,36,58,64].map(i=>'onsen-'+i));
+test('walk from the upper palace boards into the shell, resume the soak, and step back out',()=>{
+  const s=SAZAE_SPRING,game=createGame(),p=game.state.player;
+  const [x,z]=sitePoint(s,0,4);
+  Object.assign(p,{x,z,y:s.level,h:0,grounded:true,hp:16,mp:12});
+  game.step(1/60);
+  assert.equal(p.inWater,false);
+  walk(game,[s.x,s.z],'nacre treads to the bath seat');
+  assert.ok(p.inWater && p.grounded);
+  assert.equal(game.nearest()?.place,SAZAE_POOL);
+  assert.equal(p.activity,null);
+  assert.ok(game.act('interact'));
+  game.step(.1);
+  const reopened=createGame(game.save()),bather=reopened.state.player;
+  assert.ok(reopened.restored);
+  assert.equal(bather.bathPose.id,'sazae-mouth');
+  assert.equal(bather.bathPose.action,'jar');
+  assert.equal(bather.bathWaterY,waterSurfaceAt(bather.x,bather.z,0,bather.y));
+  assert.notEqual(bather.bathWaterY,waterSurfaceAt(bather.x,bather.z,0,s.level-5));
+  for(let i=0;i<36;i++)reopened.step(.1);
+  assert.equal(bather.hp,100);assert.equal(bather.mp,100);
+  walk(reopened,[x,z],'shell treads back to the dry upper gallery');
+  assert.equal(bather.inWater,false);
+  assert.equal(bather.y,s.level);
+  assert.equal(reopened.save().lastBath,null);
+});
+
 test('the spring inventory preserves the historical IDs around the retired trail baths',()=>{
   const {objects}=createGame().state;
   const old=objects.filter(o=>historicIds.includes(o.id));
   assert.deepEqual(old.map(o=>o.id),historicIds.filter(id=>!retiredIds.has(id)));
   const springs=objects.filter(o=>o.type==='onsen' && !o.goemon);
   const mains=springs.filter(o=>o.rank==='main'),subs=springs.filter(o=>o.rank==='sub');
-  assert.equal(mains.length,16);
-  assert.deepEqual(new Set(mains.map(o=>o.region)),new Set(REGIONS.filter(r=>r.id!=='ryugu').map(r=>r.id)));
+  assert.equal(mains.length,17);
+  assert.deepEqual(new Set(mains.map(o=>o.region)),new Set(REGIONS.map(r=>r.id)));
   assert.equal(subs.length,11);
   for(const s of subs){
     assert.ok(mains.every(m=>Math.hypot(s.x-m.x,s.z-m.z)>60),s.id+' away from main baths');
@@ -252,7 +279,7 @@ test('running through any bath only offers the named action; legacy village soak
   for(const o of g.state.objects.filter(o=>o.type==='onsen')){
     const pool=o.retreat && bathPools(o.retreat)?.[0];
     const [x,z]=pool?sitePoint(o.retreat,pool.u,pool.v):[o.x,o.z];
-    Object.assign(p,{x,z,y:groundHeight(x,z),activity:null,invulnerable:2,grounded:true,h:0});
+    Object.assign(p,{x,z,y:groundHeight(x,z,o.y),activity:null,invulnerable:2,grounded:true,h:0});
     g.step(1/60);
     assert.equal(p.activity,null,o.id+' waits for E');
     const choice=g.nearest();

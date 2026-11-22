@@ -21,7 +21,8 @@ export function createWake(scene) {
       next = (next + 1) % rings.length;
       ring.born = last = t;
       ring.strength = Math.min(1, 0.39 + p.speed * 0.12);
-      ring.mesh.position.set(p.x, waterSurfaceAt(p.x,p.z) + 0.029, p.z);
+      const level=p.bathWaterY ?? waterSurfaceAt(p.x,p.z,t,p.y);
+      ring.mesh.position.set(p.x, level + .029, p.z);
     }
     for (const { mesh, born, strength } of rings) {
       const age = (t - born) / 1.36;

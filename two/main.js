@@ -20,7 +20,8 @@ import { seaPortrait } from './ryugu-performers.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
 import { preloadBeastCoats } from './beast-art.js';
 import { WAYSIDE_SITES } from './wayside-hut-layout.js';
-import { REGIONS, regionAt, WATER_Y, terrainHeight, shoreDistance, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
+import { REGIONS, regionAt, canDiveAt, waterSurfaceAt, terrainHeight, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
+import { palaceInteriorAt, palaceStoreyAt } from './ryugu-layout.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
 import { inariWeatherAt } from './inari-weather.js';
@@ -132,6 +133,7 @@ let nextFrame = 0,
 const keys = new Set(),
   stick = { id: null, x: 0, y: 0 },
   look = { id: null, x: 0, y: 0 };
+const swimmingControls = () => !p.activity && !p.mount && p.inWater && (p.diveDepth>0 || canDiveAt(p.x,p.z,p.y));
 let jumpTouch = false, diveTouch = false,
   lastFace = '',
   lastMode = '',
@@ -268,11 +270,13 @@ function togglePhoto() {
     photoTime = state.time;
     const bath=p.bathPose,reclining=bath?.recline || 0;
     const seated=bathPosture(bath?.action);
-    yaw=actors.hero.rotation.y+(bath?.action==='rinse' ? 1.34 : seated ? .48 : -.77*reclining);
+    const shellBath=bath?.id==='sazae-mouth';
+    yaw=shellBath?bath.heading-.74:actors.hero.rotation.y+(bath?.action==='rinse' ? 1.34 : seated ? .48 : -.77*reclining);
     pitch=seated?seated.camera:.105+.68*reclining;
     const portrait=camera.aspect<.83;
     const floatingDistance=portrait ? Math.max(5.63,3.18/camera.aspect) : 3.99;
-    distance = THREE.MathUtils.lerp(portrait?3.48:2.95,floatingDistance,reclining)*(1+.64*p.airStretch);
+    distance = shellBath ? (portrait?6.4:5.3) :
+      THREE.MathUtils.lerp(portrait?3.48:2.95,floatingDistance,reclining)*(1+.64*p.airStretch);
     p.emote = null;
     updateEmotes();
   } else {
@@ -369,7 +373,7 @@ $('leap').onpointerdown = (e) => {
   e.preventDefault();
   e.currentTarget.setPointerCapture(e.pointerId);
   jumpTouch = true;
-  action('jump');
+  if(swimmingControls())unlock();else action('jump');
 };
 $('leap').onlostpointercapture = () => {
   jumpTouch = false;
@@ -451,7 +455,7 @@ document.addEventListener('keydown', (e) => {
   if (/^Digit/.test(e.code)) action(MODES[+e.code.slice(-1)][0]);
   if (e.code === 'KeyZ') action('throw');
   if (e.code === 'KeyE') action('interact');
-  if (e.code === 'Space') action('jump');
+  if (e.code === 'Space' && !swimmingControls()) action('jump');
 });
 document.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => {
@@ -481,12 +485,14 @@ function updateCamera(dt, snap = false) {
   else focus.lerp(heroAt, 1 - Math.exp(-dt * 13));
   let cameraYaw=yaw;
   const indoor=bath?.action==='rinse'||bath?.action==='steam';
-  if(indoor && !photoMode && Number.isFinite(bath.heading)){
-    // From the aisle see both face and ladle. A head-on view would put
-    // the camera inside the wall behind the tap in the little machiya.
+  const shellBath=bath?.id==='sazae-mouth';
+  if((indoor || shellBath) && !photoMode && Number.isFinite(bath.heading)){
     const rel=Math.atan2(Math.sin(yaw-bath.heading),Math.cos(yaw-bath.heading));
-    const threeQuarter=(rel<0?-1:1)*(bath.action==='rinse'?1.64:.94);
-    cameraYaw+=(threeQuarter-rel)*.84*settle;
+    // From the shell's open side, the face, pearl lip and spire are all
+    // visible. For the washing bench, stay in the aisle beside the ladle.
+    const threeQuarter=shellBath?-.74:(rel<0?-1:1)*(bath.action==='rinse'?1.64:.94);
+    const turn=threeQuarter-rel;
+    cameraYaw+=Math.atan2(Math.sin(turn),Math.cos(turn))*.84*settle;
   }
   const sx = Math.sin(cameraYaw),
     sz = Math.cos(cameraYaw),
@@ -512,15 +518,16 @@ function updateCamera(dt, snap = false) {
   // While the grass mochi is inside a trunk, start the camera ray on the
   // outward side of that trunk. A second wall still shortens the camera arm.
   const diving = p.diveDepth > 0;
+  const inPalace = palaceInteriorAt(p.x,p.z,p.y);
   let emerging = !diving && p.mode === 'kusa' && staticVolumeAt(focus.x,focus.z,focus.y-.15,.15,.30);
   for (let i = 1, n = Math.ceil(Math.hypot(dx,dy,dz) / .25); i <= n; i++) {
     const t = i / n,
       x = focus.x + dx * t,
       z = focus.z + dz * t,
       y = focus.y + dy * t;
-    if (diving) {
+    if (diving || inPalace) {
       if (staticVolumeAt(x,z,y-.15,.15,.30)) {
-        fraction = Math.max(.12,(i-1)/n);
+        fraction = (i-1)/n;
         break;
       }
       continue;
@@ -541,11 +548,12 @@ function updateCamera(dt, snap = false) {
   eye.x += dx * fraction;
   eye.y += dy * fraction;
   eye.z += dz * fraction;
-  if (diving && focus.y < WATER_Y - .24) {
+  if (diving) {
     // Pass through the waterline with the mochi even when the camera is tilted down.
-    eye.y=Math.min(eye.y, WATER_Y-.24);
+    const line=waterSurfaceAt(p.x,p.z,state.time,p.y);
+    if(focus.y < line-.24)eye.y=Math.min(eye.y,line-.24);
   }
-  const eyeFloor = diving ? terrainHeight(eye.x,eye.z) : emerging ? landscapeFloor(eye.x,eye.z) : groundHeight(eye.x,eye.z,eye.y);
+  const eyeFloor = diving || inPalace ? terrainHeight(eye.x,eye.z) : emerging ? landscapeFloor(eye.x,eye.z) : groundHeight(eye.x,eye.z,eye.y);
   eye.y = Math.max(eye.y, eyeFloor + .2);
   camera.position.copy(eye);
   aim.copy(focus);
@@ -562,9 +570,10 @@ function updateCamera(dt, snap = false) {
 }
 const fullScore = new Intl.NumberFormat('ja-JP');
 const shortScore = new Intl.NumberFormat('ja-JP', { notation:'compact', maximumFractionDigits:1 });
+const palaceRooms=['','竜宮城・一階','竜宮城・二階','竜宮城・三階湯殿'];
 let lastScore = -1;
 function updateHUD() {
-  $('region').textContent = state.region;
+  $('region').textContent = palaceRooms[palaceStoreyAt(p.x,p.z,p.y)] || state.region;
   $('region').parentElement.hidden = !!state.onLake;
   $('delivered-count').textContent = (state.delivered?.size || 0) + ' / ' + (state.recipientTotal ?? state.npcs.length);
   cards.get('kagami').hidden = !state.kagamiUnlocked;
@@ -596,13 +605,14 @@ function updateHUD() {
     lastFace = faceKey;
   }
   const effects = [];
-  const openSea = p.inWater && !p.mount && shoreDistance(p.x,p.z) < 0;
-  $('dive').hidden = !openSea;
-  $('leap').setAttribute('aria-label', p.diveDepth ? '浮上する' : 'ジャンプ');
-  if (openSea) {
+  const swimming = swimmingControls();
+  $('dive').hidden = !swimming;
+  $('leap').setAttribute('aria-label', swimming ? '長押しで浮上する' : 'ジャンプ');
+  $('space-hint').textContent = swimming ? '浮上・↓と同時で潜る' : '跳ぶ・連打で伸びる';
+  if (swimming) {
     const depth = Math.max(1,Math.round(p.diveDepth));
     effects.push(p.diveDepth ? '水深 '+depth+' m' + (coarse ? ' ・ 跳ぶ長押しで浮上' : ' ・ Spaceで浮上') :
-      (coarse ? '泳ぎ ・ 潜る長押し' : '泳ぎ ・ ↓で潜る'));
+      (coarse ? '泳ぎ ・ 潜る長押し' : '泳ぎ ・ Space＋↓で潜る'));
   }
   if (p.mount) effects.push(p.mount === 'bike' ? '電動自転車' : 'カメに騎乗中');
   for (const [k, n] of Object.entries({
@@ -811,7 +821,7 @@ function selectMap(id) {
     dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。',
     kyo: '南の石段を上り、羅生門をくぐって京へ。門の東脇の木階段は老婆が暮らす楼上へ、西の大路は評定所へ通じます。夕暮れには衛士が辻の篝火を灯し、軒の提灯と家々の行燈が浮かびます。大路から東を望めば「福」、北には「大」の送り火。都の南東、地図の「清」が清水寺です。舞台から西を望むと京が一望できます。鐘楼の梵鐘には三条通知が届きます。',
     peach: '竹隠れの社から西へ、尾根の間を縫う谷道をたどってください。山あいを抜けると桃林が開けます。里には花桃の瓢湯が湧き、木陰の土俵では兎と蛙が相撲を取っています。',
-    ryugu: '海風の松原から西へ泳ぎ、'+(coarse?'「潜る」':'↓ キー')+'を長押しして海底へ。真珠灯籠と海亀・鯛・蛸の一座をたどり、楼門の先の御朱印所へ。'+(coarse?'「跳ぶ」':'Space キー')+'を長押しすると浮上します。',
+    ryugu: '海風の松原から西へ泳ぎ、'+(coarse?'「潜る」':'Space＋↓')+'を長押しして海底へ。真珠灯籠をたどり、楼門の先の御朱印所へ。御殿の水門をくぐると内海に出ます。正面の段から板間へ上がり、二つの階段をたどると三階の「栄螺の壺湯」です。',
     todaiji: '回廊の先に、蓮の座に鎮まる大餅仏。参道で鹿が兎に一礼し、脇では猿と兎が筆を運びます。',
     tsuruga: '京から北山の麓をたどった先、北の入り江に開いた敦賀の津。昆布や塩を扱う家の先に、大船をつなぐ桟橋があります。甲板の船梯子を下ると荷の積まれた船倉です。',
     sakai: '京の南西の湊町。陶器や染布を荷造りする商家を抜けると、外洋をめぐる大船が出入りする波止場です。',
@@ -937,10 +947,11 @@ function frame(now) {
   previous = now;
   const left = Number(keys.has('ArrowLeft') || keys.has('KeyA')),
     right = Number(keys.has('ArrowRight') || keys.has('KeyD'));
-  const seaControls = p.inWater && !p.mount && shoreDistance(p.x,p.z) < 0;
+  const swimming=swimmingControls(), backward=keys.has('ArrowDown') || keys.has('KeyS');
+  const diveChord=swimming && keys.has('Space') && backward;
   const forward =
     Number(keys.has('ArrowUp') || keys.has('KeyW')) -
-    Number((!seaControls && keys.has('ArrowDown')) || keys.has('KeyS')) -
+    Number(backward && !diveChord) -
     stick.y;
   yaw += (Number(keys.has('KeyQ')) - Number(keys.has('KeyR'))) * delta * 1.65;
   if (!photoMode) {
@@ -952,8 +963,8 @@ function frame(now) {
       z: -s * side - c * forward,
       rightX: c,
       rightZ: -s,
-      jump: jumpTouch || keys.has('Space'),
-      dive: diveTouch || (seaControls && keys.has('ArrowDown')),
+      jump: (!swimming || p.diveDepth>0) && !diveChord && !diveTouch && (jumpTouch || keys.has('Space')),
+      dive: diveTouch || diveChord,
     });
     dispatchEvents();
   } else photoTime += delta;
