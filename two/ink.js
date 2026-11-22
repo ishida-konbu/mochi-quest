@@ -90,13 +90,16 @@ export function createInkPass(renderer, camera) {
         if(scroll>.001 && z<clip.y*.995) {
           float l=dot(c,vec3(.2126,.7152,.0722));
           float lit=smoothstep(.055,.32,l);
-          // Thin washes leave the paper luminous. Keep saturated pigments
-          // in the peach buds, red torii, deep water and the hillside fires.
+          // A tinted wash shows through the paper. Give vermilion seals,
+          // blossoms and blue water more pigment than the green-brown field.
           float chroma=max(max(c.r,c.g),c.b)-min(min(c.r,c.g),c.b);
-          vec3 lampblack=mix(vec3(l)*vec3(1.025,1.,.958),c,.68+.27*smoothstep(.05,.43,chroma));
-          vec3 lifted=lampblack+vec3(.076,.066,.049)*lit*(1.-smoothstep(.55,.95,l));
-          float line=max(ridge*.91,brush*.66)*(1.-smoothstep(36.,168.,z));
-          c=mix(c,lifted*(1.-.64*line*inkVisibility),scroll);
+          float accent=smoothstep(.045,.30,max(c.r-c.g,c.b-c.r));
+          vec3 paper=vec3(1.055,1.012,.93);
+          vec3 wash=mix(l*paper,c,.42+.45*accent+.08*smoothstep(.12,.48,chroma));
+          wash+=vec3(.095,.084,.067)*lit*(1.-smoothstep(.50,.95,l));
+          float nearInk=1.-smoothstep(22.,140.,z);
+          float line=max(ridge*.94,brush*.75)*nearInk*inkVisibility;
+          c=mix(c,mix(wash,min(wash,vec3(.032,.029,.025)),.72*line),scroll);
         }
         // The light portrait blur leaves small, distant ink silhouettes legible.
         if (focus>0. && z>focus+1.) {
@@ -120,8 +123,6 @@ export function createInkPass(renderer, camera) {
           float shoulder=knee+(1.-knee)*(1.-exp(-(peak-knee)/(1.-knee)));
           c*=shoulder/peak;
         }
-        float l=dot(c,vec3(.2126,.7152,.0722));
-        c=mix(vec3(l),c,1.025);
         gl_FragColor=vec4(max(c,vec3(0.)),1.);
         #include <colorspace_fragment>
       }`,

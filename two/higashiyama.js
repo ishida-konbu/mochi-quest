@@ -82,18 +82,28 @@ function lowerFireSlope(rise,depth,side,north) {
   const terrace=feather(edge,north?38:42)*feather(depth-back,north?38:23);
   return lowered+(rise-depth*(north?northFireDrop:eastFireDrop)-lowered)*terrace;
 }
+function gradedDivide(forward,across,north) {
+  // The city-facing meadows keep their surveyed grades. On the seaward side
+  // the divide fans into longer wooded shoulders above the harbours.
+  // The north-eastern saddle already carries the gently graded Tsuruga road.
+  const free=north?feather(across-42,46):1;
+  const end=free*(1-feather(Math.abs(across)-66,100));
+  const back=free*(1-feather(forward,110));
+  const spread=forward*(1-.20*back);
+  return watershed(spread,across,north)*(1-end*(.095+.14*back));
+}
 export function eastRidgeHeight(x,z) {
-  const rise=earlierFireRidgeHeight(x,z,false);
+  const rise=gradedDivide(x-HIGASHIYAMA.x,z-HIGASHIYAMA.z,false);
   if(!rise)return 0;
   const lowered=lowerFireSlope(rise,x-city.x,z-city.z,false);
   // Otowa's old timber platform and gravel court sit on one rocky shelf.
   // Keep its foundations and the upper pilgrim approach at their surveyed
   // level, then merge gradually into the lower shoulders of Higashiyama.
   const dx=(x-505)/99,dz=(z+724)/71,r=dx*dx+dz*dz;
-  return r<1 ? lowered+(rise-lowered)*feather(r-.38,.62) : lowered;
+  return r<1 ? lowered+(earlierFireRidgeHeight(x,z,false)-lowered)*feather(r-.38,.62) : lowered;
 }
 export function northRidgeHeight(x,z) {
-  const rise=earlierFireRidgeHeight(x,z,true);
+  const rise=gradedDivide(KITAYAMA.z-z,x-KITAYAMA.x,true);
   return rise?lowerFireSlope(rise,city.z-z,x-city.x,true):0;
 }
 

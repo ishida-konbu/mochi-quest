@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
 import { SPECIES, recipientContact } from '../two/bestiary.js';
-import { BUILDINGS, GATES, nearRoad, groundHeight } from '../two/terrain.js';
+import { BUILDINGS, GATES, ORIGINAL_REGIONS, REGIONS, regionAt, nearRoad, groundHeight, terrainHeight } from '../two/terrain.js';
 import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { Euler, Vector3 } from '../two/vendor/three.module.min.js';
 import { dragonPitch, dragonWave } from '../two/animal-motion.js';
@@ -18,6 +18,28 @@ test('the expanded recipient ledger preserves the original 691 entries and the t
   assert.equal(SPECIES.monkey.points,SPECIES.bird.points);
   assert.ok(10<SPECIES.bird.points && SPECIES.bird.points<SPECIES.fox.points && SPECIES.fox.points<SPECIES.tiger.points);
   assert.equal(SPECIES.dragon.points,1000);assert.equal(SPECIES.kirin.points,1000);
+});
+
+test('feeding circuits use gentle off-road ground from the river to both port hinterlands',()=>{
+  const {npcs}=createGame().state;
+  const grazers=npcs.filter(n=>!n.encounter && ['monkey','deer','fox','boar'].includes(n.type));
+  assert.equal(grazers.length,180);
+  const outer=grazers.filter(n=>ORIGINAL_REGIONS.every(r=>Math.hypot(n.homeX-r.x,n.homeZ-r.z)>55));
+  assert.ok(outer.length>=135);
+  for(const district of ['kyo','peach','inari','todaiji','tsuruga','sakai'])
+    assert.ok(outer.some(n=>n.habitat===district),district);
+  const point={};
+  for(const n of grazers){
+    assert.equal(n.habitat,REGIONS[regionAt(n.homeX,n.homeZ)].id);
+    for(let j=0;j<16;j++){
+      walkCircuit(n,j*Math.PI/8,point);
+      const {x,z}=point;
+      assert.ok(!nearRoad(x,z,animalRadius(n)),n.id);
+      const dx=terrainHeight(x+1,z)-terrainHeight(x-1,z);
+      const dz=terrainHeight(x,z+1)-terrainHeight(x,z-1);
+      assert.ok(Math.hypot(dx,dz)<1.25,n.id);
+    }
+  }
 });
 
 test('notices intersect the actual airborne volume, and unique recipients and old scores survive save and transfer',()=>{

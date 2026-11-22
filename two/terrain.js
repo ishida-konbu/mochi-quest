@@ -10,7 +10,7 @@ import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from
 import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
 import { COURT, RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
-import { CEDAR_GROVES, CLIFF_PINES, PEACH_TREES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
+import { CEDAR_GROVES, CLIFF_PINES, PEACH_TREES, INARI_ROUTE, inPeachAudience, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS } from './trade-routes.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
@@ -109,9 +109,9 @@ export const PENINSULAS = [
   [-413,121,62,27], [-492,311,52,30], [-583,174,24,15],
   ...FIRE_COAST,
 ];
-export function shoreDistance(x,z) {
+const shoreErosion=(x,z)=>5.9*sin(x*.048+z*.025)+3.8*cos(z*.062-x*.033)+2.3*sin(x*.109-z*.089);
+function surveyShore(x,z,erosion) {
   let shore=originalShore(x,z);
-  const erosion=5.9*sin(x*.048+z*.025)+3.8*cos(z*.062-x*.033)+2.3*sin(x*.109-z*.089);
   for(const [cx,cz,rx,rz] of PENINSULAS) {
     // Ellipses outside this bounding box cannot contribute land, surf or shoals.
     if(abs(x-cx)>rx+62 || abs(z-cz)>rz+62) continue;
@@ -121,9 +121,24 @@ export function shoreDistance(x,z) {
   }
   return portShore(x,z,shore);
 }
+export const shoreDistance=(x,z)=>surveyShore(x,z,shoreErosion(x,z));
+function coastalRise(relief,run) {
+  if(relief<=0)return relief;
+  const beach=11*(1-smooth(32,85,run));
+  const ceiling=max(0,run-beach)*.98;
+  // A rounded meeting of the coastal ramp and the inland profile. Multiplying
+  // the two profiles would add their gradients and steepen the very foothill.
+  const radius=min(relief,ceiling,9);
+  if(radius<=0)return 0;
+  const shoulder=max(0,radius-abs(relief-ceiling));
+  return min(relief,ceiling)-shoulder*shoulder/(4*radius);
+}
 function outerHeight(x,z,base) {
   if (z > -305 && z < 311 && x > -180 && x < 310) return base;
-  const shore=shoreDistance(x,z);
+  const erosion=shoreErosion(x,z),shore=surveyShore(x,z,erosion);
+  // Headlands carry breaking waves at their edge. The high country follows
+  // the broader coastline so each little cove does not become a tall rib.
+  const inland=shore-erosion;
   let ground=base;
   if (originalShore(x,z)<22 && shore> -3.3) {
     const rolls=4.8+2.2*sin(x*.025+z*.008)*cos(z*.021)
@@ -137,12 +152,22 @@ function outerHeight(x,z,base) {
     const streetEdge=max(abs(x-DISTRICTS.kyo.x)-102,abs(z-DISTRICTS.kyo.z)-84);
     const basin=x>DISTRICTS.kyo.x-124 && x<DISTRICTS.kyo.x+124 && z>DISTRICTS.kyo.z-106 && z<DISTRICTS.kyo.z+106
       ? rolls+(hills-rolls)*smooth(0,22,streetEdge):hills;
-    const newLand=-1.8+(basin+1.8)*smooth(-3.3,11,shore);
+    // A beach reaches its first low dune quickly. A ridge behind it needs
+    // a much longer foot, including where two former peninsulas meet.
+    const dune=min(rolls,1.8)+(rolls-min(rolls,1.8))*smooth(-2,41,inland);
+    const foothill=dune+coastalRise(basin-rolls,inland);
+    const newLand=-1.8+(foothill+1.8)*smooth(-3.3,11,shore);
     ground=base+(max(base,newLand)-base)*(1-smooth(11,22,originalShore(x,z)));
   }
-  if (shore>0) ground+=(pilgrimageHeight(x,z,ground)-ground)*smooth(0,20,shore);
+  if (shore>0) {
+    // Old island settlements keep their levels. Let the outer ranges begin
+    // over a rolling apron instead of switching surveys at a straight seam.
+    const interiorEdge=max(-305-z,z-311,-180-x,x-310);
+    const relief=pilgrimageHeight(x,z,ground)-ground;
+    ground+=coastalRise(relief,inland)*smooth(0,11,shore)*smooth(0,58,interiorEdge);
+  }
   const gateVerge=max(abs(x-RASHOMON.x)-14,abs(z-RASHOMON.z-3)-19);
-  if(gateVerge<20)ground+=(5-ground)*(1-smooth(0,20,gateVerge));
+  if(gateVerge<44)ground+=(5-ground)*(1-smooth(0,44,gateVerge));
   if (shore < 0) {
     // Offshore shoals gradually give way to open water. A sandy terrace
     // holds the palace and its gate at the bottom of the western bay.
@@ -178,10 +203,14 @@ function naturalHeight(x, z) {
   const nearRiver = min(basic, 1.28 + max(0, d) * 0.11 + max(0, d) ** 2 * 0.0009);
   let land = -1.57 + (nearRiver + 1.57) * smooth(-3.5, 6.6, d);
   // Beyond the maple bridge a small ravine opens eastwards into the sea.
-  if (x > 277 && z < -106 && z > -153) {
-    const bed = max(0, abs(z-mapleStreamZ(x))-2.6), opening=smooth(277,288,x);
-    const banks=smooth(.15,10.5,bed);
-    land += (-1.15-land)*(1-banks)*opening;
+  if (x>277 && z> -180 && z< -81) {
+    const across=z-mapleStreamZ(x),bed=max(0,abs(across)-2.6);
+    // The tributary falls over a short face on the north bank. Along the
+    // rest of the stream, gravel shoulders rise gradually to the old hills.
+    const bench=-1.15+(land+1.15)*smooth(.15,10.5,bed);
+    const bank=min(land,-1.15+bed*(.67+.009*bed));
+    const fan=across<0 ? smooth(341,367,x) : smooth(291,323,x);
+    land+=(bench+(bank-bench)*fan-land)*smooth(277,288,x);
   }
   const shore = originalShore(x,z);
   return -1.8 + (land + 1.8) * smooth(-3.3, 11, shore);
@@ -199,20 +228,26 @@ function ungradedHeight(x, z) {
 }
 // A building has a level earthen lot, feathered out into the hillside.
 const lotGrid = new Map();
+const lotApron=7.5;
 function landHeight(x, z, expanded = true) {
   x = wrapCoord(x); z = wrapCoord(z);
   const native = ungradedHeight(x,z);
   const base = expanded ? outerHeight(x,z,native) : native;
   const nearby = lotGrid.get(Math.floor(x / 24) * 128 + Math.floor(z / 24));
   if (!nearby) return base;
-  let weight = 0, graded = base;
+  let strongest=0,weights=0,level=0;
   for (const b of nearby) {
     const dx = x-b.x, dz = z-b.z, u = dx*b.cos - dz*b.sin, v = dx*b.sin + dz*b.cos;
     const edge = max(abs(u) - b.w/2 - .9, abs(v-.5) - b.d/2 - 1.5);
-    const blend = 1 - smooth(0, 3.8, edge);
-    if (blend > weight) { weight = blend; graded = base + (b.y-base)*blend; }
+    if(edge<=0)return b.y;
+    if(edge>=lotApron)continue;
+    const blend=1-smooth(0,lotApron,edge);
+    // Nearby gardens share an apron between their fixed foundation levels.
+    const weight=blend/(edge*edge);
+    weights+=weight;level+=b.y*weight;
+    strongest=max(strongest,blend);
   }
-  return graded;
+  return weights ? base+(level/weights-base)*strongest : base;
 }
 // The baths sit in a hand-cut hollow; their waterline is independent of the sea.
 export const SNOW_SPRING = { x: -32, z: -292, rx: 13.6, rz: 8.8, level: naturalHeight(-32,-292)-.12 };
@@ -433,7 +468,7 @@ const structures = [];
 function house(x, z, w, d, wall, roof, yaw = 0, kind = 'cottage', craft) {
   const b = { x, z, w, d, wall, roof, yaw, kind, craft, y: outerHeight(x,z,ungradedHeight(x,z)), cos: cos(yaw), sin: sin(yaw), snow: seasonAt(x,z).snow > .55 };
   structures.push(b);
-  const extent = hypot(w/2+5,d/2+6);
+  const extent = hypot(w/2+.9+lotApron,d/2+2+lotApron);
   for (let i = Math.floor((x-extent)/24); i <= Math.floor((x+extent)/24); i++)
     for (let j = Math.floor((z-extent)/24); j <= Math.floor((z+extent)/24); j++) {
       const key = i*128+j;
@@ -878,7 +913,9 @@ const onTempleApproach=(x,z,pad)=>x>334 && x<512 && z> -794 && z< -714 &&
   KIYOMIZU_ROAD.points.some(([px,pz])=>(px-x)**2+(pz-z)**2<pad**2);
 for(let i=ROCKS.length-1;i>=0;i--){
   const r=ROCKS[i];
-  if(kiyomizuClearing(r.x,r.z)||onTempleApproach(r.x,r.z,3+Math.max(r.rx,r.rz)))ROCKS.splice(i,1);
+  const reach=Math.max(r.rx,r.rz);
+  if(kiyomizuClearing(r.x,r.z) || onTempleApproach(r.x,r.z,3+reach) ||
+    nearPeachTrunk(r.x,r.z,reach+.4))ROCKS.splice(i,1);
 }
 // Exposed pine shoulders frame the view. Prune only crowns that would
 // interrupt the first stretch of a sightline from one of the three summits.
@@ -993,7 +1030,7 @@ for(const [east,pockets] of verges){
 // Open the temple approach and preserve the stage and summit views.
 for(let i=TREES.length-1;i>=0;i--){
   const t=TREES[i],{x,z}=t;
-  if(kiyomizuClearing(x,z) || onTempleApproach(x,z,5.3) || hidesValley(t) ||
+  if(inPeachAudience(x,z,.6*t.h) || (t.form===undefined && nearRoad(x,z,.6)) || kiyomizuClearing(x,z) || onTempleApproach(x,z,5.3) || hidesValley(t) ||
     x>=350 && x<=491 && z< -693 && z> -847 && kiyomizuViewTree(x,z,terrainHeight(x,z)+t.h))TREES.splice(i,1);
 }
 // Count only the sites left after opening the stage and summit sightlines.

@@ -76,6 +76,8 @@ export function bathRadius(s,x,z) {
   const u=(dx*c-dz*k)/s.rx,v=(dx*k+dz*c)/s.rz;
   return Math.hypot(u,v)/springLip(s.index,Math.atan2(v,u));
 }
+const bankFittings=new Map(RETREATS.filter(site=>site.regional)
+  .map(site=>[site,regionalBathFittings(site,springLip)]));
 export function reservedScenery(x,z) {
   const {west,east,north,south}=COURT_PRECINCT;
   if(x>west && x<east && z>north && z<south)return true;
@@ -83,7 +85,12 @@ export function reservedScenery(x,z) {
   if(s?.regional){
     const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
     const u=dx*c-dz*k,v=dx*k+dz*c;
-    return bathRadius(s,x,z)<1.38 || (Math.abs(u)<2.5 && v>=0 && v<s.rz+4.9);
+    if(bathRadius(s,x,z)<1.38 || (Math.abs(u)<2.5 && v>=0 && v<s.rz+4.9))return true;
+    // A spout or sign projects past the natural bank. Leave room for its
+    // foundation and for the width of a trunk at the edge of the footprint.
+    const {inlet,sign}=bankFittings.get(s);
+    return (Math.abs(u-inlet.u)<inlet.w/2+.45 && Math.abs(v-inlet.v)<inlet.d/2+.45) ||
+      (Math.abs(u-sign.u)<sign.w/2+.45 && Math.abs(v-sign.v)<sign.d/2+.45);
   }
   return !!s && Math.hypot(s.x-x,s.z-z)<(s.hut?9.6:7.1);
 }
@@ -175,7 +182,7 @@ export function civicAndBathSolids(height,put) {
       rim.roundHeight=q.h;
     }
     if(s.regional){
-      const {inlet,sign}=regionalBathFittings(s,springLip);
+      const {inlet,sign}=bankFittings.get(s);
       add(inlet.u,inlet.v-.20,inlet.w,1.34,.72,'oval',true);
       add(inlet.u,inlet.v+.04,1.18,1.92,inlet.h,'box',true).bottom=level+.62;
       add(sign.u,sign.v-.07,.13,.13,1.33,'wall');

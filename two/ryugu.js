@@ -342,17 +342,10 @@ export function createRyuguLife(scene) {
     dum.position.set(xx,14,zz);dum.rotation.set(.077,0,.16);dum.scale.set(1.3+rng()*2.2,30,.7+rng());dum.updateMatrix();shafts.setMatrixAt(i,dum.matrix);
   }
   group.add(shafts);scene.add(group);
-  const waterFog=new THREE.Color('#8a9e91');
   return (time,player,camera,voyageTime=time)=>{
     updateFish(time,player,camera,voyageTime);
-    const immersion=player.diveDepth>0 ? THREE.MathUtils.smoothstep(WATER_Y-camera.position.y,0,3.2):0;
-    if(immersion>0) {
-      scene.fog.color.lerp(waterFog,immersion);
-      scene.fog.density=THREE.MathUtils.lerp(scene.fog.density,.021,immersion);
-      scene.environmentIntensity*=1-.23*immersion;
-    }
     const dx=wrapDelta(RYUGU.x-player.x),dz=wrapDelta(RYUGU.z-player.z);
-    group.visible=immersion>0 && dx*dx+dz*dz<110**2;
+    group.visible=player.diveDepth>0 && camera.position.y<WATER_Y && dx*dx+dz*dz<110**2;
     if(!group.visible)return;
     clock.value=time;
     group.position.set(player.x+dx,bed,player.z+dz);

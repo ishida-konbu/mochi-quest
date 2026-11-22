@@ -4,7 +4,7 @@ import { peachHazeWeight } from './peach-haze.js';
 import * as THREE from './vendor/three.module.min.js';
 import { HDRLoader } from './vendor/HDRLoader.js';
 import { kyoNight, kyoInfluence } from './kyo-layout.js';
-import { seasonAt } from './terrain.js';
+import { seasonAt, WATER_Y } from './terrain.js';
 
 const asset = (name) => new URL('./assets/world/' + name, import.meta.url).href;
 const color = (value) => new THREE.Color(value);
@@ -19,12 +19,14 @@ const palette = {
   blue: color('#9fb8e8'),
   darkEarth: color('#4a566c'),
   twilight: color('#ffdbb6'),
-  fog: color('#d7d4bf'),
+  fog: color('#e2dbca'),
   peachFog: color('#dfced8'),
   winterFog: color('#c3d5e4'),
   fallFog: color('#d9bc99'),
   nightFog: color('#273b56'),
   dawnFog: color('#f5c3a3'),
+  seaFog: color('#91b5ad'),
+  filteredSun: color('#c6e2ce'),
 };
 const lighting = {};
 function climateAtTime(player,time,out) {
@@ -52,6 +54,12 @@ export function applyClimateLights(hemisphere, sun, bounce, player,time=0) {
     .lerp(palette.ice, moon)
     .lerp(palette.ember, 0.28 * dawn);
   bounce.intensity = 0.65 - 0.34 * moon;
+  const dive=THREE.MathUtils.smoothstep(player.diveDepth,0,12);
+  if(dive>0){
+    sun.color.lerp(palette.filteredSun,.70*dive);
+    sun.intensity*=1-.26*dive;
+    hemisphere.groundColor.lerp(palette.seaFog,.62*dive);
+  }
 }
 
 // The sky is painted in directions rather than positions so its horizon is
@@ -62,7 +70,7 @@ function mountainSky(scene, panorama) {
     climate: { value: new THREE.Vector4() },
     clock: { value: 0 },
     horizonInk: { value: 1 },
-    valleyHaze: {value:0}, valleyMist: {value:new THREE.Color()},
+    valleyHaze: {value:0}, mistColor: {value:new THREE.Color()}, immersion: {value:0},
   };
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
@@ -76,7 +84,7 @@ function mountainSky(scene, panorama) {
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
       }`,
     fragmentShader: `
-      varying vec3 direction; uniform sampler2D ridges; uniform vec4 climate; uniform float clock,horizonInk,valleyHaze; uniform vec3 valleyMist;
+      varying vec3 direction; uniform sampler2D ridges; uniform vec4 climate; uniform float clock,horizonInk,valleyHaze,immersion; uniform vec3 mistColor;
       float hash(vec2 p) {
         vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);
         return fract((p3.x+p3.y)*p3.z);
@@ -98,10 +106,10 @@ function mountainSky(scene, panorama) {
         float angle=atan(ray.x,-ray.z);
         float elevation=ray.y/max(.075,length(ray.xz));
         float high=smoothstep(.025,.78,ray.y);
-        vec3 low=mix(vec3(.909,.776,.555),vec3(.70,.80,.88),snow);
-        vec3 top=mix(vec3(.327,.486,.550),vec3(.298,.481,.66),snow);
+        vec3 low=mix(vec3(.923,.851,.700),vec3(.76,.82,.87),snow);
+        vec3 top=mix(vec3(.435,.55,.56),vec3(.405,.545,.655),snow);
         low=mix(low,vec3(.89,.62,.386),.43*fall);
-        low=mix(low,vec3(1.,.449,.222),dawn);
+        low=mix(low,vec3(.982,.608,.387),dawn);
         top=mix(top,vec3(.263,.288,.507),dawn);
         low=mix(low,vec3(.061,.098,.170),night);
         top=mix(top,vec3(.003,.008,.038),night);
@@ -129,7 +137,7 @@ function mountainSky(scene, panorama) {
         float relief=smoothstep(.46,.70,maria);
         vec3 lunarColor=mix(vec3(1.30,1.20,.9),vec3(.83,.79,.66),relief*.77);
         sky=mix(sky,lunarColor,(1.-smoothstep(radius-.001,radius+.001,moonDist))*night);
-        sky=mix(sky,mix(vec3(1.12,.60,.30),vec3(1.48,1.15,.69),dawn),
+        sky=mix(sky,mix(vec3(1.07,.86,.62),vec3(1.48,1.15,.69),dawn),
                     (1.-smoothstep(.028,.030,sunDist))*(1.-night));
         // Low distant mountains dissolve toward the open east-facing sea.
         float seaOpening=dawn*smoothstep(.18,.83,ray.x);
@@ -142,9 +150,12 @@ function mountainSky(scene, panorama) {
         vec3 ink=mix(vec3(.185,.21,.17),vec3(.27,.38,.49),snow);
         ink=mix(ink,vec3(.012,.024,.051),night);
         ink=mix(ink,vec3(.42,.248,.245),dawn);
-        vec3 col=mix(sky,ink,ridge*.75*horizonInk);
-        col=mix(col,low,(1.-smoothstep(-.13,.01,ray.y)));
-        col=mix(col,valleyMist,valleyHaze*(1.-smoothstep(-.030,.13,ray.y)));
+        vec3 col=mix(sky,ink,ridge*.56*horizonInk);
+        // Where the distant land and open sea fade out, continue their wash
+        // onto the sky. This also closes the horizon below the sea surface.
+        col=mix(col,mistColor,1.-smoothstep(-.085,.045,ray.y));
+        col=mix(col,mistColor,valleyHaze*(1.-smoothstep(-.030,.13,ray.y)));
+        col=mix(col,mistColor,immersion);
         gl_FragColor=vec4(col,1.);
         #include <colorspace_fragment>
       }`,
@@ -210,12 +221,16 @@ export function createAtmosphere(scene) {
         THREE.MathUtils.smoothstep(cityFacing,.25,.80);
       hillView=Math.max(hillView,.86*valleyView);
       dome.material.uniforms.valleyHaze.value=Math.max(valleyView,peachAir);
-      dome.material.uniforms.valleyMist.value.copy(scene.fog.color);
       dome.material.uniforms.horizonInk.value=1-Math.max(.70*peachAir,.42*clearAir,.42*hillView);
       const openAir=.0057-Math.max(.0025*clearAir,.00415*hillView);
       const valleyAir=.0070-.0018*THREE.MathUtils.smoothstep(player.y,28,90);
       scene.fog.density = THREE.MathUtils.lerp(openAir,valleyAir,peachAir) + .003*s.snow - .0008*s.dawn;
-      scene.environmentIntensity = 0.67 - 0.51 * s.moon;
+      const submerged=player.diveDepth>0 ? THREE.MathUtils.smoothstep(WATER_Y-camera.position.y,0,6) : 0;
+      scene.fog.color.lerp(palette.seaFog,submerged);
+      scene.fog.density=THREE.MathUtils.lerp(scene.fog.density,.021,submerged);
+      dome.material.uniforms.immersion.value=submerged;
+      dome.material.uniforms.mistColor.value.copy(scene.fog.color);
+      scene.environmentIntensity = (0.67 - 0.51 * s.moon)*(1-.47*submerged);
       return valleyView;
     },
   };

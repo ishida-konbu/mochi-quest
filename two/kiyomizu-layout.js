@@ -33,7 +33,31 @@ function shelf(x,z,l,r,n,s,f) {
   const edge=Math.max(l-x,x-r,n-z,z-s,0);
   const t=Math.min(1,edge/f);return 1-t*t*(3-2*t);
 }
+// The last turns lie on the gravel court itself. Keep the cut clear of the
+// open timber stage projecting over the hillside south of the court.
+const approachSegments=KIYOMIZU_APPROACH.slice(1,-2).map(([endX,endZ],i)=>{
+  const [x,z]=KIYOMIZU_APPROACH[i],dx=endX-x,dz=endZ-z;
+  return {x,z,dx,dz,length2:dx*dx+dz*dz};
+});
+function approachHeight(x,z,native) {
+  if(x<340 || x>518 || z< -805 || z> -705)return native;
+  let distance=Infinity;
+  for(const s of approachSegments){
+    const u=x-s.x,v=z-s.z,t=Math.max(0,Math.min(1,(u*s.dx+v*s.dz)/s.length2));
+    distance=Math.min(distance,(u-t*s.dx)**2+(v-t*s.dz)**2);
+  }
+  // A graded earthen approach gains height over the whole length of its
+  // western shoulder. Round both ends into the street and the gravel court.
+  const along=Math.min(x-340,158),toe=26,crest=12,run=158-(toe+crest)/2;
+  const rise=along<toe ? along*along/(2*toe) : along>158-crest ?
+    run-(158-along)**2/(2*crest) : along-toe/2;
+  const stage=Math.max(0,Math.min(1,(x-479)/12))*Math.max(0,Math.min(1,(z+739)/9));
+  const verge=Math.min(1,Math.max(0,(Math.sqrt(distance)-3)/16,stage));
+  const end=Math.min(1,(x-340)/8,(518-x)/14);
+  return native+(5+(floor-5)*rise/run-native)*(1-verge*verge*(3-2*verge))*end*end*(3-2*end);
+}
 export function kiyomizuTerrain(x,z,native) {
+  native=approachHeight(x,z,native);
   if(x<484||x>542||z< -771||z> -686)return native;
   const court=shelf(x,z,499,529,-758,-730.7,10);
   const rear=shelf(x,z,510,525,-733,-701,11);

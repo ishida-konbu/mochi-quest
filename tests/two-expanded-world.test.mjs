@@ -1,9 +1,9 @@
 import {DISTRICTS, FIFTH_EDITION_CENTRES, relocateLegacyPosition} from '../two/geography.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, roadSurfaceHeight, groundHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
+import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, ROCKS, TREES, terrainHeight, roadSurfaceHeight, groundHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
 import {RETREATS,bathRadius,sitePoint} from '../two/retreat-layout.js';
-import {INARI_GATES, INARI_ROUTE, PEACH_TREES, MOON_GATE} from '../two/pilgrimage-layout.js';
+import {CLIFF_PINES, INARI_GATES, INARI_ROUTE, PEACH_TREES, MOON_GATE, PEACH_BOUT, nearPeachTrunk} from '../two/pilgrimage-layout.js';
 import {PALACE_APPROACH} from '../two/ryugu-layout.js';
 import {HIGASHIYAMA} from '../two/higashiyama.js';
 import {kyoInfluence, kyoNight, kyoClock, KYO_DAY_SECONDS} from '../two/kyo-layout.js';
@@ -74,16 +74,28 @@ test('flowering peach colonies follow the wooded slopes and gorge while keeping 
   const mountain=PEACH_TREES.filter(t=>t.upland),basin=PEACH_TREES.filter(t=>!t.cliff);
   const centre=DISTRICTS.peach,spring=RETREATS.find(s=>s.kind==='peach'),aspects=new Array(8).fill(0);
   const heights=mountain.map(t=>terrainHeight(t.x,t.z));
-  assert.ok(basin.length>=200 && mountain.length>=600);
-  assert.ok(heights.filter(y=>y>80).length>=100 && heights.filter(y=>y>30 && y<60).length>=70);
+  assert.ok(basin.length>=155 && basin.length<=235 && mountain.length>=600);
+  assert.ok(heights.filter(y=>y>80).length>=40 && heights.filter(y=>y>30 && y<60).length>=140);
   assert.ok(mountain.filter(t=>t.wayside).length>=40);
   for(const t of mountain){
     const a=Math.atan2(t.z-centre.z,t.x-centre.x)+Math.PI;
     aspects[Math.floor(a*4/Math.PI)%8]++;
   }
   assert.ok(aspects.every(n=>n>=25),'blooming slopes in all eight directions: '+aspects);
-  for(const t of PEACH_TREES){
+  for(const t of [...TREES,...PEACH_TREES,...CLIFF_PINES]){
     assert.ok(Math.hypot(t.x-MOON_GATE.x,t.z-MOON_GATE.z)>8.9);
+    assert.ok(Math.hypot(t.x-PEACH_BOUT.x,t.z-PEACH_BOUT.z)>6.2);
+    // Test the camera as well as the ring. Standing on the south bank and
+    // looking north used to put the lens inside both a plum and a peach.
+    const reach=t.h ? .6*t.h : t.size ? 3.8*t.size : 2*t.scale;
+    const dx=t.x-PEACH_BOUT.x;
+    const dz=Math.max(0,PEACH_BOUT.z-t.z,t.z-PEACH_BOUT.z-15);
+    assert.ok(Math.hypot(dx,dz)>4.5+reach);
+  }
+  for(const rock of ROCKS){
+    assert.ok(!nearPeachTrunk(rock.x,rock.z,Math.max(rock.rx,rock.rz)+.4));
+  }
+  for(const t of PEACH_TREES){
     assert.ok(bathRadius(spring,t.x,t.z)>=1.38);
     assert.equal(waterDepth(t.x,t.z),0);
     assert.ok(terrainHeight(t.x,t.z)>0);

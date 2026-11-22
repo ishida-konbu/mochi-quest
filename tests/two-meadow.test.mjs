@@ -6,26 +6,38 @@ import { FIRE_TRAILS, fireTrailDistance, inFireMeadow } from '../two/higashiyama
 import { HERBS, HERB_FORMS } from '../two/meadow-herbs.js';
 import { meadowExclusions, visitMeadowTile, MEADOW_TILES, MEADOW_TILE } from '../two/meadow-layout.js';
 
-test('the seeded meadows reach the density target while leaving water and the bath clear',()=>{
+test('meadows alternate open ground with dense colonies throughout the island',()=>{
   const {state}=createGame(), masks=meadowExclusions(state.objects,state.npcs), forms=new Set();
   let total=0, outer=0, outlyingLand=0;
+  let patches=0, open=0, dense=0;
+  const rootsPerPatch=new Uint16Array(25);
   for(let i=0;i<MEADOW_TILES;i++)for(let j=0;j<MEADOW_TILES;j++){
     const x=(i+.5)*MEADOW_TILE-BOUND,z=(j+.5)*MEADOW_TILE-BOUND;
     if(Math.max(Math.abs(x),Math.abs(z))>416 && shoreDistance(x,z)>8)outlyingLand++;
-    total+=visitMeadowTile(i,j,masks,(x,y,z,w,h,a,form)=>{
+    rootsPerPatch.fill(0);
+    const planted=visitMeadowTile(i,j,masks,(x,y,z,w,h,a,form)=>{
       assert.ok(y>WATER_Y);
       assert.ok((x-143)**2+(z-96)**2>=25);
       assert.ok(x>=i*MEADOW_TILE-BOUND && x<(i+1)*MEADOW_TILE-BOUND);
       assert.ok(z>=j*MEADOW_TILE-BOUND && z<(j+1)*MEADOW_TILE-BOUND);
+      const col=Math.floor(((x+BOUND)/MEADOW_TILE-i)*5);
+      const row=Math.floor(((z+BOUND)/MEADOW_TILE-j)*5);
+      rootsPerPatch[row*5+col]++;
       forms.add(form);
       if(form>=(HERBS.length-1)*HERB_FORMS)assert.ok(shoreDistance(x,z)<27,'beach morning glory grows on the shore');
       if(Math.max(Math.abs(x),Math.abs(z))>416) outer++;
     });
+    total+=planted;
+    if(planted && shoreDistance(x,z)>20)for(const roots of rootsPerPatch){
+      patches++;
+      if(roots<=3)open++;
+      if(roots>=17)dense++;
+    }
   }
-  // Only nearby tiles stream in. Check that planting also reaches the outer provinces.
-  assert.ok(total-outer>500000);
-  assert.ok(outer>1500000);
-  assert.ok(outer/outlyingLand>685 && outer/outlyingLand<885,'root density per outlying land tile');
+  // In roughly five-metre squares, both a handful of stems and a thicket
+  // should be common sights, even far from the district centres.
+  assert.ok(open/patches>.17 && dense/patches>.23);
+  assert.ok(total-outer>180000 && outer/outlyingLand>240 && outer/outlyingLand<420);
   assert.ok(Math.abs(MEADOW_TILES*MEADOW_TILE-2*BOUND)<1e-8);
   assert.equal(forms.size,HERBS.length*HERB_FORMS);
   const sample=()=>{
