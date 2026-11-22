@@ -22,6 +22,8 @@ test('rolling, cycling and winged travel start at walking pace and build to thei
     const game=createGame(), p=game.state.player;
     if (mode==='bike') rent(game);
     else assert.ok(game.act(mode));
+    // Take the speed measurements between freight convoys on the river road.
+    game.state.time=480;
     stand(game,0,70);
     p.invulnerable=5;
     if (mode==='habutae') game.act('jump');
