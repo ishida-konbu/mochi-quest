@@ -1000,12 +1000,15 @@ export function poseBeast(j,n,time) {
       j.fude.quaternion.slerp(brushAngle,writing);
     }
   } else if(n.type==='deer'){
+    const bow=n.encounter==='bow' ? hold : 0;
     const graze=variation===1?0:hold;
     head.position.y=head.userData.restY-.07*graze;
     head.position.z=head.userData.restZ+.035*graze;
     head.rotation.x+=hold*(variation===1?-.22:1.34+.04*Math.cos(t*4));
     head.rotation.y+=hold*.16*Math.sin(t*2.2);
-    g.rotation.x+=.12*graze;
+    head.rotation.x+=1.08*bow;
+    g.rotation.x+=.12*graze+.22*bow;
+    for(const s of [-1,1]) j['leg'+s+',1'].rotation.x-=.18*bow;
     for(const s of [-1,1])j['pinna'+s].rotation.y=s*(.13*Math.sin(t*1.8+s)+hold*.49*Math.sin(t*1.13+s));
   } else if(n.type==='boar'){
     g.rotation.x=.15*hold;

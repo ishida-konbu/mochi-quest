@@ -12,6 +12,26 @@ function mix(a, b, t) { return a + (b - a) * t; }
 
 export const DAIBUTSU = { x:215, z:408 };
 export const PEACH = { x:-390, z:-91 };
+// Paired spurs alternate between the near and far lips of the valley. Their
+// widths are measured along and across the ridge, so a cut between summits
+// exposes distant paper sky when looking up from the orchard.
+const crags=Array.from({length:19},(_,i)=>{
+  const a=.53+i*.292, ca=cos(a),sa=sin(a);
+  const ridge=.76+.068*sin(5*a)+.059*cos(3*a);
+  const r=ridge+(i%3===0?-.093:i%3===1?.075:-.014);
+  return {x:PEACH.x+123*ca*r,z:PEACH.z+108*sa*r,ca,sa,
+    width:10+6*(1+sin(i*2.67))*.5,depth:12+6*(1+cos(i*2.17))*.5,
+    h:34+18*(1+sin(i*2.06+.86))*.5+(i%4===0?5:0),i};
+});
+export const CLIFF_PINES=crags.flatMap((c,i)=>{
+  const count=2+i%4;
+  return Array.from({length:count},(_,j)=>{
+    const side=cos(j*2.42+i*3.14)*c.width*(j?.79:.16);
+    const along=sin(j*2.18+i*1.71)*c.depth*(j?.73:.11);
+    return {x:c.x-side*c.sa+along*c.ca,z:c.z+side*c.ca+along*c.sa,
+      scale:(j?.73:1.02)+.28*(1+cos(j*2.41+i))*.5,yaw:1.55-i*.87+j*.40,type:(i+j)%3};
+  });
+});
 export const WEDDING_SITES=[
   {x:-193,z:-388,rx:19,rz:2.18},
   {x:-211,z:-445,rx:12,rz:2.13},
@@ -37,7 +57,15 @@ export function pilgrimageHeight(x, z, base) {
     const ridge = .76 + .068 * sin(5*angle) + .059 * cos(3*angle);
     const peaks = .46 + .29 * (1 + sin(7*angle + .7)) + .16 * cos(12*angle);
     const gate = ease((abs(angle) - .10) / .65);
-    const walls = exp(-((r-ridge)**2)/.016) * (19 + 31*peaks) * gate;
+    let walls=exp(-((r-ridge)**2)/.016) * (12+19*peaks) * gate;
+    if(r>.42&&r<1.11) for(const c of crags){
+      const dx=x-c.x,dz=z-c.z;
+      if(abs(dx)>32||abs(dz)>32)continue;
+      const u=(-dx*c.sa+dz*c.ca)/c.width,v=(dx*c.ca+dz*c.sa)/c.depth;
+      const q=max(abs(u+.22*v)+.20*abs(v),abs(v-.12*u)+.15*abs(u));
+      const tower=c.h*(.43*(1-ease((q-.14)/.91))+.34*(1-ease((q-.32)/.38))+.23*(1-ease((q-.67)/.39)));
+      walls=max(walls,tower+min(0,v*.9)*gate);
+    }
     const valley = 5.3 + 2.2*sin(a*5+.3)*cos(b*6) + 3.5*r + walls;
     return mix(base,valley,ease((1.16-r)/.30));
   }
@@ -101,6 +129,8 @@ function orchard() {
     if(hypot(u/83,v/66)>1 || hypot(u,v)<10 || abs(v-3*sin(u/13))<3.9) continue;
     if(alongPass(PEACH.x+u,PEACH.z+v,peachPass,4.6) ||
       hypot(PEACH.x+u-MOON_GATE.x,PEACH.z+v-MOON_GATE.z)<9) continue;
+    const wx=PEACH.x+u,wz=PEACH.z+v,ground=pilgrimageHeight(wx,wz,5);
+    if(ground>17 && hypot(pilgrimageHeight(wx+1,wz,5)-ground,pilgrimageHeight(wx,wz+1,5)-ground)>.78) continue;
     if(trees.some(q=>(q.x-PEACH.x-u)**2+(q.z-PEACH.z-v)**2<27)) continue;
     trees.push({x:PEACH.x+u,z:PEACH.z+v,size: .76+rand()*.63,turn:rand()*PI*2,seed:i+4493});
   }
@@ -135,6 +165,8 @@ export function pilgrimageSolids(height, putSolid) {
   }
   for(const tree of PEACH_TREES) putSolid(tree.x,tree.z,.25*tree.size,.25*tree.size,0,
     height(tree.x,tree.z)+2.6*tree.size,'oval',false);
+  for(const t of CLIFF_PINES) putSolid(t.x,t.z,.21*t.scale,.21*t.scale,0,height(t.x,t.z)+4.8*t.scale,'oval',false);
+  putSolid(MOON_GATE.x-.82,MOON_GATE.z-5.65,.60,.63,0,height(MOON_GATE.x,MOON_GATE.z)+4.83,'oval',false);
   for(const t of CEDAR_GROVES) putSolid(t.x,t.z,.21,.21,0,height(t.x,t.z)+t.h*.82,'oval',false);
   for(const side of [-1,1]) putSolid(MOON_GATE.x,MOON_GATE.z+side*3.23,.31,1.42,0,
     height(MOON_GATE.x,MOON_GATE.z)+4.8,'wall',false);

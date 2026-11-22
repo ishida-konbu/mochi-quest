@@ -1,3 +1,7 @@
+import { sculpture, brushStroke } from './pilgrimage-pigment.js';
+import { paintPeachCliffs } from './pilgrimage-cliffs.js';
+import { foxParties } from './pilgrimage-foxes.js';
+import { brushWash, surfaceGrain } from './scroll-sculpt.js';
 import * as T from './vendor/three.module.min.js';
 import { terrainHeight, seeded, wrapDelta } from './terrain.js';
 import { DAIBUTSU, PEACH, PEACH_TREES, WEDDING_SITES, weddingPoint, CEDAR_GROVES, MOON_GATE, INARI_GATES, INARI_SANCTUARY, TEMPLE_COLUMNS } from './pilgrimage-layout.js';
@@ -5,41 +9,6 @@ import { DAIBUTSU, PEACH, PEACH_TREES, WEDDING_SITES, weddingPoint, CEDAR_GROVES
 const { sin,cos,PI,abs,hypot,min,max } = Math, TAU=PI*2;
 const vec=(...v)=>new T.Vector3(...v);
 const rice='#efe3c7', ochre='#be9457', vermilion='#a84430';
-
-// Solid painted profiles share one geometry and one draw material per spatial batch.
-function sculpture() {
-  const vertices=[], normals=[], colors=[], indices=[];
-  const obj=new T.Object3D(), nmat=new T.Matrix3(), point=vec(), n=vec(), col=new T.Color();
-  const ball=new T.SphereGeometry(1,12,8), cube=new T.BoxGeometry(), cylinder=new T.CylinderGeometry(1,1,1,10);
-  function add(geometry, tint, x,y,z, sx,sy,sz, pitch=0,yaw=0,roll=0) {
-    obj.position.set(x,y,z);
-    obj.rotation.set(pitch,yaw,roll,'YXZ');
-    obj.scale.set(sx,sy,sz);
-    obj.updateMatrix();
-    nmat.getNormalMatrix(obj.matrix);
-    const pos=geometry.attributes.position, norm=geometry.attributes.normal, start=vertices.length/3;
-    col.set(tint);
-    for(let i=0;i<pos.count;i++) {
-      point.fromBufferAttribute(pos,i).applyMatrix4(obj.matrix);
-      n.fromBufferAttribute(norm,i).applyMatrix3(nmat).normalize();
-      vertices.push(point.x,point.y,point.z); normals.push(n.x,n.y,n.z); colors.push(col.r,col.g,col.b);
-    }
-    if(geometry.index) for(const j of geometry.index.array) indices.push(start+j);
-    else for(let j=0;j<pos.count;j++) indices.push(start+j);
-  }
-  return {
-    add, ball:(...args)=>add(ball,...args), box:(...args)=>add(cube,...args),
-    post:(...args)=>add(cylinder,...args),
-    finish(){
-      const g=new T.BufferGeometry();
-      g.setAttribute('position',new T.Float32BufferAttribute(vertices,3));
-      g.setAttribute('normal',new T.Float32BufferAttribute(normals,3));
-      g.setAttribute('color',new T.Float32BufferAttribute(colors,3));
-      g.setIndex(indices); g.computeBoundingSphere();
-      return g;
-    },
-  };
-}
 
 function drawing(width,height,paint) {
   const canvas=document.createElement('canvas');
@@ -82,13 +51,23 @@ function toriiGeometry() {
   }
   s.box('#b95134',0,.745,0,.911,.047,.052);
   s.box('#943c2d',0,.84,0,.046,.16,.046);
-  // Flared outer ends bend upward in five fitted pieces, keeping the tunnel silhouette light.
-  for(const [color,dy,depth,height] of [['#a84931',0,.075,.057],['#3f4037',.042,.097,.034]]){
-    for(let j=0;j<5;j++){
-      const u=(j-2)*.207, slope=u*.42;
-      s.box(color,u,.92+dy+.21*u*u,0,.212,height,depth,0,0,slope);
+  // A crowned kasagi tapers continuously toward either tip. Carry the dark
+  // lacquer lip under the eave so the distant corridor reads as a brushed arc.
+  function beam(y,thickness,depth,span,color){
+    const xyz=[],ix=[],profile=[[-1,-.32],[-.9,-.53],[.84,-.53],[1,-.25],[1,.34],[.74,.55],[-.76,.55],[-1,.27]];
+    for(let i=0;i<=10;i++){
+      const u=i/10-.5,r=Math.abs(u)*2,rise=.055*r*r+.010*r**5;
+      for(const [z,h] of profile) xyz.push(u*span,y+rise+thickness*h,z*depth*(1+.23*r*r));
+      if(i===10)continue;
+      for(let k=0;k<8;k++){const a=i*8+k,b=i*8+(k+1)%8;ix.push(a,b,a+8,b,b+8,a+8);}
     }
+    for(let j=1;j<7;j++) ix.push(0,j+1,j,80,80+j,81+j);
+    const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(xyz,3));g.setIndex(ix);
+    g.computeVertexNormals();s.add(g,color);
   }
+  beam(.908,.053,.041,1.032,'#9f432d');
+  beam(.948,.041,.053,1.078,'#463e35');
+  beam(.966,.013,.050,1.082,'#736b52');
   return s.finish();
 }
 
@@ -149,7 +128,8 @@ function weddingPaths(p) {
 }
 function* inari(p) {
   p.shapes.senbon=toriiGeometry();
-  const pigments=new T.MeshLambertMaterial({vertexColors:true});
+  const pigments=surfaceGrain(brushWash(new T.MeshLambertMaterial({vertexColors:true}),.19),8);
+  const cartouches=['稲荷','白狐','奥社'].map(name=>inscription(name,'#504e3b','#e6c480'));
   const donation=inscription('奉納',null,'#312b25');
   for(const [i,g] of INARI_GATES.entries()) {
     const y=terrainHeight(g.x,g.z);
@@ -160,7 +140,21 @@ function* inari(p) {
       for(const side of [-1,1]) f.part('plane',side*g.width*.348,g.height*.53,-g.width*.038,
         .20,.68,1,'#ffffff',donation,PI,0,0,false);
     }
-    if(i%125===0) yield;
+    if(i%125===0 || i===999){
+      const f=frame(p,g.x,g.z,g.yaw,y), w=g.width,h=g.height;
+      f.part('box',0,h*.833,-.24,.65,.94,.11,'#cba771');
+      f.part('plane',0,h*.833,-.307,.56,.85,1,'#fff',cartouches[i===999?2:i?1:0],PI);
+      const braid=a=>h*.72-.44*(1-(a/(w*.346))**2);
+      for(let n=0;n<18;n++){
+        const x0=w*.692*(n/18-.5),x1=w*.692*((n+1)/18-.5);
+        f.line([x0,braid(x0),-.236],[x1,braid(x1),-.236],.046,n%2?'#9f8d6d':'#c6b38a');
+      }
+      for(let n=0;n<5;n++){
+        const u=(n-2)*w*.128;
+        f.part('streamer',u,braid(u)-.11,-.233,.37,.45,.29,'#f0e6c9',p.fine,0,0,.057*sin(i+n),false);
+      }
+      yield;
+    }
   }
   summit(p);
   weddingPaths(p);
@@ -168,64 +162,102 @@ function* inari(p) {
 
 // An individual spray carries dry-brushed wood, five-petalled blossoms and buds.
 // Transparent gaps between the flowers let the drawing of the branches read against the sky.
-function blossomSpray() {
-  const rng=seeded(56025);
-  const map=drawing(320,256,c=>{
-    c.lineCap='round';
-    function twig(ax,ay,bx,by,bend,width){
-      c.strokeStyle=width>2?'#765d53':'#967267'; c.lineWidth=width;
-      c.beginPath();c.moveTo(ax,ay);c.quadraticCurveTo((ax+bx)/2+bend,(ay+by)/2,bx,by);c.stroke();
+function washTexture(file){
+  const map=new T.TextureLoader().load(new URL('./assets/world/'+file+'.webp',import.meta.url).href);
+  map.colorSpace=T.SRGBColorSpace; map.anisotropy=4;return map;
+}
+function blossomSpray(file){
+  const map=washTexture(file);
+  return new T.MeshLambertMaterial({map,side:T.DoubleSide,alphaTest:.33,
+    emissiveMap:map,emissive:'#e4ccbd',emissiveIntensity:.32});
+}
+function peachTree(seed){
+  const rng=seeded(seed), s=sculpture(), sprays=[];
+  const drift=(rng()-.46)*.91, tilt=(rng()-.5)*.49;
+  const trunk=[[.03,-.34,0],[-.10,.34,.064],[drift+.13,.98,tilt],[drift*.38,1.69,.105],[drift*.4+.16,2.34,-.11]];
+  s.stroke('#614f45',trunk,[.39,.35,.25,.223,.066],18);
+  s.stroke('#a19078',trunk.map(([x,y,z],i)=>[x-.075,y,z+[.23,.28,.23,.16,.05][i]]),
+    [.014,.038,.053,.026,.002],16);
+  for(let i=0;i<4;i++){
+    const a=i*1.57+rng()*.63;
+    s.stroke('#6f5c4b',[[.04,.41,0],[.28*cos(a),.16,.28*sin(a)],[.78*cos(a),-.12,.78*sin(a)]],
+      [.17,.19,.022],5);
+  }
+  for(let i=0;i<6;i++){
+    const a=i*2.39+rng()*.93, bend=(rng()-.5)*1.12, reach=1.1+rng()*1.32;
+    const root=trunk[2+(i%3)], h=root[1]+.65+rng()*.73;
+    const elbow=[root[0]+(.45+rng()*.40)*cos(a+bend),h,root[2]+.49*sin(a+bend)];
+    const tip=[root[0]+reach*cos(a),h+.52+rng()*.62,root[2]+reach*sin(a)];
+    const wood=[root,elbow,[.66*tip[0]+.34*elbow[0],elbow[1]-.15+.4*rng(),.66*tip[2]+.34*elbow[2]],tip];
+    s.stroke(i%2?'#725d4e':'#755e55',wood,[.145,.123,.076,.018],11);
+    const midway=wood[2];
+    const spur=[midway[0]+.57*cos(a+bend+.87),midway[1]+.58,midway[2]+.57*sin(a+bend+.87)];
+    s.stroke('#796252',[elbow,midway,spur],[.064,.059,.019],6);
+    sprays.push({q:tip,a,length:1.22+rng()*.67,pitch:.18+rng()*.53},
+      {q:spur,a:a+.91,length:1.16+rng()*.49,pitch:.39+rng()*.27},
+      {q:tip,a:a-.85,length:.98+rng()*.67,pitch:-.29+rng()*.39});
+  }
+  return {geo:s.finish(),sprays};
+}
+function oldPeach(p,art,bloom){
+  const {x,z}=MOON_GATE, f=frame(p,x,z,PI/2), tree=sculpture();
+  // An old spreading tree takes root beside the moon gate. Its hollowed trunk
+  // turns the corner of the roof and the high boughs enclose a patch of sky.
+  const timber=[
+    [[[5.66,-.92,-.84],[5.73,.69,-.65],[5.32,1.72,-.51],[5.88,3.23,-.62],[5.23,4.58,-.52],[4.16,4.92,-.32],
+      [3.65,5.47,-.16],[1.90,5.72,-.11],[.89,5.56,.02],[-.91,6.05,-.29],[-2.35,6.25,-.31]],[.83,.72,.55,.43,.37,.29,.24,.19,.14,.086,.015]],
+    [[[5.67,.10,-.26],[5.21,1.08,-.16],[5.47,2.27,-.39],[6.11,3.32,-.51],[6.65,3.92,-.42],[6.80,4.85,-.57],[7.83,5.24,-.68]],[.49,.43,.30,.25,.174,.104,.015]],
+    [[[5.68,2.97,-.72],[5.74,4.11,-.87],[5.23,5.59,-1.23],[5.51,6.56,-1.64],[5.23,7.17,-1.91]],[.31,.24,.146,.084,.012]],
+    [[[3.81,5.35,-.19],[3.03,6.28,-.33],[2.12,6.80,-.53],[1.62,7.39,-.48]],[.166,.127,.072,.009]],
+    [[[2.05,5.70,-.12],[1.47,5.37,.39],[.54,5.18,.74],[-.23,5.25,.72]],[.14,.088,.045,.01]],
+    [[[-.82,6.03,-.29],[-1.41,6.57,-.50],[-1.85,6.83,-.66],[-2.06,7.23,-.53]],[.088,.071,.039,.009]],
+  ];
+  const buds=[];
+  for(const [j,[knots,widths]] of timber.entries()){
+    tree.stroke(j%2?'#65544d':'#574b42',knots,widths,knots.length*3);
+    for(const side of [-1,1]){
+      const streak=knots.map(([a,y,b],k)=>[a+side*widths[k]*.23,y,b+widths[k]*.82]);
+      tree.stroke(side<0?'#3f3933':'#ac9880',streak,widths.map(w=>w*(side<0?.084:.142)),knots.length*3);
     }
-    function bloom(x,y,r){
-      const spin=rng()*TAU;
-      for(let k=0;k<5;k++){
-        const a=spin+k*TAU/5;
-        c.save();c.translate(x,y);c.rotate(a);
-        c.fillStyle=['#ffdddf','#ffe9e6','#fff6ee','#edafbc','#f4ccd3'][Math.floor(5*rng())];
-        c.beginPath();c.moveTo(0,0);c.bezierCurveTo(-r*.9,-r*.29,-r*.68,-r*1.32,0,-r*1.12);
-        c.bezierCurveTo(r*.68,-r*1.32,r*.80,-r*.28,0,0);c.fill();c.restore();
-      }
-      c.fillStyle='#b6796a';c.beginPath();c.arc(x,y,r*.24,0,TAU);c.fill();
-      c.fillStyle='#e6bd74';c.fillRect(x-r*.12,y-r*.12,r*.21,r*.19);
+    const tip=knots.at(-1), prev=knots.at(-2);
+    buds.push([tip,Math.atan2(-(tip[2]-prev[2]),tip[0]-prev[0])]);
+    for(let k=2;k<knots.length-1;k+=2){
+      const q=knots[k],a=k*2.23+j;
+      const twig=[q,[q[0]+.43*cos(a),q[1]+.60,q[2]+.37*sin(a)],
+        [q[0]+1.03*cos(a),q[1]+1.14,q[2]+.83*sin(a)]];
+      tree.stroke('#6f5950',twig,[widths[k]*.48,.072,.014],10);buds.push([twig.at(-1),-a]);
     }
-    twig(14,238,299,43,34,4.9);
-    for(let j=0;j<33;j++){
-      const t=(j+rng())/34;
-      const x=20+t*274, y=235-t*193-5*sin(t*PI);
-      const side=j%2?1:-1, endX=x+(14+rng()*57)*side, endY=y-14-rng()*62;
-      twig(x,y,endX,endY,side*7,1.4+rng());
-      for(let k=0;k<10;k++){
-        const q=(k+rng())/10, xx=x+(endX-x)*q+(rng()-.5)*19, yy=y+(endY-y)*q+(rng()-.5)*17;
-        if(k%6===0){c.fillStyle='#a3a77b';c.beginPath();c.ellipse(xx,yy,2.6,5.1,q*2,0,TAU);c.fill();}
-        else bloom(xx,yy,2.8+rng()*3.15);
-      }
+  }
+  for(let i=0;i<7;i++){
+    const a=i*2.4;
+    tree.stroke('#6e5b4d',[[5.65,.32,-.76],[5.68+.67*cos(a),-.02,-.77+.56*sin(a)],
+      [5.70+1.63*cos(a),-.36,-.82+1.28*sin(a)]],[.28,.25,.041],7);
+  }
+  p.shapes.gatePeach=tree.finish();
+  f.part('gatePeach',0,0,0,1,1,1,'#fff',brushWash(new T.MeshLambertMaterial({vertexColors:true}),.37));
+  for(const [i,[tip,yaw]] of buds.entries()){
+    for(let j=0;j<4;j++){
+      const a=yaw+(j-1.5)*.87,w=2.16+.65*cos(i+j);
+      f.part('peachSprig',...tip,w*1.13,w*.77,1,'#fff7ed',j===1?art:bloom,a,.49-.26*j,-.18+.12*j,false);
     }
-  });
-  return new T.MeshLambertMaterial({map,side:T.DoubleSide,alphaTest:.36,emissive:'#dbbbb7',emissiveIntensity:.34});
+  }
 }
 function* peachGrove(p) {
-  const art=blossomSpray();
-  const bark=['#6a5849','#7a6254','#614f44'];
-  for(const [idx,t] of PEACH_TREES.entries()) {
-    const f=frame(p,t.x,t.z,t.turn),s=t.size,r=seeded(t.seed);
-    const drift=(r()-.5)*.62;
-    f.line([0,-.25,0],[-.14*s,1.40*s,.12*s],.30*s,bark[idx%3]);
-    f.line([-.14*s,1.39*s,.12*s],[drift*s,2.58*s,-.16*s],.21*s,bark[(idx+1)%3]);
-    for(let i=0;i<6;i++) {
-      const a=i*2.4+r()*.46, rad=(1.36+r()*.67)*s, b=1.31*s+i*.185*s;
-      const tip=[cos(a)*rad,(2.71+i*.237+r()*.67)*s,sin(a)*rad];
-      const joint=[tip[0]*(.40+r()*.39)+drift*s,b+(.18+r()*.79)*s,tip[2]*(.37+r()*.39)];
-      f.line([-.12*s,b,.05*s],joint,.13*s,bark[idx%3]);
-      f.line(joint,tip,.082*s,bark[(idx+1)%3]);
-      const tint=['#fff8ee','#fbddd9','#ffe6e2','#f8e2e5'][idx%4];
-      for(let k=0;k<3;k++) {
-        const aa=a+(k-1)*.91;
-        f.part('plane',tip[0]+cos(aa)*.34*s,tip[1]+(.23+k*.097)*s,tip[2]+sin(aa)*.34*s,
-          (2.92+r()*.5)*s,(2.1+r()*.45)*s,1,tint,art,aa,(k-1)*.52+.22,k%2?.15:-.18,false);
-      }
+  const art=blossomSpray('peach-bough'), bloom=blossomSpray('peach-blossom-cloud'), wash=brushWash(new T.MeshLambertMaterial({vertexColors:true}),.29);
+  p.shapes.peachSprig=new T.PlaneGeometry(1,1).translate(.46,.44,0);
+  const trees=Array.from({length:5},(_,i)=>{
+    const variant=peachTree(76231+i*3504);p.shapes['twistedPeach'+i]=variant.geo;return variant;
+  });
+  for(const [i,t] of PEACH_TREES.entries()){
+    const form=i%trees.length, f=frame(p,t.x,t.z,t.turn), s=t.size;
+    f.part('twistedPeach'+form,0,0,0,s,s,s,'#fff',wash);
+    for(const [j,{q,a,length,pitch}] of trees[form].sprays.entries()){
+      const w=length*s*(j%3===0?1.06:1.39);
+      f.part('peachSprig',q[0]*s,q[1]*s,q[2]*s,w,w*.76,1,'#fff7ef',j%3===0?art:bloom,-a,pitch,0,false);
     }
-    if(idx%26===0) yield;
+    if(i%32===0)yield;
   }
+  oldPeach(p,art,bloom);
 }
 
 function groveShrine(p){
@@ -294,7 +326,15 @@ function daibutsuden(p) {
   f.part('box',0,-.19,0,34.4,.62,23.4,'#a2a497',p.masonry);
   f.part('box',0,.12,0,33.9,.14,23.2,'#d0baa0',p.deck);
   f.part('box',0,10.25,-11.4,33.1,20.4,.85,'#78776a',p.solid);
-  for(let j=-8;j<=8;j++) f.part('box',j*1.89,10.25,-10.96,.064,20.4,.065,'#66675d');
+  // A continuous offering procession runs behind the openwork aureole, with
+  // the lotus-leaf parasol and stretched silk deliberately visible at the sides.
+  const painting=washTexture('lotus-offerings');
+  const wallArt=new T.MeshLambertMaterial({map:painting,emissiveMap:painting,emissive:'#d4c8af',emissiveIntensity:.35});
+  f.part('plane',0,10.33,-10.94,31.1,18.83,1,'#fff',wallArt,0,0,0,false);
+  for(const side of [-1,1]){
+    f.part('box',side*15.67,10.33,-10.81,.24,19.32,.14,'#64543e');
+    f.part('box',0,10.33+side*9.48,-10.81,31.56,.18,.14,'#796b4b');
+  }
   for(const [u,v] of TEMPLE_COLUMNS){
     f.part('round',u,.32,v,.89,.36,.89,'#a1a397',p.stone);
     f.part('round',u,11,v,.59,21.8,.59,pillars,p.lacquer);
@@ -359,6 +399,28 @@ function vestment(p,f) {
     const name=cloth?'patinatedKesa':'riceShoulder';p.shapes[name]=g;
     f.part(name,0,0,0,1,1,1,'#fff',new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide}));
   }
+  const stitch=(points,widths,tint,name)=>{
+    p.shapes[name]=brushStroke(points,widths,26);
+    f.part(name,0,0,0,1,1,1,tint);
+  };
+  // A kesa is stitched from rectangular pieces of cloth. Their long edges
+  // turn with the body and gather in diagonals below the raised hand.
+  for(let j=-3;j<=3;j++){
+    const mid=j*.364,lo=5.63+.28*cos(mid*2.4),hi=collar(mid)-.26;
+    const path=Array.from({length:12},(_,k)=>{
+      const t=k/11,a=mid+.085*sin(t*PI+mid),q=surface(a,lo+(hi-lo)*t,true);
+      q.x+=.035*sin(a);q.z+=.035*cos(a);return q.toArray();
+    });
+    stitch(path,[.007,.050,.038,.011],j%2?'#4d625b':'#a79569','kesaPanel'+j);
+    if(j===3)continue;
+    for(let k=0;k<2;k++){
+      const endpoints=Array.from({length:8},(_,n)=>{
+        const t=n/7,a=mid+.36*t+.05,y=lo+(hi-lo)*(.30+.34*k)+.13*sin(a*2);
+        const q=surface(a,y,true);q.x+=.035*sin(a);q.z+=.035*cos(a);return q.toArray();
+      });
+      stitch(endpoints,[.009,.043,.011],'#ad9c75','kesaSeam'+j+'_'+k);
+    }
+  }
   for(const [offset,r,color] of [[0,.111,'#c4a46c'],[-.20,.054,'#9e926c']]){
     const points=Array.from({length:80},(_,j)=>{const a=TAU*j/80;return surface(a,collar(a)+offset,true);});
     const name=offset?'kesaBraid':'kesaHem';
@@ -379,7 +441,7 @@ function greatBuddha(p) {
   }
   lotus.computeVertexNormals();p.shapes.bronzeLotus=lotus;
   const smooth=(u,v,z,w,h,d,tint,roll=0)=>f.part(max(w,h,d)>.9?'mochiStone':'ball',u,v,z,w,h,d,tint,p.fine,0,0,roll);
-  const patina='#658278', edge='#bb9b63';
+  const patina='#658278';
   // A double lotus seat on a faceted bronze drum.
   f.part('round',0,.41,0,6.6,.62,5.26,'#687a6b');
   f.part('round',0,.83,0,6.29,.42,5.03,'#b29766');
@@ -392,41 +454,55 @@ function greatBuddha(p) {
       .038,.60,.037,ring?'#dcc58a':'#b1ad87',p.fine,a,ring?.37:-.27);
   }
   f.part('round',0,2.93,0,6.1,.42,4.9,'#a18e62');
-  for(const [w,h] of [[6.9,9.35],[6.62,9.06],[5.07,6.35],[4.76,6.02]]){
-    f.part('nimbus',0,h>8?10.95:13.62,-3.52,w,h,3.3,'#ba9c5c');
+  // Broad, openwork flame aureole. Each upturned tongue is pierced so
+  // offering animals on the screen can be seen through the bronze.
+  const flame=new T.Shape();
+  flame.moveTo(-.29,0);flame.bezierCurveTo(-.57,.65,-.37,1.24,.29,1.86);
+  flame.bezierCurveTo(.20,1.47,.25,1.19,.52,1.11);flame.bezierCurveTo(.12,.74,.60,.43,.27,.08);
+  flame.quadraticCurveTo(0,-.10,-.29,0);
+  const hole=new T.Path();hole.moveTo(.012,.29);hole.bezierCurveTo(-.20,.47,-.15,.81,.06,1.04);
+  hole.quadraticCurveTo(-.012,.74,.15,.57);hole.quadraticCurveTo(.22,.41,.012,.29);flame.holes.push(hole);
+  p.shapes.haloFlame=new T.ExtrudeGeometry(flame,{depth:.084,bevelEnabled:true,bevelThickness:.017,bevelSize:.017,bevelSegments:1,curveSegments:9});
+  for(const [w,h] of [[7.53,8.81],[7.22,8.54],[5.01,5.84],[4.69,5.55]]){
+    f.part('nimbus',0,h>8?10.58:14.03,-3.65,w,h,3.25,'#aa864b');
   }
-  for(let i=0;i<45;i++){
-    const a=(i+.5)*TAU/45, u=sin(a)*6.77,v=10.95+cos(a)*9.25;
-    smooth(u,v,-3.51,.19,.29,.086,'#ddbc72',-a);
-    if(i%2===0) {
-      const tip=[sin(a+.045)*7.35,10.95+cos(a+.045)*10.12,-3.45];
-      f.line([u,v,-3.5],[sin(a)*7.21,10.95+cos(a)*9.74,-3.5],.135,edge,p.fine);
-      f.line([sin(a)*7.21,10.95+cos(a)*9.74,-3.5],tip,.095,edge,p.fine);
-    }
+  for(let i=0;i<40;i++){
+    const a=(i+.5)*TAU/40,u=sin(a)*7.37,v=10.58+cos(a)*8.71;
+    f.part('haloFlame',u,v,-3.59,1.1,i%2?1.05:.81,1,'#ba9b5e',p.fine,0,0,-a);
+    smooth(u,v,-3.43,.145,.19,.088,'#d7b474',-a);
+  }
+  for(let i=0;i<18;i++){
+    const a=(i+.5)*TAU/18,u=sin(a)*4.91,v=14.03+cos(a)*5.72;
+    f.part('bronzeLotus',u,v,-3.49,.21,.47,.11,'#d5b371',p.fine,0,0,-a);
   }
   smooth(0,4.55,.12,5.55,1.71,3.89,patina);
   smooth(-1.85,4.17,1.55,3.85,1.04,2.13,'#708c7e',.085);
   smooth(1.86,4.23,1.71,3.63,.96,1.81,'#849787',-.115);
   vestment(p,f);
-  smooth(0,14.63,.09,3.22,3.18,2.48,rice);
+  const head=p.shapes.mochiStone.clone(), face=head.attributes.position;
+  const fullness=y=>1+.146*Math.exp(-((y+.24)**2)/.22)-.075*Math.max(0,y);
+  for(let i=0;i<face.count;i++)face.setX(i,face.getX(i)*fullness(face.getY(i)));
+  head.computeVertexNormals();p.shapes.riceBuddhaFace=head;
+  const complexion=brushWash(new T.MeshLambertMaterial({color:'#fff'}),.13);
+  f.part('riceBuddhaFace',0,14.63,.09,3.22,3.18,2.48,rice,complexion);
   for(const side of [-1,1]){
     smooth(side*3.05,14.42,.22,.48,.91,.47,'#e6d7b8',side*-.14);
     smooth(side*3.09,13.77,.21,.33,.68,.37,'#e3d3b3',side*.12);
     smooth(side*3.19,14.47,.53,.17,.45,.12,'#c5b38d',side*-.18);
   }
   function faceZ(u,v){
-    return .09+2.48*Math.sqrt(max(0,1-(u/3.22)**2-((v-14.63)/3.18)**2));
+    return .09+2.48*Math.sqrt(max(0,1-(u/(3.22*fullness((v-14.63)/3.18)))**2-((v-14.63)/3.18)**2));
   }
   let stroke=0;
   function faceStroke(coords,r,color){
     const curve=new T.CatmullRomCurve3(coords.map(q=>vec(...q,faceZ(...q)+.049)));
     const name='buddhaBrush'+stroke++;
-    p.shapes[name]=new T.TubeGeometry(curve,28,r,7,false);
+    p.shapes[name]=brushStroke(curve.getPoints(18).map(q=>q.toArray()),[r*.14,r,r*1.13,r*.74,r*.09],32);
     f.part(name,0,0,0,1,1,1,color);
   }
   for(const d of [-1,1]){
-    faceStroke([[d*.53,14.83],[d*.83,14.72],[d*1.18,14.68],[d*1.5,14.73],[d*1.72,14.86]],.09,'#665947');
-    faceStroke([[d*.44,15.48],[d*.79,15.65],[d*1.17,15.7],[d*1.57,15.64],[d*1.80,15.49]],.092,'#70604a');
+    faceStroke([[d*.53,14.83],[d*.83,14.72],[d*1.18,14.68],[d*1.5,14.73],[d*1.72,14.86]],.132,'#55493c');
+    faceStroke([[d*.44,15.48],[d*.79,15.65],[d*1.17,15.7],[d*1.57,15.64],[d*1.80,15.49]],.127,'#695744');
   }
   smooth(0,14.54,2.49,.30,.59,.30,'#e4d3ad');
   smooth(0,15.61,faceZ(0,15.61),.16,.16,.11,'#c7a463');
@@ -465,150 +541,13 @@ export function* dressPilgrimage(painter) {
   yield* inari(painter);
   cedarWoods(painter);
   yield;
+  yield* paintPeachCliffs(painter,washTexture('peach-valley-rock'));
   yield* peachGrove(painter);
   fallenBlossoms(painter);
   groveShrine(painter);
   yield;
   greatBuddha(painter);
   yield;
-}
-
-function foxHead(s,y,z,scale=1) {
-  const fur='#bf8c61', ivory='#f2dfbd', soot='#584638';
-  const bulb=(color,x,v,w,rx,ry,rz,roll=0)=>
-    s.ball(color,x*scale,y+v*scale,z+w*scale,rx*scale,ry*scale,rz*scale,0,0,roll);
-  bulb(fur,0,0,0,.25,.22,.23);
-  bulb(ivory,0,-.09,.16,.183,.108,.213);
-  bulb(fur,0,-.046,.235,.127,.107,.19);
-  bulb(soot,0,-.045,.397,.068,.048,.057);
-  const ear=new T.ConeGeometry(1,1,3);
-  for(const side of [-1,1]) {
-    s.add(ear,fur,side*.167*scale,y+.225*scale,z-.018*scale,.129*scale,.335*scale,.108*scale,0,0,-side*.23);
-    s.add(ear,'#7c564b',side*.173*scale,y+.232*scale,z+.044*scale,.073*scale,.204*scale,.056*scale,0,0,-side*.23);
-    bulb(ivory,side*.164,-.076,.084,.13,.105,.13,side*-.26);
-    bulb(soot,side*.166,.036,.166,.061,.017,.029,-side*.28);
-    bulb('#ad614a',side*.188,-.012,.168,.047,.012,.019,-side*.23);
-  }
-}
-function weddingFox(role) {
-  const s=sculpture(), bride=role==='bride', groom=role==='groom', parasol=role==='parasol';
-  const dye=bride?'#f4ead6':groom?'#4c5e5b':parasol?'#697972':'#977467';
-  const contrast=bride?'#ba7861':groom?'#c0afa0':'#dbc19b';
-  const robe=new T.LatheGeometry([[.31,0],[.35,.038],[.33,.16],[.215,.79],[.24,1.01],[.174,1.13]]
-    .map(([r,y])=>new T.Vector2(r,y)),20);
-  s.add(robe,dye,0,.16,0,1,1,.81);
-  s.post(contrast,0,.21,0,.346,.063,.285);
-  s.post(bride?'#cba362':'#977553',0,.85,0,.252,.149,.222);
-  for(const d of [-1,1]){
-    s.ball(dye,d*.258,1.01,.009,.14,.285,.194,0,0,d*.24);
-    s.ball(contrast,d*.306,.803,.116,.12,.073,.11);
-    s.ball('#eadaba',d*.303,.823,.18,.083,.067,.083);
-    s.box(bride?'#d6c8ab':'#e5d8b9',d*.077,1.19,.147,.054,.31,.041,-.12,0,-d*.62);
-    for(let j=0;j<3;j++) {
-      s.ball(contrast,d*(.13+j*.045),.325+j*.082,.217-j*.023,.024,.04,.018,0,0,.48*d);
-    }
-  }
-  s.ball('#c5966d',.10,.73,-.39,.133,.16,.38,-.38,.27);
-  s.ball('#f4e7cf',.18,.91,-.69,.106,.116,.183,-.52,.27);
-  foxHead(s,1.45,.033,1.06);
-  if(bride) {
-    // A watabōshi opens in front of the muzzle; a red silk lining borders both cheeks.
-    s.ball('#f4ebd9',0,1.61,-.078,.367,.356,.275);
-    for(const d of [-1,1]) {
-      s.ball('#f8efde',d*.27,1.45,.049,.086,.24,.15,0,0,-d*.22);
-      s.ball('#b97160',d*.312,1.64,.129,.041,.065,.042);
-    }
-  } else if(groom) {
-    s.ball('#363e38',0,1.69,-.056,.163,.174,.156,-.12);
-    s.ball('#434a40',0,1.84,-.12,.087,.142,.085,-.44);
-  } else if(parasol) {
-    s.post('#70583f',-.287,1.61,.21,.024,1.59,.024);
-    const cap=new T.LatheGeometry([[0,.365],[.10,.362],[.44,.292],[.83,.107],[1,.013],[.99,-.025],[.02,.225]]
-      .map(([r,y])=>new T.Vector2(r,y)),24);
-    s.add(cap,'#b85641',-.287,2.38,.21,1.01,1.01,1.01);
-    for(let i=0;i<16;i++){
-      const a=i*TAU/16;
-      s.ball('#e1b183',-.287+.66*sin(a),2.52,.21+.66*cos(a),.012,.018,.34,.38,a);
-    }
-    s.ball('#695b43',-.287,2.77,.21,.06,.085,.06);
-  } else {
-    s.post('#756045',.34,1.21,.17,.019,.84,.019);
-    s.box('#ead09c',.34,1.54,.17,.204,.295,.195);
-    for(const b of [1.377,1.703])s.box('#675743',.34,b,.17,.254,.049,.227);
-  }
-  return s.finish();
-}
-function wildFox() {
-  const s=sculpture();
-  s.ball('#be8a5d',0,.53,0,.218,.24,.46,-.02);
-  s.ball('#e1c6a2',0,.48,.285,.177,.21,.186);
-  foxHead(s,.782,.345,.87);
-  s.ball('#b58058',0,.61,-.53,.153,.152,.368,-.38);
-  s.ball('#f0dabb',.004,.741,-.79,.127,.126,.17,-.58);
-  return s.finish();
-}
-function foxParties(scene) {
-  const material=new T.MeshLambertMaterial({vertexColors:true});
-  const obj=new T.Object3D(),groups=new Map(),roles=['lantern','groom','bride','parasol','lantern'];
-  const leg=new T.SphereGeometry(1,8,6);
-  function batch(key,geo,n,mat=material){
-    const mesh=new T.InstancedMesh(geo,mat,n);
-    mesh.name='稲荷・'+key;mesh.count=0;mesh.frustumCulled=false;
-    mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
-    mesh.castShadow=true;mesh.receiveShadow=true;
-    scene.add(mesh);groups.set(key,mesh);
-  }
-  for(const r of new Set(roles)) batch(r,weddingFox(r),12);
-  batch('wild',wildFox(),42);
-  batch('feet',leg,240,new T.MeshLambertMaterial({color:'#715a44'}));
-  function mark(kind,x,y,z,yaw,pitch,sx,sy,sz){
-    const b=groups.get(kind);
-    obj.position.set(x,y,z);obj.scale.set(sx,sy,sz);obj.rotation.set(pitch,yaw,0,'YXZ');obj.updateMatrix();
-    b.setMatrixAt(b.count++,obj.matrix);
-  }
-  const rand=seeded(86317);
-  const wild=Array.from({length:38},(_,i)=>{
-    // The animals cross the clearings between the red corridors.
-    const row=i%8;
-    return {x:-263+rand()*107,z:-389.56-19.125*row,phase:rand()*TAU,
-      rx:1.3+rand()*3.6,rz:1.1+rand()*1.63,size:.71+rand()*.44,rate:.10+rand()*.07};
-  });
-  function put(kind,wx,wz,yaw,phase,size,player) {
-    const x=player.x+wrapDelta(wx-player.x),z=player.z+wrapDelta(wz-player.z);
-    if((x-player.x)**2+(z-player.z)**2>90**2) return;
-    const y=terrainHeight(wx,wz), stride=sin(phase);
-    mark(kind,x,y+.025+abs(stride)*.036*size,z,yaw,0,size,size,size);
-    const beast=kind==='wild';
-    for(const side of [-1,1])for(const front of (beast?[-1,1]:[1])){
-      const step=stride*side*front, u=side*(beast?.127:.131)*size;
-      const v=((beast?.265*front:0)+step*(beast?.080:.082))*size;
-      mark('feet',x+u*cos(yaw)+v*sin(yaw),y+(beast?.245:.13)*size,
-        z-u*sin(yaw)+v*cos(yaw),yaw,step*(beast?.29:.27),.063*size,(beast?.247:.13)*size,.092*size);
-    }
-  }
-  return (time,player,active)=>{
-    for(const b of groups.values()) b.count=0;
-    if(active){
-      for(const [i,q] of WEDDING_SITES.entries()){
-        for(const [j,r] of roles.entries()){
-          const walked=time*.82+(q.rx-q.rz)*1.04+i*2.2-j*1.22;
-          const {x,z,yaw}=weddingPoint(q,walked);
-          put(r,x,z,yaw,time*3.32+j*.76,1.08,player);
-        }
-      }
-      for(const w of wild){
-        const a=time*w.rate+w.phase,x=w.x+w.rx*sin(a),z=w.z+w.rz*sin(2*a);
-        put('wild',x,z,Math.atan2(w.rx*cos(a),2*w.rz*cos(2*a)),time*4.77+w.phase,w.size,player);
-      }
-    }
-    for(const b of groups.values()) {
-      b.visible=b.count>0;
-      if(!b.visible) continue;
-      b.instanceMatrix.clearUpdateRanges();
-      b.instanceMatrix.addUpdateRange(0,b.count*16);
-      b.instanceMatrix.needsUpdate=true;
-    }
-  };
 }
 
 function mistTexture() {

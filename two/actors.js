@@ -15,6 +15,8 @@ import { poseHareRider } from './scroll-riders.js';
 import { createSkyLife } from './sky-life.js';
 import { createCraneFlight } from './crane-flight.js';
 import { buildBeast, beastRig, poseBeast } from './beast-art.js';
+import { updateScrollResident } from './scroll-encounters.js';
+import { createRyuguPerformers } from './ryugu-performers.js';
 import { dressArtisan, poseArtisan } from './trade-tools.js';
 import { makeRiceModel, poseRice } from './mochi-model.js';
 
@@ -1527,6 +1529,7 @@ export function makeNPC(entity, root) {
     const handedness=entity.room===undefined ? 1 : -1;
     mesh.scale.set(handedness*entity.stature*entity.build,entity.stature,entity.stature);
   }
+  if(entity.encounter && !entity.area) mesh.scale.set(entity.stature*entity.build,entity.stature,entity.stature);
   if (kind === 'turtle') mesh.scale.setScalar(2);
   const shadowMesh = shadow(mesh, kind === 'turtle' ? 1.19 : 1.2, kind === 'turtle' ? 1.32 : 1.0);
   return { mesh, limbs, shadow: shadowMesh };
@@ -1661,6 +1664,7 @@ export function createActors(scene, renderer) {
   const root = group(scene, '旅の仲間');
   const h = makeHero();
   const skyLife = createSkyLife(root);
+  const seaPerformers = createRyuguPerformers(root);
   h.spin = 0;
   h.held = {
     read: accessory('manga'),
@@ -1716,10 +1720,11 @@ export function createActors(scene, renderer) {
   const viewport=renderer?.domElement || document.getElementById('scene');
   const cameraFlight = new WeakMap();
   function atPhotoTime(n, time) {
-    if(n.type!=='kirin' && !isFlying(n.type))return n;
+    if(!n.encounter && n.type!=='kirin' && !isFlying(n.type))return n;
     let view=cameraFlight.get(n);
     if(!view) {view=Object.create(n);cameraFlight.set(n,view);}
-    moveWildlife(view,time);
+    if(n.encounter) updateScrollResident(view,time);
+    else moveWildlife(view,time);
     return view;
   }
   const byCoverage=(a,b)=>b.priority-a.priority;
@@ -1745,7 +1750,7 @@ export function createActors(scene, renderer) {
     const nearest=[...state.npcs].sort((a,b)=>nearDistance(a)-nearDistance(b));
     const bodies=new Set(), tools=new Set(), stage=new THREE.Group();
     for (const n of nearest) {
-      if(n.atMortar || n.type==='bird') continue;
+      if(n.seaResident || n.atMortar || n.type==='bird') continue;
       const key=n.type+'-'+(n.area?'artisan':n.role)+(n.type==='shishi' ? n.variant : '');
       if(bodies.has(key) && (!n.area || tools.has(n.craft || n.role))) continue;
       bodies.add(key);
@@ -1779,6 +1784,7 @@ export function createActors(scene, renderer) {
       t = state.time;
     gaitHero(h, p, t, dt, state);
     skyLife(t,state,camera,state.photo ? atPhotoTime : null);
+    seaPerformers(t,p,camera,state.nearbyNpcs);
     if (!processionView) processionView=distantProcession(root,shadowMap(),state.npcs.length);
     if (!beastView) beastView=distantProcession(root,shadowMap(),state.npcs.filter(n=>SPECIES[n.type]).length,true);
     prepareCranes();
@@ -1789,7 +1795,7 @@ export function createActors(scene, renderer) {
     const focalPixels=(viewport?.height || window.innerHeight)*camera.projectionMatrix.elements[5]*.5;
     visible.length=0; selected.clear();
     for (const n of state.nearbyNpcs) {
-      if(n.mounted || n.atMortar) continue;
+      if(n.mounted || n.seaResident || n.atMortar) continue;
       const view=state.photo ? atPhotoTime(n,t) : n;
       const dx=wrapDelta(view.x-p.x),dz=wrapDelta(view.z-p.z);
       const distance=Math.hypot(dx,dz);
@@ -1814,7 +1820,10 @@ export function createActors(scene, renderer) {
       // Keep singular performances articulated, including the hare's seat and the
       // kirin's four individual cloud contacts.
       const performanceRig = n.ridesDeer || n.carriesHare || ['dragon','kirin','shishi','turtle'].includes(n.type);
-      slot.priority = performanceRig ? 10000+pixels : pixels*(npcs.has(n.id)?1.23:1);
+      // The paper atlas has a walking cycle for each beast. Keep the paired
+      // actions articulated from across the clearing, especially the deer’s bow.
+      const encounterWeight=n.encounter && distance<24 ? 1.85 : 1;
+      slot.priority = performanceRig ? 10000+pixels : pixels*encounterWeight*(npcs.has(n.id)?1.23:1);
       visible.push(slot);
     }
     visible.sort(byCoverage);

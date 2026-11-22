@@ -22,8 +22,8 @@ function leafFans() {
   return g;
 }
 
-export function createMeadow(scene,objects,coarse) {
-  const clearings=meadowExclusions(objects), shape=leafFans(), cache=new Map();
+export function createMeadow(scene,objects,coarse,residents) {
+  const clearings=meadowExclusions(objects,residents), shape=leafFans(), cache=new Map();
   const time={value:0}, traveller={value:new THREE.Vector2()}, range=coarse?42:54;
   const atlas=new THREE.TextureLoader().load(new URL('./assets/world/meadow-herbs.webp',import.meta.url).href);
   atlas.colorSpace=THREE.SRGBColorSpace;

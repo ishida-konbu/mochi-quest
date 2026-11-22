@@ -22,6 +22,7 @@ export function createInkPass(renderer, camera) {
       lens: { value: new THREE.Vector2() },
       clip: { value: new THREE.Vector2(camera.near, camera.far) },
       focus: { value: 0 },
+      scroll: { value: 0 },
     },
     vertexShader: `
       varying vec2 paperUV;
@@ -30,7 +31,7 @@ export function createInkPass(renderer, camera) {
       varying vec2 paperUV;
       uniform sampler2D painted,depthMap;
       uniform vec2 pixel,lens,clip;
-      uniform float focus;
+      uniform float focus,scroll;
       float meters(vec2 uv) {
         float d = texture2D(depthMap,uv).r;
         return clip.x*clip.y / (clip.y-d*(clip.y-clip.x));
@@ -43,12 +44,15 @@ export function createInkPass(renderer, camera) {
         return max(0.,dot(n,diff)/max(.001,dist)-.075) * (1.-smoothstep(.04,1.35,dist));
       }
       float brightness(vec3 c){ return sqrt(max(0.,dot(c,vec3(.2126,.7152,.0722)))); }
-      vec3 edgeColor(vec2 uv, vec3 base) {
+      vec3 edgeColor(vec2 uv, vec3 base, out float brush) {
         float nw=brightness(texture2D(painted,uv+vec2(-pixel.x,pixel.y)).rgb);
         float ne=brightness(texture2D(painted,uv+pixel).rgb);
         float sw=brightness(texture2D(painted,uv-pixel).rgb);
         float se=brightness(texture2D(painted,uv+vec2(pixel.x,-pixel.y)).rgb);
         float lo=min(min(nw,ne),min(sw,se)), hi=max(max(nw,ne),max(sw,se));
+        // Deposit the colour contour on the darker bank only. This keeps
+        // tiny eye highlights and the slivers of sky between branches open.
+        brush=smoothstep(.055,.29,hi-lo)*smoothstep(.007,.14,hi-brightness(base));
         if(hi-lo<max(.045,hi*.12))return base;
         vec2 dir=vec2(sw+se-nw-ne,nw+sw-ne-se);
         float norm=max(abs(dir.x),abs(dir.y));
@@ -58,7 +62,8 @@ export function createInkPass(renderer, camera) {
       void main() {
         vec2 uv=paperUV;
         float z=meters(uv);
-        vec3 c=edgeColor(uv,texture2D(painted,uv).rgb);
+        float brush;
+        vec3 c=edgeColor(uv,texture2D(painted,uv).rgb,brush);
         vec3 p=viewPoint(uv,z);
         vec3 n=normalize(cross(dFdx(p),dFdy(p)) + vec3(0.,0.,.00000001));
         float a=meters(uv+vec2(pixel.x,0.)), b=meters(uv-vec2(pixel.x,0.));
@@ -75,6 +80,17 @@ export function createInkPass(renderer, camera) {
                    +occlusion(uv+stepUV*vec2(.36,.27),p,n)
                    +occlusion(uv+stepUV*vec2(-.31,-.28),p,n);
           c*=exp(-mix(.235,.077,portrait)*occ*(1.-smoothstep(18.,48.,z)));
+        }
+        if(scroll>.001 && z<clip.y*.995) {
+          float l=dot(c,vec3(.2126,.7152,.0722));
+          float lit=smoothstep(.055,.32,l);
+          // Thin washes leave the paper luminous. Keep saturated pigments
+          // in the peach buds, red torii, deep water and the hillside fires.
+          float chroma=max(max(c.r,c.g),c.b)-min(min(c.r,c.g),c.b);
+          vec3 lampblack=mix(vec3(l)*vec3(1.025,1.,.958),c,.68+.27*smoothstep(.05,.43,chroma));
+          vec3 lifted=lampblack+vec3(.076,.066,.049)*lit*(1.-smoothstep(.55,.95,l));
+          float line=max(ridge*.91,brush*.66)*(1.-smoothstep(36.,168.,z));
+          c=mix(c,lifted*(1.-.64*line),scroll);
         }
         // The light portrait blur leaves small, distant ink silhouettes legible.
         if (focus>0. && z>focus+1.) {
@@ -129,7 +145,8 @@ export function createInkPass(renderer, camera) {
       const halfFov = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
       material.uniforms.lens.value.set(camera.aspect * halfFov, halfFov);
     },
-    draw(scene, focusDistance = 0) {
+    draw(scene, focusDistance = 0, scroll = 0) {
+      material.uniforms.scroll.value = scroll;
       material.uniforms.focus.value = focusDistance;
       renderer.setRenderTarget(target);
       renderer.render(scene, camera);

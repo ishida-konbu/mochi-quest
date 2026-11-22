@@ -1,5 +1,7 @@
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
 import { KYO_FOOD, KYO_ANIMALS, kyoNight, kyoInfluence } from './kyo-layout.js';
+import { makeScrollResidents, updateScrollResident } from './scroll-encounters.js';
+import { SEA_SPECIES, makeRyuguResidents, updateRyuguResident } from './ryugu-residents.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
 import { ORIGINAL_REGIONS, terrainHeight, shoreDistance, WATER_Y, groundHeight, landscapeFloor, solidHeightAt, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
@@ -126,6 +128,7 @@ function makeWorld() {
     npc(type,role,x,z,phase);
   }
   prepareVillageRoutes(npcs,objects);
+  npcs.push(...makeScrollResidents(), ...makeRyuguResidents());
   return { objects, npcs };
 }
 
@@ -488,6 +491,8 @@ export function createGame(snapshot = null) {
     for (const n of state.nearbyNpcs) {
       n.flash = Math.max(0, n.flash - dt);
       if (n === turtle || n.atMortar || n.ridesDeer) continue;
+      if (n.encounter) {updateScrollResident(n,state.time);continue;}
+      if (n.seaResident) {updateRyuguResident(n,state.time);continue;}
       if (SPECIES[n.type]) {
         const far=Math.abs(wrapDelta(n.x-player.x))+Math.abs(wrapDelta(n.z-player.z))>55;
         const continuous=n.type==='bird'||n.type==='dragon'||n.type==='kirin';
@@ -551,7 +556,7 @@ export function createGame(snapshot = null) {
       shot.x = wrapCoord(shot.x + dx*length); shot.z = wrapCoord(shot.z + dz*length);
       shot.age += dt; shot.life -= dt;
       if (hit) {
-        const points=SPECIES[hit.type]?.points ?? 10;
+        const points=(SPECIES[hit.type] || SEA_SPECIES[hit.type])?.points ?? 10;
         hit.flash=.58; state.score+=points;
         state.delivered.add(hit.id);
         emit('score', { value:points, text:'+'+points, x:hit.x, z:hit.z, y:shot.y+1 });
@@ -687,7 +692,7 @@ export function createGame(snapshot = null) {
     }
     if (player.invulnerable > 0) return;
     for (const n of state.nearbyNpcs) {
-      if (n.area || n.atMortar || n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
+      if (n.area || n.encounter || n.seaResident || n.atMortar || n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
       player.invulnerable = 2.1;
       if (!protectedVitals()) player.hp = Math.max(0,player.hp-7);
       if (player.hp === 0) {
@@ -872,9 +877,13 @@ export function createGame(snapshot = null) {
   const savedSeed=restored ? snapshot.flightSeed : null;
   const validSeed=Number.isInteger(savedSeed) && savedSeed>=0 && savedSeed<=0xffffffff;
   state.flightSeed=restored ? (validSeed?savedSeed:0x82c6710b) : Math.floor(Math.random()*0x100000000);
-  for(const n of npcs) if(SPECIES[n.type]) {
-    if(legendary(n.type)) n.flightSeed=state.flightSeed;
-    moveWildlife(n,state.time);
+  for(const n of npcs) {
+    if(n.encounter) updateScrollResident(n,state.time);
+    else if(n.seaResident) updateRyuguResident(n,state.time);
+    else if(SPECIES[n.type]) {
+      if(legendary(n.type)) n.flightSeed=state.flightSeed;
+      moveWildlife(n,state.time);
+    }
   }
   updateHareRider(riverRider,state.time);
   refreshCrowd();

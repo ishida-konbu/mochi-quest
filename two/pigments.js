@@ -1,3 +1,5 @@
+import { PEACH_BOUT } from './scroll-encounters.js';
+import { groundImpressions } from './scroll-paper.js';
 import * as THREE from './vendor/three.module.min.js';
 
 const asset = (name) => new URL('./assets/world/' + name + '.webp', import.meta.url).href;
@@ -27,14 +29,16 @@ export function loadPigments() {
 
 export function meadowMaterial(art) {
   const mat = new THREE.MeshLambertMaterial({ map: art.turf, vertexColors: true });
+  const impressions=groundImpressions();
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.impressions = { value: impressions };
     shader.uniforms.woodFloor = { value: art.forest };
     shader.uniforms.bankStones = { value: art.gravel };
     shader.vertexShader =
-      'attribute vec2 terrainMix; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
-      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvTerrainMix = terrainMix; vSeasons = seasons; incline=1.-abs(normal.y);');
+      'attribute float scrollAmount; varying float vScroll; varying vec3 inkPoint; attribute vec2 terrainMix; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
+      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvScroll=scrollAmount; inkPoint=position; vTerrainMix = terrainMix; vSeasons = seasons; incline=1.-abs(normal.y);');
     shader.fragmentShader =
-      'uniform sampler2D woodFloor, bankStones; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
+      'uniform sampler2D woodFloor, bankStones, impressions; varying float vScroll; varying vec3 inkPoint; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
       shader.fragmentShader.replace(
         '#include <map_fragment>',
         `
@@ -59,7 +63,39 @@ export function meadowMaterial(art) {
         float snowCover=smoothstep(.035,.96,vSeasons.x+(luma-.24)*.20);
         float drift=.5+.5*sin(tileUv.y*.49+1.5*sin(tileUv.x*.13)+tileUv.x*.27);
         vec3 snow=mix(vec3(.65,.77,.85),vec3(.94,.96,.98),drift*.40+clamp(luma,0.,.60));
-        diffuseColor.rgb *= mix(ground,snow,snowCover);
+        ground=mix(ground,snow,snowCover);
+        if(vScroll>.001) {
+          // Reserve the paper between clumps. The coarser wash stays in the
+          // distance while the fine root and bristle marks vanish through mips.
+          vec2 field=inkPoint.xz;
+          vec2 bend=vec2(sin(field.y*.077),cos(field.x*.091));
+          vec3 mark=texture2D(impressions,(field+bend*.68)/17.).rgb;
+          float pool=.5+.5*sin(field.x*.25+1.6*sin(field.y*.19)+bend.x);
+          float damp=smoothstep(-.4,1.9,.38-inkPoint.y);
+          float cliff=smoothstep(.032,.36,incline);
+          float grass=mark.r*(.60+.32*pool)*(1.-cliff);
+          float stria=mark.g*cliff;
+          float stroke=mix(max(grass,stria),mark.b,damp);
+          float mottling=clamp(.55*luma+.10*pool+.09*woodland,0.,.55);
+          vec3 fieldWash=mix(vec3(.77,.72,.59),vec3(.41,.46,.32),mottling+.13*woodland);
+          fieldWash=mix(fieldWash,vec3(.57,.58,.51)*(.85+.17*pool),cliff*.83);
+          fieldWash=mix(fieldWash,vec3(.63,.70,.64)*(.88+.21*pool),damp);
+          // Scuffs in the earth curve around the wrestlers. Leave broken
+          // crescents, like the trailing end of a single half-dry brushstroke.
+          vec2 bout=(field-vec2(${PEACH_BOUT.x}.,${PEACH_BOUT.z}.))*vec2(.90,1.05);
+          if(max(abs(bout.x),abs(bout.y))<2.4) {
+            float r=length(bout), ang=atan(bout.y,bout.x+.00001);
+            float scuff=abs(r-2.1-.055*sin(3.*ang)-.035*sin(8.*ang));
+            float nick=.5+.5*sin(5.*ang+.85*sin(7.*ang));
+            float rim=(1.-smoothstep(.018,.084,scuff))*(.19+.74*nick*nick);
+            fieldWash=mix(fieldWash,vec3(.79,.69,.54)*(.91+.18*luma),1.-smoothstep(1.95,2.4,r));
+            fieldWash*=1.-.36*rim;
+          }
+          fieldWash*=1.-.59*stroke;
+          fieldWash*=.93+.11*pool+.055*smoothstep(.08,.4,luma);
+          ground=mix(ground,fieldWash,vScroll*.88);
+        }
+        diffuseColor.rgb *= ground;
       `,
       );
   };

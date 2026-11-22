@@ -5,7 +5,7 @@ import { WATER_Y, BOUND } from '../two/terrain.js';
 import { meadowExclusions, visitMeadowTile, MEADOW_TILES, MEADOW_TILE } from '../two/meadow-layout.js';
 
 test('the seeded meadows reach the density target while leaving water and the bath clear',()=>{
-  const masks=meadowExclusions(createGame().state.objects), forms=new Set();
+  const {state}=createGame(), masks=meadowExclusions(state.objects,state.npcs), forms=new Set();
   let total=0, outer=0;
   for(let i=0;i<MEADOW_TILES;i++)for(let j=0;j<MEADOW_TILES;j++){
     total+=visitMeadowTile(i,j,masks,(x,y,z,w,h,a,form)=>{

@@ -1,4 +1,5 @@
 // One repeatable planting plan per 26 m square. All coordinates here are canonical.
+import { scrollCoverage } from './scroll-paper.js';
 import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, MARKET_STALLS, ROCKS, REGIONS, WATER_Y,
   nearRoad, seeded, seasonAt, shoreDistance, riverZ, riverHalfWidth, terrainHeight } from './terrain.js';
 
@@ -23,7 +24,7 @@ const widthScale  = [1.55,1.34,1.08,1.02,1.5,1.68,1.65,1.3,1.37,1.28,1.53,1.18];
 
 function tileKey(x,z) { return floor((x + BOUND) / MEADOW_TILE) * MEADOW_TILES + floor((z + BOUND) / MEADOW_TILE); }
 
-export function meadowExclusions(objects) {
+export function meadowExclusions(objects,residents=[]) {
   const clearings = new Map();
   const add = (x,z,r,covered) => {
     for (let a=floor((x-r+BOUND)/MEADOW_TILE); a<=floor((x+r+BOUND)/MEADOW_TILE); a++)
@@ -43,6 +44,7 @@ export function meadowExclusions(objects) {
   for (const [x,z] of MARKET_STALLS) circle(x,z,3.1);
   for (const b of ROCKS) circle(b.x,b.z,Math.max(b.rx,b.rz));
   for (const o of objects) circle(o.x,o.z,o.type==='onsen'?4.8:o.type==='port'?3.0:1.85);
+  for (const n of residents) if(n.encounter) circle(n.homeX,n.homeZ,n.travel+2.3);
   for (const r of REGIONS) circle(r.x,r.z,4.4);
   circle(307,169.8,6); circle(-55,290,7); circle(143,96,5);
   // The earthen borders of the planted paddies are left as narrow green lanes.
@@ -58,6 +60,7 @@ export function meadowExclusions(objects) {
 export function visitMeadowTile(i,j,clearings,visit) {
   const rng=seeded((i+1)*44017 ^ (j+8)*52973), x0=i*MEADOW_TILE-BOUND,z0=j*MEADOW_TILE-BOUND;
   const masks=clearings.get(tileKey(x0+1,z0+1))||[];
+  const scroll=scrollCoverage(x0+MEADOW_TILE/2,z0+MEADOW_TILE/2);
   const season={}; let count=0;
   for (let a=0;a<rows;a++) for (let b=0;b<rows;b++) {
     const x=x0+(a+.05+.9*rng())*MEADOW_TILE/rows, z=z0+(b+.05+.9*rng())*MEADOW_TILE/rows;
@@ -66,7 +69,9 @@ export function visitMeadowTile(i,j,clearings,visit) {
     if (y<WATER_Y+.13) continue;
     seasonAt(x,z,season);
     const wave=sin(x*.177+2*sin(z*.127))+cos(z*.199+x*.071)+sin(z*.048-x*.125);
-    const cover=.79+wave*.069-season.snow*.53;
+    // Draw separated banks of grass. Bare paper around the animal groups
+    // shows the feet, instruments and the space between two facing figures.
+    const cover=(.79+wave*.069-season.snow*.53)*(1-scroll*(.225-.20*wave));
     if (rng()>cover) continue;
     const wet=abs(z-riverZ(x))-riverHalfWidth(x)<9, coast=shoreDistance(x,z)<26;
     const palette=season.snow>.50?'snow':wet?'bank':season.moon>.49?'moon':season.autumn>.43?'autumn':
@@ -75,9 +80,9 @@ export function visitMeadowTile(i,j,clearings,visit) {
     // Colonies share a dominant herb; separate sprouts vary in age, spread and tilt.
     const bed=floor((sin(x*.080+cos(z*.102)*1.4)+cos(z*.109+x*.033)+2)*71);
     const family=list[rng()<.64 ? bed%list.length : floor(rng()*list.length)];
-    const form=floor(rng()*5), size=(.58+rng()*.79)*(1+wave*.039)*(1-season.snow*.36);
+    const form=floor(rng()*5), size=(.58+rng()*.79)*(1+wave*.039)*(1-season.snow*.36)*(1-scroll*(.35-.085*wave));
     const height=size*heightScale[family], width=height*widthScale[family]*(.86+rng()*.36);
-    const shade=.72+.26*rng(), hue=season.snow*.99+season.autumn*.29+season.moon*.11+(palette==='coast'?.16:0);
+    const shade=.72+.26*rng(), hue=season.snow*.99+season.autumn*.29+season.moon*.11+(palette==='coast'?.16:0)+scroll*.14;
     visit(x,y-.038,z,width,height,rng()*Math.PI*2,family*5+form,shade,hue);
     count++;
   }

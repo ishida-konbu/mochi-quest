@@ -1,6 +1,7 @@
 // The illustrated menagerie ranges through the same ten districts as the procession.
 import { ORIGINAL_REGIONS as REGIONS, groundHeight, waterDepth, solidHeightAt, terrainHeight, WATER_Y, seeded, wrapCoord, wrapDelta } from './terrain.js';
 
+import { SEA_SPECIES } from './ryugu-residents.js';
 import { canopyHeight, walkCircuit } from './village-paths.js';
 import { legendary, legendPath } from './legend-flight.js';
 import { dragonWave, dragonPhase, dragonPitch, maxDragonPitch, walkingScore } from './animal-motion.js';
@@ -162,13 +163,13 @@ const bodyVolumes = {
 const seatedHareVolumes=[[0,1.03,.03,.32,.38,.31],[0,1.52,.06,.24,.24,.26]];
 export function recipientContact(n,shot,dx,dz,length) {
   const rx=wrapDelta(shot.x-n.x),rz=wrapDelta(shot.z-n.z);
-  const volumes=n.ridesDeer ? seatedHareVolumes : bodyVolumes[n.type];
+  const volumes=n.ridesDeer ? seatedHareVolumes : bodyVolumes[n.type] || SEA_SPECIES[n.type]?.volumes;
   if (!volumes) {
     if(shot.y<n.y-.1 || shot.y>n.y+2.15) return Infinity;
     const along=Math.max(0,Math.min(length,-rx*dx-rz*dz));
     return (rx+along*dx)**2+(rz+along*dz)**2<.64 ? along : Infinity;
   }
-  const scale=n.stature||1, extent=(SPECIES[n.type]?.frame || 2)*scale;
+  const scale=n.stature||1, extent=((SPECIES[n.type] || SEA_SPECIES[n.type])?.frame || 2)*scale;
   if(Math.abs(rx)>extent+length || Math.abs(rz)>extent+length || Math.abs(shot.y-n.y)>extent) return Infinity;
   const c=Math.cos(n.heading),s=Math.sin(n.heading);
   const dragon=n.type==='dragon', pitch=dragon ? dragonPitch(n) : 0;

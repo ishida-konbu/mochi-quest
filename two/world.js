@@ -1,3 +1,4 @@
+import { scrollCoverage } from './scroll-paper.js';
 import { createKyo, kyoPavingMaterial } from './kyo.js';
 import { dressPilgrimage, pilgrimageLife } from './pilgrimage.js';
 import { dressRyugu, createRyuguLife } from './ryugu.js';
@@ -115,7 +116,7 @@ function* landscape(scene, art) {
   }
   const grid=40, tiles=12, span=2*BOUND/tiles;
   for (let row=0; row<tiles; row++) for (let column=0; column<tiles; column++) {
-    const p=[], ix=[], uv=[], col=[], surface=[], seasons=[];
+    const p=[], ix=[], uv=[], col=[], surface=[], seasons=[], scroll=[];
     for (let j=0; j<=grid; j++) for (let i=0; i<=grid; i++) {
       const x=(column+i/grid)*span-BOUND, z=(row+j/grid)*span-BOUND, y=h(x,z);
       p.push(x,y,z);
@@ -130,6 +131,7 @@ function* landscape(scene, art) {
         canopy=max(canopy,1-((x-tree.x)**2+(z-tree.z)**2)/(radius*radius));
       }
       surface.push(canopy,max(max(0,1-abs(river-.2)/7.3),max(0,min(1,(7.6-coast)/8.2))));
+      scroll.push(scrollCoverage(x,z));
       seasonAt(x,z,season);
       seasons.push(season.snow,season.autumn,season.moon, season.dawn*max(0,min(1,(30-coast)/23)));
       col.push(c.r,c.g,c.b);
@@ -140,6 +142,7 @@ function* landscape(scene, art) {
     }
     const ground=geometry(p,ix,uv,col);
     ground.setAttribute('terrainMix',new THREE.Float32BufferAttribute(surface,2));
+    ground.setAttribute('scrollAmount',new THREE.Float32BufferAttribute(scroll,1));
     ground.setAttribute('seasons',new THREE.Float32BufferAttribute(seasons,4));
     const land=new THREE.Mesh(ground,mat);
     land.receiveShadow=true;

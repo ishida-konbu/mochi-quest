@@ -7,11 +7,13 @@ import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { Euler, Vector3 } from '../two/vendor/three.module.min.js';
 import { dragonPitch, dragonWave } from '../two/animal-motion.js';
 
-test('the recipient ledger covers the original individuals and the Kyoto residents and gives the two legends a hundredfold score',()=>{
+test('the expanded recipient ledger preserves the original 691 entries and the two legends’ hundredfold score',()=>{
   const {state}=createGame();
-  assert.equal(state.recipientTotal,691);
+  assert.equal(state.recipientTotal,794);
+  const original=state.npcs.slice(0,691);
+  assert.ok(original.every((n,i)=>n.id===n.type+'-'+i));
   assert.equal(new Set(state.npcs.map(n=>n.id)).size,state.recipientTotal);
-  assert.deepEqual(Object.fromEntries(Object.keys(SPECIES).map(type=>[type,state.npcs.filter(n=>n.type===type).length])),
+  assert.deepEqual(Object.fromEntries(Object.keys(SPECIES).map(type=>[type,original.filter(n=>n.type===type).length])),
     {monkey:90,bird:40,fox:40,tiger:10,dragon:1,kirin:1,deer:32,boar:18,shishi:2});
   assert.equal(SPECIES.monkey.points,SPECIES.bird.points);
   assert.ok(10<SPECIES.bird.points && SPECIES.bird.points<SPECIES.fox.points && SPECIES.fox.points<SPECIES.tiger.points);

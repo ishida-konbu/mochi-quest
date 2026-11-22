@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { batchActorParts } from './actors.js';
+import { scrollPigment } from './kyo-scrollwork.js';
 import { brushWash } from './scroll-sculpt.js';
 import { terrainHeight, wrapDelta } from './terrain.js';
 
@@ -162,6 +163,18 @@ function body(b,kind) {
     }
     const x=side*.424, forward=side===1?.194:.08;
     b.ball(x,.738,forward,.198,.278,.184,o.dye,[-.24,0,side*.35]);
+    if(kind<2){
+      // Long furisode sleeves hang visibly from the forearms, with a tapered
+      // inner ink seam curving into the folded lining of each opening.
+      const drop=kind===0?.36:.22;
+      b.ball(side*.48,.67-drop*.37,forward+.04,.137,.172+drop*.53,.120,o.dye,[-.12,0,-side*.19]);
+      b.stroke([[side*.546,.735,forward+.135],[side*.545,.60,forward+.150],
+        [side*.527,.47-drop*.28,forward+.13],[side*.473,.418-drop*.37,forward+.086]],.0089,o.hem);
+      for(let j=0;j<3;j++){
+        const z=forward+.105+j*.008,yy=.481-drop*.25+j*.044;
+        b.stroke([[side*.46,yy,z],[side*.489,yy+.018,z+.012],[side*.502,yy+.047,z]],.0056,o.thread);
+      }
+    }
     b.ball(side*.491,.68,forward+.143,.125,.098,.105,o.silk);
     b.ball(side*.5,.701,forward+.196,.083,.075,.084,flesh);
     for(let j=0;j<5;j++){
@@ -240,7 +253,7 @@ export function createStreetCrowd(scene) {
   for(let kind=0;kind<outfits.length;kind++){
     const model=batchActorParts(reference,b=>body(b,kind));
     parts.push([
-      instances(crowd,model.geometry,model.material,perKind,outfits[kind].name),
+      instances(crowd,model.geometry,scrollPigment(),perKind,outfits[kind].name),
       instances(crowd,robeGeometry(kind),robeSilk(kind),perKind,'小袖'),
     ]);
     for(let i=0;i<perKind;i++){

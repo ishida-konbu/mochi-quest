@@ -5,6 +5,7 @@ import { prepareWorld } from './world.js';
 import { finishInSlices, uploadSceneTextures } from './preparation.js';
 import { setRiverStones } from './scanned-stone.js';
 import { createBathReflection } from './spring-water.js';
+import { scrollCoverage } from './scroll-paper.js';
 import { createInkPass } from './ink.js';
 import { createActors, getExpression } from './actors.js';
 import { loadRiceModel } from './mochi-model.js';
@@ -12,6 +13,8 @@ import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS
   transferURL, decodeTransfer, storeTransfer } from './journey-transfer.js';
 import { createGame } from './game.js';
 import { SPECIES } from './bestiary.js';
+import { SEA_SPECIES } from './ryugu-residents.js';
+import { seaPortrait } from './ryugu-performers.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
 import { preloadBeastCoats } from './beast-art.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
@@ -91,13 +94,13 @@ let pitch = 0.23,
   priorCamera = null,
   photoMode = false;
 let goal = REGIONS.some((r) => r.id === savedSettings.goal) ? savedSettings.goal : null;
-let trackedAnimal = null, jumpPin = null;
+let trackedAnimal = null, trackedHabitat = null, jumpPin = null;
 const speciesNames = { frog:'蛙', rabbit:'兎', turtle:'ミツユビハコガメ',
-  ...Object.fromEntries(Object.entries(SPECIES).map(([type,spec])=>[type,type==='bird'?'丹頂鶴':spec.label])) };
-function nearestUndelivered(type) {
+  ...Object.fromEntries(Object.entries({...SPECIES,...SEA_SPECIES}).map(([type,spec])=>[type,type==='bird'?'丹頂鶴':spec.label])) };
+function nearestUndelivered(type, habitat) {
   let result = null, best = Infinity;
   for (const n of state.npcs) {
-    if (state.delivered.has(n.id) || (type && n.type!==type)) continue;
+    if (state.delivered.has(n.id) || (type && n.type!==type) || (habitat && n.habitat!==habitat)) continue;
     const d = wrapDelta(n.x-p.x)**2 + wrapDelta(n.z-p.z)**2 + (n.y-p.y)**2;
     if (d < best) { best = d; result = n; }
   }
@@ -464,18 +467,20 @@ function updateCamera(dt, snap = false) {
   else focus.lerp(heroAt, 1 - Math.exp(-dt * 13));
   const sx = Math.sin(yaw),
     sz = Math.cos(yaw),
-    d = distance * (full > 1 && photoMode ? 1.18 : 1);
+    scenery = photoMode ? 0 : scrollCoverage(p.x,p.z),
+    d = distance * (full > 1 && photoMode ? 1.18 : 1) * (1+.14*scenery);
   // At the horizon, hold the eye above ground and tilt up to follow an animal overhead.
   const orbitPitch = photoMode ? pitch : Math.max(0, pitch);
-  const dx = sx * Math.cos(orbitPitch) * d,
+  const shoulder=scenery*Math.min(1,camera.aspect)*Math.min(1,d/5);
+  const dx = sx * Math.cos(orbitPitch) * d + sz*1.58*shoulder,
     dy = Math.sin(orbitPitch) * d + (photoMode ? 0.1 : 0.62),
-    dz = sz * Math.cos(orbitPitch) * d;
+    dz = sz * Math.cos(orbitPitch) * d - sx*1.58*shoulder;
   let fraction = 1;
   // While the grass mochi is inside a trunk, start the camera ray on the
   // outward side of that trunk. A second wall still shortens the camera arm.
   const diving = p.diveDepth > 0, palaceBed = diving ? terrainHeight(RYUGU.x,RYUGU.z) : 0;
   let emerging = !diving && p.mode === 'kusa' && solidHeightAt(focus.x,focus.z,.2,focus.y) + .19 > focus.y;
-  for (let i = 1, n = Math.ceil(d / 0.4); i <= n; i++) {
+  for (let i = 1, n = Math.ceil(Math.hypot(dx,dy,dz) / 0.4); i <= n; i++) {
     const t = i / n,
       x = focus.x + dx * t,
       z = focus.z + dz * t,
@@ -508,9 +513,11 @@ function updateCamera(dt, snap = false) {
   camera.position.copy(eye);
   aim.copy(focus);
   if (!photoMode) {
-    aim.x -= sx * 1.65;
-    aim.z -= sz * 1.65;
-    aim.y += 0.53;
+    // Give the page to the animal directly ahead. An off-centre mochi keeps
+    // the letter trajectory visible between the hero and its recipient.
+    aim.x += sz*.4*shoulder-sx*(1.65+.82*scenery);
+    aim.z -= sx*.4*shoulder+sz*(1.65+.82*scenery);
+    aim.y += .53+.25*scenery;
   } else aim.y -= .13;
   camera.lookAt(aim);
   if (!photoMode && pitch < 0) camera.rotateX(-pitch);
@@ -523,7 +530,11 @@ function updateHUD() {
   $('region').textContent = state.region;
   $('delivered-count').textContent = (state.delivered?.size || 0) + ' / ' + (state.recipientTotal ?? state.npcs.length);
   cards.get('kagami').hidden = !state.kagamiUnlocked;
-  if (trackedAnimal && state.delivered.has(trackedAnimal.id)) trackedAnimal = nearestUndelivered(trackedAnimal.type) || nearestUndelivered();
+  if(trackedAnimal && state.delivered.has(trackedAnimal.id)) {
+    trackedAnimal=trackedHabitat ? nearestUndelivered(undefined,trackedHabitat) :
+      nearestUndelivered(trackedAnimal.type) || nearestUndelivered();
+    if(!trackedAnimal) trackedHabitat=null;
+  }
   if (lastScore !== state.score) {
     const score = $('score'), exact = fullScore.format(state.score);
     score.textContent = state.score < 10000000 ? exact : shortScore.format(state.score);
@@ -616,7 +627,7 @@ function openDialog(kind) {
 function mapDialog() {
   const body = $('dialog-content');
   body.innerHTML =
-    '<div class="atlas-layout"><canvas class="map-canvas" id="atlas" width="540" height="540"></canvas><div class="map-caption"><div class="map-places"></div><p class="map-detail" aria-live="polite"></p><div class="actions"><button class="jump-link" id="set-goal">ここを道しるべにする</button><button class="choice" id="clear-goal">道しるべを外す</button></div></div></div>';
+    '<div class="atlas-layout"><canvas class="map-canvas" id="atlas" width="540" height="540"></canvas><div class="map-caption"><div class="map-places"></div><p class="map-detail" aria-live="polite"></p><div class="actions"><button class="jump-link" id="set-goal">ここを道しるべにする</button><button class="choice" id="local-animal" hidden>この地の動物に届ける</button><button class="choice" id="clear-goal">道しるべを外す</button></div></div></div>';
   for (const [i, r] of REGIONS.entries()) {
     const b = document.createElement('button');
     b.innerHTML = '<em>' + labels[i] + '</em> ' + r.name;
@@ -657,16 +668,17 @@ function mapDialog() {
   bookLink.onclick=()=>{dialogKind='journal';$('dialog-title').textContent='三条通知の配達帳';journalDialog();};
   body.querySelector('.actions').append(bookLink);
   $('set-goal').onclick = () => {
-    trackedAnimal = null;
+    trackedAnimal = trackedHabitat = null;
     goal = selectedPlace;
     lastFocus = canvas;
     persistSettings();
     dialog.close();
     updateHUD();
   };
+  $('local-animal').onclick=()=>trackDelivery(nearestUndelivered(undefined,selectedPlace),selectedPlace);
   $('clear-goal').hidden = !goal && !trackedAnimal;
   $('clear-goal').onclick = () => {
-    trackedAnimal = null;
+    trackedAnimal = trackedHabitat = null;
     goal = null;
     lastFocus = canvas;
     persistSettings();
@@ -674,6 +686,11 @@ function mapDialog() {
     updateHUD();
   };
   selectMap(selectedPlace);
+}
+function trackDelivery(animal, habitat=null) {
+  if(!animal) return;
+  trackedAnimal=animal; trackedHabitat=habitat; goal=null;
+  persistSettings();lastFocus=canvas;dialog.close();updateHUD();
 }
 function journalDialog() {
   const body=$('dialog-content');
@@ -689,7 +706,10 @@ function journalDialog() {
     row.dataset.species=type;
     row.innerHTML='<i class="animal-print" aria-hidden="true"></i><span><b></b><small></small></span><strong></strong>';
     const print=row.firstElementChild;
-    if (SPECIES[type]) {
+    if (SEA_SPECIES[type]) {
+      print.style.backgroundImage='url("'+seaPortrait(type)+'")';
+      print.style.backgroundSize='contain';
+    } else if (SPECIES[type]) {
       const drawing = beastDrawing(type);
       print.style.backgroundImage="url('./assets/residents/beasts.webp')";
       const [angle,box,cx,cy] = {
@@ -705,13 +725,10 @@ function journalDialog() {
       print.style.backgroundImage="url('../assets/actors/"+art+".webp')";
     }
     row.querySelector('b').textContent=name;
-    row.querySelector('small').textContent=(SPECIES[type]?.points || 10).toLocaleString('ja-JP')+' 点';
+    row.querySelector('small').textContent=((SPECIES[type] || SEA_SPECIES[type])?.points || 10).toLocaleString('ja-JP')+' 点';
     row.querySelector('strong').textContent=number+' / '+group.length;
     row.disabled=number===group.length;
-    row.onclick=()=>{
-      trackedAnimal=nearestUndelivered(type);
-      goal=null;persistSettings();lastFocus=canvas;dialog.close();updateHUD();
-    };
+    row.onclick=()=>trackDelivery(nearestUndelivered(type));
     body.querySelector('.ledger-animals').append(row);
   }
   dialog.scrollTop=0;
@@ -729,6 +746,7 @@ function selectMap(id) {
   const r = REGIONS.find((r) => r.id === id);
   for (const b of document.querySelectorAll('.map-places button'))
     b.setAttribute('aria-pressed', String(b.dataset.id === id));
+  $('local-animal').hidden=!nearestUndelivered(undefined,id);
   const detail = document.querySelector('.map-detail');
   detail.textContent =
     r.name +
@@ -741,10 +759,10 @@ function selectMap(id) {
     autumn: '楓の枝が重なる谷道。紅葉をくぐって峡へ。',
     moon: '北の空には十五夜の月。薄のそばの三方に近づくと、月見団子を食べられます。',
     dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。',
-    kyo: '舞妓餅が行き交う都。茶とみたらし団子は広場の店先で。夜は大通りから北の山に大の送り火が見えます。',
-    peach: '谷を囲む峰を抜けると、桃の花が一面に咲く里。',
-    ryugu: '海風の松原から西へ泳ぎ、海上で ↓ を長押しして潜ります。海底の真珠灯籠をたどり、楼門の先の御朱印所へ。Space 長押しで浮上。',
-    todaiji: '回廊の先に、蓮の座に鎮まる大餅仏。足元から仰いでみましょう。',
+    kyo: '舞妓餅が行き交う都。広場の茶席で蛙が盆を差し出し、向かいの辻では兎と蛙が笛と太鼓を合わせます。茶とみたらし団子は店先で。夜は大通りから北の山に大の送り火が見えます。',
+    peach: '東の峠を抜け、桃の花をたどって谷底へ。木陰では兎と蛙が相撲を取り、猿が土俵をのぞきこみます。',
+    ryugu: '海風の松原から西へ泳ぎ、'+(coarse?'「潜る」':'↓ キー')+'を長押しして海底へ。真珠灯籠と海亀・鯛・蛸の一座をたどり、楼門の先の御朱印所へ。'+(coarse?'「跳ぶ」':'Space キー')+'を長押しすると浮上します。',
+    todaiji: '回廊の先に、蓮の座に鎮まる大餅仏。参道で鹿が兎に一礼し、脇では猿と兎が筆を運びます。',
     inari: '朱の鳥居をくぐって雲上の奥社へ。日が差す雨の参道には、狐の嫁入りの行列が現れます。'
   };
   if (landmarks[id]) detail.append(document.createElement('br'), landmarks[id]);
@@ -841,7 +859,7 @@ function settingsForLighting() {
 function drawScene() {
   bathReflection(p, photoMode ? photoTime : state.time, camera);
   const focusDistance = photoMode ? Math.max(0.3, camera.position.distanceTo(aim) - 0.55) : 0;
-  ink.draw(scene, focusDistance);
+  ink.draw(scene, focusDistance, scrollCoverage(p.x,p.z));
 }
 function frame(now) {
   requestAnimationFrame(frame);
@@ -956,7 +974,7 @@ async function boot() {
       loadRiceModel(), finishInSlices(prepareWorld(scene)), preloadBeastCoats(), loadMapPaper(),
     ]);
     world = landscape;
-    meadow = createMeadow(scene, state.objects, coarse);
+    meadow = createMeadow(scene, state.objects, coarse, state.npcs);
     wake = createWake(scene);
     sun.target.position.set(p.x,p.y,p.z);
     applyClimateLights(hemisphere, sun, bounce, p, state.time);

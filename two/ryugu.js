@@ -1,9 +1,10 @@
 import * as THREE from './vendor/three.module.min.js';
 import { terrainHeight, WATER_Y, seeded, wrapDelta } from './terrain.js';
+import { prepareSeaOrnaments } from './ryugu-architecture.js';
 import { RYUGU, HALLS, GATE_V } from './ryugu-layout.js';
 
 const { sin, cos, PI } = Math;
-const vermilion='#b14e39', cinnabar='#cf644c', ink='#384a48', gilding='#d2ad62', shell='#ece3c7', jade='#43877d';
+const vermilion='#91604d', cinnabar='#b87859', ink='#454a43', gilding='#bba374', shell='#e5dac0', jade='#687c70';
 
 // A karamon with a scalloped, plastered arch, extruded through to the far face.
 function tideGate() {
@@ -75,17 +76,35 @@ export function dressRyugu(p) {
     p.part(shape,x+v,bed+h,z-u,w,t,d,color,yaw+angle,pitch,roll,mat,false);
   }
   const bar=(a,b,r,tint,mat=p.solid)=>p.link(point(...a),point(...b),r,tint,false,false,false,mat);
+  const ornament=prepareSeaOrnaments(p,put,bar);
   const stone=(u,h,v,w,t,d)=>put('box',u,h,v,w,t,d,'#9bada1',p.masonry);
   function roof(u,h,v,w,d,rise,crown) {
-    const shape=crown?'pagodaCrown':'pagodaRoof';
+    const shape=crown?'roof':'pagodaRoof';
     put(shape,u,h-.19,v,w,rise,d,ink);
     put(shape,u,h+.015,v,w*.995,rise,d*.995,jade,p.roofs);
+    // Follow the whole upswept eave with a thick ink fascia and the smaller
+    // vermilion return beneath it; a straight cuboid would clip the corners.
+    for(const face of [-1,1]) {
+      let prev;
+      for(let i=-6;i<=6;i++){
+        const f=i/6,y=h+rise*.17*Math.abs(f)**3.8;
+        const pt=[u+f*w*.5,y-.05,v+face*d*.5];
+        if(prev)bar(prev,pt,.089,ink,p.lacquer);
+        prev=pt;
+      }
+      for(let i=-4;i<=4;i++){
+        const xx=u+i*w*.095;
+        put('box',xx,h-.19+rise*.17*Math.abs(i*.19)**3.8,v+face*d*.441,.095,.11,d*.074,'#ab8463',p.wood);
+      }
+    }
+    if(crown)ornament.ridge(u,h+rise*1.005,v,w,d,Math.min(1.02,w/8.5));
     for(const end of [-1,1]) for(const side of [-1,1]) {
       // Curled gilt corner spines rise from the green seigaiha roof tiles.
       let previous;
       for(let j=0;j<=5;j++) {
-        const t=j/5,r=(crown?.026:.255)+(crown?.474:.245)*t;
-        const q=[u+w*r*end,h+.12+rise*((1-t)**1.59+.17*t**1.7),v+d*r*side];
+        const t=j/5,r=.255+.245*t;
+        const q=crown ? [u+w*(.43+.07*t)*end,h+.1+rise*((1-t)**1.62+.045+.12*t),v+d*.5*t*side]
+          : [u+w*r*end,h+.12+rise*((1-t)**1.59+.17*t**1.7),v+d*r*side];
         if(previous)bar(previous,q,.065,gilding);
         previous=q;
       }
@@ -101,10 +120,11 @@ export function dressRyugu(p) {
       place(pos,.85,'ball',.097,.11,.097,gilding);
     }
   }
-  function hall({u,v,w,d,tiers}) {
+  function hall({u,v,w,d,tiers},episode) {
     stone(u,.32,v,w+.78,.64,d+.82);put('box',u,.73,v,w+.94,.22,d+1,'#bfbba1');
     for(let i=0;i<3;i++) stone(u,.1+i*.1,v+d/2+1.42-i*.4,w*.38,.2+i*.2,.52);
     put('box',u,2.56,v,w*.74,3.53,d*.72,shell);
+    ornament.fusuma(u,v,w,d,episode);
     for(const side of [-1,1]) {
       for(let j=0;j<5;j++) {
         const xx=u+(j/4-.5)*w*.89;
@@ -135,6 +155,12 @@ export function dressRyugu(p) {
     }
   }
   HALLS.forEach(hall);
+  // Shell gardens sit off the centre aisle, just behind the welcoming trios.
+  for(const s of [-1,1]){
+    ornament.pearlShell(s*8.35,0,12.75,1.36,s*.21);
+    ornament.pearlShell(s*12.5,0,-2.40,.94,-s*.55);
+    ornament.pearlShell(s*23.8,0,-20.4,1.74,s*.79);
+  }
   p.shapes.tideGate=tideGate();
   put('tideGate',0,0,GATE_V,1,1,1,shell);
   for(const sign of [-1,1]){
@@ -175,15 +201,15 @@ export function dressRyugu(p) {
   flagInk.fillText('竜',48,70);flagInk.fillText('宮',48,131);flagInk.font='37px serif';flagInk.fillText('↓',48,177);
   const cloth=new THREE.CanvasTexture(flagCanvas);cloth.colorSpace=THREE.SRGBColorSpace;
   const flag=new THREE.MeshLambertMaterial({map:cloth,side:THREE.DoubleSide});
-  for(const offset of [104,59,16]) {
-    const xx=x+offset, zz=z-4, surface=WATER_Y-bed;
-    for(let j=-1;j<=1;j++)put('round',4+j*.35,surface+.025,offset,.24,1.82,.24,'#927858',p.wood,0,PI/2);
-    for(const length of [-.55,.55])put('box',4,surface+.23,offset+length,1.34,.11,.16,'#8c704a',p.wood);
-    put('round',4.39,surface+1.31,offset,.066,2.48,.066,'#725d41',p.wood);
-    put('box',4.04,surface+2.42,offset,.92,.07,.07,'#6e614c',p.wood);
-    put('plane',4,surface+1.77,offset,.72,1.26,1,'#fff',flag);
+  for(const [offset,lateral] of [[104,4],[59,4],[25,12.4]]) {
+    const xx=x+offset, zz=z-lateral, surface=WATER_Y-bed;
+    for(let j=-1;j<=1;j++)put('round',lateral+j*.35,surface+.025,offset,.24,1.82,.24,'#927858',p.wood,0,PI/2);
+    for(const length of [-.55,.55])put('box',lateral,surface+.23,offset+length,1.34,.11,.16,'#8c704a',p.wood);
+    put('round',lateral+.39,surface+1.31,offset,.066,2.48,.066,'#725d41',p.wood);
+    put('box',lateral+.04,surface+2.42,offset,.92,.07,.07,'#6e614c',p.wood);
+    put('plane',lateral,surface+1.77,offset,.72,1.26,1,'#fff',flag);
     const mooring=terrainHeight(xx,zz)-bed;
-    bar([4,surface-.10,offset],[5.18,mooring+.18,offset+1],.033,'#80775b');
+    bar([lateral,surface-.10,offset],[lateral+1.18,mooring+.18,offset+1],.033,'#80775b');
   }
   // The approach starts on the shelf. Pearl lamps lead the swimmer west and down.
   for(let i=0;i<8;i++) {
@@ -193,7 +219,7 @@ export function dressRyugu(p) {
     p.part('shaft',sx,base+.41,sz,.36,height,.36,'#98a397');
     p.part('ball',sx,base+height+.63,sz,.30,.30,.30,'#f6e4af',0,0,0,pearl,false);
   }
-  const rng=seeded(74852),coral=['#be7464','#c8493d','#dba083','#aa818e'];
+  const rng=seeded(74852),coral=['#a7826e','#a46757','#be9c7e','#988988'];
   for(let i=0;i<94;i++){
     const a=rng()*PI*2,r=21+rng()*50,u=r*cos(a),v=r*sin(a);
     if(Math.abs(u)<4 && v>0)continue;
@@ -218,25 +244,24 @@ export function dressRyugu(p) {
   }
 }
 
-// A little sea bream drawn on both flanks. Cross-sections carry the pigment
-// from the dark dorsal ridge, through vermilion scales, to a pale belly.
-function seaBream() {
+// Tiny silver fry drift above the performers, tapering to pale bellies beneath an inked ridge.
+function silverFry() {
   const pos=[],color=[],ix=[];
   const vertex=(x,y,z,tint)=>{pos.push(x,y,z);const c=new THREE.Color(tint);color.push(c.r,c.g,c.b);return pos.length/3-1;};
   const sections=[[-.61,.08,.04],[-.40,.19,.09],[-.13,.33,.17],[.17,.32,.18],[.42,.22,.14],[.55,.045,.055]],sides=12;
   for(const [x,h,d] of sections)for(let j=0;j<sides;j++){
     const a=PI*2*j/sides;
-    vertex(x,h*cos(a),d*sin(a),cos(a)>.73?'#954e47':cos(a)<-.27?'#f0d4af':'#da8777');
+    vertex(x,h*cos(a),d*sin(a),cos(a)>.73?'#647367':cos(a)<-.27?'#e6dfc8':'#a1aa94');
   }
   for(let i=0;i<sections.length-1;i++)for(let j=0;j<sides;j++){
     const a=i*sides+j,b=i*sides+(j+1)%sides;ix.push(a,b,a+sides,b,b+sides,a+sides);
   }
-  function fin(a,b,c,t='#ac675b') {ix.push(vertex(...a,t),vertex(...b,t),vertex(...c,t));}
+  function fin(a,b,c,t='#838e7d') {ix.push(vertex(...a,t),vertex(...b,t),vertex(...c,t));}
   fin([-.57,.045,0],[-.90,.30,0],[-.81,.015,0]);fin([-.57,.06,0],[-.81,.02,0],[-.57,-.065,0]);
   fin([-.57,-.065,0],[-.81,.02,0],[-.89,-.26,0]);
   for(let i=0;i<6;i++)fin([-.38+i*.096,.16+.13*sin((i+1)*.43),0],[-.39+i*.095,.28+.12*sin((i+1)*.43),0],[-.28+i*.093,.22+.11*sin((i+1)*.43),0]);
   for(const s of [-1,1]) {
-    fin([.15,-.01,s*.16],[-.15,-.13,s*.32],[-.025,-.17,s*.265],'#c88e75');
+    fin([.15,-.01,s*.16],[-.15,-.13,s*.32],[-.025,-.17,s*.265],'#a6a38c');
     for(const [cx,cy,r,tint] of [[.345,.065,.060,'#e6d7a6'],[.355,.067,.041,'#342f29'],[.366,.083,.014,'#fbf1c9']]){
       for(let j=0;j<8;j++) { const a=j*PI/4,b=(j+1)*PI/4;
         const z=s*(.164+(tint==='#342f29'?.003:tint==='#fbf1c9'?.006:0));
@@ -275,18 +300,18 @@ function tideLight(bed,clock) {
         float crescent=abs(a+b*.74+.22*sin(p.x*1.6+p.y*1.2-t));
         float light=(1.-smoothstep(.04,.17+fwidth(crescent),crescent));
         float f=(1.-smoothstep(28.,45.,length(shore)))*(.45+.28*sin(p.y*.61+p.x*.43+t));
-        gl_FragColor=vec4(.31,.68,.49,light*f*.31);
+        gl_FragColor=vec4(.43,.51,.42,light*f*.15);
         #include <colorspace_fragment>
       }`,
   }));
 }
 export function createRyuguLife(scene) {
   const rng=seeded(16251),group=new THREE.Group(),dum=new THREE.Object3D();
-  const fish=new THREE.InstancedMesh(seaBream(),new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide}),54);
+  const fish=new THREE.InstancedMesh(silverFry(),new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide}),30);
   fish.frustumCulled=false;fish.instanceMatrix.setUsage(THREE.DynamicDrawUsage);group.add(fish);
   const schools=[[-4,-5,8.5,13],[8,8,7,7],[-9,2,12,17],[17,-8,5.6,8],[28,0,10.5,7],[39,5,4,8]];
   const shoal=Array.from({length:fish.count},(_,i)=>({ home:schools[i%schools.length],offset:rng()*3,
-    depth:rng()*2.5,phase:rng()*PI*2,size:.55+rng()*.57 }));
+    depth:rng()*2.5,phase:rng()*PI*2,size:.34+rng()*.34 }));
   const count=95,bubbles=new Float32Array(3*count),buff=new THREE.BufferAttribute(bubbles,3).setUsage(THREE.DynamicDrawUsage);
   const streams=Array.from({length:count},(_,i)=>({x:(i%13-6)*3.8,z:sin(i%13*7.5)*16,phase:rng(),pace:.044+rng()*.042}));
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',buff);
@@ -314,12 +339,12 @@ export function createRyuguLife(scene) {
     dum.position.set(xx,14,zz);dum.rotation.set(.077,0,.16);dum.scale.set(1.3+rng()*2.2,30,.7+rng());dum.updateMatrix();shafts.setMatrixAt(i,dum.matrix);
   }
   group.add(shafts);scene.add(group);
-  const waterFog=new THREE.Color('#477e80');
+  const waterFog=new THREE.Color('#8a9e91');
   return (time,player,camera)=>{
     const immersion=player.diveDepth>0 ? THREE.MathUtils.smoothstep(WATER_Y-camera.position.y,0,3.2):0;
     if(immersion>0) {
       scene.fog.color.lerp(waterFog,immersion);
-      scene.fog.density=THREE.MathUtils.lerp(scene.fog.density,.028,immersion);
+      scene.fog.density=THREE.MathUtils.lerp(scene.fog.density,.021,immersion);
       scene.environmentIntensity*=1-.23*immersion;
     }
     const dx=wrapDelta(RYUGU.x-player.x),dz=wrapDelta(RYUGU.z-player.z);
