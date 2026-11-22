@@ -2,7 +2,20 @@ import * as T from '../two/vendor/three.module.min.js';
 import {peachModel,CROWN_SPAN,CROWN_MID,CROWN_ELEVATIONS} from '../two/flowering-peaches.js';
 export async function bakePeaches(){
   // This is the flowering model visible immediately before the atlas takes over.
-  const meshes=Array.from({length:5},(_,i)=>peachModel(i,false));
+  const meshes=Array.from({length:5},(_,i)=>peachModel(i));
+  const paints=[...new Set(meshes.flatMap(parts=>parts.slice(1).map(([,m])=>m.map)))];
+  if(paints.some(map=>!map.image)){
+    const manager=T.DefaultLoadingManager,{onLoad,onError}=manager;
+    try{
+      await new Promise((resolve,reject)=>{
+        manager.onLoad=resolve;
+        manager.onError=url=>reject(new Error('Could not load peach paint '+url));
+      });
+    }finally{
+      manager.onLoad=onLoad;manager.onError=onError;
+    }
+  }
+  await Promise.all(paints.map(map=>map.image.decode()));
   const renderer=new T.WebGLRenderer({alpha:true,antialias:true,premultipliedAlpha:false,preserveDrawingBuffer:true});
   renderer.clippingPlanes=[new T.Plane(new T.Vector3(0,1,0),.03)];
   renderer.setClearColor(0,0);const cell=256;renderer.setSize(cell,cell,false);

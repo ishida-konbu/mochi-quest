@@ -1,5 +1,4 @@
-import { peachPetals, createPeachOrchard } from './flowering-peaches.js';
-import { peachSprig } from './peach-blossom.js';
+import { blossomGeometry, peachMaterials, createPeachOrchard } from './flowering-peaches.js';
 import { DISTRICTS } from './geography.js';
 import { summitJoinery, orchardCarving } from './pilgrimage-carving.js';
 import { sculpture } from './pilgrimage-pigment.js';
@@ -207,24 +206,22 @@ function gateBlossoms(scene){
   }
   const trunk=new T.Mesh(tree.finish(),brushWash(new T.MeshLambertMaterial({vertexColors:true}),.37));
   trunk.castShadow=trunk.receiveShadow=true;root.add(trunk);
-  // The little flowering shoots fork around the timber in depth, including
-  // underneath the old overhang seen when the player walks through the gate.
-  const levels=new T.LOD();levels.position.set(2.2,5.8,-.4);root.add(levels);
-  for(const detailed of [true,false]){
-    const canopy=new T.Group(),local=new T.Object3D();
-    for(let kind=0;kind<3;kind++){
-      const mesh=new T.InstancedMesh(peachSprig([0,3,1][kind],kind,detailed),peachPetals,buds.length);
-      let count=0;
-      for(const [i,[tip,yaw]] of buds.entries()){
-        if(kind===1 && i%4===2)continue;
-        const j=(kind-i%3+3)%3,w=2.16+.55*cos(i+j);
-        local.position.set(...tip).sub(levels.position);local.scale.set(w,w*.92,w);
-        local.rotation.set(.42-.38*j,yaw+(j-1)*.99,-.16+.14*j,'YXZ');
-        local.updateMatrix();mesh.setMatrixAt(count++,local.matrix);
-      }
-      mesh.count=count;mesh.receiveShadow=true;canopy.add(mesh);
+  // Each tip carries one ink-drawn bough between three impressions of the
+  // flowering canopy. Their different bearings keep the arch open to the sky.
+  const sprig=blossomGeometry(),{ink,flowers}=peachMaterials();
+  const local=new T.Object3D(),tint=new T.Color('#fff7ed');
+  for(const [material,shoots] of [[ink,[1]],[flowers,[0,2,3]]]){
+    const canopy=new T.InstancedMesh(sprig,material,buds.length*shoots.length);
+    let count=0;
+    for(const [i,[tip,yaw]] of buds.entries())for(const j of shoots){
+      const w=2.16+.65*cos(i+j);
+      local.position.set(...tip);
+      local.scale.set(w*1.13,w*.77,1);
+      local.rotation.set(.49-.26*j,yaw+(j-1.5)*.87,-.18+.12*j,'YXZ');
+      local.updateMatrix();
+      canopy.setMatrixAt(count,local.matrix);canopy.setColorAt(count,tint);count++;
     }
-    levels.addLevel(canopy,detailed?0:10,.12);
+    canopy.receiveShadow=true;root.add(canopy);
   }
   return camera=>{
     if(!camera)return;
