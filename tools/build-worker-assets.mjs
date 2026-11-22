@@ -8,7 +8,7 @@ const stage = await mkdtemp(join(root, '.worker-build-'));
 const files = [
   'index.html', 'library.css', 'kagami-preview.html',
   'one/index.html', 'style.css', 'main.js', 'actors.js', 'atlas.js', 'game.js', 'landscape.js', 'sound.js', 'ui.js',
-  'two/index.html', 'two/game.css', 'two/vendor/THREE-LICENSE.txt', 'audio/CREDITS.txt',
+  'two/index.html', 'two/game.css', 'two/mystery.css', 'two/mystery-exhibits.css', 'two/vendor/THREE-LICENSE.txt', 'audio/CREDITS.txt',
 ];
 
 // Only game assets and browser modules belong on the public origin.
