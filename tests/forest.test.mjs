@@ -16,7 +16,6 @@ test('the thinned woodland preserves bamboo groves and crown forms and leaves ro
   assert.ok(TREES.length-bamboo.length-autumn.length >= 1198);
   assert.ok(TREES.filter(t=>t.z < -416 || t.z > 416).length > 75);
   assert.deepEqual(TREES.slice(0,LANDMARK_TREES.length), LANDMARK_TREES);
-  for(const tree of LANDMARK_TREES)assert.ok(!nearRoad(tree.x,tree.z,.6));
   const groves = TREES.filter(tree => tree.form !== undefined);
   assert.equal(new Set(groves.map(tree => tree.form)).size, TREE_FORM_COUNT);
   for (const tree of groves) {

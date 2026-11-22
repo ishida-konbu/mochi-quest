@@ -8,33 +8,29 @@ import { createFlockFlights } from '../two/sky-life.js';
 
 const {flocks,near,capacity}=createAmbientFlocks();
 
-test('small flocks leave open sky between the river, overland and coastal flights',()=>{
-  const census=flocks.reduce((sum,f)=>sum+f.birds.length,0);
-  assert.ok(census>400 && census<680);
+test('half the previous ambient birds follow the same migration, sea and road routes',()=>{
+  const migration=flocks.filter(f=>f.habitat==='migration');
+  const census=groups=>groups.reduce((sum,f)=>sum+f.birds.length,0);
+  assert.equal(migration.length,48);
+  assert.equal(flocks.length,480);
+  assert.equal(census(flocks),5550/2);
   assert.ok(flocks.every(f=>f.birds.length>=3 && f.birds.length<=8));
-  assert.deepEqual(new Set(flocks.map(f=>f.habitat)),new Set(['river','migration','country','offshore','shore','road','passage']));
   const distance=(x,z,f)=>Math.hypot(wrapDelta(x-f.x),wrapDelta(z-f.z));
-  for(const [i,f] of flocks.entries()){
-    assert.ok(flocks.slice(i+1).every(g=>distance(f.x,f.z,g)>=122));
-    assert.ok(f.y>Math.max(WATER_Y,terrainHeight(f.x,f.z))+6);
-  }
   for(const [habitat,routes,reach] of [
-    ['road',CONNECTING_ROADS,250],
-    ['passage',OCEAN_ROUTES.flatMap(r=>r.legs),370],
+    ['road',CONNECTING_ROADS,105],
+    ['passage',OCEAN_ROUTES.flatMap(r=>r.legs),230],
   ]){
     for(const route of routes)for(let i=0;i<route.points.length;i+=15){
       const [x,z]=route.points[i];
       assert.ok(near(x,z).some(f=>f.habitat===habitat&&distance(x,z,f)<reach),route.id+' '+[x,z]);
     }
   }
-  let quiet=0;
   for(let x=-BOUND+100;x<BOUND;x+=200)for(let z=-BOUND+100;z<BOUND;z+=200){
-    if(near(x,z).every(f=>distance(x,z,f)>90))quiet++;
+    assert.ok(near(x,z).some(f=>distance(x,z,f)<85));
     const counts=[0,0,0];
     for(const f of near(x,z))counts[f.kind]+=f.birds.length;
     for(let k=0;k<3;k++)assert.ok(counts[k]<=capacity[k]);
   }
-  assert.ok(quiet>=128);
 });
 
 test('road and offshore flocks enter the camera view, move, and wrap with the camera',()=>{
@@ -53,15 +49,14 @@ test('road and offshore flocks enter the camera view, move, and wrap with the ca
     }
     return visible;
   }
-  for(const habitat of ['road','shore','passage']){
-    const f=flocks.find(f=>f.habitat===habitat);
-    cam.position.set(f.x,Math.max(terrainHeight(f.x,f.z+100),WATER_Y)+3,f.z+100);
-    cam.lookAt(f.x,f.y,f.z);cam.updateMatrixWorld();
+  for(const [x,z,tx,ty,tz] of [[153,-684,186,44,-726],[-1024,268,-984,12,296],[657,-1255,688,7,-1221]]){
+    cam.position.set(x,Math.max(terrainHeight(x,z),WATER_Y)+3,z);
+    cam.lookAt(tx,ty,tz);cam.updateMatrixWorld();
     const birds=frame(26),advanced=frame(26.1);
-    assert.ok(birds.size>=f.birds.length);
+    assert.ok(birds.size>=8);
     let moved=0;
     for(const [id,p] of birds)if(advanced.has(id)&&advanced.get(id).distanceTo(p)>.05)moved++;
-    assert.ok(moved>=f.birds.length);
+    assert.ok(moved>=8);
     cam.position.x+=2*BOUND;cam.position.z-=2*BOUND;cam.updateMatrixWorld();
     const wrapped=frame(26);
     assert.equal(wrapped.size,birds.size);

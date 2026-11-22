@@ -517,11 +517,9 @@ function updateCamera(dt, snap = false) {
     d = distance * (full > 1 && photoMode ? 1.18 : 1) * (1+.14*scenery);
   // At the horizon, hold the eye above ground and tilt up to follow an animal overhead.
   const orbitPitch = photoMode ? pitch : Math.max(0, pitch);
-  // Leave room beside the mochi for a facing pair, even in a narrow viewport.
-  const portrait=1-THREE.MathUtils.smoothstep(camera.aspect,.52,1);
-  const shoulder=scenery*Math.min(1,d/5);
+  const shoulder=scenery*Math.min(1,camera.aspect)*Math.min(1,d/5);
   const dx = sx * Math.cos(orbitPitch) * d + sz*1.58*shoulder,
-    dy = Math.sin(orbitPitch) * d + (photoMode ? 0.1 : 0.62+.39*portrait*shoulder),
+    dy = Math.sin(orbitPitch) * d + (photoMode ? 0.1 : 0.62),
     dz = sz * Math.cos(orbitPitch) * d - sx*1.58*shoulder;
   let fraction = 1;
   // While the grass mochi is inside a trunk, start the camera ray on the
@@ -567,9 +565,8 @@ function updateCamera(dt, snap = false) {
   if (!photoMode) {
     // Give the page to the animal directly ahead. An off-centre mochi keeps
     // the letter trajectory visible between the hero and its recipient.
-    const offset=(.4+.30*portrait)*shoulder*fraction;
-    aim.x += sz*offset-sx*(1.65+.82*scenery);
-    aim.z -= sx*offset+sz*(1.65+.82*scenery);
+    aim.x += sz*.4*shoulder-sx*(1.65+.82*scenery);
+    aim.z -= sx*.4*shoulder+sz*(1.65+.82*scenery);
     aim.y += .53+.25*scenery;
   } else aim.y -= .13;
   camera.lookAt(aim);

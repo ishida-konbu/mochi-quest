@@ -1,7 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 
-// The same paper underlies the whole island. At the principal tableaux its
-// pale ground opens further around the performers.
+// Feather the paper ground into the older roads as the traveller approaches.
 import { SEAPORTS } from './seaport-layout.js';
 import { DISTRICTS } from './geography.js';
 import { KIYOMIZU } from './kiyomizu-layout.js';
@@ -16,7 +15,7 @@ const districts = [
 ];
 export function scrollCoverage(x,z) {
   const beyond=Math.max(Math.abs(x)/407,Math.abs(z)/420);
-  let weight=.58+.14*Math.min(1,Math.max(0,(beyond-.86)/.46));
+  let weight=.61*Math.min(1,Math.max(0,(beyond-.86)/.46));
   for(const [cx,cz,rx,rz] of districts) {
     const r=((x-cx)/rx)**2+((z-cz)/rz)**2;
     const t=Math.min(1,Math.max(0,(1.44-r)/.67));

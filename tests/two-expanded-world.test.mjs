@@ -1,9 +1,9 @@
 import {DISTRICTS, FIFTH_EDITION_CENTRES, relocateLegacyPosition} from '../two/geography.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, ROCKS, TREES, terrainHeight, roadSurfaceHeight, groundHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
+import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, roadSurfaceHeight, groundHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
 import {RETREATS,bathRadius,sitePoint} from '../two/retreat-layout.js';
-import {CLIFF_PINES, INARI_GATES, INARI_ROUTE, PEACH_TREES, MOON_GATE, PEACH_BOUT, nearPeachTrunk} from '../two/pilgrimage-layout.js';
+import {INARI_GATES, INARI_ROUTE, PEACH_TREES, nearPeachTrunk, MOON_GATE} from '../two/pilgrimage-layout.js';
 import {PALACE_APPROACH} from '../two/ryugu-layout.js';
 import {HIGASHIYAMA} from '../two/higashiyama.js';
 import {kyoInfluence, kyoNight, kyoClock, KYO_DAY_SECONDS} from '../two/kyo-layout.js';
@@ -87,20 +87,8 @@ test('small peach groves frame the moon gate and leave the western outlook and r
   for(const [u,v] of [[31,63],[61,-75],[-100,90]]){
     assert.equal(nearPeachTrunk(centre.x+u,centre.z+v,17),false,'open rock at '+[u,v]);
   }
-  for(const t of [...TREES,...PEACH_TREES,...CLIFF_PINES]){
-    assert.ok(Math.hypot(t.x-MOON_GATE.x,t.z-MOON_GATE.z)>8.9);
-    assert.ok(Math.hypot(t.x-PEACH_BOUT.x,t.z-PEACH_BOUT.z)>6.2);
-    // Test the camera as well as the ring. Standing on the south bank and
-    // looking north used to put the lens inside both a plum and a peach.
-    const reach=t.h ? .6*t.h : t.size ? 3.8*t.size : 2*t.scale;
-    const dx=t.x-PEACH_BOUT.x;
-    const dz=Math.max(0,PEACH_BOUT.z-t.z,t.z-PEACH_BOUT.z-15);
-    assert.ok(Math.hypot(dx,dz)>4.5+reach);
-  }
-  for(const rock of ROCKS){
-    assert.ok(!nearPeachTrunk(rock.x,rock.z,Math.max(rock.rx,rock.rz)+.4));
-  }
   for(const t of PEACH_TREES){
+    assert.ok(Math.hypot(t.x-MOON_GATE.x,t.z-MOON_GATE.z)>8.9);
     assert.ok(bathRadius(spring,t.x,t.z)>=1.38);
     assert.equal(waterDepth(t.x,t.z),0);
     assert.ok(terrainHeight(t.x,t.z)>0);

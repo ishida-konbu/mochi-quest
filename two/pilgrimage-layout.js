@@ -60,7 +60,7 @@ export function weddingPoint(q,walked) {
 // Fractured caprock follows three different spurs. The long axis of each
 // slab follows its ridge and the narrow ledge below its crown gathers pine.
 const ridgeHeads=[
-  [-182,14,67,34,-.23,33],[-247,42,50,25,-.42,28],[-292,66,60,42,-.70,14],
+  [-182,14,67,34,-.23,33],[-247,42,50,25,-.42,28],[-292,66,56,32,-.70,22],
   [-286,160,61,32,-1.05,27],[-229,207,48,23,-.94,23],[-176,247,35,19,-.71,16],
   [39,-7,55,22,.54,35],[92,51,64,22,.85,27],[116,103,40,17,1.03,19],
 ].map(([x,z,w,d,a,h])=>({x,z,w,d,h,c:cos(a),s:sin(a),extent:hypot(w,d)}));
@@ -76,12 +76,12 @@ export function pilgrimageHeight(x, z, base) {
       const along=(dz-v)*cos(turn)-(dx-u)*sin(turn);
       return exp(-((side/rx)**2+(along/rz)**2));
     };
-    const divide=58*shape(-107,60,217,116,-.30) + 33*shape(-202,143,151,111,-.84);
-    const crests=29*shape(-210,6,102,44,-.23) + 24*shape(-294,135,68,76,-.58)
-      + 34*shape(23,5,80,49,.52) + 20*shape(85,137,56,88,-.58)
-      + 20*shape(-160,265,62,107,-.55);
+    const divide=64*shape(-107,60,217,110,-.30) + 39*shape(-202,143,145,100,-.84);
+    const crests=38*shape(-210,6,98,27,-.23) + 37*shape(-294,135,57,61,-.58)
+      + 46*shape(23,5,72,33,.52) + 25*shape(85,137,46,81,-.58)
+      + 28*shape(-160,265,53,99,-.55);
     const watercourse=12*shape(-179,132,23,122,-.70)+10*shape(14,120,24,92,.75);
-    const escarpment=8*shape(-215,36,95,31,-.26)*ease((43-dz-.21*dx)/32);
+    const escarpment=12*shape(-215,36,91,23,-.26)*ease((32-dz-.21*dx)/10);
     const rim=ease((dz+104)/39)*ease((454-dz)/88)*ease((dx+465)/70)*ease((285-dx)/65);
     let caprock=0;
     for(const peak of ridgeHeads){
@@ -89,29 +89,22 @@ export function pilgrimageHeight(x, z, base) {
       if(abs(u)>peak.extent || abs(v)>peak.extent) continue;
       const along=(u*peak.c+v*peak.s)/peak.w,side=(v*peak.c-u*peak.s)/peak.d;
       const r=hypot(along,side+.19*along*along);
-      const ledge=.10*(1-ease((r-.45)/.32));
-      caprock=max(caprock,peak.h*(.60*(1-ease(r))+ledge));
+      const ledge=.16*(1-ease((r-.57)/.15))+.12*(1-ease((r-.25)/.17));
+      caprock=max(caprock,peak.h*(.72*(1-ease(r))+ledge));
     }
     const relief=Math.max(0, divide+crests+caprock-watercourse+escarpment);
-    let mountain=base+rim*relief*(1+.017*sin(x*.049)*cos(z*.037));
+    let mountain=base+rim*relief*(1+.032*sin(x*.078)*cos(z*.063));
     // Each hairpin crosses the same contour as the next gate. Feather the
     // surveyed approach and its wedding terraces back into natural slopes.
-    const row=(155-dz)/(153/8);
-    // Gain height on each traverse. The outside of each returning bend
-    // then has some rise behind it before the next traverse starts.
-    const across=2*clamp01(-dx/114)-1;
-    const tread=clamp01((row+.32*(1+across*cos(PI*row)))/8);
-    const roadGrade=7+84*ease(tread);
-    const pathWidth=ease((dx+202)/74)*ease((78-dx)/71)
-      *ease((dz+71)/59)*ease((215-dz)/57);
+    const tread=clamp01((155-dz)/156);
+    const roadGrade=7+84*ease(tread)+3.4*sin(tread*PI)*sin(dx*.034+dz*.021);
+    const pathWidth=ease((dx+176)/48)*ease((47-dx)/40)
+      *ease((dz+32)/20)*ease((187-dz)/29);
     mountain=mix(mountain,roadGrade,pathWidth);
     for(const site of WEDDING_SITES){
       if(abs(x-site.x)>site.rx+6 || abs(z-site.z)>7) continue;
       const fade=ease((7-abs(z-site.z))/3.6)*ease((site.rx+6-abs(x-site.x))/4);
-      const terraceRow=(inari.z+155-site.z)/(153/8);
-      const terraceAcross=2*clamp01((inari.x-site.x)/114)-1;
-      const terrace=7+84*ease((terraceRow+.32*(1+terraceAcross*cos(PI*terraceRow)))/8);
-      mountain=mix(mountain,terrace,fade);
+      mountain=mix(mountain,7+84*ease((inari.z+155-site.z)/156),fade);
     }
     return mountain;
   }
@@ -161,14 +154,6 @@ function alongPass(x,z,knots,radius) {
 const peachPass=TRADE_ROADS.find(r=>r.id==='peach-pass').knots;
 const inariApproach=TRADE_ROADS.find(r=>r.id==='inari-road').knots;
 export const MOON_GATE={x:PEACH.x-15,z:PEACH.z};
-export const PEACH_BOUT={x:PEACH.x+6,z:PEACH.z-3};
-// Stand on the south bank and face the ring. The chase camera travels
-// behind the spectator, so keep a length of bank open for its boom too.
-export function inPeachAudience(x,z,crownRadius){
-  const across=x-PEACH_BOUT.x,depth=z-PEACH_BOUT.z;
-  const beyond=Math.max(0,-depth,depth-15);
-  return across*across+beyond*beyond<(4.5+crownRadius)**2;
-}
 // The same local stand index keeps planted trunks apart, clears the wild
 // woodland crew's sites, and finds the flowering canopy above a traveller.
 const peachCells=new Map(),peachCell=16;
@@ -190,11 +175,6 @@ function orchard(){
   let state=634711;
   const rand=()=>(state=(Math.imul(state,1664525)+1013904223)>>>0)/4294967296;
   const trees=[],clearings=[[6,-3,9],[-13,7,7],[-32,-12,7],[40,-10,7],[15,-26,6]];
-  // From the road, the picnic and the wrestling ring sit in openings between
-  // two banks of blossom. Trees behind the figures still frame each scene.
-  const windows=[
-    [[-22,0],[-32,-12]], [[-3,0],[6,-3],[15,-26]], [[34,4],[40,-10]],
-  ].map(path=>path.map(([u,v])=>[PEACH.x+u,PEACH.z+v]));
   function plant(tree){
     const key=Math.floor(tree.x/peachCell)*512+Math.floor(tree.z/peachCell);
     if(!peachCells.has(key))peachCells.set(key,[]);
@@ -202,9 +182,8 @@ function orchard(){
   }
   function occupied(x,z,spacing){
     return nearPeachTrunk(x,z,spacing) || alongPass(x,z,peachPass,5.3) ||
-      hypot(x-MOON_GATE.x,z-MOON_GATE.z)<9 || inPeachAudience(x,z,5.5) || reservedScenery(x,z) ||
+      hypot(x-MOON_GATE.x,z-MOON_GATE.z)<9 || reservedScenery(x,z) ||
       clearings.some(([u,v,r])=>hypot(x-PEACH.x-u,z-PEACH.z-v)<r) ||
-      (abs(x-PEACH.x)<50 && abs(z-PEACH.z)<35 && windows.some(path=>alongPass(x,z,path,5.7))) ||
       CLIFF_PINES.some(q=>(x-q.x)**2+(z-q.z)**2<12);
   }
   function slope(x,z){
@@ -235,21 +214,10 @@ function orchard(){
     [-61, 56, 18,10, -35, 6,3], [ 44,-106,23,11,-36, 8,1],
     [246,-23, 18,10,  64, 6,4],
   ];
-  // Crooked wild peaches catch on the lip of the western bluff. The taller
-  // lip tree shows its bough above the near rock; a smaller spray of pink
-  // picks out the opposite bank across the unplanted axis of the moon gate.
-  const bluff=[
-    [-103,20,3,1.30],[-111,26,4,1.07],[-58,-59,3,1.10],
-    [-42,-55,1,1.06],[-47,-46,4,1.11],[-98,-14,0,1.16],
-    // A single pale crown marks the upper lip of the northeast cirque.
-    [75,-109,2,.96],
-  ];
   function setTree(u,v,form,seed,shelfSize){
     const x=PEACH.x+u,z=PEACH.z+v;
     const h=pilgrimageHeight(x,z,5),basin=h<26 && hypot(u/84,v/55)<1;
     const maxGrade=shelfSize!==undefined?2.38:(basin?.76:1.52);
-    // Reserve the named silhouettes before filling the neighbouring pockets.
-    if(shelfSize===undefined && bluff.some(([a,b])=>(u-a)**2+(v-b)**2<6.8**2))return false;
     if(occupied(x,z,basin?7.2:6.8) || slope(x,z)>maxGrade)return false;
     // The western overlook looks along this narrowing meadow to the moon gate.
     // Allow a crown's breadth either side of the opening, even on the brow.
@@ -275,6 +243,13 @@ function orchard(){
     [54,-6,0],[81,17,1],[106,-62,3],[146,-74,0],[189,3,4],[233,32,1]].entries()){
     setTree(u,v,form,71000+i);
   }
+  // Crooked wild peaches catch on the lip of the western bluff. The taller
+  // lip tree shows its bough above the near rock; a smaller spray of pink
+  // picks out the opposite bank across the unplanted axis of the moon gate.
+  const bluff=[
+    [-103,20,3,1.30],[-111,26,4,1.07],[-58,-59,3,1.10],
+    [-42,-55,1,1.06],[-47,-46,4,1.11],[-98,-14,0,1.16],
+  ];
   for(const [i,[u,v,form,size]] of bluff.entries())setTree(u,v,form,72000+i,size);
   return trees;
 }

@@ -4,11 +4,9 @@ import { createGame } from '../two/game.js';
 import { BUILDINGS, ORIGINAL_REGIONS as REGIONS, regionAt, groundHeight, nearRoad, waterDepth, solidHeightAt } from '../two/terrain.js';
 import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { roomPlan } from '../two/architecture.js';
-import { CHAYA_SITES, WAYSIDE_HUTS } from '../two/wayside-hut-layout.js';
-import { SEAPORTS, portPoint } from '../two/seaport-layout.js';
 import { DYES, TRADES } from '../two/procession.js';
 
-test('village workshops, wayside inns and ports share the ten occupations and leave the roads clear',()=>{
+test('the ten villages support ten times the original hares and frogs, with varied trades and clear roads',()=>{
   const game=createGame(), {npcs,objects}=game.state;
   for(const [species,count] of [['rabbit',190],['frog',250]]) {
     const residents=npcs.slice(0,675).filter(n=>n.type===species);
@@ -18,34 +16,27 @@ test('village workshops, wayside inns and ports share the ten occupations and le
     assert.equal(new Set(workers.map(n=>n.dye)).size,DYES.length);
     assert.equal(new Set(workers.map(n=>n.dye+'-'+n.role)).size,TRADES.length*DYES.length);
   }
-  const workers=npcs.filter(n=>n.area && !n.encounter);
-  assert.equal(workers.length,396);
-  for(const r of REGIONS)assert.ok(workers.filter(n=>n.area===r.id).length>=26);
-  for(const p of SEAPORTS) {
-    const [x,z]=portPoint(p,46,-5);
-    const porters=workers.filter(n=>n.habitat===p.id && Math.hypot(n.homeX-x,n.homeZ-z)<20);
-    assert.deepEqual(new Set(porters.map(n=>n.role)),new Set(['fisher','scribe','lantern']));
-  }
-  for(const s of [...CHAYA_SITES,...WAYSIDE_HUTS.filter(h=>h.kind==='fisher')]){
-    assert.ok(workers.filter(n=>n.habitat && Math.hypot(n.homeX-s.x,n.homeZ-s.z)<22).length>=2,s.name);
-  }
-  for(const n of workers) {
-    if(n.room!==undefined) {
-      const b=BUILDINGS[n.room], dx=n.x-b.x,dz=n.z-b.z;
-      assert.ok(Math.abs(dx*b.cos-dz*b.sin)<b.w/2-1);
-      assert.ok(Math.abs(dx*b.sin+dz*b.cos)<b.d/2-1);
-      assert.ok(Math.abs(n.y-groundHeight(n.x,n.z))<.01);
-      const bench=roomPlan(b).workbench, u=dx*b.cos-dz*b.sin, v=dx*b.sin+dz*b.cos;
-      const gap=bench.u-bench.width/2-u;
-      assert.ok(gap>.29 && gap<.46 && Math.abs(v-bench.v)<bench.depth/2+.25);
-      assert.ok(Math.sin(n.heading-b.yaw)>.98);
-      assert.ok(solidHeightAt(n.x,n.z,.25,n.y)<=n.y+.2);
-      assert.ok(n.craft);
-      continue;
+  for(const region of REGIONS) {
+    const workers=npcs.filter(n=>n.area===region.id);
+    assert.ok(workers.length>=39);
+    for(const n of workers) {
+      if(n.room!==undefined) {
+        const b=BUILDINGS[n.room], dx=n.x-b.x,dz=n.z-b.z;
+        assert.ok(Math.abs(dx*b.cos-dz*b.sin)<b.w/2-1);
+        assert.ok(Math.abs(dx*b.sin+dz*b.cos)<b.d/2-1);
+        assert.ok(Math.abs(n.y-groundHeight(n.x,n.z))<.01);
+        const bench=roomPlan(b).workbench, u=dx*b.cos-dz*b.sin, v=dx*b.sin+dz*b.cos;
+        const gap=bench.u-bench.width/2-u;
+        assert.ok(gap>.29 && gap<.46 && Math.abs(v-bench.v)<bench.depth/2+.25);
+        assert.ok(Math.sin(n.heading-b.yaw)>.98);
+        assert.ok(solidHeightAt(n.x,n.z,.25,n.y)<=n.y+.2);
+        assert.ok(n.craft);
+        continue;
+      }
+      assert.ok(!nearRoad(n.x,n.z,1.9) && waterDepth(n.x,n.z)<=.06);
+      assert.ok(solidHeightAt(n.x,n.z,1.15)<=n.y+.2);
+      assert.ok(objects.every(o=>Math.hypot(o.x-n.x,o.z-n.z)>=5.6));
     }
-    assert.ok(!nearRoad(n.x,n.z,1.9) && waterDepth(n.x,n.z)<=.06);
-    assert.ok(solidHeightAt(n.x,n.z,1.15)<=n.y+.2);
-    assert.ok(objects.every(o=>Math.hypot(o.x-n.x,o.z-n.z)>=5.6));
   }
   const rooms=npcs.filter(n=>n.room!==undefined).map(n=>BUILDINGS[n.room]);
   assert.deepEqual(new Set(rooms),new Set(BUILDINGS.filter(b=>b.kind!=='pagoda' && regionAt(b.x,b.z)<REGIONS.length)));

@@ -38,35 +38,20 @@ export const CHAYA_SEAT={x:1.64,z:2.63,width:2.18,depth:.68,top:.48};
 export const WAYSIDE_SITES=[...WAYSIDE_HUTS,...CHAYA_SITES];
 const cells=new Map();
 const cell=(x,z)=>Math.floor(x/32)*256+Math.floor(z/32);
-// Include the far corner of the kettle yard plus the reach of a large rock.
-const yardReach=23;
-for(const s of WAYSIDE_SITES)for(let x=Math.floor((s.x-yardReach)/32);x<=Math.floor((s.x+yardReach)/32);x++)
-  for(let z=Math.floor((s.z-yardReach)/32);z<=Math.floor((s.z+yardReach)/32);z++){
-    const key=x*256+z;
-    if(!cells.has(key))cells.set(key,[]);
-    cells.get(key).push(s);
-  }
-export function nearbyHut(x,z){
-  const sites=cells.get(cell(x,z));
-  if(!sites || sites.length===1)return sites?.[0];
-  let best,distance=Infinity;
-  for(const s of sites){
-    const d=(x-s.x)**2+(z-s.z)**2;
-    if(d<distance){distance=d;best=s;}
-  }
-  return best;
-}
-export function clearingWeight(s,x,z,margin=0){
+for(const s of WAYSIDE_SITES)for(let x=Math.floor((s.x-14)/32);x<=Math.floor((s.x+14)/32);x++)
+  for(let z=Math.floor((s.z-14)/32);z<=Math.floor((s.z+14)/32);z++)cells.set(x*256+z,s);
+export const nearbyHut=(x,z)=>cells.get(cell(x,z));
+export function clearingWeight(s,x,z){
   const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
   const u=dx*c-dz*k,v=dx*k+dz*c;
   const edge=s.kind==='chaya' ? Math.max(Math.abs(u)-4.15,Math.abs(v-.5)-4.10)
     : Math.max(Math.abs(u)-6.28,Math.abs(v-3.33)-6.40);
-  const t=Math.max(0,Math.min(1,(edge-margin)/2.3));
+  const t=Math.max(0,Math.min(1,edge/2.3));
   return 1-t*t*(3-2*t);
 }
-export function inHutYard(x,z,margin=0){
+export function inHutYard(x,z){
   const hut=nearbyHut(x,z);
-  return !!hut && clearingWeight(hut,x,z,margin)>.82;
+  return !!hut && clearingWeight(hut,x,z)>.82;
 }
 export function hutSolids(height,put){
   for(const s of WAYSIDE_SITES){

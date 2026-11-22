@@ -1,9 +1,9 @@
-import { districtPoint } from './geography.js';
+import { DISTRICTS, districtPoint } from './geography.js';
 // Each group has a subject: look at the other wrestler, the tea tray, or the
 // hand raised in blessing. Positions are offsets on either side of the walk.
 import { groundHeight } from './terrain.js';
 import { animalRadius, openGround } from './village-paths.js';
-import { inariPoint, PEACH_BOUT } from './pilgrimage-layout.js';
+import { inariPoint } from './pilgrimage-layout.js';
 
 const tau = Math.PI * 2;
 const groups = [];
@@ -26,7 +26,7 @@ districtScene('kyo','gate',117,-381,[
 districtScene('peach','pass',-350,-101,[
   ['rabbit','porter',-3,0], ['monkey','read',.5,2], ['deer','listen',4,-1],
 ]);
-export { PEACH_BOUT };
+export const PEACH_BOUT = {x:DISTRICTS.peach.x+6,z:DISTRICTS.peach.z-3};
 scene('peach','bout',PEACH_BOUT.x,PEACH_BOUT.z,[
   ['rabbit','sumo',-.94,0], ['frog','sumo',.94,0], ['monkey','listen',-.6,-3.4],
   ['frog','drum',3,-2.8], ['rabbit','cheer',-3.2,-1.9],
@@ -74,19 +74,6 @@ districtScene('inari','summit',-150,-534,[
 ]);
 
 const crafts = new Set(['tea','flute','drum','fan','lantern','flowers','scribe']);
-// On a switchback the uphill side of a turn can clear a pier while the
-// downhill side passes under it. Query the local floor across the excursion.
-function clearStage(x,z,radius,travel) {
-  if(!openGround(x,z,radius+travel))return false;
-  for(let ring=1;ring<=Math.ceil(travel/.55);ring++) {
-    const r=Math.min(ring*.55,travel),steps=Math.ceil(tau*r/.55);
-    for(let i=0;i<steps;i++) {
-      const a=tau*i/steps;
-      if(!openGround(x+r*Math.cos(a),z+r*Math.sin(a),radius+.25))return false;
-    }
-  }
-  return true;
-}
 let layout;
 function arrange() {
   const residents=[];
@@ -103,7 +90,7 @@ function arrange() {
       if(artisan) n.area=habitat;
       const baseX=x+u, baseZ=z+v;
       n.travel=action==='roam' ? 1.65 : action==='browse' ? .64 : action==='sumo' ? .16 : 0;
-      const clearance=animalRadius(n);
+      const clearance=animalRadius(n)+n.travel;
       // Keep each entire movement inside a clear disc. The authored spot wins
       // when it fits, otherwise find the closest pocket on the same terrace.
       let found=false;
@@ -112,7 +99,7 @@ function arrange() {
         for(let j=0;j<count;j++) {
           const angle=j*tau/count;
           const px=baseX+ring*.65*Math.cos(angle), pz=baseZ+ring*.65*Math.sin(angle);
-          if(!clearStage(px,pz,clearance,n.travel) ||
+          if(!openGround(px,pz,clearance) ||
               residents.some(r=>(r.homeX-px)**2+(r.homeZ-pz)**2<(r.travel+n.travel+1.25)**2)) continue;
           n.homeX=px; n.homeZ=pz; found=true;break;
         }

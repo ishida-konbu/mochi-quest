@@ -54,15 +54,15 @@ for(const chain of crests)for(let i=1;i<chain.length;i++){
 function divides(u,v){
   const segments=cells.get(cellKey(u,v));
   if(!segments)return 0;
-  const x=u+2.8*sin(v*.033+u*.014);
-  const z=v+3.1*sin(u*.029-v*.021);
+  const x=u+3.9*sin(v*.045+u*.014)+1.7*sin(v*.11-u*.027);
+  const z=v+4.1*sin(u*.037-v*.024)+2.1*cos(u*.092+v*.013);
   let rise=0;
   for(const s of segments){
     const a=x-s.x,b=z-s.z,t=min(1,max(0,(a*s.dx+b*s.dz)*s.inv));
     const du=a-t*s.dx,dv=b-t*s.dz,w=s.w+t*s.dw,d2=(du*du+dv*dv)/(w*w);
     if(d2>=1)continue;
-    const d=Math.sqrt(d2),flank=1-ease(0,1,d);
-    rise=max(rise,(s.h+s.dh*t)*flank);
+    const d=Math.sqrt(d2),flank=1-ease(0,1,d),crown=1-ease(0,.47,d);
+    rise=max(rise,(s.h+s.dh*t)*(.80*flank+.20*crown));
   }
   return rise;
 }
@@ -89,18 +89,14 @@ export function peachRangeHeight(x,z,base){
   const u=x-centre.x,v=z-centre.z;
   const fringe=min(ease(-330,-263,u),1-ease(303,366,u),ease(-253,-203,v),1-ease(150,198,v));
   const a=u/123,b=v/108,r=hypot(a,b),floor=5.3+2.2*sin(a*5+.3)*cos(b*6)+3.5*r;
-  const hollow=hypot((u+18)/(u< -18?90:76),v/70);
-  const toe=max(0,(hollow-.53)*67);
-  // Loose soil forms one continuous fan beyond the orchard. Its rise limits
-  // the inner slope of each spur instead of piling a second slope on top.
-  const apron=floor+.90*toe*toe/(toe+9);
-  const massif=base+.76*divides(u,v),round=max(0,4-abs(apron-massif));
-  let y=mix(floor,min(massif,apron)-round*round/16,ease(.52,.82,hollow));
+  const hollow=hypot((u+3)/76,v/57);
+  const orchard=ease(.53,1.56,hollow);
+  let y=mix(floor,base+divides(u,v),orchard);
   if(u>-11 && u<330 && v>-132 && v<155){
     const d=riverbedDistance(u,v);
     // A gravel bottom, colluvial banks, then taller crags. Smooth the
     // junction with the spur so the exposed hillside never has a cut edge.
-    const beyond=max(0,d-6.8),bank=beyond*(.65+.72*ease(0,30,beyond));
+    const beyond=max(0,d-6.8),bank=beyond*(.52+1.39*ease(0,33,beyond));
     const bed=mix(floor,9.9+.77*sin(.023*u+.016*v),ease(28,112,u));
     const valley=bed+bank,k=max(0,3.2-abs(valley-y));
     const carved=min(valley,y)-k*k/(4*3.2);
@@ -114,7 +110,7 @@ export function peachRangeHeight(x,z,base){
     const low=24+5.1*sin(index)+3.8*cos(fold);
     const middle=52+7.3*cos(index*.78)-4.6*sin(fold);
     const high=84+7.4*sin(index*.91)+5.3*sin(fold*.72);
-    const weight=cover*.32*ease(12,21,y)*(1-ease(108,120,y));
+    const weight=cover*.83*ease(12,21,y)*(1-ease(108,120,y));
     y-=weight*(terrace(y,low)+terrace(y,middle)+terrace(y,high));
   }
   return mix(base,y,fringe);

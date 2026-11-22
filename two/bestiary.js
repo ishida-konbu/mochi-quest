@@ -1,5 +1,5 @@
-// The delivery scroll keeps its original order as habitats spread along the island.
-import { ORIGINAL_REGIONS, REGIONS, regionAt, nearRoad, groundHeight, waterDepth, solidHeightAt, terrainHeight, WATER_Y, seeded, wrapCoord, wrapDelta } from './terrain.js';
+// The illustrated menagerie ranges through the same ten districts as the procession.
+import { ORIGINAL_REGIONS as REGIONS, groundHeight, waterDepth, solidHeightAt, terrainHeight, WATER_Y, seeded, wrapCoord, wrapDelta } from './terrain.js';
 
 import { SCROLL_FAUNA } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
@@ -20,71 +20,35 @@ export const SPECIES = Object.freeze({
 });
 export const isFlying = type => type==='bird' || type==='dragon';
 
-// Each point is an edge of a grove, a reed bank, or a wayside meadow. Successive
-// families share a clearing; different species meet at only a few of the edges.
-const feedingGrounds={
-  monkey:[
-    [-124,-114], [-190,-61], [-63,-245], [205,-140], [289,-181], [103,125],
-    [-312,-109], [-490,-118], [-752,-174], [81,-503], [192,-690], [362,-729],
-    [525,-548], [370,-1165], [260,585], [404,806], [-100,-664], [148,397],
-  ],
-  fox:[
-    [-124,-49], [232,-86], [-43,-322], [12,240], [469,-476], [511,-624],
-    [458,-720], [122,-650], [-660,-151], [220,495], [448,-1244], [-109,-627],
-    [220,-1000], [280,658], [344,-1397], [-360,-127], [119,194], [-119,145],
-    [210,60], [270,-197],
-  ],
-  deer:[
-    [14,89], [139,163], [29,267], [251,-152], [-647,-171], [115,373],
-    [397,783], [450,896], [273,573], [389,-1129], [346,-1410], [20,-707],
-  ],
-  boar:[
-    [-187,-120], [234,-181], [82,172], [-532,-132], [-764,-147],
-    [118,-525], [499,-558], [192,453], [-100,-645],
-  ],
-};
-// A saved sky seed describes its tour relative to these original coordinates.
-const skyOrigins={
-  dragon:[-91.31343413691405,322.5793747212329],
-  kirin:[-188.9870537805562,-67.60138919240073],
-};
 const clearanceBands=[9,25,48,73];
-function findHabitat(type,region,site,fixed,residents,random) {
-  if(skyOrigins[type])return skyOrigins[type];
-  const [cx,cz]=site || [region.x,region.z];
-  for(let attempt=0;attempt<2000;attempt++) {
-    const angle=random()*2*Math.PI;
-    const radius=site ? Math.sqrt(random())*(22+Math.min(48,attempt*.24)) : 17+random()*37;
-    const x=cx+Math.sin(angle)*radius,z=cz+Math.cos(angle)*radius;
-    if(isFlying(type))return [x,z];
-    const h=groundHeight(x,z);
-    if(site && nearRoad(x,z,7))continue;
-    if(waterDepth(x,z)>.04 || solidHeightAt(x,z,2)>h+.18 ||
-       Math.abs(groundHeight(x+1,z-1)-h)>.42 || Math.abs(groundHeight(x-1,z+1)-h)>.42 ||
-       fixed.some(n=>(n.x-x)**2+(n.z-z)**2<20) ||
-       residents.some(n=>(n.x-x)**2+(n.z-z)**2<(site?49:17)))continue;
-    return [x,z];
-  }
-  throw new Error('No habitat for '+type);
-}
 let homes;
 export function wildlifeHomes(fixed) {
   if (homes) return homes;
   const random=seeded(0x81b6e), result=[];
   for (const [type, species] of Object.entries(SPECIES)) {
     for (let i=0;i<species.count;i++) {
-      const region=ORIGINAL_REGIONS[type==='dragon'?8:type==='kirin'?1:type==='shishi'?(i===0?2:7):i%ORIGINAL_REGIONS.length];
-      const sites=feedingGrounds[type];
-      const site=sites ? sites[i%sites.length] : null;
-      const [x,z]=findHabitat(type,region,site,fixed,result,random);
+      const region=REGIONS[type==='dragon'?8:type==='kirin'?1:type==='shishi'?(i===0?2:7):i%REGIONS.length];
+      let x,z;
+      for (let attempt=0; ;attempt++) {
+        if (attempt===2000) throw new Error('No habitat for '+type);
+        const a=random()*2*Math.PI, r=17+random()*37;
+        x=region.x+Math.sin(a)*r; z=region.z+Math.cos(a)*r;
+        if (isFlying(type)) break;
+        const h=groundHeight(x,z);
+        if(waterDepth(x,z)>.04 || solidHeightAt(x,z,2)>h+.18 ||
+           Math.abs(groundHeight(x+1,z-1)-h)>.42 || Math.abs(groundHeight(x-1,z+1)-h)>.42 ||
+           fixed.some(n=>(n.x-x)**2+(n.z-z)**2<20) ||
+           result.some(n=>(n.x-x)**2+(n.z-z)**2<17)) continue;
+        break;
+      }
       const phase=random()*Math.PI*2;
       const variation=species.count===1?1:.91+random()*.18;
       // The open- and closed-mouth lions keep their established heights even
       // when new buildings change how many habitat soundings are rejected.
       const stature=species.stature*(species.variantScales?.[i] ?? variation);
-      result.push({type,role:'roam',habitat:site?REGIONS[regionAt(x,z)].id:region.id,x,z,phase,stature,
+      result.push({type,role:'roam',habitat:region.id,x,z,phase,stature,
         variant:type==='shishi'?i:0, manner:i%3,
-        flightBand:type==='bird'?Math.floor(i/ORIGINAL_REGIONS.length):0,
+        flightBand:type==='bird'?Math.floor(i/REGIONS.length):0,
         radius:type==='dragon'?25:type==='bird'?9+random()*6:1.2+random()*1.7,
         cruise:type==='dragon'?.105:type==='bird'?.26+random()*.12:.25+random()*.16});
     }

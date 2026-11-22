@@ -123,18 +123,14 @@ export function visitMeadowTile(i,j,clearings,visit) {
     if (y<WATER_Y+.13) continue;
     seasonAt(x,z,season);
     const wave=sin(x*.177+2*sin(z*.127))+cos(z*.199+x*.071)+sin(z*.048-x*.125);
+    // Draw separated banks of grass. Bare paper around the animal groups
+    // shows the feet, instruments and the space between two facing figures.
+    const cover=(.83+wave*.078-season.snow*.57)*(1-scroll*(.21-.19*wave));
+    if (rng()>cover) continue;
     const wet=x>-250 && x<380 && y<9 && abs(z-riverZ(x))-riverHalfWidth(x)<9;
     const coast=shore<27;
     const crowns=shadeCells.get(shadeKey(floor(x/8),floor(z/8)));
     const shadeTree=crowns?.some(c=>(x-c.x)**2+(z-c.z)**2<c.r2);
-    // Swathes follow the same metre coordinates across tile edges. Dense
-    // sedge beside water alternates with open soil; deep shade and snow
-    // leave only a few low plants between the denser patches.
-    const bank=wet ? .19 : 0;
-    const swathe=Math.min(1,Math.max(0,.41+.32*wave+bank+.14*season.moon));
-    const cover=(.055+.80*swathe*swathe*(3-2*swathe))*
-      (1-.65*season.snow)*(shadeTree ? .68 : 1)*(1-.18*scroll);
-    if (rng()>cover) continue;
     const palette=season.snow>.50?'snow':wet?'bank':coast?'coast':shadeTree?'wood':
       season.moon>.49?'moon':season.autumn>.43?'autumn':y>32?'ridge':'meadow';
     const list=flora[palette];
@@ -163,7 +159,7 @@ export function visitMeadowTile(i,j,clearings,visit) {
     const sx=x+cos(bearing)*step,sz=z+sin(bearing)*step;
     if(sx<x0 || sx>=x0+MEADOW_TILE || sz<z0 || sz>=z0+MEADOW_TILE)continue;
     const localShore=shoreDistance(sx,sz);
-    if(localShore<3 || (family===19 && localShore>=27) || nearRoad(sx,sz,.13) || masks.some(f=>f(sx,sz)) || inMountainStreamClearing(sx,sz))continue;
+    if(localShore<3 || (family===19 && localShore>=27) || nearRoad(sx,sz,.13) || masks.some(f=>f(sx,sz)))continue;
     const sy=terrainMeshHeight(sx,sz,heightAt);
     if(sy<WATER_Y+.13)continue;
     const young=.45+rng()*.30;

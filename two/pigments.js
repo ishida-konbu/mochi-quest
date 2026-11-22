@@ -6,7 +6,7 @@ import { groundImpressions } from './scroll-paper.js';
 import * as THREE from './vendor/three.module.min.js';
 
 const asset = (name) => new URL('./assets/world/' + name + '.webp' +
-  (name === 'kyo-hills' ? '?v=emaki-balance-1' : ''), import.meta.url).href;
+  (name === 'kyo-hills' ? '?v=kyoto-open-basin-1' : ''), import.meta.url).href;
 const paint = (color) => new THREE.Color(color);
 
 export function loadPigments() {
@@ -106,12 +106,9 @@ export function meadowMaterial(art) {
           float stria=max(mark.g,bedding*.62)*cliff;
           float stroke=mix(max(grass,stria),mark.b,damp);
           float mottling=clamp(.55*luma+.10*pool+.09*woodland,0.,.55);
-          vec3 fieldWash=mix(vec3(.82,.77,.65),vec3(.35,.415,.29),mottling+.26*woodland);
+          vec3 fieldWash=mix(vec3(.77,.72,.59),vec3(.41,.46,.32),mottling+.13*woodland);
           fieldWash=mix(fieldWash,vec3(.57,.58,.51)*(.85+.17*pool),cliff*.83);
           fieldWash=mix(fieldWash,vec3(.63,.70,.64)*(.88+.21*pool),damp);
-          fieldWash=mix(fieldWash,vec3(.66,.51,.33)*(.79+.25*pool),vSeasons.y*.69);
-          fieldWash=mix(fieldWash,vec3(.46,.50,.37)*(.82+.21*pool),vSeasons.z*.68);
-          fieldWash=mix(fieldWash,vec3(.82,.87,.90)*(.94+.08*pool),snowCover);
           // Scuffs in the earth curve around the wrestlers. Leave broken
           // crescents, like the trailing end of a single half-dry brushstroke.
           vec2 bout=(field-vec2(${PEACH_BOUT.x}.,${PEACH_BOUT.z}.))*vec2(.90,1.05);
@@ -123,12 +120,12 @@ export function meadowMaterial(art) {
             fieldWash=mix(fieldWash,vec3(.79,.69,.54)*(.91+.18*luma),1.-smoothstep(1.95,2.4,r));
             fieldWash*=1.-.36*rim;
           }
-          fieldWash*=1.-.59*stroke*(1.-.85*snowCover);
+          fieldWash*=1.-.59*stroke;
           fieldWash*=.93+.11*pool+.055*smoothstep(.08,.4,luma);
           ground=mix(ground,fieldWash,vScroll*.88);
         }
         float exposed=(1.-.80*bank)*(1.-.91*snowCover)*smoothstep(-.8,1.3,inkPoint.y);
-        ground*=1.-exposed*(.54*brush+.065*(1.-wash));
+        ground*=1.-exposed*(.75*brush+.09*(1.-wash));
         if(vRidge>.001){
           // One painted sheet covers the three ranges. Every inked rock face
           // and patch of foliage stays registered to its own slope in all views.
@@ -179,13 +176,7 @@ export function trailMaterial(art) {
       float worn=smoothstep(.08,.36,edge+.18*(wash-.5));
       vec3 dirt=mix(pigment,vec3(ochre*1.11,ochre*1.01,ochre*.88),.44);
       dirt=mix(dirt,vec3(.54,.427,.30),.20+.18*worn);
-      // A smooth walked centre and intermittent ink along the verge. Let the
-      // stroke taper out into the ground rather than drawing two unbroken rails.
-      dirt=mix(dirt,vec3(.69,.58,.425),.32+.17*worn);
-      float verge=.14+.035*(wash-.5);
-      float width=.009+.016*wash+fwidth(edge);
-      float lip=(1.-smoothstep(.002,width,abs(edge-verge)))*smoothstep(.53,.78,wash);
-      diffuseColor.rgb*=dirt*(.94+.11*wash)*(1.-.32*lip)+vec3(.032,.033,.029);
+      diffuseColor.rgb*=dirt*(.91+.16*wash)+vec3(.042,.044,.040);
       vec3 snowPath=mix(vec3(.48,.56,.61),vec3(.77,.84,.88),smoothstep(.03,.48,ochre));
       diffuseColor.rgb=mix(diffuseColor.rgb,snowPath,snowCover*.94);
       diffuseColor.a *= fade;

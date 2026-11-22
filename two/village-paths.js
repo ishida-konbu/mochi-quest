@@ -3,9 +3,6 @@
 import { BUILDINGS, BRIDGES, GATES, MARKET_STALLS, REGIONS, TREES, SHRINE_BAMBOO, regionAt, solidHeightAt, terrainHeight, waterDepth, groundHeight, nearRoad } from './terrain.js';
 import { buildingCraft, roomPlan } from './architecture.js';
 import { POUNDING } from './festival.js';
-import { CHAYA_SITES, WAYSIDE_HUTS } from './wayside-hut-layout.js';
-import { SEAPORTS } from './seaport-layout.js';
-import { sitePoint } from './retreat-layout.js';
 import { predatorRange, patrolAt } from './predator-trails.js';
 
 const tau=Math.PI*2, stepSize=16;
@@ -79,20 +76,13 @@ export function walkCircuit(n,angle,out) {
   out.z=n.homeZ+r*.66*(Math.cos(angle)-Math.cos(n.phase));
   return out;
 }
-function routeFits(x,z,r,phase,clearance,feeding=false) {
-  const cx=x-r*Math.sin(phase),cz=z-r*.66*Math.cos(phase);
-  if(feeding && nearRoad(cx,cz,clearance+r+1))return false;
+function routeFits(x,z,r,phase,clearance) {
   const samples=Math.max(8,Math.ceil(tau*r/.52));
   const pad=clearance+Math.PI*r/samples;
   for(let j=0;j<samples;j++) {
     const a=tau*j/samples;
     const tx=x+r*(Math.sin(a)-Math.sin(phase)),tz=z+r*.66*(Math.cos(a)-Math.cos(phase));
     if(!openGround(tx,tz,pad)) return false;
-    if(feeding) {
-      const dx=terrainHeight(tx+1,tz)-terrainHeight(tx-1,tz);
-      const dz=terrainHeight(tx,tz+1)-terrainHeight(tx,tz-1);
-      if(Math.hypot(dx,dz)>1.14)return false;
-    }
   }
   return true;
 }
@@ -100,19 +90,15 @@ const workshops={
   ink:['scribe','scribe'], tea:['tea','tea'], lodge:['tea','tea'], brew:['tea','ladle'],
   dye:['scribe','loom'], rice:['rake','winnow'], net:['fisher','mend']
 };
-function seatWorkers(npcs,storyResidentPosts) {
+function seatWorkers(npcs) {
   for(const [i,b] of BUILDINGS.entries()) {
     const style=workshops[buildingCraft(b)];
     if(!style) continue;
     const workers=npcs.filter(n=>n.area===REGIONS[regionAt(b.x,b.z)].id && n.room===undefined);
     const preference=n=>(n.role===style[0]?0:1000)+Math.hypot(n.x-b.x,n.z-b.z);
-    const appointed=workers.find(n=>{
-      const post=storyResidentPosts.get(n.id);
-      return post && post.x===b.x && post.z===b.z;
-    });
-    const n=appointed || workers.filter(n=>!storyResidentPosts.has(n.id)).sort((a,c)=>preference(a)-preference(c))[0];
-    if(!n) continue;
-    const plan=roomPlan(b), bench=plan.workbench;
+    workers.sort((a,c)=>preference(a)-preference(c));
+    if (!workers.length) continue;
+    const n=workers[0], plan=roomPlan(b), bench=plan.workbench;
     // The working paw is on the doorway side, above the near vat,
     // writing paper or net frame. This leaves the demonstration in profile.
     const targetV=({ink:.03,net:0,rice:.20,dye:.19,brew:.19,tea:.26,lodge:.26})[plan.craft];
@@ -123,38 +109,6 @@ function seatWorkers(npcs,storyResidentPosts) {
     n.y=b.y+plan.floor+.006;
     n.heading=n.facing=b.yaw+Math.PI*.45;
     n.craft=style[1];n.room=i;
-  }
-}
-// Small scenes on the longer walks use the same working animals, clothes,
-// tools and delivery entries as the ten original village processions.
-function seatWaysideTravellers(npcs,storyResidentPosts) {
-  const workers=npcs.filter(n=>n.area && n.room===undefined && !storyResidentPosts.has(n.id));
-  const scenes=[
-    ...CHAYA_SITES.map((site,i)=>({site,u:-6,v:3,roles:i%2?['flute','fan']:['tea','flowers']})),
-    ...WAYSIDE_HUTS.filter(s=>s.kind==='fisher').map(site=>({site,u:6.7,v:3.6,roles:['fisher','scribe']})),
-    ...SEAPORTS.map(site=>({site,u:46,v:-5,roles:['fisher','scribe','lantern']})),
-  ];
-  for(const {site,u,v,roles} of scenes) {
-    const cast=[];
-    for(const [i,role] of roles.entries()) {
-      const [du,dv]=[[0,0],[3.8,.7],[1.4,3.1]][i];
-      const [x,z]=sitePoint(site,u+du,v+dv);
-      let best=-1,gap=Infinity;
-      for(const [index,n] of workers.entries()) {
-        if(n.role!==role)continue;
-        const distance=Math.hypot(n.x-x,n.z-z);
-        if(distance<gap){gap=distance;best=index;}
-      }
-      if(best<0)continue;
-      const [n]=workers.splice(best,1);
-      n.x=n.homeX=x;n.z=n.homeZ=z;
-      n.area=n.habitat=REGIONS[regionAt(x,z)].id;
-      cast.push(n);
-    }
-    for(const [i,n] of cast.entries()) {
-      const partner=cast[i===0?1:0];
-      n.facing=n.heading=n.role==='fisher'?site.yaw:partner?Math.atan2(partner.x-n.x,partner.z-n.z):site.yaw;
-    }
   }
 }
 function findSite(n,accept,wild=false) {
@@ -200,16 +154,14 @@ function settlePredator(n, workers, objects) {
   n.habitat=REGIONS[regionAt(n.homeX,n.homeZ)].id;
 }
 let villagePlan;
-export function prepareVillageRoutes(npcs,objects,storyResidentPosts) {
+export function prepareVillageRoutes(npcs,objects) {
   if(villagePlan) {
     for(const n of npcs) Object.assign(n,villagePlan.get(n.id));
     return;
   }
   registerVillageObjects(objects);
-  seatWorkers(npcs,storyResidentPosts);
-  seatWaysideTravellers(npcs,storyResidentPosts);
+  seatWorkers(npcs);
   const workers=npcs.filter(n=>n.area);
-  const occupied=[];
   for(const n of npcs) {
     if(n.room!==undefined || n.atMortar || ['bird','dragon','kirin'].includes(n.type)) continue;
     if(n.type==='tiger' || n.type==='shishi') {
@@ -218,32 +170,16 @@ export function prepareVillageRoutes(npcs,objects,storyResidentPosts) {
     }
     const pad=animalRadius(n);
     if(n.area) {
-      const post=storyResidentPosts.get(n.id);
-      if(post?.facing!==undefined){
-        n.homeX=post.x;n.homeZ=post.z;n.facing=n.heading=post.facing;
-      }
       const sweep=pad+.46;
       findSite(n,(x,z)=>openGround(x,z,sweep) && !nearRoad(x,z,1.9) &&
-        objects.every(o=>(o.x-x)**2+(o.z-z)**2>=5.6**2) &&
-        occupied.every(o=>Math.hypot(o.x-x,o.z-z)>=o.pad+sweep));
-      occupied.push({x:n.x,z:n.z,pad:sweep});
+        objects.every(o=>(o.x-x)**2+(o.z-z)**2>=5.6**2));
     } else if(n.role==='sumo' || n.type==='turtle') {
       // The two wrestlers share a ring, and the turtle follows its own
       // shelter route, with clearance checked on each subsequent step.
       if(!openGround(n.x,n.z,pad)) findSite(n,(x,z)=>openGround(x,z,pad+.05));
     } else {
       n.radius??=n.role==='porter'?2.5:3.4;
-      const feeding=n.role==='roam';
-      const reach=pad+n.radius;
-      const offsetX=n.radius*Math.sin(n.phase), offsetZ=n.radius*.66*Math.cos(n.phase);
-      findSite(n,(x,z)=>{
-        if(feeding && occupied.some(o=>(o.x-x+offsetX)**2+(o.z-z+offsetZ)**2<(o.pad+reach)**2))return false;
-        return routeFits(x,z,n.radius,n.phase,pad,feeding);
-      },feeding);
-      if(feeding) {
-        n.habitat=REGIONS[regionAt(n.x,n.z)].id;
-        occupied.push({x:n.x-offsetX,z:n.z-offsetZ,pad:reach});
-      }
+      findSite(n,(x,z)=>routeFits(x,z,n.radius,n.phase,pad));
     }
   }
   // The flautist plays towards a drummer or fan dancer, and the server
@@ -262,5 +198,5 @@ export function prepareVillageRoutes(npcs,objects,storyResidentPosts) {
   }
   // Only immutable starting positions and tool assignments are shared.
   villagePlan=new Map(npcs.map(n=>[n.id,Object.fromEntries(
-    ['x','z','y','homeX','homeZ','radius','heading','facing','room','craft','area','habitat','trail','cruise'].filter(k=>k in n).map(k=>[k,n[k]]))]));
+    ['x','z','y','homeX','homeZ','radius','heading','facing','room','craft','habitat','trail','cruise'].filter(k=>k in n).map(k=>[k,n[k]]))]));
 }

@@ -55,6 +55,7 @@ import {
   riverZ,
   riverHalfWidth,
   coastX,
+  regionAt,
   nearRoad,
   seeded,
 } from './terrain.js';
@@ -163,8 +164,8 @@ function horizonIndex(grid){
 }
 function* landscape(scene, art) {
   const mat = meadowMaterial(art);
-  const paper=css('#eee9d7'), frost=css('#f4f6fc'), ochre=css('#e8cda6'),
-    reeds=css('#dfd8bc'), sand=css('#f1dec0'), shoal=css('#bccdc3');
+  const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
+    '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd','#e4d5b5','#efd5ce','#a9c1b3','#e1d8bb','#dbd6bb','#d8d7bf','#e1d1b4'].map(css);
   const soil = css('#efeadc'), stone = css('#d5d4c6'), hillPaper = css('#ebe9da'), c = new THREE.Color(), season = {};
   const bins = new Map();
   for (const tree of TREES) {
@@ -192,14 +193,8 @@ function* landscape(scene, art) {
       const x=(column+i/grid)*span-BOUND, z=(row+j/grid)*span-BOUND, y=h(x,z);
       p.push(x,y,z);
       uv.push(x/3.7,z/3.7);
-      const river=abs(z-riverZ(x))-riverHalfWidth(x), coast=shoreDistance(x,z);
-      // Carry one sheet of paper across district boundaries. The same climate
-      // weights drive the ground, foliage weather and light on either side.
-      seasonAt(x,z,season);
-      c.copy(paper).lerp(ochre,season.autumn).lerp(reeds,season.moon)
-        .lerp(sand,season.dawn).lerp(frost,season.snow)
-        .lerp(shoal,1-THREE.MathUtils.smoothstep(y,-9,WATER_Y))
-        .lerp(soil,max(0,1-abs(river-2)/7)*.72);
+      const r=regionAt(x,z), river=abs(z-riverZ(x))-riverHalfWidth(x), coast=shoreDistance(x,z);
+      c.copy(colors[r]).lerp(soil, max(0,1-abs(river-2)/7)*.72);
       c.lerp(stone, max(0,min(1,(y-15)/30))*.68);
       const rise=kyoRidgeHeight(x,z);
       const ridge=THREE.MathUtils.smoothstep(rise,1.5,17);
@@ -214,6 +209,7 @@ function* landscape(scene, art) {
       }
       surface.push(canopy,max(max(0,1-abs(river-.2)/7.3),max(0,min(1,(7.6-coast)/8.2))));
       scroll.push(scrollCoverage(x,z));
+      seasonAt(x,z,season);
       seasons.push(season.snow,season.autumn,season.moon, season.dawn*max(0,min(1,(30-coast)/23)));
       col.push(c.r,c.g,c.b);
       if (i<grid && j<grid) {
@@ -228,7 +224,7 @@ function* landscape(scene, art) {
     ground.setAttribute('seasons',new THREE.Float32BufferAttribute(seasons,4));
     // Adjacent tiles compute their own normals. Sample both sides at the
     // join so a sunlit rock face stays continuous across the tile boundary.
-    if(!deep){
+    if((peachTile || ridgeTile) && !deep){
       const step=span/grid,normals=ground.attributes.normal;
       function seamNormal(i,j){
         const v=j*(grid+1)+i,x=p[v*3],z=p[v*3+2];
