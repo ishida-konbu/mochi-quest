@@ -65,10 +65,37 @@ export function drawFace(canvas, mode, mood = 'joy') {
   wash.addColorStop(1,grass ? '#849572' : flour ? '#cb9965' : '#ddd8c9');
   dab(1,18.3,22,2.2,'#645f4830',-.025);
   if (mode === 'kagami') {
-    shape('M-25 15 Q-24 7 -12 6 Q8 1 20 9 Q30 15 23 19 Q2 26 -21 21 Q-26 20 -25 15Z', wash, ink,1.4);
-    g.translate(0,-3); g.scale(.77,.77);
-    shape('M-1 -24 Q4 -33 13 -30 Q10 -24 2 -23Z','#687c55',ink,.9);
-    dab(0,-22,6.7,5.2,'#b96c3b');
+    // Draw the laden willow behind the cakes so the face stays readable at HUD size.
+    for (const side of [-1,1]) {
+      g.save();
+      g.scale(side,1);
+      shape('M4 5 C9 -16 28 -34 34 -7 M10 -6 C21 -25 33 -22 37 0 M10 -6 C13 -23 16 -30 21 -20',null,'#846048',1.2);
+      for (const [x,y,pink] of [[14,-15,1],[21,-21,0],[28,-21,1],[32,-15,0],[34,-8,1],[29,-17,0],[36,-5,0],[16,-23,1]]) {
+        dab(x,y,1.45,1.85,pink?'#bf6874':'#b09a8a',-.35*side);
+        dab(x-.15,y-.25,1.12,1.44,pink?'#e7a1ac':'#fff7e9',-.35*side);
+      }
+      g.restore();
+    }
+    // A corner of the red-edged ceremonial paper points toward the viewer.
+    shape('M-33 16 L-3 7 L33 15 L3 26Z','#bb4838',ink,.9);
+    shape('M-29 16 L-3 9 L29 15 L3 23.6Z','#fff9ea');
+    // The fern lies on the paper and the weight of the lower cake covers its stem.
+    for (const side of [-1,1]) {
+      g.save();
+      g.scale(side,1);
+      shape('M5 17 Q17 24 32 19',null,'#63734e',1);
+      for (let j=0;j<7;j++) {
+        const u=j/7, x=12+21*u, y=19+2*Math.sin(Math.PI*u), length=3.4-1.5*u;
+        dab(x,y-1.4,length,.9,'#6c855b',-.65);
+        dab(x,y+1.4,length,1.1,'#b0c2a3',.78);
+      }
+      g.restore();
+    }
+    shape('M-27 13 C-27 5 -16 1 0 1 C16 1 27 5 27 13 C27 19 16 21 0 21 C-16 21 -27 19 -27 13Z',wash,ink,1.45);
+    shape('M-1 -23 Q3 -29 12 -27 Q9 -22 2 -22Z','#687c55',ink,.9);
+    dab(0,-21.1,5.8,4.4,'#d98632');
+    g.save();
+    g.translate(0,-4); g.scale(.8,.65);
   }
   if (mode === 'habutae') {
     for (const side of [-1,1]) {
@@ -115,6 +142,36 @@ export function drawFace(canvas, mode, mood = 'joy') {
   if (['sleepy','bath'].includes(mood)) dab(0,5,1.9,1,ink);
   else if (['surprise','calling'].includes(mood)) dab(0,5.3,2.7,3.9,'#764a3d');
   else shape('M-4 3.2 Q-.4 4.5 4 3 Q3 8.6 -.4 8.2 Q-2.7 8 -4 3.2Z','#995342',ink,.9);
+  if (mode === 'kagami') {
+    g.restore();
+    const band = 'M-23 5.3 Q0 12.7 23 5.3';
+    shape(band,null,'#96382e',3.2);
+    shape(band,null,'#e5bd6a',1);
+    for (const side of [-1,1]) {
+      g.save();
+      g.scale(side,1);
+      shape('M14 6 L21 -.7',null,'#956d42',1.75);
+      dab(15.6,4.2,2.9,2.2,ink,-.5);
+      dab(15.5,3.8,2.55,1.95,'#f6e9cf',-.5);
+      // The vermilion fold hangs closer to the body; the white fold fans out.
+      shape('M16 3 L20 4 L20 9 L23 8 L23 14 L26 13 L26 20 L29 19 L28 24 L21 26 L22 19 L19 20 L19 14 L16 15 L17 9 L15 10Z','#c44838','#853e30',.9);
+      shape('M20 2 L24 4 L25 8 L28 7 L29 12 L32 11 L32 16 L35 15 L35 20 L30 23 L30 18 L27 19 L26 14 L23 15 L22 10 L20 10Z','#fff9ea','#9b775a',1);
+      shape('M23 10 L25 8 M27 14 L29 12 M30 18 L32 16',null,'#bfad92',.85);
+      shape('M1 10 Q6 14 10 16 Q7 15 5 16',null,'#b14739',1.8);
+      g.restore();
+    }
+    g.translate(0,9.5);
+    for (let i=0;i<5;i++) {
+      g.save();
+      g.rotate(i * Math.PI * 2 / 5);
+      const loop = 'M-.6 1 C-4 -1 -4 -5 -.5 -6 C2 -7 3.4 -3 .4 0';
+      shape(loop,null,'#a83c33',2.4);
+      shape(loop,null,'#efc879',.86);
+      g.restore();
+    }
+    dab(0,0,1.5,1.5,'#845124');
+    dab(-.3,-.3,1.1,1.1,'#f7d898');
+  }
   g.restore();
 }
 
@@ -155,7 +212,7 @@ export const HELP = {
     ],
     ['野山の配達', '虎と獅子は、人家や街道を離れた野山を歩いています。配達帳で会いたい動物を選ぶと、地図にその一匹の居場所が映ります。'],
     ['空の配達', '龍と麒麟は十七景を渡り、道中で高さを変えます。画面を上へドラッグして空を見上げられます。配達帳で選び、道しるべの「上」「下」を頼りに羽二重餅で高さを合わせましょう。丹頂にも通知を届けられます。小さな渡り鳥の群れは配達の対象外です。'],
-    ['鏡餅', '動物全員に三条通知を届けると、5 で鏡餅に変身できます。歩く速さは白餅の三倍、通知は常に八方向。地図に行き先の印を置くと、そこへ瞬間移動できます。'],
+    ['鏡餅', '動物全員に三条通知を届けると、5 で鏡餅に変身できます。ジャンプを連打するか押し続けると、両手の御幣を羽ばたかせて上昇します。歩く速さは白餅の三倍、通知は常に八方向。地図に印を置いた場所へ瞬間移動できます。'],
     ['羽二重餅', '4 で羽二重餅に変身。ジャンプの連打か長押しで上昇し、手を休めると降下します。飛びながら進み続けると加速します。'],
     [
       'HPと温泉',

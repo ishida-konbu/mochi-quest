@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>鏡餅モード｜Mochi Quest 2</title>
+  <script type="importmap">
+    {"imports":{
+      "three":"./two/vendor/three.module.min.js",
+      "./two/kagami-mochibana.js":"./two/kagami-mochibana.js?v=6.5",
+      "./two/mochibana-rice.js":"./two/mochibana-rice.js?v=6.5"
+    }}
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f3f0e6; color: #403b32; font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; }
+    main { display: grid; place-items: center; min-height: 100svh; padding: clamp(12px, 4vw, 44px); }
+    article { width: min(100%, 880px); overflow: hidden; border: 1px solid #d8d3c2; border-radius: 15px; background: #fffdf6; }
+    header, footer { padding: 18px clamp(18px, 4vw, 36px); }
+    h1 { margin: 0; font-size: clamp(24px, 4vw, 32px); font-weight: 600; }
+    footer { font-size: 14px; line-height: 1.8; color: #595547; }
+    #stage { position: relative; height: clamp(320px, 62svh, 565px); background: #223331; touch-action: none; cursor: grab; }
+    #stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 48%, #0b17172b 100%); }
+    #stage:active { cursor: grabbing; }
+    #stage:focus-visible { outline: 2px solid #855344; outline-offset: -2px; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #hint { position: absolute; z-index: 1; left: 12px; bottom: 10px; padding: 4px 9px; border-radius: 4px; color: #fff9e9; background: #192c29d9; font: 12px system-ui, sans-serif; pointer-events: none; }
+    .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-bottom: 10px; }
+    button { font: inherit; line-height: 1.2; min-height: 36px; padding: 6px 15px; color: #423b31; background: #fffdf6; border: 1px solid #cfc5ad; border-radius: 99px; cursor: pointer; }
+    button[aria-pressed="true"] { color: #fffaf0; background: #3e504a; border-color: #3e504a; }
+    button:focus-visible { outline: 2px solid #915833; outline-offset: 2px; }
+    #jump { background: #8a342e; color: #fffaf0; border-color: #8a342e; touch-action: none; user-select: none; }
+    #height { position: absolute; z-index: 1; top: 12px; right: 12px; padding: 4px 9px; border-radius: 4px; color: #fff9e9; background: #192c29d9; font: 13px system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <main><article>
+    <header><h1>鏡餅モード</h1></header>
+    <div id="stage" tabindex="0" aria-label="鏡餅のプレビュー。スペースでジャンプ、ドラッグか左右の矢印キーで回転できます。">
+      <div id="hint" role="status">読み込み中…</div>
+      <span id="height" hidden></span>
+    </div>
+    <footer>
+      <div class="tools" aria-label="プレビュー操作">
+        <button id="jump" type="button" disabled>ジャンプ・羽ばたく</button>
+        <button id="turn" type="button">背中を見る</button>
+        <button id="detail" type="button" aria-pressed="false">飾りを拡大</button>
+        <button id="pause" type="button" aria-pressed="false">一時停止</button>
+      </div>
+      ボタンかスペースでジャンプ。空中で連打するか押し続けると、両手の御幣をあおいで上昇します。
+    </footer>
+  </article></main>
+  <script type="module">
+    import * as THREE from './two/vendor/three.module.min.js';
+    import { HDRLoader } from './two/vendor/HDRLoader.js';
+    import { loadRiceModel, makeRiceModel, poseRice } from './two/mochi-model.js';
+    import { createGame } from './two/game.js';
+
+    const stage = document.querySelector('#stage');
+    const hint = document.querySelector('#hint');
+
+    async function showKagami() {
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color('#263634');
+      scene.fog = new THREE.FogExp2(scene.background, 0.045);
+      const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 75);
+      scene.add(camera);
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.toneMapping = THREE.NeutralToneMapping;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.VSMShadowMap;
+      stage.prepend(renderer.domElement);
+
+      scene.add(new THREE.HemisphereLight(0xfff5e5, 0xc4a58c, 0.75));
+      const light = new THREE.DirectionalLight(0xffebd2, 2.25);
+      light.position.set(-3.5, 5, 3);
+      light.castShadow = true;
+      light.shadow.mapSize.set(1024, 1024);
+      light.shadow.radius = 5;
+      light.shadow.blurSamples = 8;
+      light.shadow.bias = -.00015;
+      Object.assign(light.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2 });
+      light.shadow.normalBias = 0.004;
+      scene.add(light, light.target);
+      const rim = new THREE.DirectionalLight(0xffe5b5, 1.5);
+      rim.position.set(2, 3, -3);
+      scene.add(rim);
+      const fill = new THREE.DirectionalLight(0xe9f2ff, 0.55);
+      fill.position.set(3, 1, 4);
+      scene.add(fill);
+
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100),
+        new THREE.MeshStandardMaterial({ color: '#31413e', roughness: .88, transparent: true }));
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = -0.045;
+      floor.receiveShadow = true;
+      scene.add(floor);
+
+      const [, environment, landscape] = await Promise.all([
+        loadRiceModel(), new HDRLoader().loadAsync('./two/assets/world/spruit-dawn.hdr'),
+        new THREE.TextureLoader().loadAsync('./two/assets/world/ridgelines.webp')
+      ]);
+      environment.mapping = THREE.EquirectangularReflectionMapping;
+      scene.environment = environment;
+      scene.environmentRotation.y = .62;
+      scene.environmentIntensity = .56;
+      // The game's painted hills drop below the traveller as the camera gains height.
+      landscape.colorSpace = THREE.SRGBColorSpace;
+      const hills = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({
+        map: landscape, color: '#a0b1aa', transparent: true, fog: false, toneMapped: false,
+        depthWrite: false
+      }));
+      hills.position.z = -30;
+      hills.renderOrder = -10;
+      camera.add(hills);
+      const heading = new THREE.Group();
+      const pose = new THREE.Group();
+      scene.add(heading);
+      heading.add(pose);
+      const showMochibana = new URLSearchParams(location.search).get('view') === 'mochibana';
+      heading.rotation.y = showMochibana ? Math.PI + .16 : .1;
+      let targetAngle = heading.rotation.y;
+      const rice = makeRiceModel(pose);
+      // An isolated journey uses the game's own takeoff, wingbeats and landing physics.
+      const flight = createGame();
+      flight.state.kagamiUnlocked = true;
+      flight.act('kagami');
+      const player = flight.state.player;
+      const walkingPose = Object.create(player);
+      walkingPose.speed = 5; // Walk in place while the gallery camera stays put.
+      const detail = document.querySelector('#detail');
+      const pause = document.querySelector('#pause');
+      const jump = document.querySelector('#jump');
+      const turn = document.querySelector('#turn');
+      const height = document.querySelector('#height');
+      const held = new Set();
+      let zoomTarget = showMochibana ? 1 : 0, zoom = zoomTarget, paused = false;
+      detail.setAttribute('aria-pressed', String(showMochibana));
+      turn.addEventListener('click', () => {
+        const goal = Math.cos(targetAngle) >= 0 ? Math.PI + .16 : .1;
+        targetAngle += Math.atan2(Math.sin(goal - targetAngle), Math.cos(goal - targetAngle));
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) heading.rotation.y = targetAngle;
+      });
+      detail.addEventListener('click', () => {
+        zoomTarget = 1 - zoomTarget;
+        detail.setAttribute('aria-pressed', String(Boolean(zoomTarget)));
+      });
+      pause.addEventListener('click', () => {
+        paused = !paused;
+        held.clear();
+        pause.setAttribute('aria-pressed', String(paused));
+      });
+      function flap() {
+        paused = false;
+        pause.setAttribute('aria-pressed', 'false');
+        flight.act('jump');
+      }
+      jump.disabled = false;
+      jump.addEventListener('pointerdown', event => {
+        if (event.button !== 0) return;
+        jump.setPointerCapture(event.pointerId);
+        held.add(event.pointerId);
+        flap();
+      });
+      jump.addEventListener('lostpointercapture', event => held.delete(event.pointerId));
+      jump.addEventListener('click', event => {
+        if (event.detail === 0) flap(); // Keyboard or assistive activation.
+      });
+      window.addEventListener('keydown', event => {
+        if (event.code !== 'Space' || (event.target.closest('button') && event.target !== jump)) return;
+        event.preventDefault();
+        if (event.repeat) return;
+        held.add('space');
+        flap();
+      });
+      window.addEventListener('keyup', event => {
+        if (event.code === 'Space') held.delete('space');
+      });
+      window.addEventListener('blur', () => held.clear());
+
+      let previousX;
+      stage.addEventListener('pointerdown', event => {
+        previousX = event.clientX;
+        targetAngle = heading.rotation.y;
+        stage.setPointerCapture(event.pointerId);
+      });
+      stage.addEventListener('pointermove', event => {
+        if (!stage.hasPointerCapture(event.pointerId)) return;
+        heading.rotation.y += (event.clientX - previousX) * 0.012;
+        targetAngle = heading.rotation.y;
+        previousX = event.clientX;
+      });
+      stage.addEventListener('keydown', event => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        targetAngle += event.key === 'ArrowRight' ? 0.12 : -0.12;
+      });
+
+      function resize() {
+        const { clientWidth: width, clientHeight: height } = stage;
+        renderer.setSize(width, height, false);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        const viewHeight = 60 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+        const hillHeight = Math.max(viewHeight * 1.5, viewHeight * camera.aspect / 3);
+        hills.scale.set(hillHeight * 3, hillHeight, 1);
+      }
+      resize();
+      new ResizeObserver(resize).observe(stage);
+      hint.textContent = '歩行中 · ドラッグで回転';
+      let previousTime = performance.now();
+      let walkTime = 0;
+      renderer.setAnimationLoop(time => {
+        const dt = Math.max(0, Math.min((time - previousTime) / 1000, 0.05));
+        previousTime = time;
+        heading.rotation.y = THREE.MathUtils.damp(heading.rotation.y, targetAngle, 8, dt);
+        const turnLabel = Math.cos(targetAngle) >= 0 ? '背中を見る' : '正面を見る';
+        if (turn.textContent !== turnLabel) turn.textContent = turnLabel;
+        if (!paused) {
+          walkTime += dt;
+          if (!player.grounded || held.size || player.landing > 0) flight.step(dt, { jump: held.size > 0 });
+          const motion = poseRice(rice, player.grounded ? walkingPose : player, walkTime, dt, 'joy');
+          pose.scale.set(motion.width, motion.stretch, motion.width);
+          pose.position.y = player.h + motion.bob;
+          pose.rotation.set(motion.pitch, 0, motion.lean);
+        }
+        zoom = THREE.MathUtils.damp(zoom, zoomTarget, 9, dt);
+        // Allow for the willow crown approaching the lens as the model turns.
+        const fullDistance = Math.max(5.18, 6.85 / camera.aspect);
+        // Follow the mizuhiki at the front and the higher willow sprays at the back.
+        const back = THREE.MathUtils.smoothstep(-Math.cos(heading.rotation.y), .05, .94);
+        const detailDistance = THREE.MathUtils.lerp(Math.max(3.22, 4.75 / camera.aspect),
+          Math.max(2.18, 3.4 / camera.aspect), back);
+        // A longer lens keeps near and far rice balls comparable in the rear close-up.
+        const lens = 1 + 1.6 * back * zoom;
+        if (Math.abs(camera.zoom - lens) > .0001) {
+          camera.zoom = lens;
+          camera.updateProjectionMatrix();
+        }
+        const airborne = 1 - Math.exp(-player.h * 1.7);
+        const distance = (THREE.MathUtils.lerp(fullDistance, detailDistance, zoom) +
+          .95 * airborne + .8 * player.airStretch) * camera.zoom;
+        const detailY = THREE.MathUtils.lerp(.59, 1.35, back);
+        const aimY = THREE.MathUtils.lerp(.89, detailY, zoom) + player.h + .08 * airborne + .38 * player.airStretch;
+        const aimX = -.82 * Math.sin(heading.rotation.y) * back * zoom;
+        const aimZ = THREE.MathUtils.lerp(.32, -.82 * Math.cos(heading.rotation.y), back) * zoom;
+        light.position.y = 5 + player.h;
+        light.target.position.y = player.h;
+        const sky = THREE.MathUtils.smoothstep(player.h, .6, 4);
+        hills.visible = sky > 0;
+        hills.material.opacity = sky * .87;
+        hills.position.y = hills.scale.y * (.14 - .29 * player.h / (player.h + 8));
+        floor.material.opacity = 1 - sky;
+        floor.visible = sky < 1;
+        camera.position.set(aimX, aimY + .235 * distance, aimZ + distance);
+        camera.lookAt(aimX, aimY, aimZ);
+        const status = (paused ? '一時停止中' : player.grounded ? '歩行中' : '飛行中') + ' · ドラッグで回転';
+        if (hint.textContent !== status) hint.textContent = status;
+        height.hidden = player.grounded;
+        if (!player.grounded) height.textContent = '高さ ' + player.h.toFixed(1) + ' m';
+        renderer.render(scene, camera);
+      });
+    }
+
+    showKagami().catch(error => {
+      hint.textContent = '3Dモデルを表示できませんでした。';
+      console.error(error);
+    });
+  </script>
+</body>
+</html>

@@ -67,6 +67,45 @@ test('only a completed delivery book unlocks a triple-speed kagami with map trav
   assert.ok(createGame(game.save()).state.kagamiUnlocked);
 });
 
+test('kagami beats on each jump tap and sustained press, climbs without MP and lands after release', () => {
+  const original = createGame();
+  const saved = original.save();
+  saved.delivered = original.state.npcs.map(n => n.id);
+  const game = createGame(saved), p = game.state.player;
+  place(p,310,380);
+  p.mp = 0;
+  assert.ok(game.act('kagami'));
+  // One-frame presses continue to lift after the fifth stretch has reached its limit.
+  for (let tap = 0; tap < 12; tap++) {
+    const vy = p.vy;
+    game.step(1/60, {jump:true, z:-.5});
+    assert.ok(!p.grounded && p.vy > vy && p.flapBeat > .9);
+    tick(game,19/60,{z:-.5});
+    assert.ok(p.flapBeat < .2);
+  }
+  assert.equal(p.airStretch,1);
+  assert.ok(p.h>19 && Math.abs(p.speed-16)<.05);
+
+  let beats = 0;
+  for (let frame = 0; frame < 24*60; frame++) {
+    const before = p.flapBeat;
+    game.step(1/60, {jump:true});
+    if (p.flapBeat > before) beats++;
+  }
+  assert.ok(beats>50);
+  assert.equal(p.h,120);
+  assert.equal(p.mp,0);
+  assert.equal(p.mode,'kagami');
+  game.act('jump'); // An individual button press at the ceiling still starts a fresh stroke.
+  assert.equal(p.flapBeat,1);
+  const resumed = createGame(game.save());
+  assert.ok(resumed.restored);
+  assert.equal(resumed.state.player.h,120);
+  tick(resumed,5);
+  assert.ok(resumed.state.player.grounded);
+  assert.equal(resumed.state.player.flapBeat,0);
+});
+
 test('both animals at the dawn mortar accept notices at their actual workstations',()=>{
   for(const role of ['turner','pounder']){
     const game=createGame(),p=game.state.player;

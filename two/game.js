@@ -23,6 +23,7 @@ const FALL_GRAVITY = 27;
 const JUMP_SPEED = 11.7;
 const STRETCH_SPEED = 16.5;
 const FLIGHT_CLIMB = 5.6;
+const KAGAMI_BEAT_DURATION = .36;
 const JUMP_BUFFER = .12;
 const LEDGE_GRACE = .085;
 const CEILING = 120;
@@ -191,6 +192,9 @@ export function createGame(snapshot = null) {
   const climate = {};
   const voyage = createVoyage();
   let heldJump = false;
+  let flapRemaining = 0;
+  // The render rig reads this transient stroke without adding it to journey saves.
+  Object.defineProperty(player, 'flapBeat', { get: () => flapRemaining / KAGAMI_BEAT_DURATION });
   let bufferedJump = 0;
   let ledgeGrace = 0;
   let lastBath = null;
@@ -327,9 +331,13 @@ export function createGame(snapshot = null) {
         break;
     }
   }
+  function canFly() {
+    return !player.mount && (player.mode === 'habutae' || player.mode === 'kagami');
+  }
   function jump() {
     if (player.activity) return false;
     if (player.diveDepth > 0) return true; // Space strokes upward while submerged.
+    if (player.mode === 'kagami' && !player.mount) flapRemaining = KAGAMI_BEAT_DURATION;
     const footLaunch = player.grounded || ledgeGrace > 0;
     if (!footLaunch) {
       // Each fresh press pulls out more dough. A wingbeat still lifts the
@@ -338,7 +346,7 @@ export function createGame(snapshot = null) {
       player.airStretch = Math.min(1, before + 0.23);
       player.vy += (player.airStretch - before) * 8;
       player.stretch = .23;
-      if (!player.mount && player.mode === 'habutae') {
+      if (canFly()) {
         player.vy = clamp(player.vy + 3.2, 8.6, 13.5);
       }
       if (player.vy < 0 && player.h < .55) bufferedJump = JUMP_BUFFER;
@@ -432,6 +440,7 @@ export function createGame(snapshot = null) {
   function changeMode(mode) {
     const leavingGrass = player.mode === 'kusa';
     player.mode = mode;
+    flapRemaining = 0;
     if (!leavingGrass && mode !== 'kusa') return;
     if (player.diveDepth > 0) {
       // A swimmer may have phased inside a hall. Leave the solid by the
@@ -641,7 +650,7 @@ export function createGame(snapshot = null) {
     dx /= amount; dz /= amount;
     let pace = player.mount || 'foot';
     if (!player.mount && ['dango','kagami'].includes(player.mode)) pace = player.mode;
-    if (!player.mount && player.mode === 'habutae' && !player.grounded) pace = 'flight';
+    if (!player.grounded && canFly()) pace = 'flight';
     const waterDrag = player.inWater && !player.mount ? .72 : 1;
     const modifier = waterDrag * (player.buffs.swift>0 ? SWIFT_FACTOR : 1) * (player.buffs.full>0 ? .81 : 1);
     const speed = SPEED[pace] * modifier;
@@ -703,8 +712,9 @@ export function createGame(snapshot = null) {
     const ceiling = phasing ? Infinity : Math.min(overheadHeight(at.x,at.z,player.y),ship?.ceiling ?? Infinity);
     const wasGrounded = player.grounded;
     if (player.grounded && floor >= player.y-.32 && player.vy<=0) player.y = floor;
-    if (player.mode==='habutae' && !player.mount && input.jump && !player.activity) {
+    if (canFly() && input.jump && !player.activity) {
       // Ease out of the stronger takeoff into a steady wing-powered climb.
+      if (player.mode === 'kagami' && flapRemaining === 0) flapRemaining = KAGAMI_BEAT_DURATION;
       player.vy = player.vy > FLIGHT_CLIMB
         ? Math.max(FLIGHT_CLIMB,player.vy-RISE_GRAVITY*dt)
         : Math.min(FLIGHT_CLIMB,player.vy+25*dt);
@@ -731,6 +741,7 @@ export function createGame(snapshot = null) {
       player.h = 0;
       player.y = floor;
       player.airStretch = 0;
+      flapRemaining = 0;
     } else if (player.h >= CEILING) {
       player.y = floor + CEILING; player.vy = Math.min(0,player.vy);
     }
@@ -794,6 +805,7 @@ export function createGame(snapshot = null) {
       speed:0, grounded:true, diveDepth:0, airStretch:0, stretch:0, impact:0, landing:0, invulnerable:.8});
     lastBath = null;
     bufferedJump = ledgeGrace = 0;
+    flapRemaining = 0;
     refreshCrowd();
     updateRegion(true);
     sound('mode');
@@ -802,6 +814,7 @@ export function createGame(snapshot = null) {
   }
   function advance(dt, input) {
     state.time += dt;
+    flapRemaining = Math.max(0, flapRemaining - dt);
     voyage.update(state.time,player);
     player.idleTime = player.grounded && player.speed < .22 && !player.activity ? Math.min(3, (player.idleTime || 0) + dt) : 0;
     for (const name of Object.keys(player.buffs)) player.buffs[name] = Math.max(0, player.buffs[name] - dt);

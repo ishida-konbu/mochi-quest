@@ -1,11 +1,20 @@
 import * as T from './vendor/three.module.min.js';
 import { GLTFLoader } from './vendor/GLTFLoader.min.js';
+import { addKagamiOrnaments } from './kagami-ornaments.js';
+import { addKagamiFern } from './kagami-fern.js';
+import { addKagamiMochibana } from './kagami-mochibana.js';
+import { daidai, riceFinish } from './kagami-surfaces.js';
 
 const asset = name => new URL('./assets/actors/nikkori/' + name, import.meta.url).href;
 const clamp = T.MathUtils.clamp;
 const smooth = T.MathUtils.smoothstep;
 const riceScale = .708;
 const pullExtension = 1.33 * riceScale;
+// Seat the animated character into the shoulder of the wider, lower cake.
+const kagamiUpperWidth = .51;
+const kagamiUpperHeight = .32;
+const kagamiUpperY = .34;
+const kagamiCitrusY = kagamiUpperY + 2.32 * kagamiUpperHeight + .118;
 let source, loading;
 
 // All paint, the skin weights, the smile relief and the eight performances
@@ -97,7 +106,12 @@ function skinMaterial(maps) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         normal=normalize(mix(normal,nonPerturbedNormal,clean));
         // Fade detail at distance through the mip chain. Derivatives are in view space.
-        float height=(grain-.5)*.00165*skinMask + .008*eye;
+        #ifdef KAGAMI_STARCH
+          const float grainRelief=.00016;
+        #else
+          const float grainRelief=.00165;
+        #endif
+        float height=(grain-.5)*grainRelief*skinMask + .008*eye;
         vec3 qx=dFdx(-vViewPosition), qy=dFdy(-vViewPosition);
         vec3 rx=cross(qy,normal), ry=cross(normal,qx);
         float det=dot(qx,rx);
@@ -204,13 +218,25 @@ export function dressedRiceFace(kind,capacity=0,portrait=null) {
   return face;
 }
 
-function kagamiLayers(parent, grain) {
+function palmSamples(body, hand) {
+  // Probe the front and back of the actual mitt. Their midpoint stays inside
+  // the palm when the air-stretch morph pulls the skin away from its bone.
+  const { position, skinIndex, skinWeight } = body.geometry.attributes;
+  const joint = body.skeleton.bones.indexOf(hand);
+  let front, back;
+  for (let i = 0; i < position.count; i++) {
+    if (skinIndex.getX(i) !== joint || skinWeight.getX(i) < .72) continue;
+    if (front === undefined || position.getZ(i) > position.getZ(front)) front = i;
+    if (back === undefined || position.getZ(i) < position.getZ(back)) back = i;
+  }
+  return { front, back };
+}
+
+function kagamiLayers(r) {
+  const parent=r.model.parent;
   const stack = new T.Group();
   stack.name='鏡餅・福重ね';
   parent.add(stack);
-  const rice = new T.MeshPhysicalMaterial({
-    color:'#ebddcf',roughness:.45,clearcoat:.18,bumpMap:grain,bumpScale:.0019,
-  });
   const points = [[0,.02],[.40,.025],[.67,.07],[.82,.17],[.86,.29],[.83,.39],[.72,.47],[.47,.52],[0,.53]];
   const profile=new T.SplineCurve(points.map(p=>new T.Vector2(...p))).getPoints(38);
   const base=new T.LatheGeometry(profile,72);
@@ -220,36 +246,57 @@ function kagamiLayers(parent, grain) {
     const angle=Math.atan2(x,z), ripple=1+.010*Math.cos(3*angle+y*7)+.006*Math.sin(5*angle-y*4);
     pos.setXYZ(i,x*ripple,y,z*ripple);
   }
-  base.computeVertexNormals();
-  const bottom=new T.Mesh(base,rice);
+  // Preserve the lathe's smooth normal across its UV seam.
+  const bottom=new T.Mesh(base,riceFinish());
+  bottom.receiveShadow=true;
   bottom.castShadow=true;
   bottom.scale.z=.94;
   stack.add(bottom);
-  const citrus=new T.Group();
+  addKagamiFern(stack);
+  addKagamiMochibana(stack);
+  const wands=addKagamiOrnaments(stack);
+  for (const [i,wand] of wands.entries()) wand.palm=palmSamples(r.body,r.hands[i]);
+  const citrus=daidai();
+  citrus.scale.setScalar(.91);
   stack.add(citrus);
-  const rind = new T.MeshPhysicalMaterial({
-    color:'#e89024',roughness:.56,bumpMap:grain,bumpScale:.016,clearcoat:.12,
-  });
-  const orange=new T.Mesh(new T.SphereGeometry(.166,32,22),rind);
-  orange.scale.set(1.04,.88,1);
-  citrus.add(orange);
-  const stem=new T.Mesh(new T.CylinderGeometry(.012,.020,.068,8),new T.MeshStandardMaterial({color:'#746443'}));
-  stem.position.y=.144;
-  citrus.add(stem);
-  const leaf=new T.Shape();
-  leaf.moveTo(0,0);leaf.bezierCurveTo(.06,.093,.19,.094,.255,.054);
-  leaf.bezierCurveTo(.19,.034,.12,-.047,0,0);
-  const blade=new T.Mesh(new T.ShapeGeometry(leaf,20),
-    new T.MeshStandardMaterial({color:'#53682c',roughness:.54,side:T.DoubleSide}));
-  blade.position.set(0,.165,.015);
-  blade.rotation.set(-.69,.19,-.16);
-  citrus.add(blade);
-  const vein = new T.CatmullRomCurve3([
-    new T.Vector3(.008,.007,.002),new T.Vector3(.104,.041,.002),new T.Vector3(.236,.055,.002),
-  ]);
-  blade.add(new T.Mesh(new T.TubeGeometry(vein,12,.002,4,false),new T.MeshStandardMaterial({color:'#88954a'})));
   stack.visible=false;
-  return { stack, citrus };
+  return { stack, citrus, wands, upperSkin:riceFinish(r.plainSkin), wind:0, windPhase:0,
+    stroke:0, spread:0, toStack:new T.Matrix4(), palmBack:new T.Vector3() };
+}
+
+function poseGohei(r, speed, stride, step, beat, dt) {
+  const kagami = r.kagami;
+  // The steady load trails the paper behind the walker. The other two shapes
+  // carry a wave from the tied edge to the free tip as that load rises or decays.
+  const airflow = .65 * smooth(speed, .05, 4.5) + .35 * smooth(speed, 2, 19.2);
+  const response = airflow > kagami.wind ? 5 : 3.8;
+  kagami.wind = T.MathUtils.damp(kagami.wind, airflow, response, dt);
+  if (airflow === 0 && kagami.wind < .001) kagami.wind = 0;
+  kagami.windPhase = (kagami.windPhase + dt * (5.5 + 3.1 * kagami.wind)) % (4 * Math.PI);
+  const gust = kagami.wind * (.90 + .10 * Math.sin(kagami.windPhase * .5));
+  const angle = 2*Math.PI*(1-beat);
+  const flutter = Math.sin(Math.PI*beat);
+  // Apply the shape keys and four skin weights exactly as for the painted body.
+  // Work in the stack's coordinates so ground, mount and camera transforms
+  // cannot be counted twice or compress the rigid little wooden shafts.
+  r.model.parent.updateWorldMatrix(true,false);
+  r.model.updateMatrixWorld(true);
+  kagami.toStack.copy(r.model.parent.matrixWorld).invert().multiply(r.body.matrixWorld);
+  for (const [i,wand] of kagami.wands.entries()) {
+    const side=i?1:-1;
+    const palm=wand.group.position;
+    r.body.getVertexPosition(wand.palm.front,palm);
+    r.body.getVertexPosition(wand.palm.back,kagami.palmBack);
+    palm.lerp(kagami.palmBack,.5).applyMatrix4(kagami.toStack);
+    // Pivot the staff in the existing palm. A little forward pitch on the
+    // upstroke lets the shaft clear the rising cheek without extending the arm.
+    wand.group.rotation.set(side*step*stride*.09+.28*kagami.spread+.45*Math.max(0,kagami.stroke),0,
+      side*(.06 + .26*kagami.spread + .97*kagami.stroke));
+    const w=wand.strips.morphTargetInfluences;
+    w[0]=Math.max(kagami.wind,.48*kagami.spread);
+    w[1]=T.MathUtils.lerp(gust*Math.sin(kagami.windPhase),Math.sin(angle),flutter);
+    w[2]=T.MathUtils.lerp(gust*Math.cos(kagami.windPhase),Math.cos(angle),flutter);
+  }
 }
 
 export function makeRiceModel(parent) {
@@ -274,7 +321,7 @@ export function makeRiceModel(parent) {
   const bones=[...legs,...hands,chest];
   const samples=bones.map(b=>({p:b.position.clone(),q:b.quaternion.clone()}));
   return { model,body,uniforms,mixer,actions,legs,hands,chest,bones,samples,
-    kagami:kagamiLayers(parent,maps[4]), faceCues:body.userData.faceCues, clip:null,
+    plainSkin:material, kagami:null, faceCues:body.userData.faceCues, clip:null,
     step:0,press:0,velocity:0,pull:0,pullV:0,smile:1 };
 }
 
@@ -339,6 +386,14 @@ export function poseRice(r,p,t,dt,mood) {
   r.uniforms.riceCell.value=cell;
   r.uniforms.ricePull.value=pull;
   r.uniforms.riceTint.value.copy(tints[p.mode]||tints.normal);
+  const inFlight=stack && !grounded && !ride && !p.activity;
+  const beat=inFlight ? clamp(p.flapBeat||0,0,1) : 0;
+  if (stack) {
+    r.kagami ??= kagamiLayers(r);
+    const pulse=Math.sin(2*Math.PI*beat)*Math.sin(Math.PI*beat)**.55;
+    r.kagami.stroke=T.MathUtils.damp(r.kagami.stroke,pulse,29,frame);
+    r.kagami.spread=T.MathUtils.damp(r.kagami.spread,inFlight?1:0,12,frame);
+  }
   for(let i=0;i<2;i++) {
     const side=i?1:-1, phase=side*step;
     const foot=r.legs[i], hand=r.hands[i];
@@ -369,13 +424,23 @@ export function poseRice(r,p,t,dt,mood) {
     }
   }
   r.chest.rotateZ(step*stride*.023+.034*pull*Math.sin(t*3.8));
-  r.kagami.stack.visible=stack;
   if(stack){
-    r.model.scale.setScalar(riceScale*.78);
-    r.model.position.y=.32;
-    r.kagami.citrus.position.set(.013,1.75+.78*pullExtension*pull,-.01);
+    r.kagami.stack.visible=true;
+    r.body.material=r.kagami.upperSkin;
+    r.model.scale.set(kagamiUpperWidth,kagamiUpperHeight,kagamiUpperWidth);
+    r.model.position.y=kagamiUpperY;
+    r.kagami.citrus.position.set(.013,kagamiCitrusY+1.33*kagamiUpperHeight*pull,-.01);
     r.kagami.citrus.rotation.z=.09+step*stride*.07;
+    poseGohei(r, !ride && !p.activity ? speed : 0, stride, step, beat, frame);
   }else{
+    if(r.kagami && r.kagami.stack.visible) {
+      r.kagami.stack.visible=false;
+      r.kagami.wind=0;
+      r.kagami.windPhase=0;
+      r.kagami.stroke=0;
+      r.kagami.spread=0;
+    }
+    r.body.material=r.plainSkin;
     r.model.position.y=0;
     r.model.scale.setScalar(riceScale);
   }
