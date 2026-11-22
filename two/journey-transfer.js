@@ -1,3 +1,5 @@
+import { normalizeVolumes } from '../sound.js';
+
 // Only Mochi Quest 2's two local keys travel. The fragment never becomes
 // part of the HTTP request, and the destination URL is fixed in this module.
 export const PAGES_ORIGIN = 'https://ishida-konbu.github.io';
@@ -26,7 +28,7 @@ export function decodeTransfer(origin, hash, createGame, regions) {
     // item/port layouts. It also strips fields that aren't part of the save.
     const game = createGame(data.journey);
     if (!game.restored) return null;
-    return { game, settings: { sound: settings.sound, yaw: settings.yaw, goal: settings.goal } };
+    return { game, settings: { sound: settings.sound, volumes: normalizeVolumes(settings.volumes), yaw: settings.yaw, goal: settings.goal } };
   } catch {
     return null;
   }

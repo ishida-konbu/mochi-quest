@@ -14,6 +14,15 @@ const PHRASES = {
   dismount: [[0, 523.25], [.1, 392]]
 };
 
+const volumeChannels = ['effects', 'ambient', 'music'];
+
+export function normalizeVolumes(values) {
+  return Object.fromEntries(volumeChannels.map(channel => {
+    const value = values?.[channel];
+    return [channel, Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1];
+  }));
+}
+
 export function createAudio(makeWorldAudio) {
   let enabled = true;
   let paused = false;
@@ -21,8 +30,10 @@ export function createAudio(makeWorldAudio) {
   let unlocked = false;
   let context;
   let master;
+  let channels;
+  let volumes = normalizeVolumes();
   let noise;
-  let voice = null;
+  let voice = null, spokenLine = null;
   let voiceText = '';
   let voiceUntil = 0;
   let voiceRequest = 0;
@@ -62,11 +73,17 @@ export function createAudio(makeWorldAudio) {
         } else {
           master.connect(context.destination);
         }
+        channels = Object.fromEntries(volumeChannels.map(channel => {
+          const node = context.createGain();
+          node.gain.value = volumes[channel];
+          node.connect(master);
+          return [channel, node];
+        }));
         noise = context.createBuffer(1, Math.ceil(context.sampleRate * .2), context.sampleRate);
         const samples = noise.getChannelData(0);
         for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
-        worldAudio = makeWorldAudio?.(context, master);
-      } catch { context = null; }
+        worldAudio = makeWorldAudio?.(context, master, channels);
+      } catch { context = null; channels = null; }
     }
     if (context && context.state !== 'running') context.resume().catch(() => {});
     if (!paused) worldAudio?.unlock?.();
@@ -79,6 +96,25 @@ export function createAudio(makeWorldAudio) {
       voice = null;
     }
     globalThis.speechSynthesis?.cancel();
+    spokenLine = null;
+  }
+
+  function setVolumes(values) {
+    const next = normalizeVolumes({ ...volumes, ...values });
+    for (const channel of volumeChannels) {
+      if (next[channel] === volumes[channel] || !channels) continue;
+      const gain = channels[channel].gain, now = context.currentTime;
+      const current = gain.value;
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(current, now);
+      gain.linearRampToValueAtTime(next[channel], now + .025);
+    }
+    volumes = next;
+    // System speech runs outside the Web Audio graph when voice recordings fail.
+    if (spokenLine) {
+      spokenLine.volume = .8 * volumes.effects;
+      if (!volumes.effects) stopVoice();
+    }
   }
 
   function updateOutput() {
@@ -111,19 +147,19 @@ export function createAudio(makeWorldAudio) {
 
   async function speak(text) {
     const now = performance.now();
-    if (!(text in VOICES) || (text === voiceText && now < voiceUntil)) return;
+    if (!volumes.effects || !(text in VOICES) || (text === voiceText && now < voiceUntil)) return;
     voiceText = text;
     voiceUntil = now + 750;
     const request = ++voiceRequest;
     const recorded = context ? await prepareVoice(text) : null;
-    if (!enabled || paused || request !== voiceRequest || performance.now() - now > 1800) return;
+    if (!enabled || paused || !volumes.effects || request !== voiceRequest || performance.now() - now > 1800) return;
     stopVoice();
     if (recorded && context.state === 'running') {
       const source = context.createBufferSource();
       const gain = context.createGain();
       source.buffer = recorded;
       gain.gain.value = .94;
-      source.connect(gain).connect(master);
+      source.connect(gain).connect(channels.effects);
       source.onended = () => {
         if (voice === source) voice = null;
         source.disconnect(); gain.disconnect();
@@ -136,7 +172,9 @@ export function createAudio(makeWorldAudio) {
       const line = new SpeechSynthesisUtterance(text);
       line.lang = 'ja-JP';
       line.voice = speechSynthesis.getVoices().find(v => v.lang.startsWith('ja')) || null;
-      line.pitch = 1.25; line.rate = 1.13; line.volume = .8;
+      line.pitch = 1.25; line.rate = 1.13; line.volume = .8 * volumes.effects;
+      spokenLine = line;
+      line.onend = line.onerror = () => { if (spokenLine === line) spokenLine = null; };
       worldAudio?.duckMusic?.(.85);
       speechSynthesis.speak(line);
     }
@@ -161,7 +199,7 @@ export function createAudio(makeWorldAudio) {
     amp.gain.setValueAtTime(.0001, start);
     amp.gain.exponentialRampToValueAtTime(level, start + .006);
     amp.gain.exponentialRampToValueAtTime(.0001, start + duration);
-    oscillator.connect(amp).connect(master);
+    oscillator.connect(amp).connect(channels.effects);
     playSource(oscillator, [amp], start, start + duration + .01);
   }
 
@@ -177,7 +215,7 @@ export function createAudio(makeWorldAudio) {
     amp.gain.setValueAtTime(.0001, start);
     amp.gain.exponentialRampToValueAtTime(level, start + .012);
     amp.gain.exponentialRampToValueAtTime(.0001, start + duration);
-    source.connect(filter).connect(amp).connect(master);
+    source.connect(filter).connect(amp).connect(channels.effects);
     playSource(source, [filter, amp], start, start + duration + .004);
   }
 
@@ -208,5 +246,5 @@ export function createAudio(makeWorldAudio) {
     if (event.type === 'say') void speak(event.text);
     else if (event.type === 'sound') effect(event.name);
   }
-  return { unlock, setEnabled, setPaused, updateWorld, handle };
+  return { unlock, setEnabled, setPaused, setVolumes, updateWorld, handle };
 }

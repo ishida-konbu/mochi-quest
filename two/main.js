@@ -25,7 +25,8 @@ import { palaceInteriorAt, palaceStoreyAt } from './ryugu-layout.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
 import { inariWeatherAt } from './inari-weather.js';
-import { createAudio } from '../sound.js';
+import { createAudio, normalizeVolumes } from '../sound.js';
+import { createAudioSettings } from './audio-settings.js';
 import { MODES, EMOTES, HELP, glyph, paintGlyphs, drawFace } from './interface.js';
 import { loadMapPaper, drawMap, mapHit, mapCoordinates, labels, regionPort, mappedBath } from './map.js';
 
@@ -93,6 +94,8 @@ const state = game.state,
 state.inariWeather = inariWeatherAt(p.x, p.z, state.time, state.flightSeed);
 const audio = createAudio(createSoundscape);
 let audible = savedSettings.sound !== false;
+let volumes = normalizeVolumes(savedSettings.volumes);
+audio.setVolumes(volumes);
 let yaw = Number.isFinite(savedSettings.yaw) ? savedSettings.yaw : 0;
 let pitch = 0.23,
   distance = 6.55,
@@ -162,7 +165,7 @@ let frames = 0,
   workTime = 0,
   qualitySince = 0;
 function journeySettings() {
-  return { sound: audible, yaw: photoMode ? priorCamera.yaw : yaw, goal };
+  return { sound: audible, volumes, yaw: photoMode ? priorCamera.yaw : yaw, goal };
 }
 function persistSettings() {
   store(settingsKey, journeySettings());
@@ -180,6 +183,7 @@ function unlock() {
 function setAudio(value) {
   audible = value;
   audio.setEnabled(value);
+  audioSettings.setMuted(!value);
   $('audio').querySelector('i').innerHTML = glyph(value ? 'volume' : 'mute');
   $('audio').setAttribute('aria-pressed', String(value));
   $('audio').ariaLabel = $('audio').title = value ? '音を切る' : '音を入れる';
@@ -214,6 +218,18 @@ function action(name) {
   dispatchEvents();
   updateHUD();
 }
+const audioSettings = createAudioSettings({
+  volumes,
+  onOpen() {
+    clearInput();
+    unlock();
+  },
+  onChange(nextVolumes) {
+    volumes = nextVolumes;
+    audio.setVolumes(volumes);
+    persistSettings();
+  },
+});
 setAudio(audible);
 $('audio').onclick = () => {
   setAudio(!audible);
@@ -678,6 +694,7 @@ function openDialog(kind) {
   if (!renderer || dialog.open) return;
   clearInput();
   save();
+  audioSettings.close();
   lastFocus = document.activeElement;
   dialogKind = kind;
   $('dialog-title').textContent = kind === 'map' ? '十七景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';

@@ -21,7 +21,7 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=sakuragawa-yumeguri" />
+    <link rel="stylesheet" href="./game.css?v=audio-controls-1" />
     <script type="importmap">
       {
         "imports": {
@@ -66,7 +66,7 @@
           "./kyo-bath-layout.js": "./kyo-bath-layout.js?v=suzuri-roji-1",
           "./kyo-bath-art.js": "./kyo-bath-art.js?v=suzuri-roji-1",
           "./goemon-windbreak.js": "./goemon-windbreak.js?v=yuya-emaki-1",
-          "../sound.js": "../sound.js?v=journey-music-1",
+          "../sound.js": "../sound.js?v=audio-controls-1",
           "./kiyomizu-layout.js": "./kiyomizu-layout.js?v=otowa-1",
           "./kiyomizu.js": "./kiyomizu.js?v=otowa-1",
           "./kiyomizu-bell.js": "./kiyomizu-bell.js?v=journey-music-1",
@@ -123,7 +123,7 @@
           "./kagami-paper.js": "./kagami-paper.js?v=6.1",
           "./kagami-surfaces.js": "./kagami-surfaces.js?v=5.2",
           "./interiors.js": "./interiors.js?v=3.3",
-          "./journey-transfer.js": "./journey-transfer.js?v=3.3",
+          "./journey-transfer.js": "./journey-transfer.js?v=audio-controls-1",
           "./legend-flight.js": "./legend-flight.js?v=ryu-emaki-1",
           "./map.js": "./map.js?v=kyoto-market-highways-1",
           "./meadow-herbs.js": "./meadow-herbs.js?v=emaki-landscape-1",
@@ -156,7 +156,8 @@
           "./lake-shore.js": "./lake-shore.js?v=islet-escarpment-1",
           "./snow-bath.js": "./snow-bath.js?v=yuya-emaki-1",
           "./snow-daruma.js": "./snow-daruma.js?v=3.3",
-          "./soundscape.js": "./soundscape.js?v=journey-music-1",
+          "./audio-settings.js": "./audio-settings.js?v=audio-controls-1",
+          "./soundscape.js": "./soundscape.js?v=audio-controls-1",
           "./journey-music.js": "./journey-music.js?v=journey-music-1",
           "./journey-player.js": "./journey-player.js?v=journey-music-1",
           "./spring-water.js": "./spring-water.js?v=suzuri-roji-1",
@@ -257,7 +258,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=suzuri-roji-1" />
+    <link rel="modulepreload" href="./main.js?v=audio-controls-1" />
   </head>
   <body>
     <main id="stage">
@@ -294,6 +295,10 @@
             <i data-glyph="camera"></i>
           </button>
           <button class="circle" id="audio" aria-label="音の切り替え"><i data-glyph="volume"></i></button>
+          <button type="button" class="circle" id="audio-settings-toggle" title="音量設定"
+            aria-label="音量設定" aria-expanded="false" aria-haspopup="dialog" aria-controls="audio-settings">
+            <i aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7h4m6 0h8M3 17h9m6 0h3"/><circle cx="10" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></i>
+          </button>
           <button class="circle" id="guide" aria-label="遊び方・一時停止" title="遊び方・一時停止（Esc）">
             <i data-glyph="menu"></i>
           </button>
@@ -358,6 +363,35 @@
         ><a href="../" hidden id="load-back">作品選択へ</a>
       </div>
     </main>
+    <section id="audio-settings" role="dialog" aria-labelledby="audio-settings-title" hidden>
+      <header>
+        <h2 id="audio-settings-title">音量設定</h2>
+        <button type="button" id="audio-settings-close" class="circle" aria-label="音量設定を閉じる"><i data-glyph="close"></i></button>
+      </header>
+      <p id="audio-muted" hidden>全体の音は消音中です。</p>
+      <div class="volume-row">
+        <label for="volume-effects">効果音</label>
+        <input id="volume-effects" data-channel="effects" type="range" min="0" max="100" value="100">
+        <output for="volume-effects" aria-hidden="true">100%</output>
+      </div>
+      <div class="volume-row">
+        <label for="volume-ambient">環境音</label>
+        <input id="volume-ambient" data-channel="ambient" type="range" min="0" max="100" value="100">
+        <output for="volume-ambient" aria-hidden="true">100%</output>
+      </div>
+      <div class="volume-row">
+        <label for="volume-music">BGM</label>
+        <input id="volume-music" data-channel="music" type="range" min="0" max="100" value="100">
+        <output for="volume-music" aria-hidden="true">100%</output>
+      </div>
+      <details id="soundtrack">
+        <summary>曲とエリアの一覧</summary>
+        <table>
+          <thead><tr><th scope="col">エリア・場面</th><th scope="col">曲名・アーティスト</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </details>
+    </section>
     <dialog id="dialog" aria-labelledby="dialog-title">
       <div class="sheet">
         <header>
@@ -367,7 +401,7 @@
         <div id="dialog-content"></div>
       </div>
     </dialog>
-    <script type="module" src="./main.js?v=suzuri-roji-1"></script>
+    <script type="module" src="./main.js?v=audio-controls-1"></script>
     <noscript>JavaScript を有効にして遊んでください。</noscript>
   </body>
 </html>

@@ -110,14 +110,20 @@ export function upcomingMusicCue(state, cue, ports) {
   return next === cue ? null : next;
 }
 
-export function createSoundscape(ctx, master) {
-  const music = createJourneyPlayer(ctx, master);
-  const outdoor = ctx.createBiquadFilter();
-  outdoor.type = 'lowpass';
-  outdoor.frequency.value = 14000;
-  outdoor.Q.value = .52;
-  outdoor.connect(master);
-  const templeBell = createTempleBell(ctx, outdoor);
+export function createSoundscape(ctx, master, channels = {}) {
+  const effects = channels.effects ?? master;
+  const music = createJourneyPlayer(ctx, channels.music ?? master);
+  function outdoorFilter(destination) {
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 14000;
+    filter.Q.value = .52;
+    filter.connect(destination);
+    return filter;
+  }
+  const outdoor = outdoorFilter(channels.ambient ?? master);
+  const outdoorEffects = outdoorFilter(effects);
+  const templeBell = createTempleBell(ctx, outdoorEffects);
   const layers = Object.keys(loops).map(name => ({ name, source: null, amp: null, level: 0, lastHeard: 0 }));
   const scores = REGIONS.map(({id}) => ({ name: 'score-'+id, id, source:null, amp:null, level:0, lastHeard:0 }));
   const samples = new Map();
@@ -194,7 +200,7 @@ export function createSoundscape(ctx, master) {
     return end;
   }
 
-  function note(start, hz, to, duration, level, pan = 0, type = 'sine', dest = master) {
+  function note(start, hz, to, duration, level, pan = 0, type = 'sine', dest = effects) {
     if (level < .001) return;
     const osc = ctx.createOscillator();
     osc.type = type;
@@ -204,7 +210,7 @@ export function createSoundscape(ctx, master) {
     osc.start(start); osc.stop(end + .005);
   }
 
-  function brush(start, from, to, duration, level, pan = 0, dest = master) {
+  function brush(start, from, to, duration, level, pan = 0, dest = effects) {
     if (level < .001) return;
     const src = ctx.createBufferSource(), filter = ctx.createBiquadFilter();
     src.buffer = noise; src.loop = true;
@@ -237,7 +243,7 @@ export function createSoundscape(ctx, master) {
     src.buffer = bank;
     src.playbackRate.value = (material === 'grass' ? .82 : 1) * (.92 + Math.random() * .15);
     amp.gain.value = level; stereo.pan.value = pan;
-    src.connect(amp).connect(stereo).connect(master);
+    src.connect(amp).connect(stereo).connect(effects);
     oneShots.add(src);
     src.onended = () => { oneShots.delete(src); src.disconnect(); amp.disconnect(); stereo.disconnect(); };
     src.start(now, slot * .75, .69);
@@ -259,7 +265,9 @@ export function createSoundscape(ctx, master) {
     const roof = inPalace || Number.isFinite(overheadHeight(p.x, p.z, p.y, 0, state.regionId === 'inari'));
     inside=roof;
     const submerged=clamp((p.diveDepth||0)/4);
-    outdoor.frequency.setTargetAtTime((roof?1250:14000)*(1-submerged)+690*submerged,now,.22);
+    const cutoff = (roof ? 1250 : 14000) * (1 - submerged) + 690 * submerged;
+    outdoor.frequency.setTargetAtTime(cutoff, now, .22);
+    outdoorEffects.frequency.setTargetAtTime(cutoff, now, .22);
     for (const layer of layers) mixBed(layer, weights[layer.name] * fieldGain[layer.name] * (roof ? .4 : 1), now);
     if (objectList !== state.objects) {
       objectList = state.objects;
@@ -329,8 +337,8 @@ export function createSoundscape(ctx, master) {
       const beat = Math.floor((drummer.beat - Math.PI / 2) / Math.PI);
       if (drumBeat !== null && beat === drumBeat + 1 && drummer.gesture > .88) {
         const pan = panTo(p, drummer, yaw), gain = drumGain * (inside ? .4 : 1);
-        note(now, 156, 86, .24, .17 * gain, pan, 'sine', outdoor);
-        brush(now, 820, 340, .065, .12 * gain, pan, outdoor);
+        note(now, 156, 86, .24, .17 * gain, pan, 'sine', outdoorEffects);
+        brush(now, 820, 340, .065, .12 * gain, pan, outdoorEffects);
       }
       drumBeat = beat;
     }
@@ -340,9 +348,9 @@ export function createSoundscape(ctx, master) {
       if (gain > .01) {
         const pan = panTo(p, POUNDING, yaw);
         // Mallet hits the sticky rice before the hollow wooden shell rings.
-        brush(now, 1380, 280, .08, gain * .39, pan, outdoor);
-        note(now, 137, 77, .21, gain * .31, pan, 'sine', outdoor);
-        note(now + .009, 327, 292, .115, gain * .083, pan, 'triangle', outdoor);
+        brush(now, 1380, 280, .08, gain * .39, pan, outdoorEffects);
+        note(now, 137, 77, .21, gain * .31, pan, 'sine', outdoorEffects);
+        note(now + .009, 327, 292, .115, gain * .083, pan, 'triangle', outdoorEffects);
       }
     }
     lastBeat = beat;
@@ -358,7 +366,7 @@ export function createSoundscape(ctx, master) {
     const isShrine = source === places.shrine, pan = panTo(p, source, yaw);
     const hz = isShrine ? 1073 : 681;
     for (const [ratio, volume, duration] of [[1, .07, 1.55], [2.64, .031, .87], [4.01, .021, .29]]) {
-      note(now, hz * ratio, hz * ratio * .995, duration * (isShrine ? 1 : .36), gain * volume, pan, 'sine', outdoor);
+      note(now, hz * ratio, hz * ratio * .995, duration * (isShrine ? 1 : .36), gain * volume, pan, 'sine', outdoorEffects);
     }
   }
 
@@ -403,7 +411,7 @@ export function createSoundscape(ctx, master) {
     const moving = lastTime !== null && time > lastTime && time - lastTime < .4;
     distantThunder(state, time, yaw, now, moving);
     const bellLevel = templeBell.update(state.bellStrike, p, yaw, state.time, inside);
-    if (bellLevel > .75) music.duck(1.25);
+    if (bellLevel * (channels.effects?.gain.value ?? 1) > .75) music.duck(1.25);
     if (!moving) lastBeat = drumBeat = null;
     landmarks(state, time, yaw, now);
     activity(p, yaw, now, photo);

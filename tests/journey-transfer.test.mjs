@@ -25,7 +25,9 @@ test('a transfer carries only a normalized Mochi Quest 2 save and settings in th
   assert.deepEqual(incoming.game.save().visited,['river','snow']);
   assert.equal(incoming.game.save().player.unknown,undefined);
   assert.equal(incoming.game.save().unknown,undefined);
-  assert.deepEqual(incoming.settings,settings);
+  assert.deepEqual(incoming.settings,{...settings,volumes:{effects:1,ambient:1,music:1}});
+  const mixed=decode(encode(save,{...settings,volumes:{effects:0,ambient:.6,music:.25}}).hash);
+  assert.deepEqual(mixed.settings.volumes,{effects:0,ambient:.6,music:.25});
 });
 
 test('historical six-district saves retain their stamps and acquire stocked new bike ports',()=>{
