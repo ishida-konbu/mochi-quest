@@ -57,14 +57,19 @@ function groundLight(hearths) {
   const mat=new THREE.ShaderMaterial({
     transparent:true,depthWrite:false,
     polygonOffset:true,polygonOffsetFactor:-2,uniforms:{intensity:{value:0}},
-    vertexShader:`varying vec2 washUv;void main(){washUv=uv*2.-1.;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader:`varying vec2 washUv;uniform float intensity;void main(){
+    vertexShader:`varying vec2 washUv;varying float charcoal;void main(){
+      vec4 view=modelViewMatrix*vec4(position,1.);
+      washUv=uv*2.-1.;
+      charcoal=1.-smoothstep(18.,66.,length(view.xyz));
+      gl_Position=projectionMatrix*view;
+    }`,
+    fragmentShader:`varying vec2 washUv;varying float charcoal;uniform float intensity;void main(){
       float radius=dot(washUv,washUv);
       float glow=pow(max(0.,1.-radius),2.5);
       // The same ground darkens with old charcoal when the stack is cold.
       float ash=1.-smoothstep(.21,.57,radius+.045*sin(13.*washUv.x+4.*washUv.y));
       vec3 tint=mix(vec3(.08,.066,.049),vec3(.95,.27,.055),intensity);
-      gl_FragColor=vec4(tint,mix(.31*ash,.40*glow,intensity));
+      gl_FragColor=vec4(tint,mix(.31*ash*charcoal,.40*glow,intensity));
       #include <colorspace_fragment>
     }`,
   });
@@ -132,7 +137,11 @@ export function mountainFires(scene,hearths,cx,cz,east=false) {
         float hot=tongue(p,.009,.098,.32-flutter*.46,wick+1.);
         vec3 emission=mix(vec3(.92,.095,.012),vec3(1.,.44,.042),clamp(amber*.87+plume*.18,0.,1.));
         emission=mix(emission,vec3(1.,.865,.39),hot);
-        float halo=.27*exp(-length((p-vec2(.005,.20))*vec2(2.6,1.22))*5.7);
+        // Feather the reflected glow to zero before the billboard ends.
+        // The foot of the flame can fill the frame beside a hearth.
+        vec2 edge=min(flameUv,1.-flameUv);
+        float halo=.27*exp(-length((p-vec2(.005,.20))*vec2(2.6,1.22))*5.7)
+          *smoothstep(0.,.12,min(edge.x,edge.y));
         // Wind lifts an ember from each stack on a different beat.
         float age=fract(clock*.55+wick*.413);
         vec2 spark=p-vec2(.10*sin(7.*age+wick)*age,.31+.66*age);

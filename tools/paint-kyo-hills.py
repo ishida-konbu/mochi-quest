@@ -10,14 +10,16 @@ from PIL import Image, ImageDraw, ImageFilter
 ROOT = Path(__file__).resolve().parent.parent
 survey = """
 import {terrainHeight,TREES} from './two/terrain.js';
-import {KYO_HILL_SHEET as box,kyoRidgeHeight,inFireMeadow} from './two/higashiyama.js';
-const heights=[],rises=[],mown=[];
+import {KYO_HILL_SHEET as box,kyoRidgeHeight,inFireMeadow,fukuFirebeds,daiFirebeds} from './two/higashiyama.js';
+const heights=[],rises=[],mown=[],verge=[];
 for(let z=box.z;z<=box.z+box.depth;z+=4)for(let x=box.x;x<=box.x+box.width;x+=4) {
   heights.push(Math.round(terrainHeight(x,z)*10));
   rises.push(Math.round(kyoRidgeHeight(x,z)*10));
   mown.push(+inFireMeadow(x,z));
+  verge.push(+inFireMeadow(x,z,28));
 }
-console.log(JSON.stringify({box,heights,rises,mown,trees:TREES.filter(t=>t.kyotoRidge || kyoRidgeHeight(t.x,t.z)>.5)
+console.log(JSON.stringify({box,heights,rises,mown,verge,fires:[fukuFirebeds(terrainHeight),daiFirebeds(terrainHeight)],
+  trees:TREES.filter(t=>t.kyotoRidge || kyoRidgeHeight(t.x,t.z)>.5)
   .map(t=>[t.x,t.z,t.h,t.kind])}));
 """
 data=json.loads(subprocess.check_output(['node','--input-type=module','-e',survey],cwd=ROOT))
@@ -153,5 +155,49 @@ for x,z,tall,kind in data['trees']:
         if reach>4.8:
             brush([arc[1],(u+.55*dx0+dy0*.24,v+.55*dy0-dx0*.24),
                    (u+.78*dx0+dy0*.36,v+.78*dy0-dx0*.36)],ppm*.23,tint(u,v,(75,72,55),.48))
+
+# The short, cut grass around the fires reads as a single wash from Kyoto.
+# Let the uncut woodland slowly take over again beyond the bank. These masks
+# follow both surveyed clearings, including the gaps between the arms of 大.
+reserve=blurred(scale_grid(field('verge')),11*ppm)*(1-.52*grove)
+woodland=im
+im=Image.fromarray(np.uint8(np.clip(paper,0,255)))
+draw=ImageDraw.Draw(im)
+# A few fine, tapering strokes turn with the fall line. Trace each bend
+# from the survey so the marks follow the changing aspect of its hill.
+for _ in range(8500):
+    x,y=rng.randrange(w),rng.randrange(h)
+    if reserve[y,x]<.04 or sample(slope,x,y)<.17:continue
+    strands=1 if rng.random()<.72 else 2
+    for strand in range(strands):
+        px=x+strand*rng.uniform(1.6,3.5)*ppm
+        py=y+strand*rng.uniform(.8,2.4)*ppm
+        reach=rng.uniform(10,25)*ppm
+        sweep=rng.uniform(-.22,.22)
+        path=[(px,py)]
+        for j in range(9):
+            aspect=math.atan2(-sample(dz,px,py),-sample(dx,px,py))
+            turn=aspect+sweep*math.sin(j*math.pi/8)
+            px+=math.cos(turn)*reach/9
+            py+=math.sin(turn)*reach/9
+            path.append((px,py))
+        brush(path,ppm*rng.uniform(.25,.48),tint(x,y,(89,101,83),rng.uniform(.055,.125)))
+im=Image.composite(im,woodland,Image.fromarray(np.uint8(reserve*255)))
+
+# The ground between neighbouring hearths is worn to a thin ribbon of earth.
+# This remains legible when the tiny stones and charcoal disappear into the
+# distance. Leave pen lifts and the counters of 福 open.
+tread=Image.new('L',(w,h))
+tracks=ImageDraw.Draw(tread)
+for hearths in data['fires']:
+    last=None
+    for x,_,z in hearths:
+        at=((x-box['x'])*ppm,(z-box['z'])*ppm)
+        if last and math.dist(last,at)<7*ppm:
+            tracks.line([last,at],fill=255,width=round(1.65*ppm))
+        last=at
+earth=np.asarray(tread.filter(ImageFilter.GaussianBlur(.69*ppm)),dtype=np.float32)/255
+colour=wash(np.asarray(im,dtype=np.float32),[138,127,101],earth*.48)
+im=Image.fromarray(np.uint8(colour))
 
 im.save(ROOT/'two/assets/world/kyo-hills.webp',quality=90,method=6)

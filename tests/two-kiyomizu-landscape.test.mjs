@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DISTRICTS } from '../two/geography.js';
+import { KYO_LOOKOUTS } from '../two/higashiyama.js';
 import { KIYOMIZU, STAGE, STAGE_PILES, KIYOMIZU_BELL, OTOWA_ROOFS, KIYOMIZU_APPROACH } from '../two/kiyomizu-layout.js';
 import { KIYOMIZU_ROAD, terrainHeight, terrainMeshHeight, canOccupy, groundHeight, solidHeightAt,
   staticVolumeAt, TREES } from '../two/terrain.js';
@@ -45,4 +46,21 @@ test('the bark roof, swept eaves and hollow underside use the same profile as co
   assert.ok(canOccupy(508,-717,KIYOMIZU.floor,.25,1.5),'front aisle');
   assert.ok(roofProfile('barkHip',.99,.99)>roofProfile('barkHip',0,.99)+.07);
   assert.ok(KIYOMIZU_BELL.bottom-KIYOMIZU.floor<1);
+});
+
+test('foothill trees leave a view of Kyoto from the stage and all three summits',()=>{
+  const city=DISTRICTS.kyo;
+  const lantern=terrainHeight(city.x,city.z)+2;
+  for(const {x,z,eye} of [
+    {x:491,z:-717,eye:KIYOMIZU.floor+1.3},
+    ...KYO_LOOKOUTS.map(s=>({...s,eye:terrainHeight(s.x,s.z)+1.7})),
+  ]){
+    const dx=city.x-x,dz=city.z-z,run=Math.hypot(dx,dz);
+    for(const t of TREES){
+      const u=t.x-x,v=t.z-z,along=(u*dx+v*dz)/run;
+      if(along<=0 || along>125 || Math.abs(u*dz-v*dx)/run>2)continue;
+      const line=eye+(lantern-eye)*along/run;
+      assert.ok(terrainHeight(t.x,t.z)+t.h<line,`canopy in the view from (${x}, ${z})`);
+    }
+  }
 });
