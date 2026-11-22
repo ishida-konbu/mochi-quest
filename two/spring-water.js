@@ -1,4 +1,5 @@
 import { springLip } from './retreat-layout.js';
+import { bathCraft,regionalBathFittings,inletImpactV } from './regional-bath-fittings.js';
 import { waterSurfaceAt } from './terrain.js';
 import * as T from './vendor/three.module.min.js';
 
@@ -11,6 +12,31 @@ const uniforms = {
   occupied: { value: 0 },
 };
 let poolMaterial, disc, paintedPool;
+const regionalWater=new Map();
+// The inlet and shallow mineral fringe travel with their particular basin.
+// The hero's reflection and its displacement continue to use world space.
+function regionalFinish(craft) {
+  if(regionalWater.has(craft))return regionalWater.get(craft);
+  const m=poolMaterial.clone();m.color.set(craft.water);
+  m.roughness=craft.rim==='sinter'?.32:.27;
+  m.onBeforeCompile=shader=>{
+    poolMaterial.onBeforeCompile(shader);
+    shader.vertexShader='attribute vec3 springInflow; varying vec3 source;\n'+
+      shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nsource=springInflow;');
+    shader.fragmentShader='varying vec3 source;\n'+shader.fragmentShader.replace('vec2 bed=poolPoint.xz*5.+wave;',`
+      float range=length(source.xy), phase=range*19.-poolTime*3.4;
+      float fan=exp(-2.15*range);
+      float broken=.63+.37*sin(source.x*7.4+source.y*4.1+sin(poolTime*.51));
+      wave=wave*.58+fan*.22*sin(phase)*source.xy/max(.06,range);
+      float edge=smoothstep(.74,.997,source.z);
+      float ring=pow(.5+.5*cos(phase+.35*sin(source.y*6.6)),8.)*fan*broken;
+      diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.47,.45,.30),edge*.34);
+      diffuseColor.rgb+=vec3(.19,.20,.17)*ring;
+      vec2 bed=poolPoint.xz*5.+wave;`);
+  };
+  m.customProgramCacheKey=()=> 'regional-spring-inlet-v1';
+  regionalWater.set(craft,m);return m;
+}
 export function addSpringSurface(parent, rx=1.96, rz=1.56, level=poolLevel, site=null, waterWash=null) {
   if (!poolMaterial) {
     disc = new T.CircleGeometry(1, 80);
@@ -90,17 +116,27 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=poolLevel, site
         );
     };
   }
-  let shape=disc;
+  let shape=disc,material=poolMaterial;
   if(site) {
     shape=disc.clone();
     const points=shape.attributes.position;
+    const lip=site.lip || (a=>springLip(site.index,a));
     for(let i=1;i<points.count;i++){
-      const x=points.getX(i),z=points.getZ(i),r=springLip(site.index,Math.atan2(z,x));
+      const x=points.getX(i),z=points.getZ(i),r=lip(Math.atan2(z,x));
       points.setXYZ(i,x*r,0,z*r);
     }
     shape.computeBoundingSphere();
+    if(site.regional){
+      const {inlet}=regionalBathFittings(site,springLip),flow=[];
+      // One attribute on the existing fan suffices: interpolating the offset
+      // reproduces exact distances, while the last channel follows the shore.
+      for(let i=0;i<points.count;i++){
+        flow.push(points.getX(i)*rx-inlet.u,points.getZ(i)*rz-inlet.v-inletImpactV,i===0?0:1);
+      }
+      shape.setAttribute('springInflow',new T.Float32BufferAttribute(flow,3));
+      material=regionalFinish(bathCraft[site.kind]);
+    }
   }
-  let material=poolMaterial;
   if(waterWash){
     if(!paintedPool){
       const paintedDisc=disc.clone(), uv=paintedDisc.attributes.uv;

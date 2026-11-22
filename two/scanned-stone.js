@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { sitePoint, retreatStones } from './retreat-layout.js';
+import { bathCraft } from './regional-bath-fittings.js';
 import { GLTFLoader } from './vendor/GLTFLoader.min.js';
 import { wetStone, contactRipples } from './stone-water.js';
 import { WATER_Y, BRIDGES, coastX, riverZ, riverHalfWidth, seeded, terrainHeight } from './terrain.js';
@@ -67,12 +68,13 @@ export function setRiverStones(scene, objects) {
         pebble(coastX(z) + rng() * 3.1 - 1.6, z, 0.7 + rng() * 2.6, n%4===1 ? 0 : 1, 0);
       }
     }
-    function drawGroups(batches, level) {
+    function drawGroups(batches, level, mineral) {
       shapes.forEach(({ geo, material }, i) => {
         if (!batches[i].length) return;
         material.map.anisotropy = 4;
         material.normalScale.setScalar(0.76);
         const finish = wetStone(material.clone(), level, clock);
+        if(mineral) finish.color.lerp(new THREE.Color(mineral),.30);
         const mesh = new THREE.InstancedMesh(geo, finish, batches[i].length);
         batches[i].forEach((matrix, j) => mesh.setMatrixAt(j, matrix));
         mesh.castShadow = mesh.receiveShadow = true;
@@ -99,13 +101,14 @@ export function setRiverStones(scene, objects) {
           transform.updateMatrix();
           rim[(q.i+site.index)%shapes.length].push(transform.matrix.clone());
         }
-        drawGroups(rim,pool.y+.52);
+        drawGroups(rim,pool.y+.52,site.regional?bathCraft[site.kind].base:null);
         continue;
       }
       for (let i = 0; i < 23; i++) {
-        const a = (i * Math.PI * 2) / 23,
-          dx = 1.91 * Math.cos(a),
-          dz = 1.49 * Math.sin(a);
+        const a = (i * Math.PI * 2) / 23, tub=pool.villageBath;
+        const lip=tub ? tub.lip(a) : 1;
+        const dx=((tub?.rx ?? 1.96)-.05)*lip*Math.cos(a),
+          dz=((tub?.rz ?? 1.56)-.07)*lip*Math.sin(a);
         transform.position.set(pool.x + dx * cy + dz * sy, pool.y - 0.048, pool.z - dx * sy + dz * cy);
         transform.rotation.set(
           (rng() - 0.5) * 0.18,

@@ -1,6 +1,8 @@
 // Positive local Z faces the road. Roofs, steps, pool lips and their
 // collision volumes share the same survey as the signposts on the map.
 import { DISTRICTS, districtPoint } from './geography.js';
+import { REGIONAL_SPRINGS, regionalSpringLip, regionalRimStones } from './regional-springs.js';
+import { regionalBathFittings } from './regional-bath-fittings.js';
 import { TRADE_ROADS, measureRoute, cartPosition } from './trade-routes.js';
 
 const [cx,cz]=districtPoint('kyo',35,-470.5);
@@ -29,6 +31,7 @@ export const RETREATS=[
   {...wayside('inari-road',.64,-16),name:'雲間の湯',kind:'slate',rx:5.36,rz:3.30},
   {x:-127,z:146,yaw:2.42,name:'潮待ちの湯',kind:'coast',hut:true,rx:5.12,rz:3.82},
   {x:229,z:-172,yaw:.71,name:'楓の岩湯',kind:'maple',rx:4.77,rz:4.02},
+  ...REGIONAL_SPRINGS,
 ].map((site,index)=>({...site,index}));
 
 export function sitePoint(site,u,v) {
@@ -37,12 +40,31 @@ export function sitePoint(site,u,v) {
 }
 const siteCells=new Map();
 for (const s of RETREATS) {
-  for(let a=Math.floor((s.x-14)/32);a<=Math.floor((s.x+14)/32);a++)
-    for(let b=Math.floor((s.z-14)/32);b<=Math.floor((s.z+14)/32);b++)
-      siteCells.set(a*256+b,s);
+  // Beyond this rectangle bathTerrain has fully blended back to native ground.
+  const reach=s.regional ? Math.ceil(Math.max(s.rx,s.rz)*1.32*1.86) : 14;
+  const entry={site:s,reach2:reach*reach};
+  for(let a=Math.floor((s.x-reach)/32);a<=Math.floor((s.x+reach)/32);a++)
+    for(let b=Math.floor((s.z-reach)/32);b<=Math.floor((s.z+reach)/32);b++){
+      const key=a*256+b;
+      if(!siteCells.has(key))siteCells.set(key,[]);
+      siteCells.get(key).push(entry);
+    }
 }
-export const nearbyRetreat=(x,z)=>siteCells.get(Math.floor(x/32)*256+Math.floor(z/32));
-export const springLip=(index,a)=>1+.103*Math.sin(3*a+index*.95)+.051*Math.cos(2*a-index*.62)+.026*Math.cos(5*a);
+export function nearbyRetreat(x,z) {
+  const sites=siteCells.get(Math.floor(x/32)*256+Math.floor(z/32));
+  if(!sites)return;
+  let nearest, distance=Infinity;
+  for(const {site,reach2} of sites){
+    const r=(x-site.x)**2+(z-site.z)**2;
+    if(r<=reach2 && r<distance){nearest=site;distance=r;}
+  }
+  return nearest;
+}
+export function springLip(index,a) {
+  const shape=RETREATS[index]?.shape;
+  return shape ? regionalSpringLip(shape,a) :
+    1+.103*Math.sin(3*a+index*.95)+.051*Math.cos(2*a-index*.62)+.026*Math.cos(5*a);
+}
 export function bathRadius(s,x,z) {
   const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
   const u=(dx*c-dz*k)/s.rx,v=(dx*k+dz*c)/s.rz;
@@ -52,6 +74,11 @@ export function reservedScenery(x,z) {
   const {west,east,north,south}=COURT_PRECINCT;
   if(x>west && x<east && z>north && z<south)return true;
   const s=nearbyRetreat(x,z);
+  if(s?.regional){
+    const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
+    const u=dx*c-dz*k,v=dx*k+dz*c;
+    return bathRadius(s,x,z)<1.38 || (Math.abs(u)<2.5 && v>=0 && v<s.rz+4.9);
+  }
   return !!s && Math.hypot(s.x-x,s.z-z)<(s.hut?9.6:7.1);
 }
 const ease=n=>{const t=Math.min(1,Math.max(0,n));return t*t*(3-2*t);};
@@ -69,6 +96,12 @@ export function courtTerrain(x,z,native,base) {
 export function bathTerrain(s,x,z,native,level) {
   const r=bathRadius(s,x,z);
   // A shallow submerged seat rises into a gravel beach at the entrance.
+  // The smaller, lobed pools keep a low shelf under the bank stones. The
+  // painted terrain interpolates these vertices across two-metre triangles.
+  if(s.regional){
+    const shelf=level-.52+.531*ease((r-.77)/.32);
+    return shelf+(native-shelf)*ease((r-1.24)/.62);
+  }
   const cut=level-.52+.64*ease((r-.68)/.40);
   let ground=cut+(native-cut)*ease((r-1.10)/.76);
   if(s.hut) {
@@ -79,6 +112,7 @@ export function bathTerrain(s,x,z,native,level) {
   return ground;
 }
 export function retreatStones(s) {
+  if(s.regional)return regionalRimStones(s);
   const count=28;
   return Array.from({length:count},(_,i)=>{
     const a=i*Math.PI*2/count, turn=Math.sin(7.3*i+s.index);
@@ -134,7 +168,13 @@ export function civicAndBathSolids(height,put) {
       const rim=add(q.u,q.v,(q.scanned?2.08:2)*q.w,(q.scanned?2.11:2)*q.d,top,'springRock',true,q.angle);
       rim.roundHeight=q.h;
     }
-    if(s.kind==='slate'||s.kind==='maple'){
+    if(s.regional){
+      const {inlet,sign}=regionalBathFittings(s,springLip);
+      add(inlet.u,inlet.v-.20,inlet.w,1.34,.72,'oval',true);
+      add(inlet.u,inlet.v+.04,1.18,1.92,inlet.h,'box',true).bottom=level+.62;
+      add(sign.u,sign.v-.07,.13,.13,1.33,'wall');
+      add(sign.u,sign.v,sign.w,sign.d,sign.h,'wall').bottom=level+.89;
+    } else if(s.kind==='slate'||s.kind==='maple'){
       for(let i=0;i<9;i++){
         const u=-4.3+.83*i,v=-4.15-.35*Math.cos(i*.7),h=(1+.58*Math.sin(i*.64))*(s.kind==='slate'?1.8:1);
         add(u,v,2.3,1.92,1.17*h,'oval',true,i*.17);

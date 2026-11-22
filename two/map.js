@@ -254,8 +254,11 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   for(const [site,glyph] of marks){
     const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
     if(x<0||x>w||y<0||y>h)continue;
-    g.font='bold '+(large?15:17)+'px serif';g.textAlign='center';g.textBaseline='middle';
-    g.lineWidth=3;g.strokeStyle='#fff2d6';g.fillStyle=site===COURT?'#685449':'#8c5140';
+    const regional=site.retreat?.regional, highlighted=regional && site.retreat.region===goal;
+    const size=large ? (regional && !highlighted ? 11 : 15) : 17;
+    g.font='bold '+size+'px serif';g.textAlign='center';g.textBaseline='middle';
+    g.lineWidth=3;g.strokeStyle='#fff2d6';
+    g.fillStyle=site===COURT?'#685449':highlighted?'#933c2e':'#8c5140';
     const labelX=site===COURT && large?x-4:x;
     g.strokeText(glyph,labelX,y);g.fillText(glyph,labelX,y);
   }

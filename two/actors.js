@@ -1,5 +1,6 @@
 import { goemonWaterWash } from './goemon-bath-art.js';
 import { KETTLE } from './wayside-hut-layout.js';
+import { VILLAGE_BATHS } from './village-baths.js';
 import { addFlumes } from './snow-bath.js';
 import { porcelain, makeMoonCakes } from './craftwork.js';
 import { SNOW_SPRING, wrapDelta } from './terrain.js';
@@ -1198,10 +1199,18 @@ function cuff(parent) {
     b.loop(0, 0.302, 0, 0.244, 0.244, 0.027, '#dcc094');
   });
 }
-function onsen(parent) {
-  addSpringSurface(parent);
+function onsen(parent,tub=VILLAGE_BATHS.river) {
+  addSpringSurface(parent,tub.rx,tub.rz,undefined,tub);
   batch(parent, (b) => {
-    b.ball(0, 0.035, 0, 2.1, 0.1, 1.67, '#a59270');
+    const bed=new THREE.CylinderGeometry(1,1.09,.20,64);
+    const points=bed.attributes.position;
+    for(let i=0;i<points.count;i++){
+      const x=points.getX(i),z=points.getZ(i),r=tub.lip(Math.atan2(z,x));
+      points.setXYZ(i,x*r,points.getY(i),z*r);
+    }
+    bed.computeVertexNormals();
+    b.add(bed,tub.bank,[0,.064,0],[tub.rx,1,tub.rz]);
+    bed.dispose();
     for (const x of [-1.98, -0.93]) b.rod([x, 0.12, -1.1], [x, 2.13, -1.1], 0.041, '#896d50');
     b.rod([-2.11, 2.05, -1.1], [-0.8, 2.05, -1.1], 0.054, wood);
     b.rod([1.64, 0.011, -0.6], [1.64, 0.74, -0.6], 0.081, '#a39563');
@@ -1217,16 +1226,18 @@ function onsen(parent) {
       ]);
     }
   });
-  const mat = printed('bath-sign', 220, 180, (c, w, h) => {
-    c.fillStyle = '#ac5545';
+  const mat = printed('bath-sign-'+tub.region, 220, 180, (c, w, h) => {
+    c.fillStyle = tub.dye;
     c.fillRect(0, 0, w, h);
     c.fillStyle = '#ecd5aa';
     c.font = 'bold 126px "Hiragino Mincho ProN",serif';
     c.textAlign = 'center';
-    c.fillText('ゆ', 104, 136);
+    c.fillText('ゆ', 96, 136);
+    c.font = '24px "Hiragino Mincho ProN",serif';
+    c.fillText(tub.crest,185,54);
     c.fillRect(0, 12, w, 2);
     c.fillRect(0, 163, w, 2);
-    c.fillStyle = '#8c483c';
+    c.fillStyle='rgba(49,39,31,.32)';
     c.fillRect(108, 122, 4, 58);
   });
   printPlane(parent, 'curtain', mat, -1.455, 1.59, -1.09, 1.025, 0.828);
@@ -1654,8 +1665,13 @@ function makeObject(o, parent) {
   } else if(o.retreat) {
     mesh=new THREE.Group();
     addSpringSurface(mesh,o.retreat.rx,o.retreat.rz,.52,o.retreat);
-    steam=particles('steam',30);
+    steam=particles('steam',o.retreat.kind==='sulfur'?42:30);
     steam.position.y=.51;
+    if(o.retreat.regional){
+      // Mist rises from within the basin, including its narrower cross axis.
+      steam.scale.z=o.retreat.rz/o.retreat.rx;
+      steam.scale.y=o.retreat.kind==='snow'||o.retreat.kind==='sulfur'?1.24:.9;
+    }
     mesh.add(steam);
   } else if(o.grand) {
     mesh=new THREE.Group();
@@ -1668,7 +1684,7 @@ function makeObject(o, parent) {
   } else if(o.type==='tsukimi') {
     mesh=accessory(o.type);
   } else if (o.type === 'port' || o.type === 'onsen') {
-    mesh = accessory(o.type);
+    mesh = o.villageBath ? model('village-bath-'+o.villageBath.region,parent=>onsen(parent,o.villageBath)) : accessory(o.type);
     if (o.type === 'onsen') {
       steam = particles('steam', 19);
       mesh.add(steam);

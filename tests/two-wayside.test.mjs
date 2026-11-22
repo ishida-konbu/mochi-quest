@@ -9,9 +9,10 @@ import { terrainHeight, groundHeight, waterDepth, waterSurfaceAt, constrainMove,
 
 test('a rolling dango can enter, bathe and resume at each rural spring',()=>{
   const game=createGame(),p=game.state.player;
-  assert.equal(RETREATS.length,6);
-  assert.equal(RETREATS.filter(s=>s.hut).length,3);
-  for(const s of RETREATS){
+  const wayside=RETREATS.filter(site=>!site.regional);
+  assert.equal(wayside.length,6);
+  assert.equal(wayside.filter(s=>s.hut).length,3);
+  for(const s of wayside){
     const [x,z]=sitePoint(s,0,s.rz+4);
     Object.assign(p,{x,z,y:groundHeight(x,z),mode:'dango',mount:null,h:0,vy:0,speed:0,vx:0,vz:0,grounded:true,activity:null,hp:38,mp:54});
     for(let i=0;i<120;i++){
@@ -133,7 +134,7 @@ test('the full mural is visible through the main hearing bay, and both guards li
 });
 
 test('the dome of each scanned rim rock supports the player at its visible crown',()=>{
-  for(const s of RETREATS) {
+  for(const s of RETREATS.filter(site=>!site.regional)) {
     const level=waterSurfaceAt(s.x,s.z);
     const q=retreatStones(s).find(q=>q.scanned && q.v>0);
     const [x,z]=sitePoint(s,q.u,q.v);

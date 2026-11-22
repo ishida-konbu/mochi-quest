@@ -747,8 +747,14 @@ function redrawAtlas() {
   const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
   const name = trackedAnimal ? speciesNames[trackedAnimal.type] : '';
   const atlas = $('atlas');
-  atlas.setAttribute('aria-label', '十七の名所、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
+  atlas.setAttribute('aria-label', '十七の名所、各地の野湯、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
   drawMap(atlas,state,yaw,selectedPlace,true,point,trackedAnimal,name);
+}
+function directions(from,to,originLabel) {
+  const dx=wrapDelta(to.x-from.x),dz=wrapDelta(to.z-from.z);
+  const distance=Math.round(Math.hypot(dx,dz));
+  const bearing=['北','北東','東','南東','南','南西','西','北西'][(Math.round(Math.atan2(dx,-dz)/(Math.PI/4))+8)%8];
+  return distance<3 ? '足元' : originLabel+'から'+bearing+' '+distance+' m';
 }
 function selectMap(id) {
   selectedPlace = id;
@@ -778,13 +784,13 @@ function selectMap(id) {
     inari: '京から南の街道をたどり、朱塗りの千本鳥居をくぐって雲上の奥社へ。日が差す雨の参道には、狐の嫁入りの行列が現れます。'
   };
   if (landmarks[id]) detail.append(document.createElement('br'), landmarks[id]);
+  const nearbyBaths=state.objects.filter(o=>o.retreat?.region===id);
+  for(const bath of nearbyBaths) {
+    detail.append(document.createElement('br'),'♨ '+bath.retreat.name+'　'+directions(r,bath,'名所'));
+  }
   const port = regionPort(state, id);
   if (port) {
-    const dx = wrapDelta(port.x - p.x), dz = wrapDelta(port.z - p.z);
-    const bearing = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'][(Math.round(Math.atan2(dx, -dz) / (Math.PI / 4)) + 8) % 8];
-    const distance = Math.round(Math.hypot(dx, dz));
-    const location = distance < 3 ? '足元' : '現在地から' + bearing + ' ' + distance + ' m';
-    detail.append(document.createElement('br'), 'Ⓟ 電動自転車ポート　' + port.bikes + '台', document.createElement('br'), location);
+    detail.append(document.createElement('br'), 'Ⓟ 電動自転車ポート　' + port.bikes + '台', document.createElement('br'), directions(p,port,'現在地'));
   }
   redrawAtlas();
 }

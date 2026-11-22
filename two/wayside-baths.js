@@ -4,6 +4,7 @@ import { waterSurfaceAt,terrainHeight } from './terrain.js';
 import { workshopFrame, inscriptionMaterial } from './civic-art.js';
 import { roundedStone } from './pigments.js';
 import { sculpture, brushStroke } from './pilgrimage-pigment.js';
+import { dressRegionalBath } from './regional-bath-art.js';
 
 const {PI,sin,cos}=Math;
 const palettes={
@@ -144,6 +145,7 @@ export function dressWaysideBaths(p) {
   for(let i=0;i<3;i++)p.shapes['springCrag'+i]=roundedStone(i*2.59+.42);
   for(const s of RETREATS){
     const level=waterSurfaceAt(s.x,s.z),f=workshopFrame(p,s,level),tints=palettes[s.kind];
+    if(s.regional){dressRegionalBath(p,f,s,level);continue;}
     for(const q of retreatStones(s)) {
       const scale=q.scanned?.64:1;
       f.put('springCrag'+(q.i%3),q.u,.075,q.v,q.w*scale,q.h*scale,q.d*scale,tints[q.i%4],p.stone,q.angle,0,.13*sin(q.i));

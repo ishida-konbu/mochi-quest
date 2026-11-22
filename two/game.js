@@ -4,6 +4,7 @@ import { createPickupContacts } from './pickup-contacts.js';
 import { createAmbientContacts } from './ambient-contacts.js';
 import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
+import { VILLAGE_BATHS } from './village-baths.js';
 import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
 import { SEAPORTS,relocateOldQuay } from './seaport-layout.js';
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
@@ -71,6 +72,12 @@ function makeWorld() {
     if (type === 'port') landmark.bikes = 2;
     objects.push(landmark);
   }
+  function placeSpring(site) {
+    object('onsen',site.x,site.z,site.yaw);
+    const pool=objects.at(-1);
+    pool.retreat=site;
+    if(site.regional)pool.id='onsen-'+site.id;
+  }
   function npc(type, role, x, z, phase, side = 1) {
     const heading = role === 'sumo' ? side * Math.PI / 2 : phase;
     npcs.push({
@@ -82,6 +89,7 @@ function makeWorld() {
     if (SEASONAL_STOPS[id]) {
       const [first, second] = SEASONAL_STOPS[id];
       object(first, x - 13, z - 9);
+      if(first==='onsen')objects.at(-1).villageBath=VILLAGE_BATHS[id];
       object(second, x + 6, z + 14);
       object('port', x + 12, z + 5);
       if (id==='dawn') {
@@ -104,6 +112,7 @@ function makeWorld() {
     ['onsen','manga','sake','ramen','haramaki','port'].forEach((type, k) => {
       // Leave the bather visible through the open side of each noren.
       object(type, places[k][0], places[k][1], type === 'onsen' ? 0 : (i + k) * .47);
+      if(type==='onsen')objects.at(-1).villageBath=VILLAGE_BATHS[id];
     });
     npc('rabbit', 'porter', x-4, river ? 55 : z+5, i * .8 + .2);
     npc('frog', 'sumo', x+4.1, river ? 52 : z-7, i, 1);
@@ -140,10 +149,7 @@ function makeWorld() {
     npc(type,role,x,z,phase);
   }
   // Append to the item inventory after every legacy port and shop counter.
-  for(const site of RETREATS) {
-    object('onsen',site.x,site.z,site.yaw);
-    objects.at(-1).retreat=site;
-  }
+  for(const site of RETREATS)if(!site.regional)placeSpring(site);
   for(const harbour of SEAPORTS){
     object('port',...harbour.port);
     objects.at(-1).region=harbour.id;
@@ -152,6 +158,7 @@ function makeWorld() {
     object('onsen',hut.bath.x,hut.bath.z,hut.yaw);
     objects.at(-1).goemon=hut;
   }
+  for(const site of RETREATS)if(site.regional)placeSpring(site);
   prepareVillageRoutes(npcs,objects);
   npcs.push(...makeScrollResidents(), ...makeRyuguResidents(), ...makeScrollFauna());
   return { objects, npcs };
@@ -206,6 +213,9 @@ function restoreGateVisitor(p,edition) {
 
 export function createGame(snapshot = null) {
   const { objects, npcs } = makeWorld();
+  // Permanent regional baths only persist the occupied site's ID in lastBath.
+  // Keep the original positional cooldown array readable by existing journeys.
+  const inventory=objects.filter(o=>!o.retreat?.regional);
   const riverRider = pairRiverTravellers(npcs);
   const turtle = npcs.find(n => n.type === 'turtle');
   // A tea service is always available. Only portable items have cooldowns in a journey save.
@@ -333,6 +343,7 @@ export function createGame(snapshot = null) {
         if (target.type === 'onsen') {
           if (!insideBath(target)) continue;
           radius = Infinity;
+          if (target.villageBath) label = target.villageBath.name+'につかる';
           if (target.goemon) label = '五右衛門風呂につかる';
           if (target.retreat) label = target.retreat.name + 'につかる';
           if (target.grand) label = '雪見の大露天風呂につかる';
@@ -1121,7 +1132,7 @@ export function createGame(snapshot = null) {
     return {
       version: 11, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
-      items: objects.map(o => o.cooldown),
+      items: inventory.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
       turtle: { x:turtle.x, z:turtle.z, homeX:turtle.homeX, homeZ:turtle.homeZ, pause:turtlePause, leg:turtleLeg },
       lastBath: lastBath?.id ?? null
@@ -1137,7 +1148,7 @@ export function createGame(snapshot = null) {
     // stops start stocked even when an old journey resumes on a borrowed bike.
     const old = data.version === 2;
     const savedPorts = old ? 6 : data.version <= 4 ? 10 : data.version <= 6 ? 14 : ports.length;
-    const validItemCounts = old ? [36] : data.version <= 4 ? [48,50] : data.version===5 ? [56] : data.version===6 ? [62] : data.version<=10 ? [64,objects.length] : [objects.length];
+    const validItemCounts = old ? [36] : data.version <= 4 ? [48,50] : data.version===5 ? [56] : data.version===6 ? [62] : data.version<=10 ? [64,inventory.length] : [inventory.length];
     if (!finite(data.time,0,1e9) || !Number.isSafeInteger(data.score) || data.score<0 ||
         !data.visited.every(id=>REGIONS.some(region=>region.id===id)) ||
         !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,CEILING+Math.max(160,terrainHeight(p.x,p.z)+20)) ||
@@ -1222,7 +1233,7 @@ export function createGame(snapshot = null) {
     if(player.mode==='kagami' && !state.kagamiUnlocked) player.mode='normal';
     state.score=data.score; state.time=data.time;
     state.visited=[...new Set(data.visited)];
-    objects.forEach((o,i)=>{o.cooldown=data.items[i] ?? 0; o.active=o.cooldown===0;});
+    inventory.forEach((o,i)=>{o.cooldown=data.items[i] ?? 0; o.active=o.cooldown===0;});
     ports.forEach((o,i)=>{o.bikes=data.bikes[i] ?? 2;});
     Object.assign(turtle, {x:t.x,z:t.z,homeX:t.homeX,homeZ:t.homeZ,y:groundHeight(t.x,t.z),mounted:p.mount==='turtle'});
     turtlePause=t.pause; turtleLeg=t.leg; recoverRider=turtle.mounted;
