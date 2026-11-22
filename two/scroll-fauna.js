@@ -1,6 +1,6 @@
 // Stable additions to the delivery scroll. The location of each ensemble is
 // relative to its landmark, including when a journey moves to a larger map.
-import { TREES, REGIONS, BUILDINGS, regionAt, terrainHeight, groundHeight, solidHeightAt, nearRoad, WATER_Y } from './terrain.js';
+import { TREES, REGIONS, BUILDINGS, regionAt, terrainHeight, treeGround, groundHeight, solidHeightAt, nearRoad, WATER_Y } from './terrain.js';
 import { DAIBUTSU } from './pilgrimage-layout.js';
 import { RYUGU } from './ryugu-layout.js';
 import { animalRadius, openGround, canopyHeight, walkCircuit } from './village-paths.js';
@@ -34,7 +34,7 @@ function perchOn(tree) {
   if (!shapeCache.has(tree.form)) shapeCache.set(tree.form,forestGeometry(tree.form,true));
   const q=shapeCache.get(tree.form), yaw=tree.seed*2.39996323;
   return {tree,x:tree.x+tree.h*(cos(yaw)*q.x+sin(yaw)*q.z),z:tree.z+tree.h*(-sin(yaw)*q.x+cos(yaw)*q.z),
-    y:terrainHeight(tree.x,tree.z)+tree.h*q.y,yaw:q.yaw+yaw};
+    y:treeGround(tree)+tree.h*q.y,yaw:q.yaw+yaw};
 }
 function reachableBough(tree) {
   if(perchCache.has(tree))return perchCache.get(tree);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
 import { SCROLL_FAUNA, moveScrollFauna } from '../two/scroll-fauna.js';
 import { recipientContact } from '../two/bestiary.js';
-import { BUILDINGS, REGIONS, TREES, WATER_Y, groundHeight, terrainHeight, solidHeightAt, regionAt } from '../two/terrain.js';
+import { BUILDINGS, REGIONS, TREES, WATER_Y, groundHeight, terrainHeight, treeGround, solidHeightAt, regionAt } from '../two/terrain.js';
 import { RYUGU, palaceSolid } from '../two/ryugu-layout.js';
 import { updateRyuguResident } from '../two/ryugu-residents.js';
 import { DAIBUTSU } from '../two/pilgrimage-layout.js';
@@ -68,7 +68,7 @@ test('hawks fly between distinct trees, land on the modeled branches and stay th
       assert.ok(wood*tree.h<.016 && leaf*tree.h>.045,n.id);
       assert.ok(Math.abs(x-tree.x-tree.h*(Math.cos(yaw)*local.x+Math.sin(yaw)*local.z))<1e-7);
       assert.ok(Math.abs(z-tree.z-tree.h*(-Math.sin(yaw)*local.x+Math.cos(yaw)*local.z))<1e-7);
-      assert.ok(Math.abs(y-terrainHeight(tree.x,tree.z)-tree.h*local.y)<1e-7);
+      assert.ok(Math.abs(y-treeGround(tree)-tree.h*local.y)<1e-7);
       assert.ok(Math.hypot(leg.b.x-x,leg.b.z-z)>25);
     }
     let prior;

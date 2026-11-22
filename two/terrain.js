@@ -6,10 +6,10 @@ import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
 import { SOURCE_STONES, mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
 import { MAPLE_BRIDGE, mapleDeckHeight, mapleApproachHeight, mapleBridgeFootings } from './maple-crossing.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
-import { plantMountainWoods, growNishiyamaBamboo } from './mountain-woodland.js';
+import { plantMountainWoods, growNishiyamaBamboo, isNishiyamaTree } from './mountain-woodland.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
 import { KIYOMIZU_APPROACH, kiyomizuTerrain, kiyomizuSolids, kiyomizuClearing, kiyomizuViewTree } from './kiyomizu-layout.js';
-import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, earlierFireRidgeHeight, earlierWestRidgeHeight, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow, createFireTreeCeiling, fireTrailDistance } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, earlierFireRidgeHeight, earlierWestRidgeHeight, kyoRidgeHeight, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow, createFireTreeCeiling, fireTrailDistance } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
@@ -1221,6 +1221,18 @@ for(let i=0;i<145;i++){
 }
 // Count only the sites left after opening the stage and summit sightlines.
 growNishiyamaBamboo(TREES);
+const forestFootings=new WeakMap();
+export function treeGround(tree) {
+  const cached=forestFootings.get(tree);
+  if(cached!==undefined)return cached;
+  const {x,z}=tree;
+  // Ground all three representations on the painted triangle. The planting
+  // survey can stand above the tessellated surface on a narrow mountain spur.
+  const onRidge=tree.form!==undefined && (kyoRidgeHeight(x,z)>0 || isNishiyamaTree(tree));
+  const y=onRidge ? terrainMeshHeight(x,z) : tree.ground ?? terrainHeight(x,z);
+  forestFootings.set(tree,y);
+  return y;
+}
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
 // The shrine's small bamboo stands are planted individually between its
@@ -1429,7 +1441,7 @@ for (const t of TREES)
     t.form !== undefined ? t.h*.027 : t.kind === 'bamboo' ? 0.3 : 0.37,
     t.form !== undefined ? t.h*.027 : t.kind === 'bamboo' ? 0.3 : 0.37,
     0,
-    (t.ground ?? terrainHeight(t.x, t.z)) + t.h * 0.68,
+    treeGround(t) + t.h * 0.68,
     'oval',
     false,
   );
