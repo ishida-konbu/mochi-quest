@@ -1,18 +1,20 @@
 import * as THREE from './vendor/three.module.min.js';
 import { BOUND } from './terrain.js';
+import { HERB_ATLAS_SIDE } from './meadow-herbs.js';
 import { MEADOW_TILE, MEADOW_TILES, meadowExclusions, visitMeadowTile } from './meadow-layout.js';
 
 function leafFans() {
   const points=[],uv=[],indices=[],normal=[];
-  // Two folded fans cross at the crown. Both have a ridge and a flexible upper half.
+  // Two bowed strips give the plant depth even when the camera looks down.
+  // A middle joint bends in the wind. Each clump uses eight triangles.
   for (let k=0;k<2;k++) {
     const a=k*Math.PI*.47, c=Math.cos(a),s=Math.sin(a), base=points.length/3;
-    for (let row=0;row<3;row++) for (let col=0;col<3;col++) {
-      const u=col*.5, v=row*.5, x=u-.5, depth=(1-Math.abs(x)*2)*.085*v+.075*v*v;
-      points.push(x*c-depth*s,v,x*s+depth*c); normal.push(0,1,0);uv.push(u,v);
+    for (let row=0;row<3;row++) for (let col=0;col<2;col++) {
+      const v=row*.5, x=col-.5, depth=(k ? -.17 : .21)*v*v;
+      points.push(x*c-depth*s,v,x*s+depth*c);normal.push(0,1,0);uv.push(col,v);
     }
-    for (let j=0;j<2;j++) for(let i=0;i<2;i++){
-      const n=base+j*3+i;indices.push(n,n+1,n+3,n+1,n+4,n+3);
+    for(let row=0;row<2;row++){
+      const n=base+row*2;indices.push(n,n+1,n+2,n+1,n+3,n+2);
     }
   }
   const g=new THREE.BufferGeometry();
@@ -25,15 +27,16 @@ function leafFans() {
 export function createMeadow(scene,objects,coarse,residents) {
   const clearings=meadowExclusions(objects,residents), shape=leafFans(), cache=new Map();
   const time={value:0}, traveller={value:new THREE.Vector2()}, range=coarse?42:54;
-  const atlas=new THREE.TextureLoader().load(new URL('./assets/world/meadow-herbs.webp',import.meta.url).href);
-  atlas.colorSpace=THREE.SRGBColorSpace;
-  const material=new THREE.MeshLambertMaterial({map:atlas,alphaTest:.29,side:THREE.DoubleSide});
+  const atlas=new THREE.TextureLoader().load(new URL('./assets/world/meadow-herbs.webp?v=2',import.meta.url).href);
+  atlas.colorSpace=THREE.SRGBColorSpace;atlas.anisotropy=4;
+  const material=new THREE.MeshLambertMaterial({map:atlas,alphaTest:.26,side:THREE.DoubleSide});
   material.onBeforeCompile=shader=>{
     Object.assign(shader.uniforms,{meadowTime:time,meadowTraveller:traveller});
     shader.vertexShader='attribute vec3 planting; attribute vec4 habit; attribute vec2 tint; uniform float meadowTime; uniform vec2 meadowTraveller; varying vec3 vHerbTint;\n'+shader.vertexShader;
     shader.vertexShader=shader.vertexShader.replace('#include <uv_vertex>',`#include <uv_vertex>
       float plate=habit.w;
-      vMapUv=(vec2(mod(plate,8.),7.-floor(plate/8.))+uv)*.125;
+      const float side=${HERB_ATLAS_SIDE.toFixed(1)};
+      vMapUv=(vec2(mod(plate,side),side-1.-floor(plate/side))+uv)/side;
       vec2 plot=modelMatrix[3].xz+planting.xz;
       float lod=1.-smoothstep(${range-15}.,${range}.,length(plot-cameraPosition.xz));
       float age=tint.y;

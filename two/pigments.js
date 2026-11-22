@@ -1,5 +1,7 @@
+import { KYO_HILL_SHEET } from './higashiyama.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { PEACH_BOUT } from './scroll-encounters.js';
+import { groundPrintGLSL } from './ground-print.js';
 import { groundImpressions } from './scroll-paper.js';
 import * as THREE from './vendor/three.module.min.js';
 
@@ -17,6 +19,7 @@ export function loadPigments() {
   };
   return {
     turf: read('turf'),
+    fieldInk: read('field-ink', false),
     forest: read('forest-floor'),
     gravel: read('stream-stones'),
     trail: read('trail'),
@@ -25,6 +28,7 @@ export function loadPigments() {
     cedar: read('cedar'),
     tile: read('kawara'),
     herbs: read('wayside-herbs', false),
+    hillPainting: read('kyo-hills',false),
   };
 }
 
@@ -33,46 +37,57 @@ export function meadowMaterial(art) {
   const impressions=groundImpressions();
   const {west,east,north,south}=PEACH_RANGE_BOUNDS;
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.fieldInk = { value: art.fieldInk };
     shader.uniforms.impressions = { value: impressions };
+    shader.uniforms.hillPainting = { value:art.hillPainting };
     shader.uniforms.woodFloor = { value: art.forest };
     shader.uniforms.bankStones = { value: art.gravel };
     shader.vertexShader =
-      'attribute vec2 ridgeRelief; varying vec2 vRidge; attribute float scrollAmount; varying float vScroll; varying vec3 inkPoint; attribute vec2 terrainMix; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
+      'attribute float ridgeRelief; varying float vRidge; attribute float scrollAmount; varying float vScroll; varying vec3 inkPoint; attribute vec2 terrainMix; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
       shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRidge=ridgeRelief; vScroll=scrollAmount; inkPoint=position; vTerrainMix = terrainMix; vSeasons = seasons; incline=1.-abs(normal.y);');
     shader.fragmentShader =
-      'uniform sampler2D woodFloor, bankStones, impressions; varying vec2 vRidge; varying float vScroll; varying vec3 inkPoint; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
+      groundPrintGLSL + 'uniform sampler2D fieldInk, woodFloor, bankStones, impressions, hillPainting; varying float vRidge; varying float vScroll; varying vec3 inkPoint; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
       shader.fragmentShader.replace(
         '#include <map_fragment>',
         `
-        vec2 tileUv = vMapUv;
-        vec3 blades = texture2D(map,tileUv).rgb;
-        vec3 understory = texture2D(woodFloor,vec2(tileUv.y, -tileUv.x) * .78 + vec2(.13,.07)).rgb;
-        vec3 shingle = texture2D(bankStones,tileUv * .89).rgb;
-        // The washes overlap irregularly around trunks and on gravel bars.
-        float woodland = smoothstep(.08,.96,vTerrainMix.x + (blades.g-.21)*.65);
-        vec3 pigment = mix(blades,understory,woodland);
-        pigment = mix(pigment,shingle,smoothstep(.035,.93,vTerrainMix.y+(shingle.r-.28)*.38));
+        vec2 field=inkPoint.xz, plot=vMapUv;
+        Impressions stamps=groundPrint(plot);
+        vec2 dx=dFdx(plot), dy=dFdy(plot);
+        float wash=.68*groundWash(field*.039)+.32*groundWash(field*.112+17.2);
+        vec3 strokes=readGround(fieldInk,stamps,dx,dy,1.);
+        // The drawing's paper supplies the lightest tone. The dilute tide
+        // marks and the nearly black tips of a stroke carry different weights.
+        float brush=clamp((.83-strokes.r)*1.35,0.,1.);
+        float woodland=smoothstep(.08,.89,vTerrainMix.x+.46*(wash-.5));
+        float bank=smoothstep(.03,.94,vTerrainMix.y+.31*(wash-.5));
+        vec3 blades=readGround(map,stamps,dx,dy,2.35);
+        vec3 understory=blades, shingle=blades;
+        if(woodland>.001) understory=readGround(woodFloor,stamps,dx,dy,1.85);
+        if(bank>.001 || vSeasons.y*incline>.015)
+          shingle=readGround(bankStones,stamps,dx,dy,1.72);
+        vec3 pigment=mix(mix(blades,understory,woodland),shingle,bank);
         float luma=dot(pigment,vec3(.27,.59,.14));
-        pigment=mix(vec3(luma*.93,luma*1.05,luma*1.04),pigment,.65);
+        pigment=mix(vec3(luma*.93,luma*1.05,luma*1.04),pigment,.63);
         vec3 ground=pigment*vec3(.99,1.10,1.19)+vec3(.020,.029,.031);
+        vec3 openPaper=mix(vec3(.61,.56,.398),vec3(.295,.344,.211),wash);
+        vec3 duff=mix(vec3(.35,.289,.195),vec3(.214,.240,.153),wash);
+        ground=mix(ground,mix(openPaper,duff,woodland)*(.80+.52*luma),.57-.28*bank);
         vec3 loam=mix(vec3(.20,.096,.048),vec3(.48,.28,.107),clamp(luma*2.4,0.,1.));
-        float litter=smoothstep(.14,.45,luma+.13*sin(tileUv.x*.41+1.7*sin(tileUv.y*.26)));
+        float litter=smoothstep(.14,.45,luma+.22*(wash-.5));
         ground=mix(ground,loam,vSeasons.y*(.36+.54*litter));
-        vec3 scree=texture2D(bankStones,tileUv*.57).rgb*.8+vec3(.055,.053,.045);
+        vec3 scree=shingle*.8+vec3(.055,.053,.045);
         ground=mix(ground,scree,vSeasons.y*smoothstep(.12,.52,incline)*.92);
-        ground=mix(ground,vec3(.52,.40,.25)*( .81+.54*shingle.r),vSeasons.w);
+        ground=mix(ground,vec3(.52,.40,.25)*(.74+.54*shingle.r+.18*wash),vSeasons.w);
         ground=mix(ground,vec3(.25,.27,.148)*(.56+1.7*luma),vSeasons.z*.65);
         float snowCover=smoothstep(.035,.96,vSeasons.x+(luma-.24)*.20);
-        float drift=.5+.5*sin(tileUv.y*.49+1.5*sin(tileUv.x*.13)+tileUv.x*.27);
-        vec3 snow=mix(vec3(.65,.77,.85),vec3(.94,.96,.98),drift*.40+clamp(luma,0.,.60));
+        vec3 snow=mix(vec3(.65,.77,.85),vec3(.94,.96,.98),wash*.47+clamp(luma,0.,.53));
         ground=mix(ground,snow,snowCover);
+        vec3 mark=vec3(0.);
+        if(vScroll>.001 || vRidge>.001) mark=readGround(impressions,stamps,dx,dy,.83);
         if(vScroll>.001) {
           // Reserve the paper between clumps. The coarser wash stays in the
           // distance while the fine root and bristle marks vanish through mips.
-          vec2 field=inkPoint.xz;
-          vec2 bend=vec2(sin(field.y*.077),cos(field.x*.091));
-          vec3 mark=texture2D(impressions,(field+bend*.68)/17.).rgb;
-          float pool=.5+.5*sin(field.x*.25+1.6*sin(field.y*.19)+bend.x);
+          float pool=wash;
           float damp=smoothstep(-.4,1.9,.38-inkPoint.y);
           float cliff=smoothstep(.032,.36,incline);
           float grass=mark.r*(.60+.32*pool)*(1.-cliff);
@@ -108,22 +123,22 @@ export function meadowMaterial(art) {
           fieldWash*=.93+.11*pool+.055*smoothstep(.08,.4,luma);
           ground=mix(ground,fieldWash,vScroll*.88);
         }
-        float ridge=max(vRidge.x,vRidge.y);
-        if(ridge>.001){
-          // Copses of sasa and dry susuki sweep across the aspect, with ink
-          // pooling in folds. These coarse washes survive distant mip levels.
-          vec2 hill=vRidge.x>vRidge.y?inkPoint.xz:vec2(-inkPoint.z,inkPoint.x);
-          float t=hill.y+.24*hill.x+6.2*sin(.037*hill.x)+3.3*sin(.102*hill.y+.039*hill.x);
-          float fold=sin(.038*t+.55*sin(hill.x*.026));
-          float grain=sin(.39*t+.81*sin(hill.x*.095+t*.062))*.28+sin(t*.118+hill.x*.052)*.34;
-          float culm=smoothstep(-.54,.87,fold+.65*grain);
-          float brush=texture2D(impressions,(hill+vec2(2.7*fold,1.9*grain))/36.).r;
-          vec3 meadow=mix(vec3(.28,.34,.225),vec3(.78,.655,.423),culm);
-          float ledge=inkPoint.y*.117+.034*hill.y+.69*sin(hill.x*.046+hill.y*.016);
-          float shaleBand=(1.-smoothstep(.09,.49,abs(sin(ledge))))*smoothstep(.16,.70,grain+.32*fold+.22);
-          meadow=mix(meadow,vec3(.405,.414,.354),shaleBand*.8);
-          meadow*=1.-.22*brush-.11*shaleBand;
-          ground=mix(ground,meadow,ridge*.78);
+        float exposed=(1.-.80*bank)*(1.-.91*snowCover)*smoothstep(-.8,1.3,inkPoint.y);
+        ground*=1.-exposed*(.75*brush+.09*(1.-wash));
+        if(vRidge>.001){
+          // One painted sheet covers the three ranges. Every inked rock face
+          // and patch of foliage stays registered to its own slope in all views.
+          vec2 survey=(inkPoint.xz-vec2(${KYO_HILL_SHEET.x}.,${KYO_HILL_SHEET.z}.))
+            /vec2(${KYO_HILL_SHEET.width}.,${KYO_HILL_SHEET.depth}.);
+          vec3 painting=texture2D(hillPainting,vec2(survey.x,1.-survey.y)).rgb;
+          // The broad hillside wash is legible from town. Walking up to it
+          // brings out the grain of the soil and tapered marks on the rocks.
+          float bristle=clamp(luma*1.16+.79,.81,1.17);
+          float close=1.-smoothstep(16.,75.,distance(cameraPosition,inkPoint));
+          float rock=smoothstep(.064,.28,incline);
+          float fineInk=mix(brush*.65,mark.g*.63,rock);
+          vec3 hillside=painting*bristle*(1.-close*fineInk);
+          ground=mix(ground,hillside,vRidge*(.89-.17*close));
         }
         diffuseColor.rgb *= ground;
       `,
@@ -143,16 +158,22 @@ export function trailMaterial(art) {
     color: 0xffffff,
   });
   mat.onBeforeCompile = (shader) => {
-    shader.vertexShader='attribute float snowAmount; varying float snowCover;\n'+shader.vertexShader.replace(
-      '#include <begin_vertex>', '#include <begin_vertex>\nsnowCover=snowAmount;');
-    shader.fragmentShader = 'varying float snowCover;\n'+shader.fragmentShader.replace(
+    shader.vertexShader='attribute float snowAmount; varying float snowCover; varying vec2 pathMetres;\n'+shader.vertexShader.replace(
+      '#include <begin_vertex>', '#include <begin_vertex>\nsnowCover=snowAmount; pathMetres=position.xz;');
+    shader.fragmentShader = groundPrintGLSL+'varying float snowCover; varying vec2 pathMetres;\n'+shader.fragmentShader.replace(
       '#include <map_fragment>',
       `
-      vec4 pigment = texture2D(map, vec2(vMapUv.x*1.88,vMapUv.y*1.23));
-      float edge = min(vMapUv.x, 1. - vMapUv.x);
-      float fade = smoothstep(.011,.17,edge+(pigment.g-.3)*.09 + .008*sin(vMapUv.y*31.0+sin(vMapUv.y*9.)));
-      float ochre=dot(pigment.rgb,vec3(.37,.51,.12));
-      diffuseColor.rgb*=mix(pigment.rgb,vec3(ochre*1.11,ochre*1.01,ochre*.88),.38)*vec3(1.,1.035,1.11)+vec3(.049,.043,.035);
+      vec2 plot=pathMetres/4.3;
+      Impressions stamps=groundPrint(plot);
+      vec3 pigment=readGround(map,stamps,dFdx(plot),dFdy(plot),2.4);
+      float wash=groundWash(pathMetres*.17+7.5);
+      float edge=min(vMapUv.x,1.-vMapUv.x);
+      float fade=smoothstep(.012,.17,edge+(pigment.g-.30)*.10+(wash-.5)*.105);
+      float ochre=dot(pigment,vec3(.37,.51,.12));
+      float worn=smoothstep(.08,.36,edge+.18*(wash-.5));
+      vec3 dirt=mix(pigment,vec3(ochre*1.11,ochre*1.01,ochre*.88),.44);
+      dirt=mix(dirt,vec3(.54,.427,.30),.20+.18*worn);
+      diffuseColor.rgb*=dirt*(.91+.16*wash)+vec3(.042,.044,.040);
       vec3 snowPath=mix(vec3(.48,.56,.61),vec3(.77,.84,.88),smoothstep(.03,.48,ochre));
       diffuseColor.rgb=mix(diffuseColor.rgb,snowPath,snowCover*.94);
       diffuseColor.a *= fade;

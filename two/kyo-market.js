@@ -93,6 +93,7 @@ export function dressWardShop(p,b,part){
     for(const v of [-front,front])part('box',0,wall-.10,v,w+.18,.23,.20,beam,p.wood);
   }
   if(two){
+    part('box',0,(loft+wall)/2,front-.055,w,wall-loft,.08,'#b7a584',p.boarding);
     for(const q of wardFloorPlan(b).slabs)part('box',q.x,q.top-.065,q.z,q.w,.13,q.d,q.tread?'#a38b66':'#ba9e74',p.deck);
     part('box',0,loft+.49,front,w,1.04,.16,'#a48b64',p.boarding);
     part('box',0,loft+1.75,front,w,.98,.13,'#645b48',p.workshopArt.reed);
@@ -116,7 +117,7 @@ export function dressWardShop(p,b,part){
     for(const side of [-1,1])part('box',deskX,pictureY+side*.59,back+.026,2.34,.062,.073,beam,p.wood);
 
   }
-  part('box',0,wall+.01,0,w+.33,.18,d+.29,beam,p.wood);
+  part('box',0,wall+.105,0,w+.33,.37,d+.29,beam,p.wood);
   part(craft==='rush'||craft==='baskets'?'hipRoof':'roof',0,wall+.29,0,w*1.24,b.roof,d*1.28,'#929083',craft==='rush'||craft==='baskets'?p.thatch:p.roofs);
   part('box',0,wall+b.roof+.29,0,w*(craft==='rush'||craft==='baskets'?.62:1.05),.18,.21,'#626457',p.roofs);
   const signZ=front+.46;

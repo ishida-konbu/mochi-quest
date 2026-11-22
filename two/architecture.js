@@ -14,6 +14,23 @@ export function hipHeight(x, z) {
   return (1 - pitch) ** 1.28;
 }
 
+export const HOUSE_EAVES = {width:1.24,depth:1.28};
+export const PAGODA_SPAN = 1.33;
+export const roofSkinDepth = form => form==='hip' ? .09 : form==='pagoda' ? .075 : .04;
+
+export function houseRoof(width,depth,eave,rise,form) {
+  return {width:width*HOUSE_EAVES.width,depth:depth*HOUSE_EAVES.depth,eave,rise,form,
+    wallWidth:width,wallDepth:depth};
+}
+
+// The receiver places these four narrow walls in the building's local frame.
+export function roofWallContacts(roof,add) {
+  for(const side of [-1,1]){
+    add(side*roof.wallWidth/2,0,.14,roof.wallDepth+.14);
+    add(0,side*roof.wallDepth/2,roof.wallWidth+.14,.14);
+  }
+}
+
 // Measurements in the building's local frame. The entrance faces positive Z.
 export function roomPlan(b) {
   const pagoda = b.kind === 'pagoda';
@@ -53,9 +70,13 @@ export function pagodaPlan(b) {
   // planks leave a full standing clearance underneath.
   const slab=(u,v,w,d,top,kind)=>slabs.push({u,v,w,d,top,kind,thickness:kind==='landing'?.085:.13});
   for(let n=0;n<5;n++) {
-    const y=floor+rise*n, scale=1-n*.085;
-    const w=b.w*scale, d=b.d*scale, shaftW=2*(lane+stairWidth/2), shaftD=run+1.5;
-    storeys.push({y,w,d});
+    const y=floor+rise*n, taper=1-n*.085;
+    const w=b.w*taper, d=b.d*taper, shaftW=2*(lane+stairWidth/2), shaftD=run+1.5;
+    const crown=n===4, wallRatio=n ? .76 : .73;
+    const roof={width:w*PAGODA_SPAN,depth:d*PAGODA_SPAN,eave:y+2.60*scale,
+      rise:(crown?2.05:1.19)*scale,form:'pagoda',aperture:crown?0:.51,
+      wallWidth:w*wallRatio,wallDepth:d*wallRatio};
+    storeys.push({y,w,d,roof,wallTop:n ? y+2.45*scale : roomPlan(b).ceiling});
     if(n) {
       // Four open central bays lead out onto the gallery. Between them stand
       // short plaster-and-lattice panels, with a continuous upper transom.

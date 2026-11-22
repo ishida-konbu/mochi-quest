@@ -1,4 +1,4 @@
-import { HIGASHIYAMA, KITAYAMA } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, NISHIYAMA } from './higashiyama.js';
 import { DISTRICTS } from './geography.js';
 import * as THREE from './vendor/three.module.min.js';
 import { HDRLoader } from './vendor/HDRLoader.js';
@@ -192,7 +192,7 @@ export function createAtmosphere(scene) {
       // and the far ridge from either avenue, through a thin veil of haze.
       const view=camera.matrixWorld.elements;
       let hillView=0;
-      for(const summit of [HIGASHIYAMA,KITAYAMA]){
+      for(const summit of [HIGASHIYAMA,KITAYAMA,NISHIYAMA]){
         const dx=summit.x-player.x,dz=summit.z-player.z,range=Math.hypot(dx,dz);
         const facing=-(dx*view[8]+dz*view[10])/Math.max(1,range);
         hillView=Math.max(hillView,(1-THREE.MathUtils.smoothstep(range,495,650))*THREE.MathUtils.smoothstep(facing,.26,.79));

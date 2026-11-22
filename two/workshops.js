@@ -1,38 +1,4 @@
 import * as T from './vendor/three.module.min.js';
-import { hipHeight } from './architecture.js';
-
-export function hipRoof() {
-  const pos = [], uv = [], index = [];
-  // Each corner seam runs from a ridge end to the overhanging fascia.
-  // Independent face normals retain the fold between adjacent thatch planes.
-  for (let face = 0; face < 4; face++) {
-    const offset = pos.length / 3;
-    const side = face < 2 ? 1 : -1;
-    const front = face % 2 === 0;
-    for (let row = 0; row <= 9; row++) {
-      const t = Math.min(row / 8, 1);
-      for (let i = 0; i <= 12; i++) {
-        const across = i / 6 - 1;
-        const span = .46 + t * .54;
-        const x = front ? across * span : side * span;
-        const z = front ? side * t : across * t;
-        pos.push(x / 2, hipHeight(x,z) - (row === 9 ? .09 : 0), z / 2);
-        uv.push((across + 1) * (front ? span * 2 : t * 1.2), row / 6);
-        if (row < 9 && i < 12) {
-          const k = offset + row * 13 + i;
-          index.push(k,k+1,k+13,k+1,k+14,k+13);
-        }
-      }
-    }
-  }
-  const geometry = new T.BufferGeometry();
-  geometry.setAttribute('position', new T.Float32BufferAttribute(pos,3));
-  geometry.setAttribute('uv', new T.Float32BufferAttribute(uv,2));
-  geometry.setIndex(index);
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
 function surface(width, height, draw, tiled = true) {
   const el = document.createElement('canvas');
   el.width = width; el.height = height;

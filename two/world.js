@@ -3,7 +3,7 @@ import { WAYSIDE_SITES, BATH_YARD } from './wayside-hut-layout.js';
 import { buildWaysideHut } from './wayside-hut-art.js';
 import { buildGoemonBath } from './goemon-bath-art.js';
 import { GATE_PAVING, RASHOMON } from './kyo-layout.js';
-import { HIGASHIYAMA, KITAYAMA, eastRidgeHeight, northRidgeHeight } from './higashiyama.js';
+import { kyoRidgeHeight } from './higashiyama.js';
 import { dressSeaports } from './seaports.js';
 import { createOceanShips } from './ocean-ship-art.js';
 import { dressWardShop } from './kyo-market.js';
@@ -18,8 +18,9 @@ import { dressWaysideBaths } from './wayside-baths.js';
 import { dressRyugu, createRyuguLife } from './ryugu.js';
 import { createTravellers } from './travelling-merchants.js';
 import { noren } from './craftwork.js';
-import { pagodaPlan, roomPlan, roofForm, roofProfile } from './architecture.js';
-import { hipRoof, tradeFacade } from './workshops.js';
+import { pagodaPlan, roomPlan, roofForm, HOUSE_EAVES, PAGODA_SPAN } from './architecture.js';
+import { tradeFacade } from './workshops.js';
+import { roofShell, atticWalls, timberLining } from './roof-shell.js';
 import { wetStone } from './stone-water.js';
 import { prepareForest } from './forest.js';
 import { furnishRoom } from './interiors.js';
@@ -113,12 +114,39 @@ function grain() {
     }),
   );
 }
+// Keep the survey vertices along every tile edge. Inside each two-cell square
+// only omit a midpoint if its surveyed height is within 4 cm of the chord.
+// Steep folds, the firebeds and the joins with neighbouring tiles stay intact.
+function distantHillSurface(ground,grid) {
+  const triangles=[],positions=ground.attributes.position,stride=grid+1;
+  const keep=(a,m,b)=>Math.abs(positions.getY(m)-(positions.getY(a)+positions.getY(b))*.5)>.04;
+  for(let z=0;z<grid;z+=2)for(let x=0;x<grid;x+=2){
+    const nw=z*stride+x,ne=nw+2,sw=nw+2*stride,se=sw+2,centre=nw+stride+1;
+    const edges=[nw,sw,se,ne];
+    const midpoints=[
+      x===0 || keep(nw,nw+stride,sw), z+2===grid || keep(sw,sw+1,se),
+      x+2===grid || keep(se,ne+stride,ne), z===0 || keep(ne,nw+1,nw),
+    ];
+    if(!midpoints.some(Boolean) && !keep(ne,centre,sw)){
+      triangles.push(nw,sw,ne,ne,sw,se);
+      continue;
+    }
+    for(let i=0;i<4;i++){
+      const a=edges[i],b=edges[(i+1)%4],m=(a+b)/2;
+      if(midpoints[i])triangles.push(centre,a,m,centre,m,b);
+      else triangles.push(centre,a,b);
+    }
+  }
+  const distant=new THREE.BufferGeometry();
+  for(const [key,value] of Object.entries(ground.attributes))distant.setAttribute(key,value);
+  distant.setIndex(triangles);
+  return distant;
+}
 function* landscape(scene, art) {
   const mat = meadowMaterial(art);
   const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
     '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd','#e4d5b5','#efd5ce','#a9c1b3','#e1d8bb','#dbd6bb','#d8d7bf','#e1d1b4'].map(css);
   const soil = css('#efeadc'), stone = css('#d5d4c6'), c = new THREE.Color(), season = {};
-  const shale=css('#6e7564'),dryGrass=css('#aa9e7e'),ridgeWash=new THREE.Color();
   const bins = new Map();
   for (const tree of TREES) {
     const rad = tree.h*.67+2.3;
@@ -140,24 +168,17 @@ function* landscape(scene, art) {
     const range=PEACH_RANGE_BOUNDS;
     const peachTile=midX+span/2>range.west && midX-span/2<range.east && midZ+span/2>range.north && midZ-span/2<range.south;
     const p=[], ix=[], uv=[], col=[], surface=[], seasons=[], scroll=[], ridges=[];
+    let ridgeTile=false;
     for (let j=0; j<=grid; j++) for (let i=0; i<=grid; i++) {
       const x=(column+i/grid)*span-BOUND, z=(row+j/grid)*span-BOUND, y=h(x,z);
       p.push(x,y,z);
-      uv.push(x*.205+.045*sin(z*.12), z*.205+.037*sin(x*.19));
+      uv.push(x/3.7,z/3.7);
       const r=regionAt(x,z), river=abs(z-riverZ(x))-riverHalfWidth(x), coast=shoreDistance(x,z);
       c.copy(colors[r]).lerp(soil, max(0,1-abs(river-2)/7)*.72);
       c.lerp(stone, max(0,min(1,(y-15)/30))*.68);
-      const east=eastRidgeHeight(x,z),north=northRidgeHeight(x,z),rise=Math.max(east,north);
-      ridges.push(THREE.MathUtils.smoothstep(east,4,33),THREE.MathUtils.smoothstep(north,4,33));
-      if(rise>0){
-        // Long brush washes follow the watershed, gathering in the gullies.
-        // Dry meadow and lit rock separate the spurs even at street level.
-        const u=east>north ? x-HIGASHIYAMA.x : KITAYAMA.z-z;
-        const v=east>north ? z-HIGASHIYAMA.z : x-KITAYAMA.x;
-        const wash=.5+.5*cos(.044*v-.018*u+1.38*sin(u*.034+v*.016));
-        ridgeWash.copy(dryGrass).lerp(shale,.12+.76*wash*wash);
-        c.lerp(ridgeWash,.87*THREE.MathUtils.smoothstep(rise,3,53));
-      }
+      const rise=kyoRidgeHeight(x,z);
+      ridges.push(THREE.MathUtils.smoothstep(rise,3,23));
+      if(rise>0)ridgeTile=true;
       c.multiplyScalar(.96+.042*cos(x*.076+sin(z*.044))+.039*sin(z*.115+sin(x*.093)));
       let canopy=0;
       for (const tree of bins.get(Math.floor(x/18)*256+Math.floor(z/18)) || []) {
@@ -175,13 +196,13 @@ function* landscape(scene, art) {
       }
     }
     const ground=geometry(p,ix,uv,col);
-    ground.setAttribute('ridgeRelief',new THREE.Float32BufferAttribute(ridges,2));
+    ground.setAttribute('ridgeRelief',new THREE.Float32BufferAttribute(ridges,1));
     ground.setAttribute('terrainMix',new THREE.Float32BufferAttribute(surface,2));
     ground.setAttribute('scrollAmount',new THREE.Float32BufferAttribute(scroll,1));
     ground.setAttribute('seasons',new THREE.Float32BufferAttribute(seasons,4));
     // Adjacent tiles compute their own normals. Sample both sides at the
     // join so a sunlit rock face stays continuous across the tile boundary.
-    if(peachTile && !deep){
+    if((peachTile || ridgeTile) && !deep){
       const step=span/grid,normals=ground.attributes.normal;
       function seamNormal(i,j){
         const v=j*(grid+1)+i,x=p[v*3],z=p[v*3+2];
@@ -193,8 +214,12 @@ function* landscape(scene, art) {
       for(let j=1;j<grid;j++){seamNormal(0,j);seamNormal(grid,j);}
     }
     const land=new THREE.Mesh(ground,mat);
+    if(ridgeTile && !deep){
+      land.userData.nearGeometry=ground;
+      land.userData.farGeometry=distantHillSurface(ground,grid);
+    }
     land.receiveShadow=true;
-    land.userData.range=peachTile || eastRidgeHeight(midX,midZ)+northRidgeHeight(midX,midZ)>0?710:475;
+    land.userData.range=peachTile || ridgeTile?710:475;
     scene.add(land);
     yield;
   }
@@ -220,7 +245,7 @@ function reserveGatePaving(original) {
   return material;
 }
 function buildRoads(scene, art) {
-  const material = trailMaterial(art), paving=kyoPavingMaterial(), climate={};
+  const material = trailMaterial(art), paving=kyoPavingMaterial(art.rock), climate={};
   const approach=reserveGatePaving(material),avenue=reserveGatePaving(paving);
   for (const road of ROADS) {
     const p=[], uv=[], ix=[], snow=[];
@@ -235,7 +260,7 @@ function buildRoads(scene, art) {
       for(let j=0;j<=4;j++) {
         const across=(j/4-.5)*width, xx=x+(dz/l)*across, zz=z-(dx/l)*across;
         p.push(xx,h(xx,zz)+.08,zz);
-        if(road.paved) uv.push(xx/7.6,zz/5.12);
+        if(road.paved) uv.push(xx,zz);
         else uv.push(j/4,travel/4.8);
         snow.push(snowAmount);
         if(!underDeck && i<road.points.length-1 && j<4) {
@@ -492,67 +517,6 @@ function bronzeFinial() {
   );
 }
 
-function pagodaRoofShape(inner = .255) {
-  const p = [],
-    uv = [],
-    ix = [],
-    n = 13,
-    rows = 7;
-  for (let side = 0; side < 4; side++) {
-    const offset = p.length / 3,
-      angle = (side * PI) / 2;
-    for (let j = 0; j <= rows; j++)
-      for (let i = 0; i <= n; i++) {
-        const u = i / n - 0.5,
-          t = j / rows,
-          r = inner + (.5 - inner) * t;
-        const dx = u * r * 2, dz = r;
-        p.push(
-          dx * cos(angle) - dz * sin(angle),
-          roofProfile('pagoda',2*dx,2*dz,2*inner),
-          dx * sin(angle) + dz * cos(angle),
-        );
-        uv.push((i / n) * 2.6, t * 1.4);
-        if (i < n && j < rows) {
-          const k = offset + j * (n + 1) + i,
-            l = k + n + 1;
-          ix.push(k, k + 1, l, k + 1, l + 1, l);
-        }
-      }
-  }
-  return geometry(p, ix, uv);
-}
-
-function roofShape() {
-  const p = [],
-    uv = [],
-    ix = [],
-    n = 12,
-    bands = 5;
-  for (const sign of [-1, 1]) {
-    const off = p.length / 3;
-    for (let j = 0; j <= bands; j++)
-      for (let i = 0; i <= n; i++) {
-        const x = i / n - 0.5,
-          v = j / bands,
-          xx = x * (.86 + .14 * v);
-        p.push(xx, roofProfile('gable',2*xx,v), sign * v * .5);
-        uv.push((i / n) * 3, v * 2);
-        if (i < n && j < bands) {
-          const k = off + j * (n + 1) + i,
-            l = k + n + 1;
-          ix.push(k, k + 1, l, k + 1, l + 1, l);
-        }
-      }
-  }
-  for (const s of [-1, 1]) {
-    const k = p.length / 3;
-    p.push(s * 0.4, 0, -0.45, s * 0.4, 0, 0.45, s * 0.4, 1, 0);
-    uv.push(0, 0, 1, 0, 0.5, 1);
-    ix.push(k, k + 1, k + 2);
-  }
-  return geometry(p, ix, uv);
-}
 function leafBlade() {
   // Curved blades rise from a common root and taper to a single painted tip.
   const p = [],
@@ -654,6 +618,8 @@ function calligraphy(glyph) {
 class Painter {
   constructor(scene, paper, art) {
     this.scene = scene;
+    this.roofLinings=new Map();
+    this.roofTimber=art.cedar;
     this.groups = new Map();
     this.closeDetails = [];
     this.sway = { value: 0 };
@@ -702,10 +668,15 @@ class Painter {
       rock: roundedStone(43),
       leaf: leafBlade(),
       plane: new THREE.PlaneGeometry(1, 1),
-      roof: roofShape(),
-      hipRoof: hipRoof(),
-      pagodaRoof: pagodaRoofShape(),
-      pagodaCrown: pagodaRoofShape(.026),
+      roof: roofShell('gable'),
+      hipRoof: roofShell('hip'),
+      pagodaRoof: roofShell('pagoda',.51),
+      pagodaCrown: roofShell('pagoda'),
+      gableWalls: atticWalls('gable',1/HOUSE_EAVES.width,1/HOUSE_EAVES.depth),
+      hipWalls: atticWalls('hip',1/HOUSE_EAVES.width,1/HOUSE_EAVES.depth),
+      pagodaFootWalls: atticWalls('pagoda',.73/PAGODA_SPAN,.73/PAGODA_SPAN,.51),
+      pagodaWalls: atticWalls('pagoda',.76/PAGODA_SPAN,.76/PAGODA_SPAN,.51),
+      pagodaCrownWalls: atticWalls('pagoda',.76/PAGODA_SPAN,.76/PAGODA_SPAN),
       pyramid: new THREE.ConeGeometry(1, 1, 4, 1),
       ball: new THREE.SphereGeometry(1, 10, 7),
     };
@@ -819,6 +790,10 @@ class Painter {
   }
   record(shape, mat, color, matrix, x, z, shadow = true, chunk = false) {
     if (shape === 'rock' && mat === this.solid) mat = this.stone;
+    if(shape==='roof'||shape==='hipRoof'||shape==='pagodaRoof'||shape==='pagodaCrown'){
+      if(!this.roofLinings.has(mat)) this.roofLinings.set(mat,timberLining(mat,this.roofTimber));
+      mat=this.roofLinings.get(mat);
+    }
     const key =
       shape +
       '|' +
@@ -1207,6 +1182,11 @@ function building(p, b, index) {
   part('box', 0, 0.42 - stoneHeight / 2, 0, w + 1.1, stoneHeight, d + 1.08, '#969484', p.masonry);
   for (let j = 0; j < 3; j++)
     part('box', 0, 0.18 - j * 0.19, d / 2 + 0.48 + j * 0.39, w * 0.48, 0.28, 0.46, '#a4a28a');
+  if (kind !== 'pagoda') {
+    const form=roofForm(b);
+    part(form==='hip'?'hipWalls':'gableWalls',0,wall+.29,0,w*HOUSE_EAVES.width,roof,d*HOUSE_EAVES.depth,
+      '#b9ab91',p.boarding);
+  }
   if (kind === 'wardShop') { dressWardShop(p,b,part); return; }
   furnishRoom(p, b, index, part, local);
   if (kind === 'pagoda') {
@@ -1267,7 +1247,30 @@ function building(p, b, index) {
         }
       }
       part('box',0,y+2.66,0,.19,.11,1.90,beam,p.wood);
-      part(top?'pagodaCrown':'pagodaRoof',0,eave,0,ww*1.33,top?2.05:1.19,dd*1.33,b.snow?'#e6f0ef':'#7b8079',b.snow?p.solid:p.roofs);
+      // A tall Kyoto first storey has a timber frieze over the entrance.
+      // The closed drum follows the eave up to the next gallery.
+      const r=level.roof, bottom=(level.wallTop-y)/tower.scale, band=2.60-bottom;
+      for(const side of [-1,1]){
+        part('box',side*r.wallWidth/2,y+bottom+band/2,0,.14,band,r.wallDepth+.14,'#dfd4b9',p.workshopArt.clay);
+        part('box',0,y+bottom+band/2,side*r.wallDepth/2,r.wallWidth+.14,band,.14,'#dfd4b9',p.workshopArt.clay);
+        for(const height of [bottom,2.60]){
+          part('box',side*r.wallWidth/2,y+height,0,.21,.12,r.wallDepth+.20,beam,p.wood);
+          part('box',0,y+height,side*r.wallDepth/2,r.wallWidth+.20,.12,.21,beam,p.wood);
+        }
+        if(band>.65){
+          const mid=y+bottom+band*.46;
+          part('box',side*r.wallWidth/2,mid,0,.19,.085,r.wallDepth+.16,beam,p.wood);
+          part('box',0,mid,side*r.wallDepth/2,r.wallWidth+.16,.085,.19,beam,p.wood);
+        }
+        if(band>.65) for(let k=-2;k<=2;k++){
+          part('box',side*r.wallWidth/2,y+bottom+band/2,r.wallDepth*k*.245,.18,band,.10,beam,p.wood);
+          part('box',r.wallWidth*k*.245,y+bottom+band/2,side*r.wallDepth/2,.10,band,.18,beam,p.wood);
+        }
+      }
+      part(top?'pagodaCrownWalls':j?'pagodaWalls':'pagodaFootWalls',0,eave,0,r.width,r.rise/tower.scale,r.depth,
+        '#c7b79a',p.workshopArt.clay);
+      part(top?'pagodaCrown':'pagodaRoof',0,eave,0,r.width,r.rise/tower.scale,r.depth,
+        b.snow?'#e6f0ef':'#7b8079',b.snow?p.solid:p.roofs);
     }
     const apex=tower.storeys[4].y+4.64;
     part('round',0,apex+1.61,0,.088,3.38,.088,'#565747',p.bronze);

@@ -1,6 +1,6 @@
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
-import { HIGASHIYAMA, KITAYAMA, FIRE_COAST, eastRidgeHeight, northRidgeHeight, inFireMeadow } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, FIRE_COAST, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
@@ -10,7 +10,7 @@ import { CEDAR_GROVES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimage
 import { TRADE_ROADS } from './trade-routes.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
-import { roomPlan, pagodaPlan, roofForm, roofProfile } from './architecture.js';
+import { roomPlan, pagodaPlan, roofForm, roofProfile, houseRoof, roofSkinDepth, roofWallContacts } from './architecture.js';
 // Coordinates and dimensions are metres. Positive Z is south.
 const ORIGINAL_BOUND = 416;
 export const BOUND = WORLD_BOUND,
@@ -124,7 +124,7 @@ function outerHeight(x,z,base) {
   if (originalShore(x,z)<22 && shore> -3.3) {
     const rolls=4.8+2.2*sin(x*.025+z*.008)*cos(z*.021)
       + 1.35*cos(x*.013-z*.018)+1.10*sin(x*.043+z*.039);
-    const hills=rolls + eastRidgeHeight(x,z) + northRidgeHeight(x,z)
+    const hills=rolls + eastRidgeHeight(x,z) + northRidgeHeight(x,z) + westRidgeHeight(x,z)
       + 18*hill(x,z,-89,-592,101,91) + 22*hill(x,z,184,-694,74,69)
       + 26*hill(x,z,-563,-198,87,46) + 18*hill(x,z,-451,-80,72,39) + 6.4*hill(x,z,-240,-84,28,27)
       + 25*hill(x,z,219,556,64,89) + 32*hill(x,z,382,677,84,81)
@@ -233,13 +233,13 @@ export function terrainHeight(x,z) {
 // Root a plant on the actual painted triangle. Across the crease of a rocky
 // spur the analytic surface can differ visibly from its sampled vertices.
 const groundSpacing=2*BOUND/(TERRAIN_TILES*TERRAIN_SUBDIVISIONS);
-export function terrainMeshHeight(x,z) {
+export function terrainMeshHeight(x,z,heightAt=terrainHeight) {
   const left=Math.floor((x+BOUND)/groundSpacing)*groundSpacing-BOUND;
   const north=Math.floor((z+BOUND)/groundSpacing)*groundSpacing-BOUND;
   const u=(x-left)/groundSpacing,v=(z-north)/groundSpacing;
-  const east=terrainHeight(left+groundSpacing,north),south=terrainHeight(left,north+groundSpacing);
-  return u+v<=1 ? terrainHeight(left,north)*(1-u-v)+east*u+south*v :
-    terrainHeight(left+groundSpacing,north+groundSpacing)*(u+v-1)+east*(1-v)+south*(1-u);
+  const east=heightAt(left+groundSpacing,north),south=heightAt(left,north+groundSpacing);
+  return u+v<=1 ? heightAt(left,north)*(1-u-v)+east*u+south*v :
+    heightAt(left+groundSpacing,north+groundSpacing)*(u+v-1)+east*(1-v)+south*(1-u);
 }
 // Street processions follow the stone walking level beneath the gatehouse.
 export function roadSurfaceHeight(x,z) {
@@ -764,6 +764,53 @@ for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
       form:family*TREE_FORMS_PER_FAMILY+i%4,seed:(east?181033:390901)+i*13});
   }
 }
+// Close ranks of sugi in sheltered ravines, oak on the lower skirts, and
+// shorter wind-shaped red pines above. The openings between these copses
+// expose the rock underneath, including the cut grass around 大 and 福.
+{
+  const spacing=new Map(),cell=(x,z)=>Math.floor(x/12)*512+Math.floor(z/12);
+  function remember(t) {
+    const key=cell(t.x,t.z);
+    if(!spacing.has(key))spacing.set(key,[]);
+    spacing.get(key).push(t);
+  }
+  TREES.forEach(remember);
+  function occupied(x,z,gap) {
+    const key=cell(x,z);
+    for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++)
+      if(spacing.get(key+i*512+j)?.some(t=>(t.x-x)**2+(t.z-z)**2<gap*gap))return true;
+    return false;
+  }
+  for(const [centre,height,seed,width,depth] of [
+    [HIGASHIYAMA,eastRidgeHeight,7709,470,540],
+    [KITAYAMA,northRidgeHeight,4093,520,450],
+    [NISHIYAMA,westRidgeHeight,2837,314,295],
+  ]){
+    const plant=seeded(seed);
+    for(let grove=0;grove<220;grove++){
+      const cx=centre.x+(plant()-.53)*width,cz=centre.z+(plant()-.50)*depth;
+      const rise=height(cx,cz);
+      if(rise<8)continue;
+      const hx=height(cx+2,cz)-height(cx-2,cz),hz=height(cx,cz+2)-height(cx,cz-2);
+      const angle=Math.atan2(hz,hx)+plant()*.48-.24,c=cos(angle),s=sin(angle);
+      const exposed=rise>91 || (rise>54 && hx+hz>1.3);
+      const family=exposed?(plant()<.78?1:0):rise<43 && plant()<.52?13:plant()<.64?2:3;
+      const length=13+plant()*29,breadth=6+plant()*13,gap=exposed?6:4.6;
+      for(let i=0;i<18;i++){
+        const az=plant()*Math.PI*2,rad=Math.sqrt(plant());
+        const u=cos(az)*length*rad,v=sin(az)*breadth*rad;
+        const x=cx+u*c-v*s,z=cz+u*s+v*c;
+        if(height(x,z)<6 || occupied(x,z,gap) || inFireMeadow(x,z) ||
+           shoreDistance(x,z)<10 || nearRoad(x,z,4.5) || protectedDistrict(x,z) || reservedScenery(x,z))continue;
+        const kind=plant()<.16?(exposed?9:12):family;
+        const h=(exposed?4.8:6.3)+plant()*(exposed?4.2:5.5)+1.6*(1-rad);
+        const tree={x,z,h,kind:TREE_FAMILIES[kind][0],form:kind*TREE_FORMS_PER_FAMILY+Math.floor(plant()*4),
+          seed:seed*1000+grove*18+i};
+        TREES.push(tree);remember(tree);
+      }
+    }
+  }
+}
 // These shrine cedars use the same forked trunks, needle sprays and moving
 // crowns as the surrounding woodland. A clear strip follows every gate.
 for(const [i,t] of CEDAR_GROVES.entries()) {
@@ -867,7 +914,15 @@ for (const b of BUILDINGS) {
   function localSolid(u, v, width, depth, height, kind, support, bottom=-Infinity) {
     const x = b.x + u * cos(b.yaw) + v * sin(b.yaw);
     const z = b.z - u * sin(b.yaw) + v * cos(b.yaw);
-    putSolid(x, z, width / 2, depth / 2, b.yaw, b.y + height, kind, support,0,b.y+bottom);
+    return putSolid(x, z, width / 2, depth / 2, b.yaw, b.y + height, kind, support,0,b.y+bottom);
+  }
+  function closedRoof(r,wallBottom) {
+    const sheet=localSolid(0,0,r.width,r.depth,r.eave,r.form==='pagoda'?'pagodaEave':'roof',true);
+    sheet.form=r.form;sheet.aperture=r.aperture;sheet.roofRise=r.rise;
+    sheet.thickness=roofSkinDepth(r.form)*r.rise;
+    roofWallContacts(r,(u,v,w,d)=>{
+      localSolid(u,v,w,d,r.eave,'roofWall',false,wallBottom).sheet=sheet;
+    });
   }
   localSolid(0, 0, b.w + 1.1, b.d + 1.08, 0.42, 'floor', true);
   localSolid(0, 0, plan.width, plan.depth, plan.floor, 'floor', true);
@@ -875,6 +930,8 @@ for (const b of BUILDINGS) {
     localSolid(0, b.d / 2 + 0.48 + j * 0.39, b.w * 0.48, 0.46, 0.32 - j * 0.19, 'floor', true);
   for (const wall of plan.walls)
     localSolid(wall.u, wall.v, wall.width, wall.depth, plan.ceiling, 'wall', false);
+  if(b.kind!=='wardShop')
+    localSolid(0,plan.depth/2,plan.width+.12,.28,plan.ceiling+.04,'slab',true,plan.ceiling-.18);
   if (b.kind === 'pagoda') {
     const tower=pagodaPlan(b);
     for(const wall of tower.panels)
@@ -882,17 +939,32 @@ for (const b of BUILDINGS) {
     for (const tread of tower.slabs)
       localSolid(tread.u,tread.v,tread.w,tread.d,tread.top,'slab',true,tread.top-tread.thickness);
     for (const [i,storey] of tower.storeys.entries()) {
-      const {y,w,d}=storey, eave=y+2.60*tower.scale, cap=i===4;
-      const outerW=w*1.33, outerD=d*1.33;
-      // The lower eaves shelter the outer gallery; the central well is open.
-      const roof=putSolid(b.x,b.z,outerW/2,outerD/2,b.yaw,b.y+eave,'pagodaEave',true,(cap?2.05:1.19)*tower.scale);
-      roof.aperture=cap?.052:.51;
+      const {y,w,d,roof,wallTop}=storey;
+      closedRoof(roof,wallTop);
+      // Timber uprights and two continuous gallery rails are distinct from
+      // the four cardinal openings in the wall around the staircase.
+      for(const side of [-1,1]){
+        for(const corner of [-1,1])
+          localSolid(side*w*.413,corner*d*.414,.206,.206,y+2.52*tower.scale,'oval',false,y);
+        if(i) for(const lift of [.24,.67]){
+          const top=y+(lift+.0475)*tower.scale, bottom=y+(lift-.0475)*tower.scale;
+          localSolid(side*w*.48,0,.09,d*.98,top,'slab',true,bottom);
+          localSolid(0,side*d*.48,w*.98,.09,top,'slab',true,bottom);
+        }
+      }
       localSolid(0,0,.19,1.9,y+2.66*tower.scale,'ceiling',false);
+      if(i===4){
+        const apex=y+4.64*tower.scale;
+        localSolid(0,0,.176,.176,apex+3.91*tower.scale,'oval',false,apex-.09*tower.scale);
+        for(let j=0;j<9;j++){
+          const diameter=2*(.49-j*.035),height=apex+(.26+j*.28)*tower.scale;
+          localSolid(0,0,diameter,diameter,height+.0415*tower.scale,'oval',false,height-.0415*tower.scale);
+        }
+      }
     }
   } else {
     localSolid(0, 0, b.w * 1.08, b.d * 1.08, plan.ceiling, 'ceiling', false);
-    const roof = putSolid(b.x, b.z, b.w * 0.62, b.d * 0.64, b.yaw, b.y + b.wall + 0.29, 'roof', true, b.roof);
-    roof.form = roofForm(b);
+    closedRoof(houseRoof(b.w,b.d,b.wall+.29,b.roof,roofForm(b)),plan.ceiling);
     for (const cap of [plan.porch, plan.monitor]) {
       if (!cap) continue;
       const cx=b.x+cap.u*b.cos+cap.v*b.sin, cz=b.z-cap.u*b.sin+cap.v*b.cos;
@@ -906,7 +978,7 @@ for (const b of BUILDINGS) {
       awning(b.d/2+.15,b.w*1.01,1.29,2.90,.36);
       if (b.wall>5) {
         awning(b.d/2+.13,b.w+.20,.79,4.29,.25);
-        localSolid(0,b.d/2,b.w,.16,5.64,'wall',false,3.38);
+        localSolid(0,b.d/2,b.w,.16,b.wall,'wall',false,3.38);
       }
     }
     if(b.kind==='wardShop' && b.wall>5)for(const q of wardFloorPlan(b).slabs)
@@ -1029,6 +1101,7 @@ function surfaceHeight(s, x, z, pad) {
   }
   if (abs(a) > s.rx + pad || abs(b) > s.rz + pad) return -Infinity;
   if (pad > 0 && max(0,abs(a)-s.rx)**2 + max(0,abs(b)-s.rz)**2 > pad*pad) return -Infinity;
+  if (s.kind === 'roofWall') return surfaceHeight(s.sheet,x,z,pad);
   if (s.kind === 'roof' || s.kind === 'pagodaEave') {
     const h = roofProfile(s.kind === 'pagodaEave' ? 'pagoda' : s.form,
       a/s.rx,b/s.rz,s.aperture,pad/s.rx,pad/s.rz);

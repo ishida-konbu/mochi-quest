@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
-import { eastRidgeHeight, northRidgeHeight } from './higashiyama.js';
+import { kyoRidgeHeight } from './higashiyama.js';
 import { TREES, terrainHeight, wrapDelta } from './terrain.js';
 import { TREE_FORM_COUNT } from './forest-forms.js';
 import { forestGeometry, forestMaterial, forestTexture } from './forest-mesh.js';
@@ -19,7 +19,7 @@ export function* prepareForest(scene, clock) {
   const records = trees.map(t=>{
     totals[t.form]++;
     return {tree:t, ground:terrainHeight(t.x,t.z), rotation:t.seed*2.39996323,
-      range:eastRidgeHeight(t.x,t.z)+northRidgeHeight(t.x,t.z)>8?640:RANGE,
+      range:kyoRidgeHeight(t.x,t.z)>6?640:RANGE,
       tint:.86+(t.seed%131)*.0019};
   });
   const loader=new THREE.TextureLoader();

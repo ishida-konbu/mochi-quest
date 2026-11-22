@@ -1,5 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 import { SEAPORTS,PORT_BUILDINGS,DECK_Y,QUAY_Y,FIXED_BERTH,QUAY_CENTER,QUAY_LENGTH } from './seaport-layout.js';
+import { roofProfile } from './architecture.js';
 import { workshopFrame,inscriptionMaterial } from './civic-art.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { ROCKS,WATER_Y } from './terrain.js';
@@ -114,12 +115,12 @@ function quayLandmark(p,f,port){
   }
 }
 function warehouse(p,f,b){
-  const {u,v,w,d,i}=b,floor=QUAY_Y,high=i===0||i===5?5.1:3.2,front=v+d*.5;
+  const {u,v,w,d,i,high,roof:frame}=b,floor=QUAY_Y,front=v+d*.5;
   const brown=b.p.id==='sakai'?'#a58a68':'#8a806b',roof=i===0||i===2||i===5?p.roofs:p.thatch;
   f.put('box',u,floor-.13,v,w+.35,.30,d+.34,'#a8a395',p.masonry);
   f.put('box',u,floor+.035,v,w,.15,d,'#b29b79',p.deck);
   for(const side of [-1,1]){
-    f.put('box',u+side*w*.49,floor+high*.50,v,.16,high,d,'#b6a588',p.boarding);
+    f.put('box',u+side*w*.5,floor+high*.50,v,.16,high,d+.16,'#b6a588',p.boarding);
     f.put('box',u+side*w*.375,floor+high*.5,front,w*.25,high,.15,brown,p.boarding);
     for(let j=0;j<6;j++)f.put('box',u+side*(w*.26+w*.045*j),floor+high*.48,front+.10,.055,high*.81,.048,wood);
     for(let j=0;j<5;j++)f.put('box',u+side*w*.502,floor+high*.48,v+d*(j/4-.5),.13,high,.115,dark);
@@ -131,11 +132,26 @@ function warehouse(p,f,b){
     f.bar([u+side*w*.46,floor+high-.63,v+z],[u+side*(w*.49-.51),floor+high,v+z],.071,wood,p.wood,true);
   }
   f.put('box',u,floor+high-.10,front,w+.11,.28,.27,dark);
-  f.put('roof',u,floor+high+.10,v,w+1.22,2.07,d+1.44,i===5?'#777a6e':i===3?'#9c8063':'#8b806b',roof);
-  for(let j=0;j<9;j++)f.bar([u+w*(j/8-.5),floor+high-.10,front-.13],[u+w*(j/8-.5),floor+high+.10,front+.69],.052,wood,p.wood,true);
-  f.put('box',u,floor+high+2.15,v,w+1.23,.19,.25,'#656251',p.wood);
+  f.put('box',u,frame.eave-.08,v,w+.14,.16,d+.14,dark,p.deck);
+  f.put('gableWalls',u,frame.eave,v,frame.width,frame.rise,frame.depth,i===0||i===5?'#cdc2a9':'#b09b7d',p.boarding);
+  for(const side of [-1,1]){
+    // The visible gable braces land on the end wall and pass under the ridge.
+    const x=u+side*(w*.5+.045);
+    f.put('box',x,frame.eave+.49*frame.rise,v,.13,frame.rise,.15,wood,p.wood);
+    for(const end of [-1,1]) f.bar([x,frame.eave+.05,v+end*d*.32],
+      [x,frame.eave+frame.rise*.69,v],.090,dark,p.wood,true);
+  }
+  f.put('roof',u,frame.eave,v,frame.width,frame.rise,frame.depth,i===5?'#777a6e':i===3?'#9c8063':'#8b806b',roof);
+  for(const side of [-1,1]) for(let j=-4;j<=4;j++){
+    const dx=w*j/8,under=frame.eave+frame.rise*(roofProfile('gable',dx*2/frame.width,1)-.04);
+    f.bar([u+dx,frame.eave-.10,v+side*d*.49],[u+dx,under,v+side*frame.depth*.49],.08,wood,p.wood,true);
+  }
+  f.put('box',u,floor+high+2.15,v,frame.width*.87,.19,.25,'#656251',p.wood);
   const tall=high>4;
   if(tall){
+    const sill=floor+2.88;
+    f.put('box',u,(sill+floor+high)/2,front,w*.53,floor+high-sill,.16,brown,p.boarding);
+    f.put('box',u,sill,front,w*.57,.15,.24,dark,p.wood);
     for(let j=0;j<5;j++){
       const x=u+w*(j-2)*.159;
       f.put('box',x,floor+high-.92,front+.054,w*.106,.92,.13,'#5e5849',p.deck);

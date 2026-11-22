@@ -6,7 +6,7 @@ import { SEAPORTS, PORT_BUILDINGS, QUAY_CENTER, QUAY_LENGTH, portPoint } from '.
 import { SEAWAYS, FLEET, vesselPose } from './ocean-voyage.js';
 import { CHAYA_SITES } from './wayside-hut-layout.js';
 import { COURT } from './retreat-layout.js';
-import { HIGASHIYAMA, KITAYAMA } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, westRidgeHeight } from './higashiyama.js';
 import { RASHOMON, GATE_STONE, GATE_STONE_APRONS, GATE_STONE_STEPS, GATE_WING } from './kyo-layout.js';
 import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
 const SIZE = 2048, SPAN = 2 * BOUND, adj = SIZE / SPAN;
@@ -22,7 +22,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=peach-gorge', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=kyoto-woodlands', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -68,7 +68,7 @@ export function paintMapPaper() {
   for (let j=0;j<cells;j++) for (let i=0;i<cells;i++) {
     const x=i*step-BOUND,z=j*step-BOUND,idx=j*stride+i;
     const a=heights[idx], b=heights[idx+stride+1];
-    const inRanges=(x>peach.west && x<peach.east && z>peach.north && z<peach.south) ||
+    const inRanges=westRidgeHeight(x,z)>3 || (x>peach.west && x<peach.east && z>peach.north && z<peach.south) ||
       z<DISTRICTS.kyo.z+140 && (Math.abs(x-KITAYAMA.x)<380 && z<DISTRICTS.kyo.z-75 ||
       Math.abs(z-HIGASHIYAMA.z)<320 && x>DISTRICTS.kyo.x+115);
     if (a < WATER_Y) {

@@ -1,3 +1,4 @@
+import { houseRoof, roofWallContacts, roofSkinDepth } from './architecture.js';
 // Local +v points to sea. The shore terrace, landings and timber decks share
 // surveyed elevations so a visitor can walk from the market to either vessel.
 const pi=Math.PI;
@@ -48,7 +49,9 @@ for (const p of SEAPORTS) {
   const lots=[[-31,-1,12.3,7.8],[-15,-1,9.5,6.2],[9.5,-1,12.5,7.0],[28,-2,10,6.0],[-31,-17,11,7.8],[-12,-17,15.4,8.1],[8,-17,10.6,6.5],[26,-17,12.4,7.7]];
   lots.forEach(([u,v,w,d],i)=>{
     const [x,z]=portPoint(p,u,v);
-    PORT_BUILDINGS.push({p,u,v,w,d,kind:types[i],i,x,z});
+    const high=i===0||i===5?5.1:3.2;
+    const roof=houseRoof(w,d,QUAY_Y+high+.10,2.07,'gable');
+    PORT_BUILDINGS.push({p,u,v,w,d,high,roof,kind:types[i],i,x,z});
   });
 }
 export function portSolids(put){
@@ -71,14 +74,28 @@ export function portSolids(put){
       for(let i=0;i<32;i++)box(u,6.4+i*.49,2.85,.52,QUAY_Y+(DECK_Y-QUAY_Y)*i/31,'slab',true,QUAY_Y+(DECK_Y-QUAY_Y)*i/31-.22);
     }
     for(const b of PORT_BUILDINGS.filter(q=>q.p===p)){
-      const {u,v,w,d,i}=b,base=QUAY_Y,high=i===0||i===5?5.1:3.2;
-      box(u,v,w,d,base+.10);
-      for(const side of [-1,1])box(u+w*.488*side,v,.17,d,base+high,'wall',false);
-      box(u,v-d*.48,w,.17,base+high,'wall',false);
-      for(const side of [-1,1])box(u+side*w*.376,v+d*.48,w*.25,.17,base+high,'wall',false);
-      box(u,v,w+.9,d+.8,base+high,'ceiling',false);
-      box(u,v,w+1.22,d+1.44,base+high+.10,'roof',true).roofRise=2.07;
-      if (high>4) box(u,v+d/2+.22,w+.5,2.25,base+2.63,'roof',true).roofRise=.54;
+      const {u,v,w,d,high,roof}=b,base=QUAY_Y;
+      box(u,v,w,d,base+.11);
+      for(const side of [-1,1])box(u+w*.5*side,v,.16,d+.16,base+high,'wall',false);
+      box(u,v-d*.5,w,.16,base+high,'wall',false);
+      for(const side of [-1,1])box(u+side*w*.375,v+d*.5,w*.25,.15,base+high,'wall',false);
+      box(u,v+d*.5,w+.11,.27,base+high+.04,'slab',true,base+high-.24);
+      box(u,v,w+.14,d+.14,roof.eave,'slab',true,base+high-.06);
+      const sheet=box(u,v,roof.width,roof.depth,roof.eave,'roof',true);
+      sheet.roofRise=roof.rise;sheet.thickness=roofSkinDepth(roof.form)*roof.rise;
+      roofWallContacts(roof,(dx,dz,width,depth)=>{
+        const wall=box(u+dx,v+dz,width,depth,roof.eave,'roofWall',false,base+high-.06);
+        wall.sheet=sheet;
+      });
+      const front=v+d/2;
+      if(high>4){
+        box(u,front,w*.53,.16,base+high,'wall',false,base+2.88-.075);
+        box(u,front+.22,w+.5,2.25,base+2.63,'roof',true).roofRise=.54;
+      }
+      // Keep the centre aisle clear beside the shop tables, just as on the quay.
+      if(b.i===5) box(u,v,2.15,.90,base+.57,'slab',true,base+.45);
+      else if(b.i===2) box(u+w*.29,front-1.53,2.19,.91,base+.885,'slab',true,base+.755);
+      else if(![0,7].includes(b.i)) box(u,front-.43,3.05,.83,base+1.03,'slab',true,base+.89);
     }
   }
 }

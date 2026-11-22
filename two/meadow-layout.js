@@ -1,33 +1,53 @@
 import { WAYSIDE_SITES,inHutYard } from './wayside-hut-layout.js';
 import { SEAPORTS,portReserved } from './seaport-layout.js';
+import { HERBS, HERB_FORMS } from './meadow-herbs.js';
 // One repeatable planting plan per 26 m square. All coordinates here are canonical.
 import { RASHOMON, GATE_STONE, GATE_WING, gateStoneRise } from './kyo-layout.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { COURT, RETREATS, reservedScenery } from './retreat-layout.js';
 import { scrollCoverage } from './scroll-paper.js';
-import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, MARKET_STALLS, ROCKS, REGIONS, WATER_Y,
-  nearRoad, seeded, seasonAt, shoreDistance, riverZ, riverHalfWidth, terrainHeight } from './terrain.js';
+import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, MARKET_STALLS, ROCKS, REGIONS, TREES, WATER_Y,
+  nearRoad, seeded, seasonAt, shoreDistance, riverZ, riverHalfWidth, terrainHeight, terrainMeshHeight } from './terrain.js';
 
 export const MEADOW_TILES = 122;
 export const MEADOW_TILE = 2 * BOUND / MEADOW_TILES;
-const rows = 29;
+const rows = 31;
 const {abs, sin, cos, floor, hypot} = Math;
 
-// The integer codes are the rows in the botanical atlas. Multiplicity controls
-// which plants form the matrix around the occasional flowering patches.
+// Common companions occupy the open spaces between colonies of the dominant species.
 const flora = {
-  meadow: [0,0,0,1,1,2,6,6,7,8,9,10],
-  bank:   [1,1,1,2,2,3,4,5,11],
-  wood:   [0,2,4,4,4,5,5,6,8,11],
-  autumn: [0,1,2,2,2,4,7,8,9,11],
-  coast:  [0,0,1,1,1,2,3,6,7,10],
-  snow:   [0,1,1,2,2,3,7,11],
-  moon:   [0,1,1,2,2,2,3,6,9,11],
+  meadow: [0,0,0,1,1,6,6,7,8,9,10,16,17,18],
+  bank:   [1,1,1,2,3,3,4,5,11,13,14,14],
+  wood:   [0,4,4,4,5,5,8,12,12,13,13,17],
+  ridge:  [0,0,1,2,2,7,9,10,12,12,15,16],
+  autumn: [0,1,2,2,2,4,7,9,12,15,15,16],
+  coast:  [0,0,1,1,1,2,2,6,10,19,19,19],
+  snow:   [0,1,1,2,2,2,12,12,17],
+  moon:   [0,1,2,2,2,2,6,9,10,15,15,16],
 };
-const heightScale = [.43,.55,.74,.67,.56,.38,.26,.38,.40,.45,.35,.47];
-const widthScale  = [1.55,1.34,1.08,1.02,1.5,1.68,1.65,1.3,1.37,1.28,1.53,1.18];
+
+const spreading=new Set([0,1,2,4,5,6,12,13,17,19]);
 
 function tileKey(x,z) { return floor((x + BOUND) / MEADOW_TILE) * MEADOW_TILES + floor((z + BOUND) / MEADOW_TILE); }
+
+// A crown can shelter seedlings on either side of a streaming tile boundary.
+const shadeCells=new Map();
+const shadeKey=(i,j)=>i*1024+j;
+for(const tree of TREES){
+  const reach=tree.h*.44+1.3, crown={x:tree.x,z:tree.z,r2:reach*reach};
+  for(let i=floor((tree.x-reach)/8);i<=floor((tree.x+reach)/8);i++){
+    for(let j=floor((tree.z-reach)/8);j<=floor((tree.z+reach)/8);j++){
+      const key=shadeKey(i,j);
+      if(!shadeCells.has(key))shadeCells.set(key,[]);
+      shadeCells.get(key).push(crown);
+    }
+  }
+}
+
+function colonySeed(i,j){
+  const hash=Math.imul(i,73856093)^Math.imul(j,19349663);
+  return Math.imul(hash^(hash>>>16),1597334677)>>>0;
+}
 
 export function meadowExclusions(objects,residents=[]) {
   const clearings = new Map();
@@ -75,33 +95,68 @@ export function meadowExclusions(objects,residents=[]) {
 // Each plant is emitted once, independent of camera, travel direction and budgets.
 export function visitMeadowTile(i,j,clearings,visit) {
   const rng=seeded((i+1)*44017 ^ (j+8)*52973), x0=i*MEADOW_TILE-BOUND,z0=j*MEADOW_TILE-BOUND;
-  // Skip deep-water tiles before sampling 841 individual plants.
+  // Discard deep sea before surveying the individual roots.
   if(shoreDistance(x0+MEADOW_TILE/2,z0+MEADOW_TILE/2) < -MEADOW_TILE) return 0;
   const masks=clearings.get(tileKey(x0+1,z0+1))||[];
-  const scroll=scrollCoverage(x0+MEADOW_TILE/2,z0+MEADOW_TILE/2);
+  // Blend the open paper near processions continuously into surrounding fields.
+  const nw=scrollCoverage(x0,z0),ne=scrollCoverage(x0+MEADOW_TILE,z0);
+  const sw=scrollCoverage(x0,z0+MEADOW_TILE),se=scrollCoverage(x0+MEADOW_TILE,z0+MEADOW_TILE);
+  // Adjacent stems share three lattice samples on the rendered ground.
+  const lattice=new Map();
+  function heightAt(x,z){
+    const key=x*65536+z;
+    if(!lattice.has(key))lattice.set(key,terrainHeight(x,z));
+    return lattice.get(key);
+  }
   const season={}; let count=0;
   for (let a=0;a<rows;a++) for (let b=0;b<rows;b++) {
     const x=x0+(a+.05+.9*rng())*MEADOW_TILE/rows, z=z0+(b+.05+.9*rng())*MEADOW_TILE/rows;
-    if (shoreDistance(x,z)<3 || nearRoad(x,z,.08) || masks.some(f=>f(x,z))) continue;
-    const y=terrainHeight(x,z);
+    const uTile=(x-x0)/MEADOW_TILE,vTile=(z-z0)/MEADOW_TILE;
+    const scroll=(nw+(ne-nw)*uTile)*(1-vTile)+(sw+(se-sw)*uTile)*vTile;
+    const shore=shoreDistance(x,z);
+    if (shore<3 || nearRoad(x,z,.13) || masks.some(f=>f(x,z))) continue;
+    const y=terrainMeshHeight(x,z,heightAt);
     if (y<WATER_Y+.13) continue;
     seasonAt(x,z,season);
     const wave=sin(x*.177+2*sin(z*.127))+cos(z*.199+x*.071)+sin(z*.048-x*.125);
     // Draw separated banks of grass. Bare paper around the animal groups
     // shows the feet, instruments and the space between two facing figures.
-    const cover=(.79+wave*.069-season.snow*.53)*(1-scroll*(.225-.20*wave));
+    const cover=(.83+wave*.078-season.snow*.57)*(1-scroll*(.21-.19*wave));
     if (rng()>cover) continue;
-    const wet=abs(z-riverZ(x))-riverHalfWidth(x)<9, coast=shoreDistance(x,z)<26;
-    const palette=season.snow>.50?'snow':wet?'bank':season.moon>.49?'moon':season.autumn>.43?'autumn':
-      coast||season.dawn>.53?'coast':(wave<-.55 || (x < -86 && z < -53))?'wood':'meadow';
+    const wet=x>-250 && x<380 && y<9 && abs(z-riverZ(x))-riverHalfWidth(x)<9;
+    const coast=shore<27;
+    const crowns=shadeCells.get(shadeKey(floor(x/8),floor(z/8)));
+    const shadeTree=crowns?.some(c=>(x-c.x)**2+(z-c.z)**2<c.r2);
+    const palette=season.snow>.50?'snow':wet?'bank':coast?'coast':shadeTree?'wood':
+      season.moon>.49?'moon':season.autumn>.43?'autumn':y>32?'ridge':'meadow';
     const list=flora[palette];
-    // Colonies share a dominant herb; separate sprouts vary in age, spread and tilt.
-    const bed=floor((sin(x*.080+cos(z*.102)*1.4)+cos(z*.109+x*.033)+2)*71);
-    const family=list[rng()<.64 ? bed%list.length : floor(rng()*list.length)];
-    const form=floor(rng()*5), size=(.58+rng()*.79)*(1+wave*.039)*(1-season.snow*.36)*(1-scroll*(.35-.085*wave));
-    const height=size*heightScale[family], width=height*widthScale[family]*(.86+rng()*.36);
-    const shade=.72+.26*rng(), hue=season.snow*.99+season.autumn*.29+season.moon*.11+(palette==='coast'?.16:0)+scroll*.14;
-    visit(x,y-.038,z,width,height,rng()*Math.PI*2,family*5+form,shade,hue);
+    // Colonies have a coherent centre. The edges dissolve into shorter grass
+    // and scattered companions, with boundaries that run across streaming tiles.
+    const u=x*.106+.27*sin(z*.16)+.31*cos((x+z)*.086), v=z*.121+.37*cos(x*.13-z*.05);
+    const cellX=floor(u),cellZ=floor(v),bed=colonySeed(cellX,cellZ);
+    const dx=u-cellX-.5,dz=v-cellZ-.5;
+    const centre=Math.max(0,1-3.65*(dx*dx+dz*dz));
+    const dominant=rng()<centre*.89;
+    const family=list[dominant ? bed%list.length : floor(rng()*list.length)];
+    const form=floor(rng()*HERB_FORMS);
+    const size=(.55+rng()*.66+centre*.23)*(1+wave*.048)*(1-season.snow*.40)*(1-scroll*(.27-.06*wave));
+    const [,stature,spread]=HERBS[family],height=size*stature,width=height*spread*(.84+rng()*.38);
+    const shade=(shadeTree ? .74 : .80)+.23*rng(), hue=season.snow+season.autumn*.34+season.moon*.14+(coast ? .13 : 0)+scroll*.10;
+    const angle=dominant ? (bed%997)*.0063+(rng()-.5)*2.20 : rng()*Math.PI*2;
+    visit(x,y-.022,z,width,height,angle,family*HERB_FORMS+form,shade,hue);
+    count++;
+    // Rhizomes and stolons send up younger shoots a handspan from the parent.
+    // These give the dense beds knots of stems and open paper between them.
+    if(!spreading.has(family) || rng()>.10+centre*.32)continue;
+    const bearing=angle+(rng()-.5)*3.4,step=.14+rng()*.36;
+    const sx=x+cos(bearing)*step,sz=z+sin(bearing)*step;
+    if(sx<x0 || sx>=x0+MEADOW_TILE || sz<z0 || sz>=z0+MEADOW_TILE)continue;
+    const localShore=shoreDistance(sx,sz);
+    if(localShore<3 || (family===19 && localShore>=27) || nearRoad(sx,sz,.13) || masks.some(f=>f(sx,sz)))continue;
+    const sy=terrainMeshHeight(sx,sz,heightAt);
+    if(sy<WATER_Y+.13)continue;
+    const young=.45+rng()*.30;
+    visit(sx,sy-.022,sz,width*young*.91,height*young,bearing,family*HERB_FORMS+floor(rng()*2),shade*.98,hue);
     count++;
   }
   return count;

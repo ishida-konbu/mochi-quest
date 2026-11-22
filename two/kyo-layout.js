@@ -1,5 +1,5 @@
 import { districtPoint, DISTRICTS, DISTRICT_SHIFT } from './geography.js';
-import { HIGASHIYAMA, KITAYAMA } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, NISHIYAMA } from './higashiyama.js';
 import { COURT, COURT_GATE_Z, COURT_PRECINCT } from './retreat-layout.js';
 
 // The main avenue is kept open from the southern gate right up to the hillside fires.
@@ -174,7 +174,8 @@ export function kyoInfluence(x,z) {
   // the northern watershed and the shrine south of the capital have their own light.
   const east=Math.hypot((x-HIGASHIYAMA.x+145)/310,(z-HIGASHIYAMA.z)/175);
   const north=Math.hypot((x-KITAYAMA.x)/171,(z-KITAYAMA.z-145)/310);
-  return 1 - smooth(.52, 1.08, Math.min(urban,east,north));
+  const west=Math.hypot((x-NISHIYAMA.x-147)/300,(z-NISHIYAMA.z)/136);
+  return 1 - smooth(.52, 1.08, Math.min(urban,east,north,west));
 }
 // Daylight, the curfew, the night watch and both mountains use this noon-to-noon period.
 export const KYO_DAY_SECONDS = 288;

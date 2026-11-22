@@ -5,6 +5,9 @@ import { DISTRICTS } from './geography.js';
 const city=DISTRICTS.kyo;
 export const HIGASHIYAMA={x:city.x+380,z:city.z};
 export const KITAYAMA={x:city.x-4,z:city.z-372};
+export const NISHIYAMA={x:city.x-327,z:city.z-13};
+// Geographic bounds of the single painted sheet, in metres from its NW corner.
+export const KYO_HILL_SHEET={x:-320,z:-1552,width:1216,depth:1056};
 
 // These coastal lobes meet beneath the long aprons, beyond the last visible
 // contour. The same shore survey feeds the sea, trekking and atlas painters.
@@ -35,7 +38,15 @@ function watershed(a,b,north) {
   const rightSpur=24*dome((a+108-.71*(b-116))/156,(b-119)/67);
   const gullies=10*dome((a+85)/142,(b+83+.34*a)/34)+
     8*dome((a+77)/137,(b-99-.30*a)/30);
-  const relief=mantle+crest+peak+left+right+leftSpur+rightSpur-gullies;
+  // Short, raked shoulders break the skyline beside the two mown firebeds.
+  // The two divides have different rock strikes and side valleys.
+  const shear=a+(north?.31:-.24)*b;
+  const shoulders=north
+    ? 25*dome((shear+18)/82,(b-113)/51)+16*dome((shear-38)/67,(b+169)/38)
+      -10*dome((shear+49)/93,(b+206)/29)
+    : 22*dome((shear-9)/76,(b+113)/52)+19*dome((shear+62)/93,(b-168)/43)
+      -13*dome((shear+24)/90,(b+160)/39);
+  const relief=mantle+crest+peak+left+right+leftSpur+rightSpur-gullies+shoulders;
   // Slight discontinuities in the beds show in grazing light, without
   // introducing steps in the meadow that holds the ceremonial brushstrokes.
   const folds=1+.016*Math.sin(.034*b+.017*a)*Math.cos(.025*a-.009*b);
@@ -44,6 +55,24 @@ function watershed(a,b,north) {
 
 export const eastRidgeHeight=(x,z)=>watershed(x-HIGASHIYAMA.x,z-HIGASHIYAMA.z,false);
 export const northRidgeHeight=(x,z)=>watershed(KITAYAMA.z-z,x-KITAYAMA.x,true);
+
+// A lower, overlapping pair of cedar ridges above the road to Sakai. Their
+// southern toes die out on the town side of the pass; the shore stays open.
+export function westRidgeHeight(x,z) {
+  const u=x-NISHIYAMA.x,v=z-NISHIYAMA.z;
+  if(u< -218 || u>250 || v< -209 || v>142)return 0;
+  const axis=u+.32*v+14*Math.sin(v*.021);
+  const ridge=84*dome(axis/174,(v+18)/190)
+    +22*dome((axis+9)/86,(v+41)/64)
+    +34*dome((u+80+.46*v)/98,(v+92)/97)
+    +46*dome((u-55+.34*v)/100,(v-28)/75)
+    +20*dome((u-86+.62*v)/106,(v+51)/45)
+    -9*dome((u-27+.47*v)/80,(v+12)/21);
+  const foot=Math.min(1,Math.max(0,(142-v)/50));
+  return Math.max(0,ridge)*foot*foot*(3-2*foot);
+}
+
+export const kyoRidgeHeight=(x,z)=>Math.max(eastRidgeHeight(x,z),northRidgeHeight(x,z),westRidgeHeight(x,z));
 
 export function inFireMeadow(x,z) {
   function clearing(along,across,rise,minimum,width){

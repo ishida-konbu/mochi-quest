@@ -1,3 +1,4 @@
+import { groundPrintGLSL } from './ground-print.js';
 import { mountainFires } from './mountain-fires.js';
 import { HIGASHIYAMA, KITAYAMA, eastRidgeHeight, northRidgeHeight, fukuFirebeds, daiFirebeds, inFireMeadow } from './higashiyama.js';
 import { createRashomon } from './rashomon.js';
@@ -253,66 +254,48 @@ function streetLamps(p,light){
 }
 
 // The two paved avenues share world-space UVs, so courses continue across the junction.
-export function kyoPavingMaterial() {
-  const rand=seeded(0x675e5a);
-  const stone=painted(768,512,(c,w,h)=>{
-    c.fillStyle='#aaa396';c.fillRect(0,0,w,h);
-    const palette=['#c6c3b5','#bdbbad','#bfc1b7','#c5bfae','#c0bcae','#c9c6b9'];
-    for(let j=0;j<8;j++){
-      const top=j*h/8;
-      let x=0;
-      while(x<w){
-        const end=Math.min(w,x+78+rand()*82);
-        const left=x+1, right=end-1, y=top+1.1, bottom=top+h/8-1.1;
-        const face=c.createLinearGradient(left,y,right,bottom);
-        const shade=palette[Math.floor(rand()*palette.length)];
-        face.addColorStop(0,shade);face.addColorStop(.65,shade);face.addColorStop(1,'#bcb9ab');
-        c.fillStyle=face;
-        c.beginPath();c.moveTo(left+3,y+rand()*1.3);c.lineTo(right-3,y);
-        c.lineTo(right,y+2);c.lineTo(right,bottom-2-rand()*2);c.lineTo(right-3,bottom);
-        c.lineTo(left+3,bottom);c.lineTo(left,bottom-4);c.lineTo(left,y+3);c.closePath();c.fill();
-        c.strokeStyle='rgba(247,240,212,.33)';c.lineWidth=1;
-        c.beginPath();c.moveTo(left+3,y+1);c.lineTo(right-4,y+1);c.stroke();
-        x=end;
-      }
-    }
-    for(let i=0;i<17000;i++){
-      c.fillStyle=i%3?'rgba(250,244,223,.16)':'rgba(62,61,54,.17)';
-      c.fillRect(rand()*w,rand()*h,.46+rand()*1.9,.55+rand()*2.0);
-    }
-    for(let i=0;i<180;i++){
-      const x=rand()*w,y=rand()*h;
-      c.strokeStyle=i%3?'rgba(252,242,217,.13)':'rgba(93,86,69,.14)';c.lineWidth=.8;
-      c.beginPath();c.moveTo(x,y);c.quadraticCurveTo(x+5,y-1,x+9+rand()*8,y-1.5);c.stroke();
-    }
-  },{transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2});
-  stone.map.wrapS=stone.map.wrapT=THREE.RepeatWrapping;
+export function kyoPavingMaterial(granite) {
+  const stone=new THREE.MeshLambertMaterial({map:granite,side:THREE.DoubleSide,
+    transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2});
+  stone.onBeforeCompile=shader=>{
+    shader.fragmentShader=groundPrintGLSL+shader.fragmentShader.replace('#include <map_fragment>',`
+      vec2 metres=vMapUv, dx=dFdx(metres),dy=dFdy(metres);
+      float weather=groundWash(metres*.13);
+      // An individual course meanders by a few millimetres. Joint positions
+      // are shared by the two neighbouring slabs, including at a crossroads.
+      float course=metres.y/.63+.047*groundWash(metres*.72);
+      float row=floor(course), along=metres.x/1.37+groundHash(vec2(row,3.)).x;
+      float i=floor(along+.35);
+      float seam=i+.70*(groundHash(vec2(i,row)).x-.5);
+      if(along<seam) i-=1.;
+      vec2 seed=groundHash(vec2(i,row));
+      float left=(along-i-.70*(seed.x-.5))*1.37;
+      float right=(i+1.+.70*(groundHash(vec2(i+1.,row)).x-.5)-along)*1.37;
+      vec2 within=vec2(min(left,right),.63*min(fract(course),1.-fract(course)));
+      float corner=min(within.x,within.y)+.012*min(1.,max(within.x,within.y)*15.);
+      vec3 fleck=textureGrad(map,metres*.62+seed,dx*.62,dy*.62).rgb;
+      float grain=dot(fleck,vec3(.30,.54,.16));
+      float aa=clamp(max(length(dx),length(dy))*.54,.001,.16);
+      float joint=(1.-smoothstep(.011-aa,.024+aa,corner+(grain-.3)*.013))/(1.+aa*17.);
+      float lip=1.-smoothstep(.006,.013+aa,abs(min(left,.63*fract(course))-.024));
+      vec3 slab=mix(vec3(.46,.446,.395),vec3(.624,.593,.506),seed.y);
+      slab=mix(slab,vec3(.43,.463,.424),weather*.21);
+      slab*=.86+.32*grain;
+      diffuseColor.rgb*=mix(slab+vec3(.033*lip),vec3(.245,.246,.210),joint*.85);
+    `);
+  };
   return stone;
 }
 
-// Clumps, rather than a repeating lawn, set the scale of the cut slopes.
-// Washes sit on the earth; broken shale outcrops and swaying susuki plumes
-// are drawn with the same tapered brush. The complete slope is one mesh.
+// Small tufts of cut susuki stand above the mountain painting on the two fire meadows.
 function hillsideInk(p,east,hearths) {
   const {x:cx,z:cz}=east?HIGASHIYAMA:KITAYAMA;
   const height=east?eastRidgeHeight:northRidgeHeight;
   const rand=seeded(east?66189:73462), positions=[],colors=[],indices=[];
-  const palette=['#5b5b41','#87815b','#aa9569','#c2ad80','#565c50','#8b8872','#a59e83'].map(c=>new THREE.Color(c));
+  const palette=['#716e55','#898264','#a29875','#cdbd91'].map(c=>new THREE.Color(c));
   const point=(a,b)=>[cx+(east?a:b),cz+(east?b:-a)];
   function vertex(x,y,z,ink){
     positions.push(x-cx,y,z-cz);colors.push(ink.r,ink.g,ink.b);
-  }
-  function brush(x,z,dx,dz,width,ink,curve,lift){
-    const len=Math.hypot(dx,dz),nx=-dz/len,nz=dx/len,base=positions.length/3;
-    for(let j=0;j<=5;j++){
-      const t=j/5,bow=Math.sin(t*Math.PI),w=width*(.041+.96*bow**.66);
-      const xx=x+dx*t+nx*curve*bow,zz=z+dz*t+nz*curve*bow;
-      for(const edge of [-w,w]){
-        const u=xx+nx*edge,v=zz+nz*edge;
-        vertex(u,terrainHeight(u,v)+.19+lift*bow,v,ink);
-      }
-      if(j<5){const k=base+j*2;indices.push(k,k+2,k+1,k+1,k+2,k+3);}
-    }
   }
   function susuki(x,z,size) {
     const y=terrainHeight(x,z)+.13;
@@ -335,37 +318,21 @@ function hillsideInk(p,east,hearths) {
       }
     }
   }
-  for(let i=0;i<1010;i++){
-    // Concentrate the brush on the open grade, with occasional sprays and
-    // ledges emerging between conifers on the lateral spurs.
-    const central=i<640;
-    const a=central?-245+rand()*231:(rand()-.53)*427,b=(rand()-.5)*(central?177:550);
-    const [x,z]=point(a,b),rise=height(x,z);
-    if(rise<8 || !central && inFireMeadow(x,z) && rand()<.5)continue;
-    if(hearths.some(([hx,,hz])=>(x-hx)**2+(z-hz)**2<8))continue;
-    const stone=Math.sin(b*.071+a*.037)+Math.cos(a*.099-b*.027)>.68 && rise>36;
-    // Runs of earth, rock and grass taper along the contour, rarely level.
-    const length=(stone?4.1:2.5)+rand()*(stone?9.5:6);
-    const across=length*(rand()<.5?-1:1),down=-length*(.16+rand()*.36);
-    const dx=east?down:across,dz=east?across:-down;
-    const w=stone?.36+rand()*.96:.48+rand()*1.23,curve=(rand()-.5)*2.5;
-    brush(x,z,dx,dz,w,palette[stone?4:1],curve,stone?.28:.07);
-    if(stone){
-      brush(x+.12,z+.13,dx*.81,dz*.81,w*.71,palette[5],curve*.85,.42);
-      for(let j=0;j<3;j++){
-        const t=rand()*.72;
-        brush(x+dx*t,z+dz*t,dx*.28+.10,dz*.28+.10,w*.14,palette[6],.19,.5);
-      }
-    }else{
-      for(let j=0;j<4;j++){
-        const t=rand();
-        susuki(x+t*dx+(rand()-.5)*1.2,z+t*dz+(rand()-.5)*1.2,.66+rand()*.72);
-      }
+  for(let i=0;i<735;i++){
+    const [x,z]=point(-253+rand()*248,(rand()-.5)*180);
+    if(!inFireMeadow(x,z) || height(x,z)<8 ||
+      hearths.some(([hx,,hz])=>(x-hx)**2+(z-hz)**2<12))continue;
+    const turn=rand()*TAU,dx=Math.cos(turn),dz=Math.sin(turn);
+    for(let j=0,count=2+Math.floor(rand()*5);j<count;j++){
+      const along=rand()*3.6,side=(rand()-.5)*1.25;
+      susuki(x+along*dx-side*dz,z+along*dz+side*dx,.48+rand()*.73);
     }
   }
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
   g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));g.setIndex(indices);g.computeVertexNormals();
-  g.userData.range=625;
+  // Individual blades project to a pixel here; the unique hill painting
+  // carries the grass beyond the close approach to the hearths.
+  g.userData.range=78;
   const name=east?'eastHillInk':'kyoHillInk';p.shapes[name]=g;
   const mat=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2});
   p.part(name,cx,0,cz,1,1,1,'#fff',0,0,0,mat,false,true);

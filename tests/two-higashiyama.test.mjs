@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DISTRICTS } from '../two/geography.js';
-import { HIGASHIYAMA, KITAYAMA, eastRidgeHeight, northRidgeHeight, fukuFirebeds, daiFirebeds, FIRE_DRAWINGS } from '../two/higashiyama.js';
-import { TREES, shoreDistance, solidHeightAt, terrainHeight } from '../two/terrain.js';
+import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, eastRidgeHeight, northRidgeHeight, westRidgeHeight, fukuFirebeds, daiFirebeds, FIRE_DRAWINGS } from '../two/higashiyama.js';
+import { CONNECTING_ROADS, TREES, shoreDistance, solidHeightAt, terrainHeight } from '../two/terrain.js';
 import { canopyHeight } from '../two/village-paths.js';
 
 for(const east of [true,false]){
@@ -24,6 +24,15 @@ for(const east of [true,false]){
     assert.ok(TREES.filter(t=>height(t.x,t.z)>10).length>175);
   });
 }
+
+test('the western divide rises over Kyoto and leaves the Sakai pass at its surveyed grade',()=>{
+  const {x,z}=NISHIYAMA;
+  assert.ok(terrainHeight(x,z)>90);
+  assert.ok(TREES.filter(t=>westRidgeHeight(t.x,t.z)>10).length>300);
+  for(const road of CONNECTING_ROADS)for(const [x,z] of road.points){
+    assert.equal(westRidgeHeight(x,z),0,road.destination);
+  }
+});
 
 test('the 福 and 大 firebeds make complete brushstrokes on terrain visible from street level',()=>{
   const city=DISTRICTS.kyo,eyeY=terrainHeight(city.x,city.z)+1.85;
