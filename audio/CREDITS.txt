@@ -71,8 +71,32 @@ inari-thunder.mp3　山肌を伝って幾度か返る遠雷
 三つの音源は tools/compose-inari-rain.py によるオリジナルの合成音です。
 音源と生成コードを CC0 1.0 Universal で提供します。
 
-【四季十七景の小品】
-十七の地域のBGMは Mochi Quest 2 のためのオリジナル楽曲です。
+【Mochi Quest 2 の選曲　Epidemic Sound】
+桜川の渡し　　　　Inuyama Gardens — Mandala Dreams
+竹隠れの社　　　　Oku No In — Mandala Dreams
+蔵町の市　　　　　Water Mirror — Akibakid
+湯けむり峠　　　　Onsen Ritual — Joseph Beg
+月見の棚田　　　　Shade Of The Sunflower — Mandala Dreams
+海風の松原・竜宮沖の海面　Pacific Shores — Mandala Dreams
+雪灯りの街　　　　Hokkaido Solitude — Mandala Dreams
+錦秋の楓峡　　　　Autumn Garden — Joseph Beg
+十五夜の薄野　　　Waking Dream — Mandala Dreams
+初日の出の浦　　　Ittekimasu — Mandala Dreams
+花の京　　　　　　Kyoto by Dawn — Ooyy, Smartface
+深山の桃源郷　　　Shanghai — Saira Ridley
+竜宮沖の潜水中　　Sand Mandala — Joseph Beg
+東大寺の大餅仏　　Sanctity (Instrumental Version) — Isaku Kageyama
+伏見稲荷　　　　　Strange Tales (Instrumental Version) — Isaku Kageyama
+敦賀の津　　　　　Across the Sea of Japan — Mandala Dreams
+堺の津　　　　　　Greeted in Osaka — Sight of Wonders
+竜宮の御殿内　　　State of Zen — Mandala Dreams
+電動自転車　　　　Mayonaka — Usnow
+上記の録音にはEpidemic Soundのライセンスが適用されます。
+https://www.epidemicsound.com/game-development/
+
+【四季十七景の小品　オリジナルBGM】
+音源　audio/journey/score-*.mp3
+選曲した音源が未収録の場面には、その地域のオリジナル楽曲を使用します。
 箏と三味線の撥弦、尺八風の息と揺り、鉦、太鼓を合成し、各曲を八小節で構成しています。
 曲・録音・生成コードを CC0 1.0 Universal で提供します。
-音源　audio/journey/score-*.mp3　楽譜と生成コード　tools/compose-journey.py
+楽譜と生成コード　tools/compose-journey.py

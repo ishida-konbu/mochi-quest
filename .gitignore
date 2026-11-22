@@ -5,3 +5,5 @@ dist/
 .worker-build-*/
 .dev.vars*
 .env*
+/BGM/
+/audio/music/*.mp3

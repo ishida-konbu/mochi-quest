@@ -1,17 +1,27 @@
 // The original synthesis and mixer in this module are released under CC0-1.0.
 // The field recordings and foley have separate credits in ../audio/CREDITS.txt.
 import { FOREST_LAKE, lakeRadius } from './snow-country.js';
-import { REGIONS, bridgeAt, nearRoad, overheadHeight, riverHalfWidth, riverZ, seasonAt,
-  shoreDistance, wrapDelta } from './terrain.js';
+import { MARKET_STALLS, REGIONS, bridgeAt, nearRoad, overheadHeight, regionAt, riverHalfWidth, riverZ, seasonAt,
+  shoreDistance, wrapCoord, wrapDelta } from './terrain.js';
+import { onMountOtowa } from './kiyomizu-layout.js';
 import { kyoNight, kyoInfluence } from './kyo-layout.js';
 import { MOUNTAIN_STREAMS } from './mountain-streams.js';
 import { POUNDING } from './festival.js';
 import { createTempleBell } from './kiyomizu-bell.js';
 import { palaceInteriorAt } from './ryugu-layout.js';
+import { journeyMusicCue } from './journey-music.js';
+import { createJourneyPlayer } from './journey-player.js';
 
 const places = Object.fromEntries(REGIONS.map(place => [place.id, place]));
 const loops = { bamboo: 27, river: 24, wind: 23, crickets: 25, shore: 29, paddy: 21,
   'inari-rain-drops': 19, 'inari-rain-curtain': 23 };
+// The night insects and surf recordings are substantially louder than the wind.
+const fieldGain = { bamboo: .48, river: .48, wind: .78, crickets: .39, shore: .43, paddy: .55,
+  'inari-rain-drops': .77, 'inari-rain-curtain': .73 };
+const crockeryStalls = [1, 3, 5].map(index => {
+  const [x, z] = MARKET_STALLS[index];
+  return { x, z };
+});
 const clamp = value => Math.min(1, Math.max(0, value));
 
 function reach(distance, radius) {
@@ -30,7 +40,10 @@ function panTo(p, source, yaw) {
 }
 
 export function landscapeMix(p, season = seasonAt(p.x, p.z), weather) {
-  const coast = reach(Math.max(0, shoreDistance(p.x, p.z)), 78);
+  const shore = shoreDistance(p.x, p.z);
+  const coast = reach(Math.max(0, shore), 78);
+  const offshore = reach(Math.max(0, -shore), 90);
+  const surface = reach(p.diveDepth || 0, 12);
   const bank = Math.max(0, Math.abs(p.z - riverZ(p.x)) - riverHalfWidth(p.x));
   const river = reach(bank, 64) * (1 - coast);
   const lakeshore = reach(Math.abs(lakeRadius(p.x,p.z)-1)*FOREST_LAKE.rz,26);
@@ -43,19 +56,19 @@ export function landscapeMix(p, season = seasonAt(p.x, p.z), weather) {
   }
   const paddy = proximity(p, places.terraces, 99);
   const hush = (1 - .95 * season.moon) * (1 - .96 * season.snow);
-  const high = reach(Math.max(0, p.h - 2), 38);
+  const high = reach(Math.max(0, (p.h || 0) - 2), 38);
   const rain = clamp(weather?.rain || 0), downpour = clamp(weather?.downpour || 0);
   return {
     // Birds recede behind the heavier curtain. Near drops remain distinct
     // on the leaves even with the shrine melody playing underneath.
     'inari-rain-drops': .145 * Math.sqrt(rain),
     'inari-rain-curtain': .115 * downpour ** 1.4,
-    bamboo: (1 - .55 * rain) * (.27 + .13 * proximity(p, places.shrine, 95)) * hush * (1 - .75 * coast) * high,
-    river: Math.max(.40 * Math.max(river, creek, .44*lakeshore) * high, .76 * falls),
-    wind: .045 + .32 * season.snow + .16 * season.autumn + .09 * coast + .15 * (1 - high),
-    crickets: (.29 * season.moon + .075 * season.autumn) * high,
-    shore: .53 * coast * (.45 + .55 * high),
-    paddy: .27 * paddy * (1 - season.snow) * high,
+    bamboo: (1 - .55 * rain) * (.27 + .13 * proximity(p, places.shrine, 95)) * hush * (1 - .75 * coast) * high * offshore * surface,
+    river: Math.max(.40 * Math.max(river, creek, .44*lakeshore) * high, .76 * falls) * (.40 + .60 * surface),
+    wind: (.045 + .32 * season.snow + .16 * season.autumn + .09 * coast + .15 * (1 - high)) * surface,
+    crickets: (.29 * season.moon + .075 * season.autumn) * high * offshore * surface,
+    shore: .53 * coast * (.45 + .55 * high) * (.28 + .72 * offshore) * (.24 + .76 * surface),
+    paddy: .27 * paddy * (1 - season.snow) * high * surface,
   };
 }
 
@@ -73,7 +86,32 @@ export function footSurface(p) {
   return climate.autumn > .44 ? 'autumn' : 'grass';
 }
 
+// Look a few seconds down the current route. Interactions can change the score
+// without horizontal motion, so a nearby bike port and the offshore dive take priority.
+export function upcomingMusicCue(state, cue, ports) {
+  const p = state.player;
+  if (p.grounded && !p.activity && p.mount !== 'turtle' && ports.some(port =>
+    port.active && (port.bikes > 0 || cue === 'bike') && Math.abs(p.y - port.y) < 3 &&
+    Math.hypot(wrapDelta(port.x - p.x), wrapDelta(port.z - p.z)) < 9)) {
+    return cue === 'bike' ? state.regionId : 'bike';
+  }
+  if (cue === 'bike') return null;
+  if (state.regionId === 'ryugu' && cue === 'coast' && p.inWater) return 'ryugu';
+
+  const speed = Math.hypot(p.vx, p.vz);
+  if (speed < .5 || !Number.isFinite(speed)) return null;
+  const seconds = Math.min(3, 45 / speed);
+  const x = wrapCoord(p.x + p.vx * seconds), z = wrapCoord(p.z + p.vz * seconds);
+  const region = onMountOtowa(x, z) ? 'kyo' : REGIONS[regionAt(x, z)].id;
+  let next = region;
+  if (region === 'ryugu') {
+    next = palaceInteriorAt(x, z, p.y) ? 'palace' : p.diveDepth > 0 ? 'ryugu' : 'coast';
+  }
+  return next === cue ? null : next;
+}
+
 export function createSoundscape(ctx, master) {
+  const music = createJourneyPlayer(ctx, master);
   const outdoor = ctx.createBiquadFilter();
   outdoor.type = 'lowpass';
   outdoor.frequency.value = 14000;
@@ -124,7 +162,7 @@ export function createSoundscape(ctx, master) {
         layer.source.loopStart = layer.id ? 0 : .25;
         layer.source.loopEnd = layer.id ? buffer.duration : .25 + loops[layer.name];
         layer.amp.gain.value = 0;
-        layer.source.connect(layer.amp).connect(outdoor);
+        layer.source.connect(layer.amp).connect(layer.id ? music.bus : outdoor);
         layer.source.start(0, layer.id ? 0 : .25 + now % loops[layer.name]);
       }
     } else {
@@ -205,9 +243,10 @@ export function createSoundscape(ctx, master) {
     src.start(now, slot * .75, .69);
   }
 
-  let lastTime = null, lastX = 0, lastZ = 0, onGround = true, wasWet = false;
+  let lastTime = null, lastX = 0, lastZ = 0, lastDepth = 0, onGround = true, wasWet = false;
   let travelled = 0, lastStep = 0, nextMix = 0, nextActivity = 0, nextBell = 0;
-  let lastBeat = null, objectList, baths = [], nearestBath, bathGain = 0, inside = false;
+  let lastBeat = null, objectList, baths = [], ports = [], nearestBath, bathGain = 0, inside = false;
+  let drummer = null, drumBeat = null, drumGain = 0;
 
   function updateEnvironment(state, now) {
     const p = state.player;
@@ -221,18 +260,32 @@ export function createSoundscape(ctx, master) {
     inside=roof;
     const submerged=clamp((p.diveDepth||0)/4);
     outdoor.frequency.setTargetAtTime((roof?1250:14000)*(1-submerged)+690*submerged,now,.22);
-    for (const layer of layers) mixBed(layer, weights[layer.name] * (roof ? .4 : 1), now);
-    const scoreId=state.regionId==='ryugu' && !p.diveDepth && !inPalace ? 'coast' : state.regionId;
-    for (const score of scores) mixBed(score, score.id === scoreId ? (roof ? .087 : .105) : 0, now);
+    for (const layer of layers) mixBed(layer, weights[layer.name] * fieldGain[layer.name] * (roof ? .4 : 1), now);
     if (objectList !== state.objects) {
       objectList = state.objects;
       baths = objectList.filter(obj => obj.type === 'onsen');
+      ports = objectList.filter(obj => obj.type === 'port');
     }
+    const cue = journeyMusicCue(state, inPalace);
+    const hasMaster = music.update(cue, roof, upcomingMusicCue(state, cue, ports));
+    const fallbackId = state.regionId === 'ryugu' && !inPalace && !p.diveDepth ? 'coast' : state.regionId;
+    for (const score of scores) mixBed(score, !hasMaster && score.id === fallbackId ? .18 : 0, now);
     bathGain = 0;
     for (const bath of baths) {
       const volume = reach(Math.hypot(wrapDelta(bath.x-p.x),wrapDelta(bath.z-p.z),(bath.y??p.y)-p.y),13);
       if (volume > bathGain) { nearestBath = bath; bathGain = volume; }
     }
+    let nearestDrummer = null;
+    drumGain = 0;
+    if (state.regionId === 'ryugu' && (p.diveDepth > 0 || inPalace)) {
+      for (const npc of state.nearbyNpcs || []) {
+        if (npc.type !== 'seaTurtle') continue;
+        const gain = reach(Math.hypot(npc.x-p.x, npc.y-p.y, npc.z-p.z), 12);
+        if (gain > drumGain) { drumGain = gain; nearestDrummer = npc; }
+      }
+    }
+    if (nearestDrummer !== drummer) drumBeat = null;
+    drummer = nearestDrummer;
     load('footfalls', now);
     if (state.regionId === 'inari') load('inari-thunder', now);
   }
@@ -271,6 +324,16 @@ export function createSoundscape(ctx, master) {
 
   function landmarks(state, time, yaw, now) {
     const p = state.player;
+    if (drummer) {
+      // The two mallets reach the drumhead at opposite extrema of the same pose.
+      const beat = Math.floor((drummer.beat - Math.PI / 2) / Math.PI);
+      if (drumBeat !== null && beat === drumBeat + 1 && drummer.gesture > .88) {
+        const pan = panTo(p, drummer, yaw), gain = drumGain * (inside ? .4 : 1);
+        note(now, 156, 86, .24, .17 * gain, pan, 'sine', outdoor);
+        brush(now, 820, 340, .065, .12 * gain, pan, outdoor);
+      }
+      drumBeat = beat;
+    }
     const beat = Math.floor(time / POUNDING.period - POUNDING.strike);
     if (lastBeat !== null && beat > lastBeat && beat === lastBeat + 1) {
       const gain = proximity(p, POUNDING, 47) * (inside ? .42 : 1);
@@ -284,11 +347,15 @@ export function createSoundscape(ctx, master) {
     }
     lastBeat = beat;
     if (now < nextBell) return;
+    let source = places.shrine, nearest = proximity(p, source, 38);
+    for (const stall of crockeryStalls) {
+      const gain = proximity(p, stall, 22);
+      if (gain > nearest) { source = stall; nearest = gain; }
+    }
+    const gain = nearest * reach(p.h || 0, 27) * (inside ? .6 : 1);
+    if (gain < .03) { nextBell = now + 1; return; }
     nextBell = now + 6.5 + Math.random() * 9;
-    const shrine = proximity(p, places.shrine, 46), market = proximity(p, places.market, 45);
-    if (Math.max(shrine, market) < .03) return;
-    const isShrine = shrine > market, gain = Math.max(shrine, market) * (inside ? .6 : 1);
-    const pan = panTo(p, isShrine ? places.shrine : places.market, yaw);
+    const isShrine = source === places.shrine, pan = panTo(p, source, yaw);
     const hz = isShrine ? 1073 : 681;
     for (const [ratio, volume, duration] of [[1, .07, 1.55], [2.64, .031, .87], [4.01, .021, .29]]) {
       note(now, hz * ratio, hz * ratio * .995, duration * (isShrine ? 1 : .36), gain * volume, pan, 'sine', outdoor);
@@ -322,9 +389,9 @@ export function createSoundscape(ctx, master) {
     }
     if (photo) return;
     if (p.activity === 'read') brush(now, 2300, 5200, .21, .085, -.12);
-    if (p.activity === 'drink') note(now, 330, 545, .095, .07);
-    if (p.activity === 'eat') brush(now, 1350, 260, .17, .083);
-    if (p.mode === 'habutae' && !p.grounded) brush(now, 980, 320, .45, .12 * clamp(.28 + p.speed / 18));
+    if (['drink', 'tea', 'chaya'].includes(p.activity)) note(now, 330, 545, .095, .07);
+    if (['eat', 'mitarashi', 'tsukimi'].includes(p.activity)) brush(now, 1350, 260, .17, .083);
+    if (p.mode === 'habutae' && !p.grounded && !p.diveDepth) brush(now, 980, 320, .45, .12 * clamp(.28 + p.speed / 18));
   }
 
   function update(state, time, yaw, photo) {
@@ -335,34 +402,41 @@ export function createSoundscape(ctx, master) {
     }
     const moving = lastTime !== null && time > lastTime && time - lastTime < .4;
     distantThunder(state, time, yaw, now, moving);
-    templeBell.update(state.bellStrike, p, yaw, state.time, inside);
-    if (!moving) lastBeat = null;
+    const bellLevel = templeBell.update(state.bellStrike, p, yaw, state.time, inside);
+    if (bellLevel > .75) music.duck(1.25);
+    if (!moving) lastBeat = drumBeat = null;
     landmarks(state, time, yaw, now);
     activity(p, yaw, now, photo);
     const enteredWater = !photo && lastTime !== null && p.inWater && !wasWet;
     if (enteredWater) enterWater(p.impact || 0);
+    const depth = p.diveDepth || 0;
     if (!photo && moving) {
-      const distance = Math.hypot(wrapDelta(p.x - lastX), wrapDelta(p.z - lastZ));
-      if (distance < 6 && p.grounded && !p.activity) {
+      const distance = Math.hypot(wrapDelta(p.x - lastX), wrapDelta(p.z - lastZ), depth - lastDepth);
+      if (distance < 6 && (p.grounded || depth > 0) && !p.activity) {
         travelled += distance;
-        const landing = !onGround && p.landing > 0;
+        const landing = p.grounded && !onGround && p.landing > 0;
         if (enteredWater) { travelled = 0; lastStep = now; }
         else if (landing) {
-          footfall(p, landing ? .28 + .37 * p.impact : .33);
-          if (landing && !p.inWater) note(now + .003, 143, 70, .13, .075 * p.impact);
+          footfall(p, .28 + .37 * p.impact);
+          if (!p.inWater) note(now + .003, 143, 70, .13, .075 * p.impact);
           travelled = 0; lastStep = now;
-        } else if (travelled > (p.mount || p.mode === 'dango' ? 2.25 : 1.33) && now - lastStep > .19) {
+        } else if (travelled > (p.mount || p.mode === 'dango' ? 2.25 : 1.33) && now - lastStep > (depth ? .55 : .19)) {
           travelled = 0; lastStep = now;
-          if (p.mount === 'bike') {
-            brush(now, 1300, 2800, .06, .085);
-            note(now + .021, 495, 260, .06, .035, .08, 'triangle');
+          if (depth > 0) {
+            const pan = ++stepIndex % 2 ? -.14 : .14;
+            brush(now, 570, 205, .34, .17, pan);
+            note(now + .10, 285, 405, .085, .045, pan);
+          } else if (p.mount === 'bike') {
+            const speed = clamp(p.speed / 46);
+            brush(now, 640 + 560 * speed, 310, .23, .10 + .07 * speed);
+            note(now + .021, 610, 315, .048, .033, .08, 'triangle');
           } else if (p.mode === 'dango' && !p.inWater) {
             brush(now, 450, 175, .25, .13);
           } else footfall(p, p.mount === 'turtle' ? .32 : .23);
         }
       } else travelled = 0;
     } else travelled = 0;
-    lastTime = time; lastX = p.x; lastZ = p.z; onGround = p.grounded; wasWet = p.inWater;
+    lastTime = time; lastX = p.x; lastZ = p.z; lastDepth = depth; onGround = p.grounded; wasWet = p.inWater;
   }
 
   function enterWater(impact = 0) {
@@ -377,6 +451,7 @@ export function createSoundscape(ctx, master) {
     }
   }
   function stop() {
+    music.stop();
     templeBell.stop();
     for (const layer of [...layers, ...scores]) stopLayer(layer);
     for (const source of oneShots) source.stop();
@@ -385,5 +460,5 @@ export function createSoundscape(ctx, master) {
     travelled = nextMix = 0;
   }
 
-  return { update, stop, enterWater };
+  return { update, stop, enterWater, unlock: music.unlock, duckMusic: music.duck };
 }

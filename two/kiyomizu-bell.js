@@ -103,8 +103,11 @@ export function createTempleBell(ctx, outdoor) {
     direct.pan.setTargetAtTime(pan, now, .045);
     reflections[0].pan.setTargetAtTime(.35 * pan - .44, now, .055);
     reflections[1].pan.setTargetAtTime(.32 * pan + .42, now, .055);
-    if (fresh && level > .001) excite(now + .004 + distance / 343, strike.source === 'notice');
     nextMix = now + .045;
+    if (fresh && level > .001) {
+      excite(now + .004 + distance / 343, strike.source === 'notice');
+      return level;
+    }
   }
   function stop() {
     for (const voice of voices) release(voice, .015);

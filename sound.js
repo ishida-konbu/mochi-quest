@@ -50,7 +50,18 @@ export function createAudio(makeWorldAudio) {
         context = new Audio();
         master = context.createGain();
         master.gain.value = paused ? 0 : .72;
-        master.connect(context.destination);
+        if (makeWorldAudio) {
+          // Leave normal music and field levels alone; catch coincident bell, splash and voice peaks.
+          const peaks = context.createDynamicsCompressor();
+          peaks.threshold.value = -4;
+          peaks.knee.value = 3;
+          peaks.ratio.value = 8;
+          peaks.attack.value = .003;
+          peaks.release.value = .16;
+          master.connect(peaks).connect(context.destination);
+        } else {
+          master.connect(context.destination);
+        }
         noise = context.createBuffer(1, Math.ceil(context.sampleRate * .2), context.sampleRate);
         const samples = noise.getChannelData(0);
         for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
@@ -58,6 +69,7 @@ export function createAudio(makeWorldAudio) {
       } catch { context = null; }
     }
     if (context && context.state !== 'running') context.resume().catch(() => {});
+    if (!paused) worldAudio?.unlock?.();
     if (context) for (const text of Object.keys(VOICES)) prepareVoice(text);
   }
 
@@ -118,12 +130,14 @@ export function createAudio(makeWorldAudio) {
       };
       voice = source;
       voiceUntil = performance.now() + recorded.duration * 920;
+      worldAudio?.duckMusic?.(recorded.duration);
       source.start();
     } else if (globalThis.speechSynthesis && globalThis.SpeechSynthesisUtterance) {
       const line = new SpeechSynthesisUtterance(text);
       line.lang = 'ja-JP';
       line.voice = speechSynthesis.getVoices().find(v => v.lang.startsWith('ja')) || null;
       line.pitch = 1.25; line.rate = 1.13; line.volume = .8;
+      worldAudio?.duckMusic?.(.85);
       speechSynthesis.speak(line);
     }
   }
