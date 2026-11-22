@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { BUILDINGS, LANDMARK_TREES, TREES, REGIONS, regionAt, hasAutumnLeaves, nearRoad, riverZ, riverHalfWidth, shoreDistance } from '../two/terrain.js';
 import { TREE_FORM_COUNT } from '../two/forest-forms.js';
+import { isNishiyamaTree } from '../two/mountain-woodland.js';
 
 test('the thinned woodland preserves bamboo groves and crown forms and leaves room for roads, entrances and swimming ashore', () => {
   const bamboo=TREES.filter(t=>t.kind==='bamboo'||t.kind==='moso');
-  assert.equal(bamboo.length,139);
-  assert.equal(createHash('sha256').update(JSON.stringify(bamboo)).digest('hex'),'bf8b76abb9076a6bb02bf41f75ffd02fd14a7cbc0d8e526d8afee3c014eff6ae');
+  const oldGroves=bamboo.filter(t=>!isNishiyamaTree(t));
+  assert.equal(oldGroves.length,139);
+  assert.equal(createHash('sha256').update(JSON.stringify(oldGroves)).digest('hex'),'bf8b76abb9076a6bb02bf41f75ffd02fd14a7cbc0d8e526d8afee3c014eff6ae');
   const autumn = TREES.filter(t => REGIONS[regionAt(t.x,t.z)].id === 'autumn' && hasAutumnLeaves(t));
   assert.ok(autumn.length >= 400); // Mountain woods now extend the established stands above the valley.
   // The new approach roads and the fire mountain carry additional stands.

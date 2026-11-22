@@ -34,6 +34,31 @@ export function woodlandAt(x,z){
   return range;
 }
 
+// Where the skirts of two mountains meet, the surveyed stand owns its trees.
+export function isNishiyamaTree(tree){
+  if(tree.kyotoRidge)return tree.kyotoRidge==='nishi';
+  return westRidgeHeight(tree.x,tree.z)>.5 || woodlandAt(tree.x,tree.z)?.id==='nishi';
+}
+
+export function growNishiyamaBamboo(trees){
+  const stand=trees.filter(isNishiyamaTree);
+  const candidates=stand.filter(t=>t.kind!=='bamboo' && t.kind!=='moso');
+  const existing=stand.length-candidates.length;
+  const target=Math.round(stand.length*.8)-existing;
+  const moso=TREE_FAMILIES.findIndex(([kind])=>kind==='moso');
+  // Neighbouring roots often belong to the same grove. A little seed-scale
+  // variation breaks the edges where the groves meet the surviving trees.
+  const groves=candidates.map(t=>({tree:t, score:
+    Math.sin(.052*t.x+.033*t.z)+.74*Math.sin(.071*t.z-.028*t.x)
+    +.38*Math.cos(.094*t.x-.064*t.z)+.85*((t.seed%997)/997-.5)}));
+  groves.sort((a,b)=>a.score-b.score);
+  for(let i=0;i<target;i++){
+    const tree=groves[i].tree;
+    tree.form=moso*TREE_FORMS_PER_FAMILY+tree.seed%TREE_FORMS_PER_FAMILY;
+    tree.kind=TREE_FAMILIES[moso][0];
+  }
+}
+
 // Small buckets keep both separation between living stems and the silhouettes
 // of older boulders without an all-pairs search.
 function plantingGrid(){

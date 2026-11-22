@@ -1,7 +1,7 @@
 import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
 import { mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
-import { plantMountainWoods, plantKyotoWoods } from './mountain-woodland.js';
+import { plantMountainWoods, plantKyotoWoods, growNishiyamaBamboo } from './mountain-woodland.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
 import { KIYOMIZU_APPROACH, kiyomizuTerrain, kiyomizuSolids, kiyomizuClearing, kiyomizuViewTree } from './kiyomizu-layout.js';
 import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow, createFireTreeCeiling, fireTrailDistance } from './higashiyama.js';
@@ -961,6 +961,8 @@ for(let i=TREES.length-1;i>=0;i--){
   if(kiyomizuClearing(x,z) || onTempleApproach(x,z,5.3) || hidesValley(t) ||
     x>=350 && x<=491 && z< -693 && z> -847 && kiyomizuViewTree(x,z,terrainHeight(x,z)+t.h))TREES.splice(i,1);
 }
+// Count only the sites left after opening the stage and summit sightlines.
+growNishiyamaBamboo(TREES);
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
 // The shrine's small bamboo stands are planted individually between its

@@ -6,13 +6,17 @@ import { forestGeometry, forestMaterial, forestTexture } from './forest-mesh.js'
 
 const NEAR = 28, FAR = 42, RANGE = 314, STEP = 3;
 const KYOTO_NEAR = 21, KYOTO_FAR = 30;
+// A bamboo crown contains six to eleven jointed culms with overlapping leaf
+// sprays. Its ink silhouette takes over sooner on the densely planted slope.
+const BAMBOO_NEAR = 17, BAMBOO_FAR = 25;
+const detailNear=[NEAR,KYOTO_NEAR,BAMBOO_NEAR], detailFar=[FAR,KYOTO_FAR,BAMBOO_FAR];
 const phaseDeclaration = 'varying float forestDistance;\n';
 const dither = 'float screenSeed=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715))));';
 function fade(shader, far) {
   shader.fragmentShader = phaseDeclaration+shader.fragmentShader.replace('#include <alphatest_fragment>',
     '#include <alphatest_fragment>\n'+dither+
-    `float transition=smoothstep(mix(${NEAR}.,${KYOTO_NEAR}.,inkTree),
-      mix(${FAR}.,${KYOTO_FAR}.,inkTree),forestDistance);`+
+    `float transition=smoothstep(mix(mix(${NEAR}.,${KYOTO_NEAR}.,inkTree),${BAMBOO_NEAR}.,inkBamboo),
+      mix(mix(${FAR}.,${KYOTO_FAR}.,inkTree),${BAMBOO_FAR}.,inkBamboo),forestDistance);`+
     (far?'if(screenSeed >= transition) discard;':'if(screenSeed < transition) discard;'));
 }
 export function* prepareForest(scene, clock) {
@@ -39,7 +43,8 @@ export function* prepareForest(scene, clock) {
     const folds=kyoto ? .52*Math.sin(.047*t.x+.015*t.z)+.32*Math.cos(.057*t.z-.021*t.x)
       +.16*Math.sin(.112*t.x-.058*t.z) : 0;
     const tint=(.86+(t.seed%131)*.0019)*(kyoto ? .77+.34*folds : 1);
-    grove.trees.push({tree:t,ground,rotation:t.seed*2.39996323,range,kyoto,tint});
+    const inkGrove=kyoto ? (t.kind==='moso' ? 2 : 1) : 0;
+    grove.trees.push({tree:t,ground,rotation:t.seed*2.39996323,range,inkGrove,tint});
     grove.range=Math.max(grove.range,range);
     for(let i=cellAt(t.x-nearRadius);i<=cellAt(t.x+nearRadius);i++)
       for(let j=cellAt(t.z-nearRadius);j<=cellAt(t.z+nearRadius);j++){
@@ -69,10 +74,11 @@ export function* prepareForest(scene, clock) {
     shader.uniforms.forestClock=clock;
     shader.uniforms.heroView=heroView;
     shader.uniforms.heroRadius=heroRadius;
-    shader.vertexShader=phaseDeclaration+'uniform float forestClock; attribute float inkGrove; varying float inkTree; varying vec3 canopyView;\n'+shader.vertexShader.replace('#include <begin_vertex>',
+    shader.vertexShader=phaseDeclaration+'uniform float forestClock; attribute float inkGrove; varying float inkTree,inkBamboo; varying vec3 canopyView;\n'+shader.vertexShader.replace('#include <begin_vertex>',
       `#include <begin_vertex>
        vec3 root=instanceMatrix[3].xyz;
-       inkTree=inkGrove;
+       inkTree=min(inkGrove,1.);
+       inkBamboo=step(1.5,inkGrove);
        forestDistance=distance(root,cameraPosition);
        transformed.x+=.0055*pow(max(0.,position.y),1.6)*sin(root.x*.18+root.z*.12+forestClock*1.25+position.y*2.);
       `);
@@ -81,7 +87,7 @@ export function* prepareForest(scene, clock) {
     fade(shader,false);
     // Perspective-project the branch fragment onto the plane of the hero. Only
     // fragments in front of the body enter the softly feathered viewing cone.
-    shader.fragmentShader='uniform vec3 heroView; uniform vec2 heroRadius; varying float inkTree; varying vec3 canopyView;\n'+
+    shader.fragmentShader='uniform vec3 heroView; uniform vec2 heroRadius; varying float inkTree,inkBamboo; varying vec3 canopyView;\n'+
       shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
         if(inkTree>.5) {
           // Near the footpath each folded spray carries a wash. Bark and the
@@ -92,6 +98,9 @@ export function* prepareForest(scene, clock) {
           vec3 wash=mix(ink,leaf,.09+.83*lift);
           float fringe=1.-smoothstep(.36,.80,diffuseColor.a);
           vec3 bark=mix(vec3(.026,.024,.020),vec3(.30,.25,.17),lift);
+          // A dilute green wash follows the jointed bamboo culms under the leaves.
+          vec3 culm=mix(vec3(.046,.064,.038),vec3(.35,.41,.22),lift);
+          bark=mix(bark,culm,inkBamboo);
           diffuseColor.rgb=mix(bark, wash*(1.-.52*fringe),treeLeaf);
         }
       `).replace('#include <opaque_fragment>', `
@@ -136,7 +145,7 @@ export function* prepareForest(scene, clock) {
   const inkCrowns=read('kyo-ink-crowns');
   farMaterial.onBeforeCompile=shader=>{
     shader.uniforms.inkCrowns={value:inkCrowns};
-    shader.vertexShader=phaseDeclaration+'attribute vec4 rootHeight; attribute vec4 treeForm; varying float forestTint,inkTree;\n'+
+    shader.vertexShader=phaseDeclaration+'attribute vec4 rootHeight; attribute vec4 treeForm; varying float forestTint,inkTree,inkBamboo;\n'+
       shader.vertexShader.replace('#include <beginnormal_vertex>','#include <beginnormal_vertex>\nobjectNormal=vec3(0.,1.,0.);').replace('#include <begin_vertex>',`
         vec3 root=rootHeight.xyz;
         forestDistance=distance(cameraPosition,root);
@@ -147,9 +156,9 @@ export function* prepareForest(scene, clock) {
         float aspect=mod(quarter,2.);
         float u=mod(quarter,4.)>1.5 ? 1.-uv.x : uv.x;
         vMapUv=(vec2(mod(treeForm.x,8.)+aspect*8.,7.-floor(treeForm.x/8.))+vec2(u,uv.y))/vec2(16.,8.);
-        forestTint=treeForm.z;inkTree=treeForm.w;
+        forestTint=treeForm.z;inkTree=min(treeForm.w,1.);inkBamboo=step(1.5,treeForm.w);
       `);
-    shader.fragmentShader='uniform sampler2D inkCrowns; varying float forestTint,inkTree;\n'+
+    shader.fragmentShader='uniform sampler2D inkCrowns; varying float forestTint,inkTree,inkBamboo;\n'+
       shader.fragmentShader.replace('#include <map_fragment>', `
         if(inkTree>.5) diffuseColor*=texture2D(inkCrowns,vMapUv);
         else diffuseColor*=texture2D(map,vMapUv);
@@ -190,7 +199,7 @@ export function* prepareForest(scene, clock) {
       crown.center.set(eye.x+gx,grove.centreY,eye.z+gz);
       crown.radius=grove.radius;
       if(!view.intersectsSphere(crown))continue;
-      for(const {tree, ground, rotation, range, kyoto, tint:brightness} of grove.trees) {
+      for(const {tree, ground, rotation, range, inkGrove, tint:brightness} of grove.trees) {
         const dx=wrapDelta(tree.x-eye.x), dz=wrapDelta(tree.z-eye.z);
         const d2=dx*dx+dz*dz+(ground-eye.y)**2;
         if(d2>range*range) continue;
@@ -200,16 +209,16 @@ export function* prepareForest(scene, clock) {
         // turn between updates. A newly visible branch cannot pop at the edge.
         crown.radius=tree.h*1.2+STEP+1+Math.sqrt(d2)*.031;
         if(!view.intersectsSphere(crown))continue;
-        if(d2<((kyoto?KYOTO_FAR:FAR)+STEP+1)**2) {
+        if(d2<(detailFar[inkGrove]+STEP+1)**2) {
           const mesh=near[tree.form], idx=mesh.count++;
           transform.position.set(x,ground,z);transform.rotation.y=rotation;transform.scale.setScalar(tree.h);
           transform.updateMatrix();mesh.setMatrixAt(idx,transform.matrix);
           mesh.setColorAt(idx,tint.setRGB(brightness,brightness,brightness));
-          mesh.geometry.attributes.inkGrove.setX(idx,Number(kyoto));
+          mesh.geometry.attributes.inkGrove.setX(idx,inkGrove);
         }
-        if(d2>((kyoto?KYOTO_NEAR:NEAR)-STEP-1)**2) {
+        if(d2>(detailNear[inkGrove]-STEP-1)**2) {
           roots.setXYZW(used,x,ground,z,tree.h);
-          forms.setXYZW(used,tree.form,rotation%(Math.PI*2),brightness,Number(kyoto));used++;
+          forms.setXYZW(used,tree.form,rotation%(Math.PI*2),brightness,inkGrove);used++;
         }
       }
     }
