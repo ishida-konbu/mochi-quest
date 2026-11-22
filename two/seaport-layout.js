@@ -19,6 +19,10 @@ export function relocateOldQuay(x,z){
   return u>=-45 && u<=67 && v>=-30 && v<=26 ? portPoint(SEAPORTS[0],u,v) : [x,z];
 }
 export const QUAY_Y=2.38,DECK_Y=3.58,HOLD_Y=.72;
+export const QUAY_MERCHANTS=SEAPORTS.flatMap(port=>[[-8.4,4.8],[16.6,-6.5],[-25.3,23.5]].map(([u,v],i)=>{
+  const [x,z]=portPoint(port,u,v);
+  return {x,z,i,y:v>20?DECK_Y:QUAY_Y,yaw:port.yaw+i*1.57,size:i===1?.79:.91,name:port.name+'・荷改めの商人'};
+}));
 export const FIXED_BERTH=54,QUAY_CENTER=12.1,QUAY_LENGTH=107.2;
 const smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
 function visit(x,z,f,base){
@@ -52,7 +56,11 @@ export function portSolids(put){
     function box(u,v,w,d,top,kind='floor',support=true,bottom=-Infinity,yaw=0){
       const [x,z]=portPoint(p,u,v);return put(x,z,w/2,d/2,p.yaw+yaw,top,kind,support,0,bottom);
     }
-    box(QUAY_CENTER,23.7,QUAY_LENGTH,4.2,DECK_Y);
+    box(QUAY_CENTER,23.7,QUAY_LENGTH,4.22,DECK_Y,'slab',true,DECK_Y-.26);
+    for (const v of [21.90,25.43]) {
+      box(QUAY_CENTER,v,QUAY_LENGTH,.36,DECK_Y-.235,'slab',true,DECK_Y-.625);
+      for (let j=0;j<=21;j++) box(-40+j*5,v,.40,.40,3.575,'oval',false,-1.495);
+    }
     if(p.id==='tsuruga'){
       for(const a of [-1,1])for(const b of [-1,1])box(-40+a*1.85,-10+b*1.70,.34,.34,QUAY_Y+8.30,'wall',false);
       box(-40,-10,4.25,4.17,QUAY_Y+5.24,'slab',true,QUAY_Y+5.02);
@@ -60,7 +68,7 @@ export function portSolids(put){
     }else box(38,-10,4.95,5.75,QUAY_Y+1.96,'oval',true);
 
     for(const u of [-37,0,37]){
-      for(let i=0;i<32;i++)box(u,6.4+i*.49,2.85,.52,QUAY_Y+(DECK_Y-QUAY_Y)*i/31);
+      for(let i=0;i<32;i++)box(u,6.4+i*.49,2.85,.52,QUAY_Y+(DECK_Y-QUAY_Y)*i/31,'slab',true,QUAY_Y+(DECK_Y-QUAY_Y)*i/31-.22);
     }
     for(const b of PORT_BUILDINGS.filter(q=>q.p===p)){
       const {u,v,w,d,i}=b,base=QUAY_Y,high=i===0||i===5?5.1:3.2;
@@ -69,7 +77,8 @@ export function portSolids(put){
       box(u,v-d*.48,w,.17,base+high,'wall',false);
       for(const side of [-1,1])box(u+side*w*.376,v+d*.48,w*.25,.17,base+high,'wall',false);
       box(u,v,w+.9,d+.8,base+high,'ceiling',false);
-      box(u,v,w,d,base+high+.22,'roof',true).roofRise=2.07;
+      box(u,v,w+1.22,d+1.44,base+high+.10,'roof',true).roofRise=2.07;
+      if (high>4) box(u,v+d/2+.22,w+.5,2.25,base+2.63,'roof',true).roofRise=.54;
     }
   }
 }

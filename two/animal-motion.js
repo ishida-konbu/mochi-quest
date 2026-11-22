@@ -19,6 +19,13 @@ export function dragonPitch(n) {
   const slope = Math.atan2(n.verticalSpeed || 0, Math.max(2, n.speed || 0));
   return -Math.max(-maxDragonPitch, Math.min(maxDragonPitch, slope));
 }
+export function craneWingbeat(t,out) {
+  const flap=t*4.35,thermal=.5+.5*Math.cos(t*.51);
+  out.flap=flap;out.amplitude=.18+.82*thermal*thermal;
+  out.stroke=out.amplitude*(.79*Math.sin(flap)+.21*Math.sin(2*flap-.32));
+  out.bank=.11+.19*Math.sin(t*.53);
+  return out;
+}
 export const kirinFrequency = 2.18;
 export function hoofPhase(side,front) {
   return side<0 ? (front<0 ? 0 : Math.PI/2) : (front<0 ? Math.PI : 1.5*Math.PI);

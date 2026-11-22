@@ -75,16 +75,27 @@ test('the court approach joins two unobstructed paved avenues across the capital
   const game=createGame(),p=game.state.player;
   Object.assign(p,{x:city.x-100,z:city.z,y:groundHeight(city.x-100,city.z),h:0,grounded:true});
   function reach(x,z,limit){
+    let interval=0,previous=Infinity,sideSteps=0;
     for(let i=0;i<limit;i++){
       const dx=x-p.x,dz=z-p.z,d=Math.hypot(dx,dz);
       if(d<.16)return;
-      p.invulnerable=2;game.step(1/30,{x:dx/d,z:dz/d});
+      // Follow the pavement, stepping aside for a crowd member on the line
+      // of travel. The static clearance across the full road is checked above.
+      if(++interval===18){
+        if(previous-d<.49)sideSteps=12;
+        previous=d;interval=0;
+      }
+      p.invulnerable=2;
+      if(sideSteps>0){game.step(1/30,{x:dz/d,z:-dx/d});sideSteps--;}
+      else game.step(1/30,{x:dx/d,z:dz/d});
     }
     assert.fail('obstructed at '+[p.x,p.z]+' on the way to '+[x,z]);
   }
-  reach(city.x+100,city.z,1010);
-  reach(COURT.x,city.z,950);
-  reach(COURT.x,COURT.z+.4,270);
+  // A crossing pedestrian or an ox cart can occupy the pavement briefly.
+  // Allow time to pass the moving cast over the two hundred metre avenue.
+  reach(city.x+100,city.z,1450);
+  reach(COURT.x,city.z,1250);
+  reach(COURT.x,COURT.z+.4,470);
   assert.ok(Math.abs(p.y-terrainHeight(COURT.x,COURT.z)-1.05)<.03);
 });
 

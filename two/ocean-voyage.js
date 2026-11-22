@@ -167,7 +167,7 @@ export function hullWidth(v){
 export const hatch={left:-1.24,right:1.24,bottom:-4.5,top:2.5};
 export const stairTops=Array.from({length:16},(_,i)=>HOLD_Y+(DECK_Y-HOLD_Y)*i/15);
 export const stepDepth=(hatch.top-hatch.bottom)/stairTops.length;
-function localContact(p,x,z,feet,radius=0,bound=WORLD_BOUND) {
+function localContact(p,x,z,feet,radius=0,bound=WORLD_BOUND,bodyHeight=1.33) {
   const dx=wrapWorld(x-p.x,bound),dz=wrapWorld(z-p.z,bound);
   if(Math.abs(dx)>19||Math.abs(dz)>19)return null;
   const local=localPoint({...p,x:0,z:0},dx,dz);
@@ -177,6 +177,15 @@ function localContact(p,x,z,feet,radius=0,bound=WORLD_BOUND) {
   if(gang && y>=DECK_Y-.46)return {pose:p,u,v,floor:DECK_Y+p.y,ceiling,solid};
   const edge=hullWidth(v);
   if(v< -15.6-radius||v>16+radius||Math.abs(u)>edge+radius)return null;
+  const keel=-1.66+.75*(Math.abs(v)/16)**2;
+  if(y+bodyHeight<keel)return null;
+  // A diver can go beneath the hull. In the narrowing bilge only the
+  // breadth of the planks at the swimmer's height blocks the water.
+  if(y<HOLD_Y-.34) {
+    const depth=Math.min(1,Math.max(0,(y+bodyHeight-keel)/(DECK_Y+.7-keel)));
+    if(Math.abs(u)>edge*(.57+.43*depth**.75)+radius)return null;
+    return {pose:p,u,v,floor:-Infinity,ceiling:keel+p.y,solid:HOLD_Y+p.y};
+  }
   const below=y<DECK_Y-.36;
   const stairs=u>hatch.left&&u<hatch.right&&v>hatch.bottom&&v<hatch.top;
   if(stairs){
@@ -186,7 +195,7 @@ function localContact(p,x,z,feet,radius=0,bound=WORLD_BOUND) {
   else if(y>HOLD_Y-.70)floor=HOLD_Y;
   if(below&&!stairs)ceiling=DECK_Y-.16;
   function wall(condition,top,bottom=-Infinity){
-    if(condition&&y+1.33>bottom&&y<top-.05)solid=Math.max(solid,top);
+    if(condition&&y+bodyHeight>bottom&&y<top-.05)solid=Math.max(solid,top);
   }
   // Leave an opening in both bulwarks amidships for the boarding plank.
   wall(Math.abs(u)>edge-.18-radius || v>15.65-radius || v< -15.23+radius,
@@ -196,8 +205,13 @@ function localContact(p,x,z,feet,radius=0,bound=WORLD_BOUND) {
     wall(Math.abs(v-hatch.bottom)<.09+radius&&Math.abs(u)<1.38,DECK_Y+.72);
     const cabin=Math.abs(u)<2.55&&v>-13.6&&v<-8.7;
     wall(cabin&&(Math.abs(u)>2.30-radius || v<-13.3+radius || (v>-8.92-radius&&Math.abs(u)>1.10-radius)),DECK_Y+2.84);
-    if(cabin && y<DECK_Y+2.64)ceiling=DECK_Y+2.64;
-    for(const mast of [-6.35,8.2])wall(Math.hypot(u,v-mast)<.29+radius,DECK_Y+12.7);
+    if(Math.abs(u)<2.94+radius && Math.abs(v+11.27)<2.94+radius){
+      const roof=DECK_Y+3.37-.20*Math.abs(u);
+      if(y<roof-.34){ceiling=roof-.18;wall(true,roof,roof-.18);}
+      else floor=Math.max(floor,roof);
+    }
+    wall(Math.hypot(u-1.62,v-10.3)<.28+radius,DECK_Y+1.59,DECK_Y);
+    for(const mast of [-6.35,8.2])wall(Math.hypot(u,v-mast)<.29+radius,DECK_Y+(mast<0?9.3:7.15));
   }else{
     wall(Math.abs(u)>1.76-radius&&Math.abs(u)<3.25+radius&&Math.abs(Math.abs(v)-6.6)<1.48+radius,HOLD_Y+1.45);
     for(const v0 of [-8.35,6.65])wall(Math.abs(v-v0)<.13+radius&&Math.abs(u)>1.02-radius,DECK_Y-.16);
@@ -239,8 +253,8 @@ export function restoreHarbourTraveller(player,time,edition){
 }
 export function createVoyage(time=0){
   const poses=FLEET.map(s=>vesselPose(s,time)),prior=FLEET.map(s=>vesselPose(s,time));
-  function sample(x,z,y,radius=0){
-    for(const p of poses){const c=localContact(p,x,z,y,radius);if(c)return c;}return null;
+  function sample(x,z,y,radius=0,bodyHeight=1.33){
+    for(const p of poses){const c=localContact(p,x,z,y,radius,WORLD_BOUND,bodyHeight);if(c)return c;}return null;
   }
   function update(t,player){
     let rider=null;
@@ -258,14 +272,18 @@ export function createVoyage(time=0){
       player.heading=Math.atan2(Math.sin(heading),Math.cos(heading));
     }
   }
-  function move(x,z,nx,nz,feet,radius=.23){
+  function move(x,z,nx,nz,feet,radius=.23,bodyHeight=1.39){
     const free=(a,b)=>{
-      const q=sample(a,b,feet,radius);
-      return !q||(q.solid<=feet+.34&&q.ceiling>=feet+1.39&&(q.floor<=feet+.36||feet<HOLD_Y-.35));
+      const q=sample(a,b,feet,radius,bodyHeight);
+      return !q||(q.solid<=feet+.34&&q.ceiling>=feet+bodyHeight&&(q.floor<=feet+.36||feet<HOLD_Y-.35));
     };
-    if(free(nx,nz))return {x:nx,z:nz};
-    if(free(nx,z))return {x:nx,z};
-    if(free(x,nz))return {x,z:nz};
+    const dx=wrap(nx-x),dz=wrap(nz-z),steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.30));
+    for(let i=0;i<steps;i++){
+      const a=wrap(x+dx/steps),b=wrap(z+dz/steps);
+      if(free(a,b)){x=a;z=b;}
+      else if(free(a,z))x=a;
+      else if(free(x,b))z=b;
+    }
     return {x,z};
   }
   return {poses,sample,update,move};

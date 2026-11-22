@@ -50,9 +50,8 @@ export function hutSolids(height,put){
       add(side*1.625,1.9,1.79,.12,plate,'wall');
     }
     add(0,-1.85,5.1,.15,plate,'wall');
-    add(0,0,5.1,3.8,plate,'ceiling');
     const roof=add(0,0,6,4.72,fisher?2.30:1.86,'roof',true);
-    roof.roofRise=fisher?1.65:2.31;
+    roof.roofRise=fisher?1.65:2.31;roof.thickness=.045;
     if(!fisher)roof.form='hip';
     if(fisher){
       add(0,2.13,5.10,.56,floor,'floor',true);

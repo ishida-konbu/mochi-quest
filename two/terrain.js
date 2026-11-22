@@ -1,15 +1,16 @@
 import { nearbyHut, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
+import { RYUGU, palaceSolid } from './ryugu-layout.js';
 import { HIGASHIYAMA, KITAYAMA, FIRE_COAST, eastRidgeHeight, northRidgeHeight, inFireMeadow } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint, WORLD_BOUND, wrapWorld } from './geography.js';
 import { RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
-import { KYO_BUILDINGS, KYO_ROADS, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
+import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
 import { CEDAR_GROVES, INARI_ROUTE, PEACH_TREES, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS } from './trade-routes.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
-import { roomPlan, pagodaPlan, roofForm, hipHeight } from './architecture.js';
+import { roomPlan, pagodaPlan, roofForm, roofProfile } from './architecture.js';
 // Coordinates and dimensions are metres. Positive Z is south.
 const ORIGINAL_BOUND = 416;
 export const BOUND = WORLD_BOUND,
@@ -829,6 +830,9 @@ function cell(x, z) {
   return Math.floor(x / 16) + ',' + Math.floor(z / 16);
 }
 function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0, bottom = -Infinity) {
+  // A ceiling records the underside of a beam. A slab records its top.
+  if (kind === 'ceiling') { bottom = top; top += .13; }
+  if (kind === 'slab' && bottom === -Infinity) bottom = top - .13;
   const item = { x, z, rx, rz, c: cos(yaw), s: sin(yaw), top, kind, support, roofRise, bottom };
   // Include the turning clearance of the largest ground animal (the shishi).
   const r = hypot(rx, rz) + 6.8;
@@ -858,7 +862,7 @@ for (const b of BUILDINGS) {
     for(const wall of tower.panels)
       localSolid(wall.u,wall.v,wall.width,wall.depth,wall.y+2.50*tower.scale,'wall',false,wall.y);
     for (const tread of tower.slabs)
-      localSolid(tread.u,tread.v,tread.w,tread.d,tread.top,'slab',true);
+      localSolid(tread.u,tread.v,tread.w,tread.d,tread.top,'slab',true,tread.top-tread.thickness);
     for (const [i,storey] of tower.storeys.entries()) {
       const {y,w,d}=storey, eave=y+2.60*tower.scale, cap=i===4;
       const outerW=w*1.33, outerD=d*1.33;
@@ -874,12 +878,19 @@ for (const b of BUILDINGS) {
     for (const cap of [plan.porch, plan.monitor]) {
       if (!cap) continue;
       const cx=b.x+cap.u*b.cos+cap.v*b.sin, cz=b.z-cap.u*b.sin+cap.v*b.cos;
-      const cover=putSolid(cx,cz,cap.width*.5,cap.depth*.5,b.yaw+cap.rotation,
+      putSolid(cx,cz,cap.width*.5,cap.depth*.5,b.yaw+cap.rotation,
         b.y+cap.eave,'roof',true,cap.rise);
-      cover.overhang=true;
     }
     if (plan.porch) for (const side of [-1,1])
       localSolid(side*b.w*.207,plan.porch.v+b.d*.19,.15,.16,plan.porch.eave,'wall',false);
+    if (b.kind === 'wardShop') {
+      const awning = (v,w,d,y,rise) => putSolid(b.x+v*b.sin,b.z+v*b.cos,w/2,d/2,b.yaw,b.y+y,'roof',true,rise);
+      awning(b.d/2+.15,b.w*1.01,1.29,2.90,.36);
+      if (b.wall>5) {
+        awning(b.d/2+.13,b.w+.20,.79,4.29,.25);
+        localSolid(0,b.d/2,b.w,.16,5.64,'wall',false,3.38);
+      }
+    }
     if(b.kind==='wardShop' && b.wall>5)for(const q of wardFloorPlan(b).slabs)
       localSolid(q.x,q.z,q.w,q.d,q.top,'slab',true);
     if (plan.workbench) {
@@ -913,10 +924,28 @@ for(const stone of SPRING_STONES) {
 }
 for(const step of BATH_STEPS) putSolid(SNOW_SPRING.x,SNOW_SPRING.z+step.z,1.32,.265,0,
   SNOW_SPRING.level+step.top,'floor',true);
+// The snow pavilion has an open front and a slatted rear wall.
+const pavilionZ=SNOW_SPRING.z-8.9, pavilionBase=SNOW_SPRING.level+.52;
+putSolid(SNOW_SPRING.x,pavilionZ,4.70,2.095,0,pavilionBase+3.56,'roof',true,1.46);
+for (const dx of [-3.67,0,3.67]) for (const dz of [-1.13,1.06])
+  putSolid(SNOW_SPRING.x+dx,pavilionZ+dz,.095,.095,0,pavilionBase+3.50,'wall',false);
+putSolid(SNOW_SPRING.x,pavilionZ-1.30,4.06,.11,0,pavilionBase+3,'wall',false);
 putSolid(SNOW_SPRING.x,SNOW_SPRING.z-8.9,3.90,1.55,0,SNOW_SPRING.level+.61,'floor',true);
 for (const [x, z, yaw] of MARKET_STALLS) {
+  const base=terrainHeight(x,z), c=cos(yaw), s=sin(yaw);
+  for (const u of [-1.64,1.64]) for (const v of [-.79,1.07])
+    putSolid(x+u*c+v*s,z-u*s+v*c,.059,.059,0,base+(v<0?3.28:2.53),'oval',false);
+  putSolid(x+.12*s,z+.12*c,3.83/2,1.12,yaw,base+2.65,'awning',true);
   putSolid(x + 0.42 * sin(yaw), z + 0.42 * cos(yaw), 1.57, 0.42, yaw, terrainHeight(x, z) + 0.93, 'box', true);
 }
+for(const {x,z,yaw} of KYO_FOOD) {
+  const base=terrainHeight(x,z), c=cos(yaw), s=sin(yaw);
+  putSolid(x,z,1.975,1.1,yaw,base+2.56,'roof',true,.79).form='hip';
+  putSolid(x+.24*s,z+.24*c,1.49,.525,yaw,base+.963,'box',true);
+  for(const u of [-1.57,1.57])for(const v of [-.78,.66])
+    putSolid(x+u*c+v*s,z-u*s+v*c,.068,.068,0,base+2.58,'oval',false);
+}
+putSolid(-161.7,-90.6,1.84,.44,1.18,terrainHeight(-161.7,-90.6)+2.08,'roof',true,.44);
 putSolid(-161.7, -90.6, 1.65, 0.24, 1.18, terrainHeight(-161.7, -90.6) + 1.93, 'box', false);
 for (const r of ROCKS) putSolid(r.x, r.z, r.rx, r.rz, r.yaw || 0, terrainHeight(r.x, r.z) + r.h, 'oval', true);
 for (const t of TREES)
@@ -937,12 +966,35 @@ for(const t of SHRINE_BAMBOO) {
     putSolid(t.x+t.sx*f,t.z+t.sz*f,radius,radius,0,y+t.height*(k+1)/2,'oval',false,0,y+t.height*k/2-.1);
   }
 }
-for (const g of GATES)
+function lampSolid(x,z,scale) {
+  const base=terrainHeight(x,z);
+  putSolid(x,z,.23*scale,.23*scale,0,base+1.67*scale,'oval',false);
+  putSolid(x,z,.50*scale,.50*scale,0,base+2.15*scale,'oval',false,0,base+1.23*scale);
+}
+for (const g of GATES) {
+  const base=terrainHeight(g.x,g.z);
+  putSolid(g.x,g.z,g.w*.455,.195,g.yaw,base+g.h*.754,'slab',true,0,base+g.h*.696);
+  putSolid(g.x,g.z,.155,.15,g.yaw,base+g.h*.95,'wall',false,0,base+g.h*.74);
+  const crown=putSolid(g.x,g.z,g.w*.55,g.w*.055,g.yaw,base+g.h*.973,'toriiCrown',true,g.h*.076);
+  crown.thickness=g.h*.087;
   for (const sign of [-1, 1]) {
     const x = g.x + sign * g.w * 0.36 * cos(g.yaw),
       z = g.z - sign * g.w * 0.36 * sin(g.yaw);
-    putSolid(x, z, g.w * 0.045, g.w * 0.045, 0, terrainHeight(g.x, g.z) + g.h, 'oval', false);
+    putSolid(x, z, g.w * 0.045, g.w * 0.045, 0, base + g.h, 'oval', false);
+    lampSolid(g.x+sign*g.w*.57,g.z+1.6,g===GATES[0]?1.16:1);
   }
+}
+for (const b of BRIDGES) for (const sign of [-1,1]) {
+  const x=b.x+sign*(b.halfWidth-.13);
+  const rail=putSolid(x,b.z,.105,b.length/2,0,1.21,'bridgeRail',false);
+  rail.bridge=b;
+  for(let j=1;j<=14;j+=3) {
+    const z=b.z+b.length*(j/14-.5);
+    putSolid(x,z,.17,.17,0,bridgeHeight(b,z),'wall',false,0,-.95);
+  }
+  lampSolid(b.x+sign*(b.halfWidth+.94),b.z+b.length/2+.48,.91);
+}
+
 function surfaceHeight(s, x, z, pad) {
   const dx = x - s.x,
     dz = z - s.z,
@@ -958,35 +1010,40 @@ function surfaceHeight(s, x, z, pad) {
     return s.kind === 'oval' ? s.top : s.top - s.roundHeight * (1 - Math.sqrt(1-r2));
   }
   if (abs(a) > s.rx + pad || abs(b) > s.rz + pad) return -Infinity;
-  if (s.kind === 'pagodaEave') {
-    const x=abs(a)/s.rx,z=abs(b)/s.rz,r=max(x,z);
-    if (r<s.aperture) return -Infinity;
-    const t=sat((r-s.aperture)/(1-s.aperture));
-    const corner=min(x,z)/max(r,.001);
-    return s.top+s.roofRise*((1-t)**1.59+.17*corner**3.8*t**1.7);
+  if (pad > 0 && max(0,abs(a)-s.rx)**2 + max(0,abs(b)-s.rz)**2 > pad*pad) return -Infinity;
+  if (s.kind === 'roof' || s.kind === 'pagodaEave') {
+    const h = roofProfile(s.kind === 'pagodaEave' ? 'pagoda' : s.form,
+      a/s.rx,b/s.rz,s.aperture,pad/s.rx,pad/s.rz);
+    return h === -Infinity ? h : s.top + h*s.roofRise;
   }
-  if (s.kind === 'roof') {
-    if (s.form === 'leanTo') return s.top + s.roofRise * sat(.5 - .5*b/s.rz);
-    if (s.form === 'hip') return s.top + s.roofRise * hipHeight(a / s.rx, b / s.rz);
-    const v = min(1, abs(b) / (s.rz * 1.12)),
-      end = min(1, abs(a) / s.rx);
-    return s.top + s.roofRise * ((1 - v) ** 1.62 + end ** 5 * (0.045 + 0.12 * v));
+  if (s.kind === 'awning') {
+    const u = sat(.5+a/(2*s.rx)), v = sat(.5+b/(2*s.rz));
+    return s.top + 1.1*(.58-.72*v-.085*sin(Math.PI*u)-.07*sin(Math.PI*v)+.021*cos(u*8*Math.PI));
   }
+  if (s.kind === 'bridgeRail') return bridgeHeight(s.bridge,z) + s.top;
+  if (s.kind === 'toriiCrown') return s.top + s.roofRise*(min(1,abs(a)/s.rx)**2.8);
   return s.top;
 }
 // feet limits which storey can support an actor. Without a height hint,
 // terrain queries (objects, spawn points and the atlas) use the lower storey.
-function highest(x, z, pad, feet, supportOnly) {
+function highest(x, z, pad, feet, supportOnly, body = 1.42) {
   let height = -Infinity;
   const items = cells.get(cell(x, z));
   if (items) for (const item of items) {
-    if (feet + 1.42 < item.bottom || item.kind === 'ceiling' || (supportOnly && !item.support)) continue;
-    if (item.kind === 'slab' && feet < item.top - .34) continue;
-    if (item.kind === 'roof' || item.kind === 'pagodaEave') {
-      if (feet < item.top - 0.22) continue;
-      if (supportOnly && surfaceHeight(item,x,z,pad) > feet + .34) continue;
+    if (feet + body < item.bottom) continue;
+    if (supportOnly && feet === -Infinity && !item.support) continue;
+    const sheet = item.kind === 'roof' || item.kind === 'pagodaEave' ||
+      item.kind === 'awning' || item.kind === 'toriiCrown';
+    const top = surfaceHeight(item,x,z,item.kind==='slab' && feet!==Infinity ? 0 : pad);
+    // Posts and upright walls block walking from the side. A falling
+    // character can still come to rest on their exposed upper face.
+    if (top === -Infinity || supportOnly && !item.support && feet < top-.015) continue;
+    if (item.kind === 'slab' && feet < top-.34) continue;
+    if (sheet) {
+      if (feet < top - .34 && (supportOnly || feet + body <= lowerFace(item,top))) continue;
     }
-    height = max(height, surfaceHeight(item, x, z, pad));
+    if (item.kind === 'bridgeRail' && feet+body <= lowerFace(item,top)) continue;
+    height = max(height,top);
   }
   return height;
 }
@@ -1004,39 +1061,124 @@ export function groundHeight(x, z, feet = -Infinity) {
 export function waterDepth(x, z) {
   return max(0, waterSurfaceAt(x,z) - terrainHeight(x, z));
 }
-export function overheadHeight(x, z, feet) {
-  const bridge = bridgeAt(x, z);
+function lowerFace(item,top) {
+  if (item.kind === 'roof' || item.kind === 'pagodaEave') return top - (item.thickness ?? Math.max(.10,item.form==='hip'?.09*item.roofRise:0));
+  if (item.kind === 'awning') return top-.044;
+  if (item.kind === 'bridgeRail') return top-1.65;
+  if (item.kind === 'toriiCrown') return top-item.thickness;
+  return item.bottom;
+}
+export function overheadHeight(x, z, feet, radius = 0) {
+  const bridge = bridgeAt(x,z);
   const deck = bridge ? bridgeHeight(bridge,z) : -Infinity;
-  let ceiling = feet < deck - .36 ? deck - .17 : Infinity;
-  const items = cells.get(cell(x, z));
-  if (items) for (const item of items) {
-    if (item.kind === 'pagodaEave' || item.overhang) {
-      const roof=surfaceHeight(item,x,z,0);
-      if (feet<roof-.55) ceiling=min(ceiling,roof-.08);
-    }
-    if (item.kind === 'slab' && feet < item.top - .55 && surfaceHeight(item,x,z,0) > -Infinity)
-      ceiling = min(ceiling,item.top-.10);
-    if (item.kind === 'ceiling' && feet < item.top - 0.15 && surfaceHeight(item,x,z,0) > -Infinity)
-      ceiling = min(ceiling, item.top);
+  let ceiling = feet < deck - .34 ? deck - .235 : Infinity;
+  for (const item of cells.get(cell(x,z)) || []) {
+    const top = surfaceHeight(item,x,z,item.kind==='slab' ? 0 : radius);
+    if (top <= feet + .34) continue;
+    const bottom = lowerFace(item,top);
+    if (bottom === -Infinity) continue;
+    // A footprint may overlap the next tread on its way upstairs. Landings
+    // at the next storey still have a real underside above the climber.
+    if (item.kind === 'slab' && bottom < feet+.42) continue;
+    if (bottom > feet) ceiling = min(ceiling,bottom);
   }
   return ceiling;
 }
+const palaceBed = terrainHeight(RYUGU.x,RYUGU.z);
+export function staticVolumeAt(x,z,feet,radius=.24,body=1.42) {
+  if (terrainHeight(x,z) > feet+.001 || palaceSolid(x,z,feet,palaceBed,body,radius)) return true;
+  const bridge=bridgeAt(x,z);
+  if (bridge) {
+    const deck=bridgeHeight(bridge,z);
+    if (deck > feet+.001 && deck-.235 < feet+body) return true;
+  }
+  for (const item of cells.get(cell(x,z)) || []) {
+    if (item.bottom >= feet+body) continue;
+    const top=surfaceHeight(item,x,z,radius);
+    if (top > feet+.001 && lowerFace(item,top) < feet+body) return true;
+  }
+  return false;
+}
+export function canOccupy(x,z,feet,radius=.24,bodyHeight=1.42) {
+  return highest(x,z,radius,feet,false,bodyHeight) <= feet+.34 &&
+    overheadHeight(x,z,feet,radius) >= feet+bodyHeight;
+}
 export function canLand(x, z, feet) {
   const floor = groundHeight(x, z, feet);
-  return highest(x, z, 0.12, feet ?? floor, false) <= floor + 0.33;
+  return canOccupy(x,z,feet ?? floor,.12);
 }
-export function constrainMove(fromX, fromZ, toX, toZ, aboveGround = 0, feetY = groundHeight(fromX, fromZ) + aboveGround, radius = .24) {
+function sidePenetration(item,x,z,feet,radius,body) {
+  const top=surfaceHeight(item,x,z,radius);
+  if (top <= feet+.34 || lowerFace(item,top) >= feet+body) return 0;
+  const dx=x-item.x,dz=z-item.z;
+  const a=abs(dx*item.c-dz*item.s),b=abs(dx*item.s+dz*item.c);
+  if(item.kind==='kettleRim'){
+    const r=hypot(a,b);
+    return min(item.rx+.045+radius-r,r-(item.rx-.11-radius));
+  }
+  if(item.kind==='oval' || item.kind==='springRock')
+    return (1-hypot(a/(item.rx+radius),b/(item.rz+radius)))*min(item.rx+radius,item.rz+radius);
+  return radius-hypot(max(0,a-item.rx),max(0,b-item.rz))-min(0,max(a-item.rx,b-item.rz));
+}
+function leavingOverlap(x,z,nx,nz,feet,radius,body) {
+  // A restored position or a wider mount can begin just inside a corner.
+  // Permit strides that reduce that overlap without entering another solid.
+  let improves=false;
+  for(const item of cells.get(cell(nx,nz)) || []) {
+    const next=sidePenetration(item,nx,nz,feet,radius,body);
+    if(next<=0)continue;
+    const previous=sidePenetration(item,x,z,feet,radius,body);
+    if(previous<=0 || next>previous+.000001)return false;
+    if(next<previous-.000001)improves=true;
+  }
+  return improves;
+}
+// Project the blocked part of a stride along the face actually touched.
+// Choosing a world axis here drifts sideways against rotated walls even
+// when the player walks straight into them, then snags on the next post.
+function wallSlide(x,z,nx,nz,feet,radius,body,free) {
+  const dx=wrapDelta(nx-x),dz=wrapDelta(nz-z);
+  for(const item of cells.get(cell(nx,nz)) || []) {
+    const top=surfaceHeight(item,nx,nz,radius);
+    if(top<=feet+.34 || lowerFace(item,top)>=feet+body)continue;
+    const a=(x-item.x)*item.c-(z-item.z)*item.s;
+    const b=(x-item.x)*item.s+(z-item.z)*item.c;
+    let u,v;
+    if(item.kind==='kettleRim'){
+      const sign=hypot(a,b)<item.rx-.0325?-1:1;
+      u=sign*a;v=sign*b;
+    }else if(item.kind==='oval' || item.kind==='springRock') {
+      u=a/(item.rx+radius)**2;v=b/(item.rz+radius)**2;
+    }else{
+      u=Math.sign(a)*max(0,abs(a)-item.rx);
+      v=Math.sign(b)*max(0,abs(b)-item.rz);
+      if(!u && !v)continue;
+    }
+    const span=hypot(u,v);
+    if(!span)continue;
+    const normalX=(u*item.c+v*item.s)/span, normalZ=(-u*item.s+v*item.c)/span;
+    const inward=dx*normalX+dz*normalZ;
+    if(inward>=0)continue;
+    const tx=wrapCoord(nx-inward*normalX),tz=wrapCoord(nz-inward*normalZ);
+    if(free(tx,tz))return {x:tx,z:tz};
+  }
+  return null;
+}
+export function constrainMove(fromX, fromZ, toX, toZ, aboveGround = 0, feetY = groundHeight(fromX, fromZ) + aboveGround, radius = .24, bodyHeight = 1.42) {
   const dx = wrapDelta(toX - fromX), dz = wrapDelta(toZ - fromZ);
-  const steps = max(1, Math.ceil(hypot(dx, dz) / 0.55));
+  const steps = max(1, Math.ceil(hypot(dx, dz) / .25));
   let x = fromX, z = fromZ;
   for (let i = 0; i < steps; i++) {
     const feet = max(feetY, groundHeight(x, z, feetY));
-    const free = (nx, nz) => highest(nx, nz, radius, feet, false) <= feet + 0.34 &&
-      overheadHeight(nx, nz, feet) >= feet + 1.42;
+    const free = (nx,nz) => canOccupy(nx,nz,feet,radius,bodyHeight);
     const nx = wrapCoord(x + dx / steps), nz = wrapCoord(z + dz / steps);
-    if (free(nx, nz)) { x = nx; z = nz; }
-    else if (free(nx, z)) x = nx;
-    else if (free(x, nz)) z = nz;
+    if (free(nx,nz) || !free(x,z) && leavingOverlap(x,z,nx,nz,feet,radius,bodyHeight)) { x=nx; z=nz; }
+    else {
+      const slide=wallSlide(x,z,nx,nz,feet,radius,bodyHeight,free);
+      if(slide){x=slide.x;z=slide.z;}
+      else if (nx !== x && free(nx, z)) x = nx;
+      else if (nz !== z && free(x, nz)) z = nz;
+    }
   }
   return { x, z };
 }

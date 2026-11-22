@@ -1,83 +1,14 @@
 import * as THREE from './vendor/three.module.min.js';
+import { brushWash } from './scroll-sculpt.js';
 const {PI,sin,cos}=Math, tau=PI*2;
 export const INK='#3e382e', SOOT='#5b5040', PAPER='#ece3ca', WARM='#ceb994', RED='#a6614a';
-const cell=256,tiles={paper:0,scales:1,shell:2,mantle:3,fan:4,cloth:5};
+const tiles={paper:0,scales:1,shell:2,mantle:3,fan:4,cloth:5};
 let paint;
 function pigments() {
-  const atlas=document.createElement('canvas');atlas.width=cell*3;atlas.height=cell*2;
-  const g=atlas.getContext('2d');
-  let seed=64281;
-  function random(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}
-  function tile(name,base,draw) {
-    const id=tiles[name];g.save();g.translate(cell*(id%3),cell*Math.floor(id/3));
-    g.beginPath();g.rect(0,0,256,256);g.clip();
-    g.fillStyle=base;g.fillRect(0,0,256,256);g.lineCap='round';g.lineJoin='round';draw();
-    // Short, uneven dry-brush fibres soften the flat pools of colour.
-    for(let i=0;i<1120;i++){
-      g.fillStyle=i%4===0?'rgba(74,59,38,.068)':'rgba(255,244,215,.085)';
-      g.fillRect(random()*256,random()*256,1+random()*4,.6+random()*.7);
-    }
-    g.restore();
-  }
-  function path(d,c,width=1,fill) {
-    const p=new Path2D(d);
-    if(fill){g.fillStyle=fill;g.fill(p);}
-    if(c){g.strokeStyle=c;g.lineWidth=width;g.stroke(p);}
-  }
-  tile('paper','#fbf7e9',()=>{});
-  tile('scales','#ddc4a5',()=>{
-    const wash=g.createLinearGradient(0,0,0,256);
-    for(const [t,c] of [[0,'#79584d'],[.19,'#a27361'],[.49,'#d0a48c'],[.72,'#e8cdb2'],[1,'#e7dabd']])wash.addColorStop(t,c);
-    g.fillStyle=wash;g.fillRect(0,0,256,256);
-    for(let row=0;row<12;row++)for(let col=0;col<10;col++){
-      const x=col*18+(row%2)*8-7,y=22+row*16+.04*(155-x);
-      if(x>175 || (x<38 && row>8))continue;
-      const w=8+random()*3,h=11+random()*2;
-      path('M'+x+' '+y+'q'+w+' '+(h*.16)+' '+(w*.75)+' '+h,'rgba(64,47,38,.58)',1+random()*.8);
-      if((row+col)%3!==1)path('M'+(x+2)+' '+(y+2)+'q'+(w*.73)+' 3 '+(w*.54)+' '+(h*.73),'rgba(248,229,195,.64)',1.2);
-    }
-    path('M183 45Q176 67 179 88Q163 116 170 147Q175 170 191 178',SOOT,3.6);
-    path('M178 71Q166 96 162 120Q161 150 171 163','#9c7960',1.5);
-    path('M206 153Q219 162 237 150',SOOT,2);
-    for(let k=0;k<6;k++)path('M'+(43+k*13)+' '+(199+(k%2)*5)+'q10 2 15 -1','#bc9a7c',1.3);
-  });
-  tile('shell','#a69d75',()=>{
-    const wash=g.createRadialGradient(114,101,19,128,131,158);
-    wash.addColorStop(0,'#bdac7b');wash.addColorStop(.60,'#9e9470');wash.addColorStop(1,'#6a6c55');
-    g.fillStyle=wash;g.fillRect(0,0,256,256);
-    const seams=['M30 45Q65 42 96 57L118 39Q148 37 165 50L184 67 222 53','M8 96L46 86Q64 109 72 119Q94 123 107 128L119 111 157 110 175 129 212 111 251 113','M4 166Q32 144 58 151Q67 172 85 184L105 184 124 162 155 165 179 182 212 159 251 170','M11 212L54 206 85 220Q112 226 123 211L155 210 180 220 214 204 247 204','M96 57L93 86 107 128M165 50Q168 79 157 110M46 86L34 61M184 67L212 111M72 119L58 151M175 129L179 182M107 128L124 162M212 111L212 159M85 184L85 220M155 165L155 210'];
-    for(const d of seams){g.save();g.translate(2.2,1.7);path(d,'#c6b58d',3.6);g.restore();path(d,'#514c3d',2.5);}
-    for(let j=0;j<52;j++){
-      const x=12+random()*228,y=12+random()*232;
-      path('M'+x+' '+y+'q4 2 8 0','rgba(74,69,52,.28)',1);
-    }
-  });
-  tile('mantle','#c99680',()=>{
-    const wash=g.createLinearGradient(0,0,0,256);
-    wash.addColorStop(0,'#ac7868');wash.addColorStop(.46,'#c4937c');wash.addColorStop(.83,'#d3b299');wash.addColorStop(1,'#d7c6a6');
-    g.fillStyle=wash;g.fillRect(0,0,256,256);
-    for(let i=0;i<190;i++){
-      const x=random()*256,y=random()*216,r=1+random()*2.2;
-      g.strokeStyle=i%3?'rgba(109,69,53,.27)':'rgba(238,214,179,.57)';
-      g.lineWidth=.9;g.beginPath();g.ellipse(x,y,r*1.25,r,.34,0,tau);g.stroke();
-    }
-    for(let i=0;i<8;i++)path('M'+(10+i*34)+' 177q7 25 0 34','#a97863',1.1);
-  });
-  tile('fan','#e6cf9e',()=>{
-    const wash=g.createLinearGradient(0,0,0,256);wash.addColorStop(0,'#c88460');wash.addColorStop(.29,'#e2c391');wash.addColorStop(.69,'#e9d8ad');wash.addColorStop(1,'#be986f');
-    g.fillStyle=wash;g.fillRect(0,0,256,256);
-    for(let i=-7;i<=7;i++){const x=128+i*27;path('M128 265L'+x+' -7',i%2?'#a88963':'#caa67c',1.5);}
-    for(let i=0;i<3;i++)path('M-6 '+(94+i*11)+'Q40 '+(56+i*11)+' 78 '+(96+i*11)+'T161 '+(94+i*11)+'T272 '+(87+i*11),'#786a52',2);
-    path('M183 46Q197 37 208 46Q215 41 227 43M167 32Q177 29 185 34Q192 29 199 30',INK,2);
-  });
-  tile('cloth','#acb2a0',()=>{
-    for(let j=-1;j<7;j++)for(let i=-1;i<6;i++)for(let k=1;k<4;k++){
-      g.strokeStyle=k===3?'#747c70':'#dbd5bc';g.lineWidth=k===3?1.8:1.4;g.beginPath();
-      g.arc(52*i+(j%2)*26,30+j*46,k*8,PI,tau);g.stroke();
-    }
-  });
-  const map=new THREE.CanvasTexture(atlas);map.colorSpace=THREE.SRGBColorSpace;map.anisotropy=4;
-  return new THREE.MeshLambertMaterial({map,vertexColors:true,side:THREE.DoubleSide});
+  const map=new THREE.TextureLoader().load(new URL('./assets/bestiary/ryugu-brushwork.webp',import.meta.url).href);
+  map.colorSpace=THREE.SRGBColorSpace;
+  map.anisotropy=8;
+  return brushWash(new THREE.MeshLambertMaterial({map,vertexColors:true,side:THREE.DoubleSide}),.63);
 }
 export function pigment(){return paint??=pigments();}
 const sphere=new THREE.SphereGeometry(1,22,16),small=new THREE.SphereGeometry(1,12,8);
@@ -106,10 +37,10 @@ export class InkForm {
   }
   // A tapered, curved ink line has real thickness even in profile. Rings are
   // perpendicular to the tangent, giving elbows and curled arms a rounded cap.
-  stroke(points,radii,tint,tile='paper',sides=9) {
+  stroke(points,radii,tint,tile='paper',sides=9,samples) {
     if(typeof radii==='number')radii=points.map(()=>radii);
     const pts=points.map(v=>new THREE.Vector3(...v)),curve=new THREE.CatmullRomCurve3(pts),
-      count=Math.max(6,(pts.length-1)*4),frames=curve.computeFrenetFrames(count,false);
+      count=samples??Math.max(6,(pts.length-1)*4),frames=curve.computeFrenetFrames(count,false);
     const vertices=[],indices=[],uv=[];
     for(let k=0;k<=count;k++){
       const t=k/count,along=t*(radii.length-1),l=Math.min(Math.floor(along),radii.length-2),

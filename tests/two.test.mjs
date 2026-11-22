@@ -187,7 +187,8 @@ test('a player can walk across the modeled bridge and stretch onto the riverbank
   const landed=[];
   for(const mode of ['normal','dango']) {
     const g=createGame(),p=g.state.player;
-    moveTo(g,-29.25,49); const startingGround=p.y;
+    // Take off before reaching the gable so a high arc can clear its edge.
+    moveTo(g,-26,49); const startingGround=p.y;
     g.act(mode);g.act('jump');
     for(let f=0;f<160;f++) g.step(1/60,{x:p.x>-33.6?-1:0});
     assert.equal(p.grounded,true);

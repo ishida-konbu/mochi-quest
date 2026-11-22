@@ -1,6 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { batchActorParts as paint } from './actors.js';
-import { CONNECTING_ROADS, WATER_Y, riverZ, coastX, eastCoastX, roadSurfaceHeight, wrapDelta } from './terrain.js';
+import { wrapDelta } from './terrain.js';
 import { courtCurtains, ferryCrew } from './kyo-procession-art.js';
 import { harnessBeast, capitalHorse } from './otsu-travellers.js';
 import { OX_SCALE } from './scroll-fauna.js';
@@ -10,7 +10,8 @@ import { kosode, silkMaterial, SilkPanels } from './kosode.js';
 import { dressedRiceFace } from './mochi-model.js';
 import { paintedSilk,townPortrait } from './emaki-costume.js';
 import { brushStroke } from './pilgrimage-pigment.js';
-import { measureRoute, cartPosition } from './trade-routes.js';
+import { CARRIAGES, OX_HITCH, merchantPose, carriagePose } from './traveller-positions.js';
+export {merchantPosition} from './traveller-positions.js';
 
 const { PI, sin, cos }=Math;
 const ink='#3c3935', lacquer='#653c31', straw='#b2915b', pine='#526551', gold='#cba861';
@@ -69,7 +70,7 @@ export function traveller(parent,noble){
 }
 function oxCarriage() {
   const root=new THREE.Group(), wheels=[];
-  const oxZ=3.78;
+  const oxZ=OX_HITCH;
   // The yoke and strap follow the ox; the rear shaft sockets belong to the wagon.
   const onOx=([x,y,z])=>[x*OX_SCALE,y*OX_SCALE,oxZ+z*OX_SCALE];
   const shaftTip=side=>onOx([side*.55,1.48,.345]);
@@ -182,22 +183,12 @@ function marketBoat(tint,index) {
   const row=ferryCrew(root,index);
   return {root,row};
 }
-export function merchantPosition(index,time) {
-  const a=time*(index===2?.040:.021)+[0,1.75,2.4][index];
-  if(index===2) {
-    const x=69+38*sin(a);
-    return {x,z:riverZ(x)+3.8*cos(a)};
-  }
-  const z=(index===0?159:210)+(index===0?83:117)*sin(a);
-  const coast=index===0?coastX(z):eastCoastX(z);
-  return {x:coast+(index===0?-1:1)*(23+12*cos(a)),z};
-}
 export function createTravellers(scene) {
   const horse=capitalHorse(scene), walkers=createRoadMerchants(scene);
-  const carts=CONNECTING_ROADS.slice(0,2).map((road,i)=>{
+  const carts=CARRIAGES.map(journey=>{
     const cart=oxCarriage();
     scene.add(cart.root);
-    return {...cart,route:measureRoute(road.points),speed:i===0?1.85:1.63,offset:i===0?85:30};
+    return {...cart,...journey};
   });
   const boats=['#825643','#526775','#7b7051'].map((tint,i)=>{const boat=marketBoat(tint,i);scene.add(boat.root);return boat;});
   function place(root,player,x,z,y,yaw){
@@ -209,11 +200,10 @@ export function createTravellers(scene) {
   return (time,player,camera)=>{
     walkers(time,player,camera);
     horse(time,player);
-    for(const {route,root,wheels,ox,noble,speed,offset} of carts){
-      const q=cartPosition(route,time,speed,offset), bed=roadSurfaceHeight(q.x,q.z);
-      if(!place(root,player,q.x,q.z,bed,q.yaw)) continue;
-      const fore=roadSurfaceHeight(q.x+3*sin(q.yaw),q.z+3*cos(q.yaw));
-      root.rotation.order='YXZ';root.rotation.x=-Math.atan2(fore-bed,3);
+    for(const cart of carts){
+      const {root,wheels,ox,noble,offset}=cart,q=carriagePose(cart,time);
+      if(!place(root,player,q.x,q.z,q.y,q.yaw)) continue;
+      root.rotation.order='YXZ';root.rotation.x=-Math.atan(q.grade);
       const look=Math.atan2(wrapDelta(player.x-q.x),wrapDelta(player.z-q.z))-q.yaw;
       noble.rotation.y=Math.max(-1.22,Math.min(1.22,Math.atan2(sin(look),cos(look))))+.08*sin(time*.56);
       noble.rotation.z=.036*cos(time*1.23+offset);
@@ -221,8 +211,8 @@ export function createTravellers(scene) {
       ox.pose(time,Number(q.moving),q.travelled*3.44/OX_SCALE);
     }
     boats.forEach(({root:m,row},i)=>{
-      const a=merchantPosition(i,time),b=merchantPosition(i,time+.08);
-      if(!place(m,player,a.x,a.z,WATER_Y+.045+.061*sin(time*1.34+i),Math.atan2(b.x-a.x,b.z-a.z))) return;
+      const a=merchantPose(i,time);
+      if(!place(m,player,a.x,a.z,a.y,a.yaw)) return;
       row(time,wrapDelta(a.x-player.x)**2+wrapDelta(a.z-player.z)**2<52**2);
       m.rotation.order='YXZ';m.rotation.x=.022*cos(time*.91+i);m.rotation.z=.034*sin(time*.83+i);
     });

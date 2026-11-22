@@ -22,7 +22,7 @@ export const SCROLL_FAUNA = {
       ...[-.28,.28].flatMap(x=>[-.62,.44].map(z=>[x,.40,z,.095,.39,.11]))]},
   chicken:{count:40,label:'鶏',points:25,stature:1.03,center:.56,frame:1.95,
     volumes:[[0,.45,-.04,.25,.25,.43],[0,.75,.24,.15,.23,.20]]},
-  fishfolk:{count:10,label:'魚人',points:55,stature:1.02,center:1.07,frame:2.9,
+  fishfolk:{count:7,label:'魚人',points:55,stature:1.02,center:1.07,frame:2.9,
     volumes:[[0,.96,-.01,.39,.56,.27],[0,1.70,.075,.27,.31,.35],[-.43,1.09,.09,.17,.26,.18],[.43,1.09,.09,.17,.26,.18]]},
 };
 const tau=Math.PI*2, {sin,cos,hypot}=Math;
@@ -129,7 +129,7 @@ function findGround(n,residents) {
   }
   throw new Error('Missing habitat for '+n.id);
 }
-const courtSeats=[[11,-11],[7,7],[-2,-9],[8,3],[-4,8],[5,-11],[-2,12],[9,10],[-7,3],[6,-17]];
+const courtSeats=[[11,-11],[7,7],[-2,-9],[8,3],[-4,8],[5,-11],[-2,10.5]];
 export function makeScrollFauna() {
   if(!plan) {
     plan=[];
@@ -203,7 +203,7 @@ export function moveScrollFauna(n,time) {
 
 // Four movement phases and eight views of every silhouette, including the
 // closed wings of a perched hawk and the shorter tail of a hen.
-export const FAUNA_SHEET={atlas:'scroll-fauna.webp?v=otsu-eyes-1',columns:16,rows:16,width:144,height:144,poses:4};
+export const FAUNA_SHEET={atlas:'scroll-fauna.webp?v=ryugu-brush-1',columns:16,rows:16,width:144,height:144,poses:4};
 export const faunaPrints=['elephant','baku','hawk','ox','chicken','hen','fishfolk','hawk-perched'];
 export function faunaDrawing(n) {
   const kind=n.type==='hawk' && n.perched?'hawk-perched':n.type==='chicken' && n.variant%4!==0?'hen':n.type;

@@ -1,7 +1,8 @@
 // Original three-dimensional pen studies. Every flank, sleeve and flight feather
 // carries its own UVs; moving parts from one species share an instanced draw.
 import * as T from './vendor/three.module.min.js';
-import { InkForm, surface } from './ryugu-ink.js';
+import { skin as brushSkin, profile as brushProfile, eye as inkEye } from './ryugu-sculpt.js';
+import { InkForm, surface, pigment as seaPigment } from './ryugu-ink.js';
 import { courtFowl } from './court-fowl.js';
 import { brushWash } from './scroll-sculpt.js';
 import { otsuParts } from './otsu-beasts.js';
@@ -162,6 +163,45 @@ function hawk(){
   }
   return parts;
 }
+// The chamberlain's carp head has a high nape sloping into fleshy lips.
+// Its barbels curl forward below the gill covers, clear of the hat cord.
+function courtCarpHead(){
+  const f=new InkForm({paper:0,scales:1,feather:0,plume:0},3,2);
+  const section=brushProfile([
+    [-.335,.021,.059,.167],[-.275,.156,.203,.181],[-.155,.255,.277,.195],
+    [.035,.281,.258,.184],[.194,.247,.209,.155],[.323,.183,.151,.119],
+    [.398,.121,.083,.090],[.444,.057,.044,.088],[.457,.005,.014,.079],
+  ]);
+  function cheek(z,a,lift=0){
+    const [breadth,depth,centre]=section(z);
+    return [(breadth+lift)*sin(a),centre+(depth+lift)*cos(a),z];
+  }
+  brushSkin(f,36,34,(u,v)=>{
+    const z=-.335+.792*v,a=u*tau;
+    return [...cheek(z,a),.23+.76*v,.5+.45*cos(a)];
+  },'#fff9e8','scales',false,true);
+  for(const side of [-1,1]){
+    const q=(z,a,l)=>cheek(z,side*a,l);
+    inkEye(f,(u,v,l)=>q(.196+.082*u,1.18-.30*v,.006+l),.91);
+    const gill=[[-.014,.69],[-.067,.98],[-.091,1.41],[-.082,1.81],[-.025,2.16],[.075,2.37]];
+    line(f,gill.map(([z,a])=>q(z,a,.004)),[.002,.009,.013,.011,.006,.001]);
+    line(f,gill.slice(1,-1).map(([z,a])=>q(z-.027,a,.004)),[.001,.005,.004,.001],smoke);
+    line(f,[[.368,1.62],[.39,1.78],[.415,1.94],[.44,1.78]].map(([z,a])=>q(z,a,.005)),
+      [.002,.006,.009,.002]);
+    const lip=q(.392,1.96);
+    tube(f,[lip,[side*.16,.023,.443],[side*.231,-.021,.464],[side*.256,-.004,.442],
+      [side*.259,.012,.434]],[.012,.013,.008,.005,.001],'#726756');
+    blade(f,[q(-.156,1.83),[side*.30,.169,-.235],[side*.375,.205,-.305],[side*.415,.243,-.369]],
+      [.038,.074,.057,.002],[0,1,0],.017*side,'feather','#c8c0a9');
+  }
+  // A pinched eboshi sits high behind the eyes. The ties follow the cheek.
+  loft(f,'y',[[0,.829,-.201,.019,.023],[.021,.796,-.18,.077,.069],[.034,.703,-.132,.102,.10],
+    [.017,.574,-.09,.107,.123],[0,.493,-.057,.151,.149],[0,.401,-.037,.187,.172],
+    [0,.375,-.035,.193,.17]],'plume','#625e55',.037);
+  for(const side of [-1,1])line(f,[[side*.164,.406,-.023],[side*.237,.324,-.046],
+    [side*.271,.234,-.073],[side*.256,.112,-.083]],[.013,.011,.008,.004],'#4d4c43');
+  return {name:'head',pivot:[0,1.53,.006],geometry:f.geometry(),material:seaPigment()};
+}
 function fishfolk(){
   const parts=[part('body',origin,f=>{
     // Underskirt and kosode leave a stepped hem and an open wrap at the ankle.
@@ -183,25 +223,7 @@ function fishfolk(){
     f.oval([-.014,.985,-.238],[.165,.084,.07],'#c3a574',[0,0,-.12]);
     for(const s of [-1,1])blade(f,[[s*.036,.97,-.258],[s*.079,.84,-.281],[s*.081,.73,-.261]],
       [.043,.058,.028],[1,0,0],.019,'lotus');
-  }),part('head',[0,1.53,.006],f=>{
-    loft(f,'z',[[0,.178,-.329,.039,.087],[0,.179,-.26,.175,.238],[0,.184,-.14,.265,.285],
-      [0,.172,.054,.281,.249],[0,.142,.227,.238,.192],[0,.103,.343,.164,.131],[0,.084,.419,.097,.071]],'scales');
-    f.oval([0,.069,.421],[.125,.053,.05],'#d2b498');
-    line(f,[[-.10,.073,.450],[-.009,.055,.472],[.059,.062,.466],[.10,.080,.449]],[.004,.014,.011,.003]);
-    for(const s of [-1,1]){
-      eye(f,s,.234,.235,.17,.083);
-      line(f,[[s*.203,.345,.029],[s*.275,.275,-.028],[s*.291,.178,-.046],[s*.278,.102,-.049],[s*.215,.007,-.05]],[.006,.014,.018,.015,.003]);
-      line(f,[[s*.217,.319,-.058],[s*.277,.257,-.109],[s*.282,.158,-.105]],[.003,.011,.003],smoke);
-      tube(f,[[s*.084,.076,.402],[s*.156,.037,.415],[s*.209,-.002,.407],[s*.246,.007,.38]],[.014,.012,.009,.002],ochre);
-      blade(f,[[s*.221,.152,-.169],[s*.319,.202,-.241],[s*.387,.239,-.315],[s*.418,.268,-.359]],
-        [.045,.085,.064,.003],[0,1,0],.018*s,'feather');
-    }
-    // Soft black eboshi, pinched high above the carp's brow.
-    loft(f,'y',[[0,.829,-.201,.019,.023],[.021,.796,-.18,.077,.069],[.034,.703,-.132,.102,.10],
-      [.017,.574,-.09,.107,.123],[0,.493,-.057,.151,.149],[0,.401,-.037,.187,.172],[0,.375,-.035,.193,.17]],'plume','#807f73',.037);
-    for(const s of [-1,1])line(f,[[s*.164,.406,-.023],[s*.237,.324,-.046],[s*.257,.234,-.073],[s*.246,.112,-.083]],
-      [.013,.011,.008,.004],'#4d4c43');
-  })];
+  }),courtCarpHead()];
   for(const s of [-1,1])parts.push(part('sleeve'+s,[s*.28,1.346,-.011],f=>{
     loft(f,'y',[[0,.052,0,.084,.11],[s*.082,.008,.009,.133,.142],[s*.137,-.081,.04,.136,.159],
       [s*.164,-.209,.068,.15,.17],[s*.154,-.354,.084,.143,.182],[s*.131,-.426,.111,.141,.171]],'wave','#eee9d5',.055);

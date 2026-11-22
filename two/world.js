@@ -16,7 +16,7 @@ import { dressWaysideBaths } from './wayside-baths.js';
 import { dressRyugu, createRyuguLife } from './ryugu.js';
 import { createTravellers } from './travelling-merchants.js';
 import { noren } from './craftwork.js';
-import { pagodaPlan, roomPlan, roofForm } from './architecture.js';
+import { pagodaPlan, roomPlan, roofForm, roofProfile } from './architecture.js';
 import { hipRoof, tradeFacade } from './workshops.js';
 import { wetStone } from './stone-water.js';
 import { prepareForest } from './forest.js';
@@ -489,12 +489,10 @@ function pagodaRoofShape(inner = .255) {
         const u = i / n - 0.5,
           t = j / rows,
           r = inner + (.5 - inner) * t;
-        const dx = u * r * 2,
-          dz = r,
-          corner = abs(2 * u) ** 3.8;
+        const dx = u * r * 2, dz = r;
         p.push(
           dx * cos(angle) - dz * sin(angle),
-          (1 - t) ** 1.59 + 0.17 * corner * t ** 1.7,
+          roofProfile('pagoda',2*dx,2*dz,2*inner),
           dx * sin(angle) + dz * cos(angle),
         );
         uv.push((i / n) * 2.6, t * 1.4);
@@ -520,9 +518,8 @@ function roofShape() {
       for (let i = 0; i <= n; i++) {
         const x = i / n - 0.5,
           v = j / bands,
-          end = abs(2 * x) ** 5;
-        const y = (1 - v) ** 1.62 + end * (0.045 + 0.12 * v);
-        p.push(x * (0.86 + 0.14 * v), y, sign * v * 0.5);
+          xx = x * (.86 + .14 * v);
+        p.push(xx, roofProfile('gable',2*xx,v), sign * v * .5);
         uv.push((i / n) * 3, v * 2);
         if (i < n && j < bands) {
           const k = off + j * (n + 1) + i,
@@ -1199,7 +1196,7 @@ function building(p, b, index) {
     const tower=pagodaPlan(b);
     for(const s of tower.slabs) {
       const tread=s.kind==='tread';
-      part('box',s.u,s.top-.065,s.v,s.w,.13,s.d,tread?'#a3774d':'#aa8861',p.boarding);
+      part('box',s.u,s.top-s.thickness/2,s.v,s.w,s.thickness,s.d,tread?'#a3774d':'#aa8861',p.boarding);
       if(tread) part('box',s.u,s.top-.018,s.v-Math.sign(s.u)*s.d*.43,s.w,.045,.047,'#d3af78',p.wood);
     }
     for(const panel of tower.panels) {
