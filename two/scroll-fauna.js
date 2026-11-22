@@ -7,6 +7,8 @@ import { animalRadius, openGround, canopyHeight, walkCircuit } from './village-p
 import { walkingScore } from './animal-motion.js';
 import { forestGeometry } from './forest-mesh.js';
 
+export const OX_SCALE = 4 / 3;
+
 export const SCROLL_FAUNA = {
   elephant:{count:2,label:'象',points:150,stature:3.04,center:1.04,frame:4.0,
     volumes:[[0,1.15,-.05,.60,.68,1.04],[0,1.59,.91,.46,.49,.49],[0,1.02,1.35,.19,.61,.19],
@@ -15,7 +17,7 @@ export const SCROLL_FAUNA = {
     volumes:[[0,.90,-.05,.41,.49,.87],[0,1.16,.69,.29,.34,.42]]},
   hawk:{count:10,label:'鷹',points:70,stature:1.17,center:.38,frame:3.1,
     volumes:[[0,.33,.03,.19,.29,.43],[0,.51,.28,.17,.20,.20]]},
-  ox:{count:10,label:'牛',points:65,stature:2.08,center:1.06,frame:3.8,
+  ox:{count:10,label:'牛',points:65,stature:1.04*OX_SCALE,center:1.06,frame:3.8,
     volumes:[[0,1.11,-.17,.48,.56,.94],[0,1.55,.90,.28,.31,.52],
       ...[-.28,.28].flatMap(x=>[-.62,.44].map(z=>[x,.40,z,.095,.39,.11]))]},
   chicken:{count:40,label:'鶏',points:25,stature:1.03,center:.56,frame:1.95,

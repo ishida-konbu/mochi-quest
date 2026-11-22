@@ -31,8 +31,15 @@ test('the full elephant sculptures stand about one fifth taller than the two lio
   const ratio=mean(elephants,()=>statureOfSculpt('elephant'))/mean(lions,n=>lionHeight(n.variant));
   assert.ok(Math.abs(ratio-1.2)<.035,`elephant/lion height ratio ${ratio}`);
   assert.equal(SPECIES.tiger.stature,2*1.22);
-  assert.equal(SCROLL_FAUNA.ox.stature,2*1.04);
-  // The rebuilt ox keeps the earlier 2.27-metre toe-to-horn profile before scaling.
+});
+
+test('grazing oxen are two thirds of their former size and keep their individual proportions',()=>{
+  const oxen=createGame().state.npcs.filter(n=>n.type==='ox');
+  assert.equal(oxen.length,10);
+  for(const ox of oxen){
+    const previous=2.08*(.93+.12*(.5+.5*Math.sin(ox.variant*2.73)));
+    assert.ok(Math.abs(ox.stature/previous-2/3)<1e-12,ox.id);
+  }
   assert.ok(Math.abs(statureOfSculpt('ox')-2.27)<.025);
 });
 

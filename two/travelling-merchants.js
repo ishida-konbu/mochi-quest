@@ -3,6 +3,7 @@ import { batchActorParts as paint } from './actors.js';
 import { CONNECTING_ROADS, WATER_Y, riverZ, coastX, eastCoastX, terrainHeight, wrapDelta } from './terrain.js';
 import { courtCurtains, ferryCrew } from './kyo-procession-art.js';
 import { harnessBeast, capitalHorse } from './otsu-travellers.js';
+import { OX_SCALE } from './scroll-fauna.js';
 import { illustratedMesh, scrollPigment } from './kyo-scrollwork.js';
 import { kosode, silkMaterial, SilkPanels } from './kosode.js';
 import { dressedRiceFace } from './mochi-model.js';
@@ -67,11 +68,15 @@ export function traveller(parent,noble){
 }
 function oxCarriage() {
   const root=new THREE.Group(), wheels=[];
+  const oxZ=3.78;
+  // The yoke and strap follow the ox; the rear shaft sockets belong to the wagon.
+  const onOx=([x,y,z])=>[x*OX_SCALE,y*OX_SCALE,oxZ+z*OX_SCALE];
+  const shaftTip=side=>onOx([side*.55,1.48,.345]);
   const wagon=paint(root,b=>{
     b.box(0,1.21,-.54,1.99,.22,2.53,lacquer);
     b.box(0,1.36,-.56,1.88,.12,2.47,straw);
     for(const side of [-1,1]) {
-      b.rod([side*.87,1.13,-1.95],[side*1.09,2.96,4.47],.065,'#766342');
+      b.rod([side*.87,1.13,-1.95],shaftTip(side),.065,'#766342');
       b.box(side*.93,1.63,-.53,.09,.45,2.17,pine);
       for(const z of [-1.58,.53]) b.box(side*.93,2.09,z,.086,1.48,.086,lacquer);
       // Rolled misu blinds frame both side windows and leave a view of the passenger.
@@ -103,12 +108,11 @@ function oxCarriage() {
     }
     courtCurtains(b);
     b.box(0,1.46,-.12,1.03,.12,1.04,'#a37657');
-    // A wooden bow passes over the enlarged withers. The shafts meet its
-    // low ends; the plaited strap follows the brisket below the yoke.
-    b.stroke([[-1.10,2.96,4.47],[-.80,3.25,4.51],[-.42,3.72,4.53],[0,3.79,4.54],
-      [.42,3.72,4.53],[.80,3.25,4.51],[1.10,2.96,4.47]],.075,'#80674d');
-    b.stroke([[-1.09,2.98,4.47],[-.97,2.34,4.57],[-.68,1.77,4.66],[0,1.47,4.68],
-      [.68,1.77,4.66],[.97,2.34,4.57],[1.09,2.98,4.47]],.045,'#976c54');
+    const bow=[[-.40,1.625,.365],[-.21,1.86,.375],[0,1.895,.38],[.21,1.86,.375],[.40,1.625,.365]];
+    b.stroke([shaftTip(-1),...bow.map(onOx),shaftTip(1)],.0375*OX_SCALE,'#80674d');
+    const strap=[[-.545,1.49,.345],[-.485,1.17,.395],[-.34,.885,.44],[0,.735,.45],
+      [.34,.885,.44],[.485,1.17,.395],[.545,1.49,.345]];
+    b.stroke(strap.map(onOx),.0225*OX_SCALE,'#976c54');
   },'御簾の牛車');
   wagon.material=scrollPigment();
   const noble=traveller(root,true);
@@ -125,7 +129,7 @@ function oxCarriage() {
       b.rod([-.14,0,0],[.14,0,0],.15,lacquer);
     },'車輪',[side*1.055,1.035,-.63]));
   }
-  const ox=harnessBeast(root,'ox',2,3.78);
+  const ox=harnessBeast(root,'ox',OX_SCALE,oxZ);
   return {root,wheels,ox,noble};
 }
 function boatHull() {
@@ -212,7 +216,7 @@ export function createTravellers(scene) {
       noble.rotation.y=Math.max(-1.22,Math.min(1.22,Math.atan2(sin(look),cos(look))))+.08*sin(time*.56);
       noble.rotation.z=.036*cos(time*1.23+offset);
       wheels.forEach(w=>w.rotation.x=q.travelled/.98);
-      ox.pose(time,Number(q.moving),q.travelled*1.72);
+      ox.pose(time,Number(q.moving),q.travelled*3.44/OX_SCALE);
     }
     boats.forEach(({root:m,row},i)=>{
       const a=merchantPosition(i,time),b=merchantPosition(i,time+.08);
