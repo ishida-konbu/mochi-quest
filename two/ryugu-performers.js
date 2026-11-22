@@ -2,7 +2,8 @@ import * as THREE from './vendor/three.module.min.js';
 import { wrapDelta } from './terrain.js';
 import { SEA_ENSEMBLES, updateRyuguResident } from './ryugu-residents.js';
 import { InkForm, fin, pigment, INK, SOOT, PAPER, WARM, RED } from './ryugu-ink.js';
-import { skin, profile, brush, eye, membrane, pointCurve } from './ryugu-sculpt.js';
+import { brushWash } from './scroll-sculpt.js';
+import { skin, skinGeometry, profile, brush, eye, membrane, pointCurve } from './ryugu-sculpt.js';
 
 const {sin,cos,PI}=Math,tau=2*PI,ivory='#ebe3cc',moss='#c8c2a6',umber='#786e5a';
 const darker='#655e4f',wash='#b2aa95',indigo='#747770';
@@ -106,36 +107,46 @@ function bream() {
   }));
   return rigs;
 }
-// A hawksbill-like, hooked jaw over the pulled-in throat. The transition from
-// neck to crown and down over the beak is one skin with no head/neck seam.
+// The throat rises out of the collar into a broad cheek. A shallow stop at the
+// bridge and a short blunt cutting edge break the profile of the upper jaw.
 const turtleProfile=profile([
-  [-.21,-.07,-.423,.099,-.018],[-.11,.025,-.399,.148,-.007],[.015,.149,-.293,.149,.011],
-  [.132,.263,-.171,.139,.022],[.225,.337,-.067,.155,.032],[.353,.366,.031,.193,.045],
-  [.465,.330,.075,.187,.053],[.552,.284,.095,.153,.057],[.65,.241,.106,.095,.059],
-  [.704,.197,.089,.049,.06],[.722,.136,.085,.014,.06],[.724,.109,.103,.001,.06],
+  // z, crown, throat, half breadth, centreline offset
+  [-.21,-.066,-.42,.099,-.018],[-.105,.031,-.393,.139,-.005],
+  [.024,.147,-.277,.128,.012],[.143,.236,-.145,.126,.031],
+  [.229,.290,-.066,.154,.047],[.314,.336,-.018,.199,.057],
+  [.396,.347,.007,.214,.061],[.465,.334,.030,.190,.062],
+  [.523,.303,.049,.166,.063],[.581,.275,.066,.144,.067],
+  [.610,.266,.074,.132,.070],[.648,.259,.087,.111,.073],
+  [.674,.247,.097,.089,.075],[.690,.225,.108,.060,.076],
+  [.697,.196,.122,.034,.077],[.700,.153,.153,0,.077],
 ]);
-function turtlePoint(z,a,lift=0) {
-  const [top,bottom,width,dx]=turtleProfile(z),level=cos(a),side=sin(a);
-  return [dx+(width*(1+.13*level)+lift)*side,(top+bottom)/2+((top-bottom)/2+lift)*level,z];
-}
-function turtleHead(f) {
-  skin(f,43,36,(u,v)=>turtlePoint(lerp(-.21,.724,v),u*tau),moss,'paper',true,true);
-  for(const s of [-1,1]){
-    const on=(z,a,lift=.005)=>turtlePoint(z,a*s,lift);
-    eye(f,(u,v,lift)=>on(.457+.082*u,1.19-v*.43,lift),-1);
-    // The hooked upper bill sits visibly below the corner of the old man's grin.
-    brush(f,[[.382,1.89],[.445,2.02],[.54,2.12],[.63,1.94],[.695,1.98],[.722,2.40]]
-      .map(([z,a])=>on(z,a)),[.001,.008,.013,.012,.01,.002],INK);
-    brush(f,[on(.628,.82),on(.647,.94),on(.654,1.03)],[.002,.011,.0025],INK);
-    const plates=[[[.294,.42],[.339,.62],[.353,.94]],[[.339,.62],[.393,.46],[.446,.52]],
-      [[.479,.54],[.533,.69],[.556,.99]],[[.54,1.53],[.586,1.48],[.604,1.20]],
-      [[.30,1.18],[.332,1.48],[.317,1.79]],[[.326,1.81],[.361,1.87],[.371,2.12]]];
-    for(const path of plates)brush(f,path.map(([z,a])=>on(z,a)),[.001,.0055,.0015],darker);
-    for(const [i,z] of [-.035,.026,.090,.145].entries()){
-      const marks=[[z+.038,.84],[z+.013,1.31],[z+.021,1.87],[z+.068,2.46]];
-      brush(f,marks.map(([q,a])=>on(q,a)),[.001,.0065,.004,.0007],i===1?SOOT:'#87806b');
-    }
-  }
+
+function turtleHead() {
+  const geometry=skinGeometry(72,56,(u,v)=>{
+    const a=u*tau,side=sin(a),level=cos(a);
+    // More sections around the two ends keep the blunt muzzle smoothly rounded.
+    const along=(1-cos(PI*v))*.5,z=lerp(-.21,.70,along);
+    const [crown,throat,width,offset]=turtleProfile(z);
+    const sideAngle=Math.acos(level);
+    const socket=Math.exp(-(((z-.46)/.095)**2+((sideAngle-1.16)/.47)**2));
+    const jaw=Math.exp(-(((z-.56)/.135)**2+((sideAngle-1.91)/.15)**2));
+    const breadth=width*(1+.065*level+.063*socket-.024*jaw);
+    // Across the bill the upper and lower plates meet in a flatter edge.
+    // The cross-section becomes round again where the neck enters the collar.
+    const bill=THREE.MathUtils.smoothstep(z,.47,.66);
+    const faceSide=Math.sign(side)*Math.abs(side)**(1-.18*bill);
+    const faceLevel=Math.sign(level)*Math.abs(level)**(1-.17*bill);
+    const x=offset+breadth*faceSide;
+    const y=(crown+throat)*.5+(crown-throat)*.5*faceLevel;
+    // The lower cutting plate tucks just inside the upper one at the muzzle.
+    const jawZ=z-.27*width*bill*Math.max(0,-level);
+    return [x,y,jawZ,along,1-u];
+  },true,true);
+  const map=new THREE.TextureLoader().load(new URL('./assets/bestiary/ryugu-turtle-face.webp',import.meta.url).href);
+  map.colorSpace=THREE.SRGBColorSpace;
+  map.anisotropy=8;
+  const material=brushWash(new THREE.MeshLambertMaterial({map}),.63);
+  return {name:'turtle-head',pivot:[0,1.31,.12],geometry,material};
 }
 
 // Both sides of the breastplate meet the same upturned rim. The shell swells
@@ -224,7 +235,7 @@ function flipper(f,s,back=false){
   }
 }
 function turtle() {
-  const rigs=[part('turtle-shell',[0,.85,-.14],turtleShell),part('turtle-head',[0,1.31,.12],turtleHead)];
+  const rigs=[part('turtle-shell',[0,.85,-.14],turtleShell),turtleHead()];
   for(const s of [-1,1]){
     rigs.push(part(s<0?'turtle-left':'turtle-right',[s*.34,1.02,.084],f=>{
       flipper(f,s);
@@ -429,7 +440,9 @@ function acknowledgement(){
   });
 }
 export function seaPortrait(type) {
-  return new URL(`./assets/bestiary/ryugu-${type}.webp`,import.meta.url).href;
+  const portrait=new URL(`./assets/bestiary/ryugu-${type}.webp`,import.meta.url);
+  if(type==='seaTurtle')portrait.search='v=ink-face-1';
+  return portrait.href;
 }
 const rotationTo=(from,to)=>new THREE.Quaternion().setFromUnitVectors(
   new THREE.Vector3(...from).normalize(),new THREE.Vector3(...to).normalize());

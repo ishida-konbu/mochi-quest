@@ -4,7 +4,7 @@ import * as T from './vendor/three.module.min.js';
 import {surface} from './ryugu-ink.js';
 
 const tau=2*Math.PI;
-export function skin(form,rows,columns,sample,tint,tile='paper',reverse=false,closed=false) {
+export function skinGeometry(rows,columns,sample,reverse=false,closed=false) {
   const pos=[],uv=[],index=[];
   for(let j=0;j<=rows;j++)for(let i=0;i<=columns;i++){
     const u=i/columns,v=j/rows,[x,y,z,s=u,t=v]=sample(u,v);
@@ -24,7 +24,11 @@ export function skin(form,rows,columns,sample,tint,tile='paper',reverse=false,cl
       n.setXYZ(lo,a.x,a.y,a.z);n.setXYZ(hi,a.x,a.y,a.z);
     }
   }
-  form.draw(g,[0,0,0],[1,1,1],tint,[0,0,0],tile);
+  return g;
+}
+
+export function skin(form,rows,columns,sample,tint,tile='paper',reverse=false,closed=false) {
+  form.draw(skinGeometry(rows,columns,sample,reverse,closed),[0,0,0],[1,1,1],tint,[0,0,0],tile);
 }
 
 // Monotone cubic section interpolation preserves a hooked beak or a narrow
