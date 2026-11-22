@@ -12,6 +12,9 @@ import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, earlierFire
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
+import { snowBathLip } from './main-bath-outlines.js';
+import { springGroundSurvey } from './spring-ground-survey.js';
+import { tableauGround,tableauFooting } from './main-bath-rims.js';
 import { COURT, RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
 import { CEDAR_GROVES, CLIFF_PINES, PEACH_TREES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
@@ -293,10 +296,11 @@ function landHeight(x, z, expanded = true) {
 }
 // The baths sit in a hand-cut hollow; their waterline is independent of the sea.
 const [bathX,bathZ]=snowPoint(-32,-292);
-export const SNOW_SPRING = { name:'雪見の大露天風呂', region:'snow', rank:'main', x:bathX, z:bathZ, rx:13.6, rz:8.8, level:landHeight(bathX,bathZ)-.12 };
+export const SNOW_SPRING = { name:'雪見の大露天風呂', region:'snow', rank:'main', kind:'snow', yaw:0, lip:snowBathLip, x:bathX, z:bathZ, rx:13.6, rz:8.8, level:landHeight(bathX,bathZ)-.12 };
 export const TSUKIMI = { x: -51.7, z: 285.9, yaw: -.15 };
 export function springRadius(x,z) {
-  return hypot((x-SNOW_SPRING.x)/SNOW_SPRING.rx,(z-SNOW_SPRING.z)/SNOW_SPRING.rz);
+  const u=(x-SNOW_SPRING.x)/SNOW_SPRING.rx,v=(z-SNOW_SPRING.z)/SNOW_SPRING.rz,r=hypot(u,v);
+  return r>2?r:r/snowBathLip(Math.atan2(v,u));
 }
 function groundBeforeBath(x,z) {
   // The littoral shelf makes a walkable, continuous transition from the
@@ -335,18 +339,16 @@ export function terrainHeight(x,z) {
   if (abs(x-SNOW_SPRING.x)>23 || abs(z-SNOW_SPRING.z)>16) return native;
   const r = springRadius(x,z);
   const bed = SNOW_SPRING.level-.61+smooth(.70,1.03,r)*.87;
-  return bed+(native-bed)*smooth(1.08,1.60,r);
+  const ground=bed+(native-bed)*smooth(1.08,1.60,r);
+  return r>1?tableauGround(SNOW_SPRING,x-bathX,z-bathZ,ground,SNOW_SPRING.level):ground;
 }
 // Root a plant on the actual painted triangle. Across the crease of a rocky
 // spur the analytic surface can differ visibly from its sampled vertices.
 const groundSpacing=2*BOUND/(TERRAIN_TILES*TERRAIN_SUBDIVISIONS);
+export const springGround=springGroundSurvey([...RETREATS.filter(s=>s.rank==='main'),SNOW_SPRING],
+  BOUND,groundSpacing,TERRAIN_SUBDIVISIONS);
 export function terrainMeshHeight(x,z,heightAt=terrainHeight) {
-  const left=Math.floor((x+BOUND)/groundSpacing)*groundSpacing-BOUND;
-  const north=Math.floor((z+BOUND)/groundSpacing)*groundSpacing-BOUND;
-  const u=(x-left)/groundSpacing,v=(z-north)/groundSpacing;
-  const east=heightAt(left+groundSpacing,north),south=heightAt(left,north+groundSpacing);
-  return u+v<=1 ? heightAt(left,north)*(1-u-v)+east*u+south*v :
-    heightAt(left+groundSpacing,north+groundSpacing)*(u+v-1)+east*(1-v)+south*(1-u);
+  return springGround.height(x,z,heightAt);
 }
 // Street processions follow the stone walking level beneath the gatehouse.
 export function roadSurfaceHeight(x,z) {
@@ -1231,7 +1233,8 @@ const springRng=seeded(82691);
 for(let i=0;i<75;i++) {
   const a=i*Math.PI*2/75, dx=Math.cos(a), dz=Math.sin(a);
   if (dx<-.91 && abs(dz)<.26 || dz>.88 && dx>-.1 && dx<.46 || dz<-.90 && abs(dx)<.26) continue;
-  const x=dx*SNOW_SPRING.rx*(.98+.024*springRng()),z=dz*SNOW_SPRING.rz*(.98+.025*springRng());
+  const lip=snowBathLip(a);
+  const x=lip*dx*SNOW_SPRING.rx*(.98+.024*springRng()),z=lip*dz*SNOW_SPRING.rz*(.98+.025*springRng());
   const w=.65+.55*springRng(),h=.44+.79*springRng(),d=.64+.45*springRng();
   SPRING_STONES.push({x,z,w,h,d,yaw:-a+springRng()*.36,roll:springRng()*.2,index:i});
 }
@@ -1369,6 +1372,8 @@ portSolids(putSolid);
 for(const {x,z,rx,rz,yaw,top,rise} of SOURCE_STONES){
   putSolid(x,z,rx,rz,yaw,top,'springRock',true).roundHeight=rise;
 }
+const winterCarving=tableauFooting(SNOW_SPRING,terrainHeight);
+putSolid(winterCarving.x,winterCarving.z,1.65,.90,winterCarving.yaw,winterCarving.ground+1.77,'oval',false);
 for(const stone of SPRING_STONES) {
   putSolid(SNOW_SPRING.x+stone.x,SNOW_SPRING.z+stone.z,stone.w*.84,stone.d*.84,stone.yaw,
     SNOW_SPRING.level+.18+stone.h,'oval',true);

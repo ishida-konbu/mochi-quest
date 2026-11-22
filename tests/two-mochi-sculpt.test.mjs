@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { floatBerth } from "../two/bathing.js";
+import { RETREATS, bathRadius, sitePoint, springLip } from "../two/retreat-layout.js";
 import { AnimationMixer, Vector3 } from '../two/vendor/three.module.min.js';
 import { GLTFLoader } from '../two/vendor/GLTFLoader.min.js';
 
@@ -26,6 +28,27 @@ test('the projected lip bed has a continuous outward normal on the neutral and s
     }
   }
   assert.ok(vertices > 30, 'the test sampled the mouth interior');
+});
+
+test('the spring float draws a long belly while the eyelids, mouth and both mitts keep their proportions',()=>{
+  const shape=geometry.morphAttributes.position[body.morphTargetDictionary['Hot spring float']];
+  const skin=geometry.attributes.skinIndex,weight=geometry.attributes.skinWeight;
+  let belly=0,face=0,palms=0,crown=-Infinity,heel=Infinity;
+  for(let i=0;i<position.count;i++){
+    const rest=point(position,i),delta=point(shape,i),y=rest.y+delta.y;
+    crown=Math.max(crown,y);heel=Math.min(heel,y);
+    if(rest.y>.28 && rest.y<.42 && delta.y>.20 && delta.y<2.8)belly++;
+    if(rest.z>.87 && rest.y>1.06 && rest.y<1.78){
+      assert.ok(Math.abs(delta.y-3.08)<.002,'the painted face travels together');
+      face++;
+    }
+    if(body.skeleton.bones[skin.getX(i)].name.startsWith('Hand') && weight.getX(i)>.7){
+      assert.ok(Math.abs(delta.y-3.08)<.002,'no palm vertex is drawn out into the waist');
+      palms++;
+    }
+  }
+  assert.ok(crown-heel>5.35 && crown-heel<5.5);
+  assert.ok(belly>50 && face>100 && palms>150);
 });
 
 test('the exported skinned hands stay rounded through every pull of a long jump', () => {
@@ -95,6 +118,30 @@ test('each pull draws a soft waist between the round crown and the cushion above
         assert.ok(fullness > 1.10 && fullness < 1.22, 'the lower lobe remains round at full extension');
         assert.ok(cheeks[axis]/waist[axis] > 1.27 && cheeks[axis]/waist[axis] < 1.47,
           'the cheeks retain their volume around a gently narrowed middle');
+      }
+    }
+  }
+});
+
+test("the spread heels and shoulders stay in the water around concave banks",()=>{
+  const float=geometry.morphAttributes.position[body.morphTargetDictionary["Hot spring float"]];
+  const tilt=1.53, size=1.28*.708;
+  for(const id of ["moon-yumihari","inari-magari","peach-hanamomo"]){
+    const site=RETREATS.find(s=>s.id===id), target={...site,retreat:site};
+    for(const a of [0,-Math.PI/2,Math.PI*3/4]){
+      const r=.915*springLip(site.index,a);
+      const [x,z]=sitePoint(site,r*site.rx*Math.cos(a),r*site.rz*Math.sin(a));
+      for(const heading of [0,Math.PI/6,7*Math.PI/6]){
+        const berth=floatBerth({x,z,heading,buffs:{full:10}},target);
+        const half=(2.32+3.08*berth.extension)*.5;
+        for(let i=0;i<position.count;i+=19){
+          const v=point(position,i).addScaledVector(point(float,i),berth.extension);
+          const along=((half-v.y)*Math.sin(tilt)+v.z*Math.cos(tilt))*size;
+          const across=v.x*size*1.035;
+          const wx=berth.x+along*Math.sin(heading)+across*Math.cos(heading);
+          const wz=berth.z+along*Math.cos(heading)-across*Math.sin(heading);
+          assert.ok(bathRadius(site,wx,wz)<.99,id+" rim crossed by vertex "+i);
+        }
       }
     }
   }

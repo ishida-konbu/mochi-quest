@@ -1365,10 +1365,11 @@ function gaitHero(h, p, t, dt, state) {
   const giant = p.buffs?.full > 0,
     dango = p.mode === 'dango',
     wings = p.mode === 'habutae';
-  h.root.position.set(p.x, p.y, p.z);
+  const bath=p.bathPose;
+  h.root.position.set(bath?.x ?? p.x, p.y, bath?.z ?? p.z);
   h.root.rotation.y = h.angle;
-  const response=poseRice(h.rice,p,t,dt,mood);
-  const g=giant?1.28:1;
+  const response=poseRice(h.rice,p,t,dt,mood,bath);
+  const g=THREE.MathUtils.lerp(giant?1.28:1,.90,bath?.kettle ? bath.settle : 0);
   h.pose.scale.set(g*response.width,g*response.stretch,g*response.width);
   const mountHeight = p.mount === 'bike' ? .90 : p.mount === 'turtle' ? 1.04 : 0;
   h.pose.position.set(0,response.bob+mountHeight,riding?-.14:0);
@@ -1389,21 +1390,24 @@ function gaitHero(h, p, t, dt, state) {
     h.pose.rotation.x+=.07;
   }
   if(sit==='sleep'){h.pose.scale.y*=.76;h.pose.rotation.z=-.13;h.pose.position.y=.009;}
-  if(sit==='bath'){
-    // The water crosses the lower belly. Leave the brush-drawn mouth clear
-    // of the surface, including at the bottom of the breathing cycle.
-    h.pose.position.y=p.bathWaterY-p.y-g*(.33+.012*Math.cos(t*2));
-    h.pose.rotation.x=.028;
-    h.pose.scale.set(g*1.06,g*.96,g*1.06);
+  if(bath){
+    const {recline,settle}=bath, breath=Math.sin(t*1.85);
+    const tilt=THREE.MathUtils.lerp(.065,-1.53,recline);
+    const halfLength=response.floatLength*.50*g;
+    h.pose.rotation.x=tilt;
+    h.pose.rotation.z=.025*recline*Math.sin(t*1.28);
+    h.pose.position.z=-Math.sin(tilt)*halfLength*settle;
+    h.pose.position.y=(p.bathWaterY-p.y+.045+.015*breath-Math.cos(tilt)*halfLength)*settle;
+    h.pose.scale.set(g*(1+.035*recline),g,g*(1+.018*breath*recline));
   }
   if(p.buffs?.drunk>0) h.pose.rotation.z+=.115*Math.sin(t*3.7);
   h.leaves.visible = p.mode === 'kusa';
-  h.leaves.position.y = response.extension;
+  h.leaves.position.y = response.extension+response.floatDraw;
   h.wrap.visible = p.buffs?.wrap > 0;
   const pull = response.pull;
   h.leaves.scale.set(1-.25*pull,1,1-.25*pull);
-  h.wrap.position.set(.052*pull,response.extension*.22,.018*pull);
-  h.wrap.scale.set(1.075-.08*pull,1+.40*pull,1.042-.085*pull);
+  h.wrap.position.set(.052*pull+.06*(bath?.melt || 0),response.extension*.22+response.floatDraw*.54,.018*pull);
+  h.wrap.scale.set(1.075-.08*pull,1+.40*pull,1.042-.085*pull-.34*(bath?.melt || 0));
   if (dango && !riding && !sit) {
     if ((!p.grounded && p.airStretch > 0) || speed < .22)
       h.spin += shortest(h.spin,0) * (1-Math.exp(-dt*14));
@@ -1420,8 +1424,8 @@ function gaitHero(h, p, t, dt, state) {
   for (let i = 0; i < 2; i++) {
     const s=i?1:-1;
     h.wingParts[i].visible = wings;
-    h.wingParts[i].position.set(s*(.65+.015*pull)+.055*pull,.66+response.extension*.93,-.01);
-    h.wingParts[i].rotation.z = s * (0.24 + Math.sin(t * (p.grounded ? 5 : 13)) * 0.47);
+    h.wingParts[i].position.set(s*(.65+.015*pull)+.055*pull,.66+response.extension*.93+response.floatDraw,-.01);
+    h.wingParts[i].rotation.z = s * (0.24 + Math.sin(t * (p.grounded ? 5 : 13)) * 0.47*(1-(bath?.recline || 0)));
   }
   for (const key of ['read', 'drink', 'eat', 'tsukimi','tea','mitarashi']) {
     const item = h.held[key];
@@ -1460,13 +1464,14 @@ function gaitHero(h, p, t, dt, state) {
   if(h.ridingTurtle.visible) turtleGait(h.ridingTurtle,t,speed,false);
   const shadowScale = Math.max(0.25, 1 - (p.h || 0) * 0.1);
   h.shadow.scale.set(1.91 * shadowScale * g, 1.6 * shadowScale * g, 1);
-  h.shadow.visible = !p.inWater;
+  h.shadow.visible = !p.inWater && !bath;
   h.shadow.position.y = 0.036 - (p.h || 0);
   h.dust.visible = false;
   if (p.mode === 'kinako' && speed > 0.12) mistAt(h.dust, t, false, 1);
   h.warm.visible = false;
   if (p.buffs?.warm > 0 || sit === 'bath') {
-    h.warm.position.y = 0.56;
+    h.warm.position.y = bath ? p.bathWaterY-p.y+.06 : .56;
+    h.warm.scale.z = 1+(bath?.melt || 0);
     mistAt(h.warm, t, true, 1.24);
   }
 }
@@ -1637,7 +1642,7 @@ function makeObject(o, parent) {
     mesh.add(steam);
   } else if(o.grand) {
     mesh=new THREE.Group();
-    addSpringSurface(mesh,SNOW_SPRING.rx,SNOW_SPRING.rz,SNOW_SPRING.level-o.y);
+    addSpringSurface(mesh,SNOW_SPRING.rx,SNOW_SPRING.rz,SNOW_SPRING.level-o.y,SNOW_SPRING);
     steam=particles('steam',87);
     steam.position.y=.54;
     steam.scale.y=1.55;

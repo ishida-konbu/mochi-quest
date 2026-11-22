@@ -57,6 +57,27 @@ test('the moon makes a strolling mochi drowsy and a rolling dango smiles at ever
   assert.equal(getExpression(player), 'bath');
 });
 
+test('E tips the bather back before the dough spreads, and a saved soak resumes in the same pose',()=>{
+  const game=createGame(),p=game.state.player;
+  const pool=game.state.objects.find(o=>o.grand);
+  Object.assign(p,{x:pool.x,z:pool.z,y:pool.y,h:0,grounded:true,inWater:true,mode:'kusa'});
+  assert.equal(getExpression(p),'bath');assert.equal(p.bathPose,undefined);
+  assert.ok(game.act('interact',Math.PI*7+.3));
+  assert.ok(Math.abs(p.heading)<=Math.PI);
+  assert.equal(p.bathPose.melt,0);assert.equal(p.bathPose.recline,0);
+  for(let i=0;i<6;i++)game.step(.1);
+  assert.ok(p.bathPose.recline>p.bathPose.melt);
+  for(let i=0;i<11;i++)game.step(.1);
+  assert.equal(p.bathPose.melt,1);assert.equal(p.bathPose.recline,1);
+  const saved=game.save(),resumed=createGame(saved);
+  assert.ok(resumed.restored);assert.ok(!Object.hasOwn(saved.player,'bathPose'));
+  assert.deepEqual(resumed.state.player.bathPose,p.bathPose);
+  for(let i=0;i<16;i++)resumed.step(.1);
+  assert.ok(resumed.state.player.bathPose.recline<.25);assert.equal(resumed.state.player.bathPose.melt,0);
+  for(let i=0;i<3;i++)resumed.step(.1);
+  assert.equal(resumed.state.player.bathPose,undefined);assert.equal(resumed.state.player.mode,'kusa');
+});
+
 test('the cyclist smiles through acceleration and coasting, including in the moonlight', () => {
   const player = createGame().state.player;
   Object.assign(player, { mount:'bike', night:true });

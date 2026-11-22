@@ -4,8 +4,11 @@ import { createGame } from '../two/game.js';
 import { Group } from '../two/vendor/three.module.min.js';
 import { regionalSpringBank } from '../two/regional-bath-art.js';
 import { addSpringSurface } from '../two/spring-water.js';
+import { bankSculpture } from '../two/main-bath-art.js';
+import { tableauFooting } from '../two/main-bath-rims.js';
+import { KYO_SCREENS } from '../two/kyo-layout.js';
 import { WAYSIDE_HUTS } from '../two/wayside-hut-layout.js';
-import { REGIONS, groundHeight, regionAt, terrainHeight, terrainMeshHeight, waterSurfaceAt } from '../two/terrain.js';
+import { REGIONS, SNOW_SPRING, groundHeight, regionAt, staticVolumeAt, terrainHeight, terrainMeshHeight, waterSurfaceAt } from '../two/terrain.js';
 import { RETREATS, bathRadius, sitePoint, springLip } from '../two/retreat-layout.js';
 
 // The last v11 release stored these slots by index, including its eight outdoor
@@ -58,6 +61,48 @@ test('the spring inventory preserves the historical IDs around the retired trail
   assert.ok(!names.has(undefined) && !names.has('') && names.size===added.length);
 });
 
+test('the Kyoto inkstone opens to the east-west avenue in front of the dumpling screen',()=>{
+  const s=regional().find(q=>q.id==='capital-suzuri');
+  const screen=KYO_SCREENS.find(q=>q.picture===1);
+  const dx=s.x-screen.x,dz=s.z-screen.z,c=Math.cos(screen.yaw),k=Math.sin(screen.yaw);
+  const across=dx*c-dz*k,forward=dx*k+dz*c;
+  assert.ok(Math.abs(across)<screen.width/2,'the inkstone sits in front of the screen');
+  assert.ok(forward>s.rz+.8 && forward<12,'the screen and bath share the town lot');
+  const game=createGame(),avenue=REGIONS.find(r=>r.id==='kyo').z;
+  arrive(game,s.x,avenue);
+  walk(game,[s.x,s.z],'main avenue to the inkstone');
+  assert.ok(game.state.player.inWater);
+  assert.equal(game.nearest()?.target.retreat,s);
+  assert.ok(game.act('interact'));
+});
+
+test('a Kyoto soak follows the inkstone into the city, while other visitors keep their footing',()=>{
+  const original=createGame(),s=regional().find(q=>q.id==='capital-suzuri');
+  const destination='onsen-'+s.id;
+  const x=122.14,z=-910.97; // Inside the former inkstone, off its centre.
+  for(const edition of [11,12]){
+    const old=original.save();
+    Object.assign(old.player,{x,z,y:groundHeight(x,z),activity:'bath',activityTime:1.85,hp:38,mp:47});
+    Object.assign(old,{version:edition,lastBath:destination,score:360});
+    const resumed=createGame(old),p=resumed.state.player;
+    assert.ok(resumed.restored);
+    assert.deepEqual([p.x,p.z,p.activity,p.activityTime,p.hp,p.mp,resumed.state.score],
+      [s.x,s.z,'bath',1.85,38,47,360]);
+    assert.equal(p.bathWaterY,waterSurfaceAt(s.x,s.z));
+    assert.equal(resumed.save().lastBath,destination);
+    const again=createGame(resumed.save());
+    assert.deepEqual([again.state.player.x,again.state.player.z],[s.x,s.z]);
+    for(let i=0;i<20;i++)again.step(.1);
+    assert.equal(again.state.player.activity,null);
+    assert.deepEqual([again.state.player.hp,again.state.player.mp],[100,100]);
+    for(const [activity,lastBath] of [[null,destination],['bath',null],['bath','onsen-shrine-sasafune']]){
+      const other=createGame({...old,player:{...old.player,activity},lastBath}).state.player;
+      assert.deepEqual([other.x,other.z],[x,z]);
+      assert.equal(other.activity,null);
+    }
+  }
+});
+
 test('regional basins have distinct shorelines, continuous water and a dry approach',()=>{
   const sites=regional(),regions=new Set(),profiles=new Set();
   for(const s of sites){
@@ -82,6 +127,25 @@ test('regional basins have distinct shorelines, continuous water and a dry appro
   }
   assert.deepEqual(regions,new Set(REGIONS.filter(r=>r.id!=='ryugu').map(r=>r.id)));
   assert.ok(profiles.size>=10,'distinct shorelines across the island');
+});
+
+test('each main bath has its own shoreline and a sculpted, solid scene above the water',()=>{
+  const sites=[...regional().filter(s=>s.rank==='main'),SNOW_SPRING],profiles=new Set();
+  for(const s of sites){
+    const radii=Array.from({length:80},(_,i)=>{
+      const angle=i*Math.PI/40;
+      return (s.lip?s.lip(angle):springLip(s.index,angle)).toFixed(3);
+    }).join(',');
+    assert.ok(!profiles.has(radii),s.name+' has its own basin silhouette');
+    profiles.add(radii);
+    const art=bankSculpture(s.kind);
+    const {position,normal,color}=art.attributes;
+    assert.ok(art.index.count && position.count===normal.count && position.count===color.count,s.name);
+    for(const a of [position,normal,color])assert.ok(a.array.every(Number.isFinite),s.name+' renderable geometry');
+    const footing=tableauFooting(s,terrainHeight);
+    assert.ok(footing.ground>waterSurfaceAt(s.x,s.z),s.name+' carved scene is on the dry bank');
+    assert.ok(staticVolumeAt(footing.x,footing.z,footing.ground),s.name+' carving has a physical footprint');
+  }
 });
 
 test('the visible bank meets the water at every vertex and beds into the hillside',()=>{

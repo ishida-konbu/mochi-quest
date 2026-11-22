@@ -47,7 +47,7 @@ function store(key, value) {
   }
 }
 const clamp = THREE.MathUtils.clamp;
-const restingEyeHeightOffset = { bath: 0.35, sleep: 0.26 };
+const restingEyeHeightOffset = { sleep: 0.26 };
 function confirmJourney(existing, incoming) {
   const describe = game => game.state.region + '、御朱印 ' + game.state.visited.length + ' 個、通知点 ' + game.state.score + ' 点';
   $('dialog-title').textContent = 'Cloudflare版に旅の記録を引き継ぐ';
@@ -200,7 +200,9 @@ function dispatchEvents() {
 function action(name) {
   if (dialog.open || photoMode) return;
   unlock();
-  game.act(name, name === 'throw' ? actors?.hero.rotation.y : undefined);
+  // As the traveller lies back, the toes drift towards the near corner
+  // of the frame. The direction is saved with the rest of the journey.
+  game.act(name, name === 'throw' ? actors?.hero.rotation.y : name==='interact' ? yaw+.77 : undefined);
   dispatchEvents();
   updateHUD();
 }
@@ -263,9 +265,12 @@ function togglePhoto() {
     photoMode = true;
     state.photo = true;
     photoTime = state.time;
-    yaw = actors.hero.rotation.y;
-    pitch = 0.105;
-    distance = (camera.aspect < 0.83 ? 3.48 : 2.95) * (1 + .64 * p.airStretch);
+    const reclining=p.bathPose?.recline || 0;
+    yaw = actors.hero.rotation.y-.77*reclining;
+    pitch = .105+.68*reclining;
+    const portrait=camera.aspect<.83;
+    const floatingDistance=portrait ? Math.max(5.63,3.18/camera.aspect) : 3.99;
+    distance = THREE.MathUtils.lerp(portrait?3.48:2.95,floatingDistance,reclining)*(1+.64*p.airStretch);
     p.emote = null;
     updateEmotes();
   } else {
@@ -465,15 +470,17 @@ function updateCamera(dt, snap = false) {
   // long flights, while a standing jump retains a visible point of departure.
   const rise = photoMode ? 0 : Math.min(p.h, 3.6) * 0.41;
   const resting = photoMode ? restingEyeHeightOffset[p.activity] || 0 : 0;
-  heroAt.set(p.x, p.y + ride + 0.9 * full + p.airStretch * full * (photoMode ? .72 : .51) - rise - resting, p.z);
+  const bath=p.bathPose, settle=bath?.settle || 0;
+  const standingEye=p.y + ride + .9*full + p.airStretch*full*(photoMode ? .72 : .51) - rise - resting;
+  heroAt.set(bath?.x ?? p.x,bath ? THREE.MathUtils.lerp(standingEye,p.bathWaterY+.32*full,settle) : standingEye,bath?.z ?? p.z);
   if (snap || Math.abs(heroAt.x - focus.x) > BOUND || Math.abs(heroAt.z - focus.z) > BOUND) focus.copy(heroAt);
   else focus.lerp(heroAt, 1 - Math.exp(-dt * 13));
   const sx = Math.sin(yaw),
     sz = Math.cos(yaw),
-    scenery = photoMode ? 0 : scrollCoverage(p.x,p.z),
-    d = distance * (full > 1 && photoMode ? 1.18 : 1) * (1+.14*scenery);
+    scenery = photoMode ? 0 : scrollCoverage(p.x,p.z)*(1-settle),
+    d = distance * (full > 1 && photoMode ? 1.18 : 1) * (1+.14*scenery) * (photoMode ? 1 : 1-.12*settle);
   // At the horizon, hold the eye above ground and tilt up to follow an animal overhead.
-  const orbitPitch = photoMode ? pitch : Math.max(0, pitch);
+  const orbitPitch = photoMode ? pitch : Math.max(0,pitch)+Math.max(0,.73-Math.max(0,pitch))*settle;
   const shoulder=scenery*Math.min(1,camera.aspect)*Math.min(1,d/5);
   const dx = sx * Math.cos(orbitPitch) * d + sz*1.58*shoulder,
     dz = sz * Math.cos(orbitPitch) * d - sx*1.58*shoulder;
@@ -530,12 +537,12 @@ function updateCamera(dt, snap = false) {
   if (!photoMode) {
     // Give the page to the animal directly ahead. An off-centre mochi keeps
     // the letter trajectory visible between the hero and its recipient.
-    aim.x += sz*.4*shoulder-sx*(1.65+.82*scenery);
-    aim.z -= sx*.4*shoulder+sz*(1.65+.82*scenery);
-    aim.y += .53+.25*scenery;
+    aim.x += (sz*.4*shoulder-sx*(1.65+.82*scenery))*(1-settle);
+    aim.z -= (sx*.4*shoulder+sz*(1.65+.82*scenery))*(1-settle);
+    aim.y += (.53+.25*scenery)*(1-settle)+(camera.aspect<.83 ? .27*settle : 0);
   } else aim.y -= .13;
   camera.lookAt(aim);
-  if (!photoMode && pitch < 0) camera.rotateX(-pitch);
+  if (!photoMode && pitch < 0) camera.rotateX(-pitch*(1-settle));
   camera.updateMatrixWorld();
 }
 const fullScore = new Intl.NumberFormat('ja-JP');

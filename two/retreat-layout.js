@@ -3,6 +3,7 @@
 import { DISTRICTS, districtPoint } from './geography.js';
 import { REGIONAL_SPRINGS, regionalSpringLip, regionalRimStones } from './regional-springs.js';
 import { bathEnclosureGround, bathEnclosureReserved, addBathEnclosureSolids, waysideBankRocks } from './bath-enclosures.js';
+import { addMainRimSolids,bathTableau,tableauGround } from './main-bath-rims.js';
 import { regionalBathFittings } from './regional-bath-fittings.js';
 import { TRADE_ROADS, measureRoute, cartPosition } from './trade-routes.js';
 
@@ -112,9 +113,11 @@ export function bathTerrain(s,x,z,native,level) {
   const ground=shore+(native-shore)*ease((edge-1.22)/2.72);
   const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
   const apron=bathEnclosureGround(s,dx*c-dz*k,dx*k+dz*c);
-  return ground+(level+.026-ground)*apron*ease((r-.85)/.23);
+  const finished=ground+(level+.026-ground)*apron*ease((r-.85)/.23);
+  return s.rank==='main' && r>1 ? tableauGround(s,dx*c-dz*k,dx*k+dz*c,finished,level) : finished;
 }
 export function retreatStones(s) {
+  if(s.rank==='main')return []; // The sculpted vessel supplies its continuous coping.
   if(s.regional)return regionalRimStones(s);
   const count=28;
   return Array.from({length:count},(_,i)=>{
@@ -166,6 +169,11 @@ export function civicAndBathSolids(height,put) {
       const [x,z]=sitePoint(s,u,v);
       return put(x,z,w/2,d/2,s.yaw+angle,level+y,kind,support);
     };
+    if(s.rank==='main'){
+      addMainRimSolids(s,add);
+      const t=bathTableau(s);
+      add(t.u,t.v,2.3*t.scale,1.17*t.scale,.17+1.40*t.scale,'oval',false,t.yaw);
+    }
     for(const q of retreatStones(s)){
       const top=q.scanned?-.03+1.18*q.h:.075+q.h;
       const rim=add(q.u,q.v,(q.scanned?2.08:2)*q.w,(q.scanned?2.11:2)*q.d,top,'springRock',true,q.angle);

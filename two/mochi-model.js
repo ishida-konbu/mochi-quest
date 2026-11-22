@@ -10,6 +10,7 @@ const clamp = T.MathUtils.clamp;
 const smooth = T.MathUtils.smoothstep;
 const riceScale = .708;
 const pullExtension = 1.33 * riceScale;
+const floatExtension = 3.08; // Hot spring float shape key, in the artist's model units.
 // Seat the animated character into the shoulder of the wider, lower cake.
 const kagamiUpperWidth = .51;
 const kagamiUpperHeight = .32;
@@ -24,7 +25,7 @@ export function loadRiceModel() {
     const loader = new T.TextureLoader();
     const names = ['rice-color','rice-normal','bare-cheeks','expressions','rice-grain','eye-relief'];
     const [gltf, ...maps] = await Promise.all([
-      new GLTFLoader().loadAsync(asset('nikkori.glb')),
+      new GLTFLoader().loadAsync(asset('nikkori.glb')+'?v=onsen-float'),
       ...names.map(name => loader.loadAsync(asset(name + '.webp'))),
     ]);
     for (const [i,map] of maps.entries()) {
@@ -330,6 +331,9 @@ export function makeRiceModel(parent) {
   body.frustumCulled=false;
   const mixer=new T.AnimationMixer(model);
   const actions = Object.fromEntries(gltf.animations.map(c=>[c.name,mixer.clipAction(c)]));
+  // Return the skeleton to its bind pose as the dough flows. The standing
+  // bath gesture folds the hips, which would pinch the long reclining body.
+  actions.Float=mixer.clipAction(new T.AnimationClip('Float',2,[]));
   const legs=['Foot_R','Foot_L'].map(name=>model.getObjectByName(name));
   const hands=['Hand_R','Hand_L'].map(name=>model.getObjectByName(name));
   const chest=model.getObjectByName('Chest');
@@ -343,7 +347,7 @@ export function makeRiceModel(parent) {
 const poses = { curious:'Normal',calm:'Warm',sleepy:'Drowsy',bath:'Bathe',
   hurt:'Bump',determined:'Bump',calling:'Notify',surprise:'Surprise',blush:'Warm',eating:'Read' };
 const tints = {normal:new T.Color(0xffffff),kusa:new T.Color('#bfd79c'),kinako:new T.Color('#f1c38a')};
-function playGesture(r,name,dt) {
+function playGesture(r,name,dt,face=name) {
   for (let i=0;i<r.bones.length;i++){
     r.bones[i].position.copy(r.samples[i].p);
     r.bones[i].quaternion.copy(r.samples[i].q);
@@ -360,14 +364,14 @@ function playGesture(r,name,dt) {
   }
   const time=r.actions[name].time;
   let cell=0;
-  for (const cue of r.faceCues[name]) {
+  for (const cue of r.faceCues[face]) {
     if (cue[0]>time) break;
     cell=cue[1];
   }
   return cell;
 }
 
-export function poseRice(r,p,t,dt,mood) {
+export function poseRice(r,p,t,dt,mood,bath) {
   const grounded=p.grounded!==false, ride=!!p.mount, speed=p.speed||0;
   const rolling=p.mode==='dango', stack=p.mode==='kagami';
   const stride=grounded && !ride && !p.activity && !rolling ? smooth(speed,.04,4.5) : 0;
@@ -392,11 +396,13 @@ export function poseRice(r,p,t,dt,mood) {
   const stretch=clamp(1+r.press+breath+.045*pull,.67,1.32);
   const joy=mood==='joy' && p.activity!=='read';
   const name=p.activity==='read' ? 'Read' : (poses[mood]||'Normal');
-  const cell=playGesture(r,name,dt);
+  const cell=playGesture(r,bath ? 'Float' : name,dt,name);
+  const melt=bath?.melt || 0, recline=bath?.recline || 0;
   r.smile=T.MathUtils.damp(r.smile,joy?1:0,42,dt);
   r.body.morphTargetInfluences[0]=r.smile;
   r.body.morphTargetInfluences[1]=pull;
   r.body.morphTargetInfluences[2]=dip;
+  r.body.morphTargetInfluences[3]=melt;
   r.uniforms.riceSmile.value=r.smile;
   r.uniforms.riceCell.value=cell;
   r.uniforms.ricePull.value=pull;
@@ -422,6 +428,13 @@ export function poseRice(r,p,t,dt,mood) {
     // while the player holds a long pull, then release it on the rebound.
     hand.position.x+=side*(.040*pull+.029*Math.max(0,tug));
     hand.position.y+=.047*pull+.055*Math.max(0,tug);
+    if(bath){
+      // Slide the palms up beside the cheeks and let the little toes surface.
+      hand.position.x+=side*.065*recline;
+      hand.position.y+=(.28+.025*Math.sin(t*1.9+side))*recline;
+      hand.position.z+=.09*recline;
+      foot.position.z+=(.13+.025*side*Math.cos(t*1.9))*recline;
+    }
     if (!grounded || ride) {
       foot.position.y+=(ride ? .053 : .080);
       foot.position.z+=(ride ? .132 : .058);
@@ -452,9 +465,11 @@ export function poseRice(r,p,t,dt,mood) {
   if(stack){
     r.kagami.stack.visible=true;
     r.body.material=r.kagami.upperSkin;
-    r.model.scale.set(kagamiUpperWidth,kagamiUpperHeight,kagamiUpperWidth);
+    const upperHeight=kagamiUpperHeight+.26*recline;
+    r.model.scale.set(kagamiUpperWidth+.10*recline,upperHeight,kagamiUpperWidth);
     r.model.position.y=kagamiUpperY;
-    r.kagami.citrus.position.set(.013,kagamiCitrusY+1.33*kagamiUpperHeight*pull,-.01);
+    r.kagami.citrus.position.set(.013,kagamiCitrusY+2.32*(upperHeight-kagamiUpperHeight)+
+      upperHeight*(1.33*pull+floatExtension*melt),-.01);
     r.kagami.citrus.rotation.z=.09+step*stride*.07;
     poseGohei(r, !ride && !p.activity ? speed : 0, stride, step, beat, frame);
   }else{
@@ -469,7 +484,9 @@ export function poseRice(r,p,t,dt,mood) {
     r.model.position.y=0;
     r.model.scale.setScalar(riceScale);
   }
-  return {stretch,width:1/Math.sqrt(stretch),pull,extension:pullExtension*pull,
+  const floatDraw=floatExtension*melt*r.model.scale.y;
+  const floatLength=r.model.position.y+2.32*r.model.scale.y+floatDraw;
+  return {stretch,width:1/Math.sqrt(stretch),pull,extension:pullExtension*pull,floatDraw,floatLength,
     bob:Math.abs(step)*stride*.046,lean:-step*stride*.040-.028*tug,
     pitch:stride*(-.036+plant*.023)-.045*tug,breath};
 }

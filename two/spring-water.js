@@ -1,3 +1,4 @@
+import { addBathLeaves } from './bath-leaves.js';
 import { springLip } from './retreat-layout.js';
 import { bathCraft,regionalBathFittings,inletImpactV } from './regional-bath-fittings.js';
 import * as T from './vendor/three.module.min.js';
@@ -7,15 +8,23 @@ const uniforms = {
   reflected: { value: null },
   reflectionVP: { value: new T.Matrix4() },
   poolCenter: { value: new T.Vector2(10000, 10000) },
+  poolForward: { value: new T.Vector2(0,1) },
+  floatSize: { value: new T.Vector2(.85,.85) },
   occupied: { value: 0 },
 };
 let poolMaterial, disc, paintedPool;
 const regionalWater=new Map();
+const mineralWash={
+  sakura:'#a1afa0',bamboo:'#768e78',earthen:'#8c9d8a',sulfur:'#c3cabb',paddy:'#a4ab81',
+  shore:'#91b1ad',maple:'#939b81',susuki:'#8d9199',dawn:'#b1a994',capital:'#526869',
+  peach:'#b0aa98',temple:'#96a494',inari:'#899d88',tsuruga:'#7e9ba2',sakai:'#87a89a',
+};
 // The inlet and shallow mineral fringe travel with their particular basin.
 // The hero's reflection and its displacement continue to use world space.
-function regionalFinish(craft) {
-  if(regionalWater.has(craft))return regionalWater.get(craft);
-  const m=poolMaterial.clone();m.color.set(craft.water);
+function regionalFinish(site) {
+  const craft=bathCraft[site.kind],main=site.rank==='main',key=main?site.id:craft;
+  if(regionalWater.has(key))return regionalWater.get(key);
+  const m=poolMaterial.clone();m.color.set(main?mineralWash[site.kind]:craft.water);
   m.roughness=craft.rim==='sinter'?.43:.36;
   m.specularIntensity=.43;
   m.clearcoat=.14;
@@ -24,7 +33,9 @@ function regionalFinish(craft) {
     poolMaterial.onBeforeCompile(shader);
     shader.vertexShader='attribute vec3 springInflow; varying vec3 source;\n'+
       shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nsource=springInflow;');
-    shader.fragmentShader='varying vec3 source;\n'+shader.fragmentShader.replace('vec2 bed=poolPoint.xz*5.+wave;',`
+    shader.uniforms.inkPool={value:site.shape==='suzuri'?1:0};
+    shader.uniforms.chalkPool={value:site.kind==='sulfur'?1:0};
+    shader.fragmentShader='varying vec3 source; uniform float inkPool, chalkPool;\n'+shader.fragmentShader.replace('vec2 bed=poolPoint.xz*5.+wave;',`
       float range=length(source.xy), phase=range*19.-poolTime*3.4;
       float fan=exp(-2.15*range);
       float broken=.63+.37*sin(source.x*7.4+source.y*4.1+sin(poolTime*.51));
@@ -33,10 +44,23 @@ function regionalFinish(craft) {
       float ring=pow(.5+.5*cos(phase+.35*sin(source.y*6.6)),8.)*fan*broken;
       diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.47,.45,.30),edge*.34);
       diffuseColor.rgb+=vec3(.19,.20,.17)*ring;
+      if(inkPool>.5){
+        // The eddy behind the water dropper pulls two fine ribbons of ink
+        // across the sea of the inkstone. The centre stays open for the face.
+        vec2 flow=source.xy+vec2(-.28,.21);
+        float angle=atan(flow.y,flow.x), radius=length(flow);
+        float curl=radius*3.7+1.55*sin(angle+.65*radius)-poolTime*.20;
+        float trace=pow(.5+.5*cos(curl*3.0),15.)*(1.-smoothstep(.3,4.2,radius));
+        diffuseColor.rgb*=1.-.31*trace;
+      }
+      if(chalkPool>.5){
+        float cloud=pebble(source.xy*.53+wave*.35+vec2(poolTime*.022,0.));
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.67,.71,.59),cloud*.49);
+      }
       vec2 bed=poolPoint.xz*5.+wave;`);
   };
-  m.customProgramCacheKey=()=> 'regional-spring-inlet-v1';
-  regionalWater.set(craft,m);return m;
+  m.customProgramCacheKey=()=> 'regional-spring-ink-and-sinter';
+  regionalWater.set(key,m);return m;
 }
 export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null, waterWash=null) {
   if (!poolMaterial) {
@@ -63,7 +87,7 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null
         `
         varying vec3 poolPoint;
         uniform float poolTime,occupied;
-        uniform vec2 poolCenter;
+        uniform vec2 poolCenter,poolForward,floatSize;
         uniform mat4 reflectionVP;
         uniform sampler2D reflected;
         float n(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
@@ -71,11 +95,14 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null
           vec2 k=floor(p), u=fract(p); u=u*u*(3.-2.*u);
           return mix(mix(n(k),n(k+vec2(1,0)),u.x),mix(n(k+vec2(0,1)),n(k+1.),u.x),u.y);
         }
+        float floatRadius(vec2 d) {
+          return length(vec2(dot(d,poolForward),dot(d,vec2(poolForward.y,-poolForward.x)))/floatSize);
+        }
         vec2 ripple(vec2 q,float t){
-          vec2 d=q-poolCenter; float r=length(d);
+          vec2 d=q-poolCenter; float r=floatRadius(d);
           return .030*vec2(cos(q.x*9.+q.y*7.+t*1.6),sin(q.y*12.-t*1.4))
               +.019*vec2(sin(q.y*21.+q.x*5.-t*2.),cos(q.x*17.+t*1.8))
-              +occupied*exp(-abs(r-.83)*1.9)*.087*sin(r*28.-t*3.8)*d/max(.015,r);
+              +occupied*exp(-abs(r-1.)*2.2)*.078*sin(r*26.-t*3.8)*d/max(.015,length(d));
         }\n` + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader
         .replace(
@@ -99,7 +126,7 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null
         .replace(
           '#include <opaque_fragment>',
           `
-        if (occupied>.5 && distance(poolPoint.xz,poolCenter)<2.2) {
+        if (occupied>.5 && floatRadius(poolPoint.xz-poolCenter)<2.55) {
           vec4 uvh=reflectionVP*vec4(poolPoint,1.);
           vec2 uv=uvh.xy/uvh.w*.5+.5+wave*vec2(.13,.095);
           vec2 soft=vec2(.0023,.0031);
@@ -108,9 +135,9 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null
              +texture2D(reflected,clamp(uv-soft,.003,.997))*.25;
           float fresnel=1.-clamp(dot(normal,normalize(vViewPosition)),0.,1.);
           outgoingLight=mix(outgoingLight,mochi.rgb,mochi.a*(.18+.38*pow(fresnel,1.8)));
-          float ring=length((poolPoint.xz-poolCenter)*vec2(.92,1.10))+wave.x*.34;
+          float ring=floatRadius(poolPoint.xz-poolCenter)+wave.x*.34;
           float thread=pow(.5+.5*cos(ring*48.-poolTime*4.1+sin(bed.x*.61)*.72),10.);
-          outgoingLight+=vec3(.126,.104,.060)*thread*exp(-abs(ring-.91)*2.7);
+          outgoingLight+=vec3(.126,.104,.060)*thread*exp(-abs(ring-1.06)*3.);
         }
         #include <opaque_fragment>
       `,
@@ -135,7 +162,7 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null
         flow.push(points.getX(i)*rx-inlet.u,points.getZ(i)*rz-inlet.v-inletImpactV,i===0?0:1);
       }
       shape.setAttribute('springInflow',new T.Float32BufferAttribute(flow,3));
-      material=regionalFinish(bathCraft[site.kind]);
+      material=regionalFinish(site);
     }
   }
   if(waterWash){
@@ -154,6 +181,7 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null
   surface.position.y = level;
   surface.receiveShadow = true;
   parent.add(surface);
+  if(site)addBathLeaves(parent,site,level,uniforms.poolTime);
 }
 
 // Only the bather needs a second view. Trees and dawn light already reach the
@@ -179,7 +207,11 @@ export function createBathReflection(renderer, scene, hero) {
       uniforms.reflected.value = target.texture;
     }
     const waterY = player.bathWaterY;
-    uniforms.poolCenter.value.set(player.x, player.z);
+    const bath=player.bathPose;
+    uniforms.poolCenter.value.set(bath.x,bath.z);
+    uniforms.poolForward.value.set(Math.sin(hero.rotation.y),Math.cos(hero.rotation.y));
+    const g=T.MathUtils.lerp(player.buffs.full>0?1.28:1,.90,bath.kettle?bath.settle:0);
+    uniforms.floatSize.value.set(g*(.82+1.09*bath.melt),g*(.83+.05*bath.recline));
     const clearAlpha = renderer.getClearAlpha(),
       bg = scene.background;
     const autoShadow = renderer.shadowMap.autoUpdate,

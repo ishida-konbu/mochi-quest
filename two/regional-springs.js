@@ -1,24 +1,26 @@
+import { mainBathLip } from './main-bath-outlines.js';
+
 // Surveyed in world metres. Positive local Z is the unobstructed walk from
 // the road, so a pool can follow the contours independently of its compass bearing.
 export const REGIONAL_SPRINGS = [
   // Ferry, shrine, market, old mountain baths and farming hamlets.
-  ['river-hanabira', '花筏の湯', 'river', 'sakura', 'lotus', 29,77,2.8204, 5.00,3.60],
-  ['shrine-sasafune', '笹舟の湯', 'shrine', 'bamboo', 'leaf', -140.25,-132.25,-1.0872, 4.50,3.15],
-  ['market-tsuboyu', '蔵町の甕湯', 'market', 'earthen', 'gourd', 38,-106,-1.2764, 4.72,3.30],
-  ['pass-yunohana', '湯の花の岩棚', 'spring', 'sulfur', 'cleft', 170,-144,.6750, 5.20,3.65],
-  ['paddy-azemichi', '畦映しの湯', 'terraces', 'paddy', 'terrace', 95.37,67.87,-.1813, 5.34,3.20],
-  ['coast-kaigara', '松浜の貝湯', 'coast', 'shore', 'shell', -174.25,80,.2338, 5.00,3.60],
+  ['river-hanabira', '花筏の湯', 'river', 'sakura', 'petalRaft', 29,77,2.8204, 5.00,3.60],
+  ['shrine-sasafune', '笹舟の湯', 'shrine', 'bamboo', 'bambooBoat', -140.25,-132.25,-1.0872, 4.50,3.15],
+  ['market-tsuboyu', '蔵町の甕湯', 'market', 'earthen', 'kilnJar', 38,-106,-1.2764, 4.72,3.30],
+  ['pass-yunohana', '湯の花の岩棚', 'spring', 'sulfur', 'sinterShelf', 170,-144,.6750, 5.20,3.65],
+  ['paddy-azemichi', '畦映しの湯', 'terraces', 'paddy', 'riceField', 95.37,67.87,-.1813, 5.34,3.20],
+  ['coast-kaigara', '松浜の貝湯', 'coast', 'shore', 'scallop', -174.25,80,.2338, 5.00,3.60],
   ['moon-kusatsuyu', '草露の小湯', 'moon', 'susuki', 'pebble', 47,356,2.9783, 3.23,2.51,'sub'],
-  ['autumn-kaedeba', '楓葉の湯', 'autumn', 'maple', 'leaf', 326.34,-56.09,-1.7547, 4.96,3.61],
-  ['moon-yumihari', '弓張月の湯', 'moon', 'susuki', 'oxbow', -31.57,275.90,-2.6966, 5.40,3.34],
-  ['dawn-akatsuki', '暁の扇湯', 'dawn', 'dawn', 'fan', 306.50,145.75,-.1526, 5.00,3.60],
-  // The city outskirts, orchard, pilgrimage precincts and working ports.
-  ['capital-suzuri', '花京の硯湯', 'kyo', 'capital', 'inkstone', 121,-911.75,1.4790, 4.92,3.42],
-  ['peach-hanamomo', '花桃の瓢湯', 'peach', 'peach', 'gourd', -783,-193,.0469, 4.50,3.20],
-  ['temple-hasu', '蓮弁の湯', 'todaiji', 'temple', 'lotus', 380.62,854.25,1.9306, 5.23,3.79],
-  ['inari-magari', '稲荷山の曲り湯', 'inari', 'inari', 'oxbow', 378,-592,-.0422, 4.75,3.17],
-  ['tsuruga-shiomachi', '船溜りの湯', 'tsuruga', 'tsuruga', 'shell', 353,-1413,-.5404, 5.12,3.27],
-  ['sakai-tsuboguchi', '堺の壺口湯', 'sakai', 'sakai', 'inkstone', -176,-554,-1.5708, 4.80,3.05],
+  ['autumn-kaedeba', '楓葉の湯', 'autumn', 'maple', 'mapleLeaf', 326.34,-56.09,-1.7547, 4.96,3.61],
+  ['moon-yumihari', '弓張月の湯', 'moon', 'susuki', 'crescent', -31.57,275.90,-2.6966, 5.40,3.34],
+  ['dawn-akatsuki', '暁の扇湯', 'dawn', 'dawn', 'foldingFan', 306.50,145.75,-.1526, 5.00,3.60],
+  // The Kyoto crossroads, orchard, pilgrimage precincts and working ports.
+  ['capital-suzuri', '花京の硯湯', 'kyo', 'capital', 'suzuri', 228.5,-838.65,Math.PI, 5.03,3.05],
+  ['peach-hanamomo', '花桃の瓢湯', 'peach', 'peach', 'calabash', -783,-193,.0469, 4.50,3.20],
+  ['temple-hasu', '蓮弁の湯', 'todaiji', 'temple', 'lotusThrone', 380.62,854.25,1.9306, 5.23,3.79],
+  ['inari-magari', '稲荷山の曲り湯', 'inari', 'inari', 'foxTail', 378,-592,-.0422, 4.75,3.17],
+  ['tsuruga-shiomachi', '船溜りの湯', 'tsuruga', 'tsuruga', 'shipBasin', 353,-1413,-.5404, 5.12,3.27],
+  ['sakai-tsuboguchi', '堺の壺口湯', 'sakai', 'sakai', 'jarMouth', -176,-554,-1.5708, 4.80,3.05],
   // Longer journeys have intermediate stops beyond the settled centres.
   ['snow-nagoriyuki', '峠の名残雪', 'snow', 'snow', 'cleft', 646,-1105,.24, 3.18,2.51,'sub'],
   ['sakai-akane', '堺街道の茜湯', 'sakai', 'sakai', 'terrace', -49,-722,.5880, 3.28,2.57,'sub'],
@@ -31,6 +33,8 @@ export const REGIONAL_SPRINGS = [
 // Each outline is single-valued round the centre so the mesh, water tests,
 // carved bank and individually fitted edge stones can follow the same shore.
 export function regionalSpringLip(shape,a) {
+  const named=mainBathLip(shape,a);
+  if(named!==undefined)return named;
   const c=Math.cos(a),s=Math.sin(a);
   switch(shape) {
     case 'gourd':

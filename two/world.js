@@ -18,6 +18,7 @@ import { createKiyomizu } from './kiyomizu.js';
 import { createKyo, kyoPavingMaterial } from './kyo.js';
 import { dressPilgrimage, pilgrimageLife } from './pilgrimage.js';
 import { dressCourt } from './magistrates-hall.js';
+import { createBathTableaux } from './main-bath-art.js';
 import { dressWaysideBaths } from './wayside-baths.js';
 import { dressRyugu, createRyuguLife } from './ryugu.js';
 import { createTravellers } from './travelling-merchants.js';
@@ -55,7 +56,7 @@ import {
   ROADS,
   BRIDGES, MAPLE_FOOTINGS,
   WATER_Y,
-  terrainHeight, terrainMeshHeight,
+  terrainHeight, terrainMeshHeight, springGround,
   bridgeHeight,
   riverZ,
   riverHalfWidth,
@@ -225,6 +226,7 @@ function* landscape(scene, art) {
         ix.push(k,l,k+1,k+1,l,l+1);
       }
     }
+    if(!deep)springGround.refineTile(column,row,p,ix,[[uv,2],[col,3],[ridges,1],[surface,2],[scroll,1],[seasons,4]],h);
     const ground=geometry(p,ix,uv,col);
     ground.setAttribute('ridgeRelief',new THREE.Float32BufferAttribute(ridges,1));
     ground.setAttribute('terrainMix',new THREE.Float32BufferAttribute(surface,2));
@@ -2017,6 +2019,7 @@ export function* prepareWorld(scene) {
   const updateLake=createLakeShore(scene);
   const updateShrines=pilgrimageLife(scene), updatePalace=createRyuguLife(scene);
   const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene), updateHuts=createWaysideHuts(scene);
+  const updateBathTableaux=createBathTableaux(scene);
   const updateLamps=painter.lamps.finish(scene,landGroup);
   yield* painter.finish();
   // Each spatial batch lives in its nearest image of the repeating island.
@@ -2048,6 +2051,7 @@ export function* prepareWorld(scene) {
         updateShrines(time,player,camera,inariWeather);
         updateTrade(time,player,camera);
         updateHuts(player);
+        updateBathTableaux(player);
         updateWaterfalls(time,player,camera);
         updateLake(time,player);
         updateOcean(voyageTime,player);

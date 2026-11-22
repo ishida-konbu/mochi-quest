@@ -1,4 +1,5 @@
 import { WAYSIDE_HUTS,KETTLE,CHAYA_SITES,CHAYA_SEAT } from './wayside-hut-layout.js';
+import { SOAK_SECONDS, floatBerth, bathingPose } from './bathing.js';
 import { planTurtleLeg } from './turtle-trail.js';
 import { BELL_FIRST, BELL_INTERVAL, noticeBellDistance, templeBellHour } from './kiyomizu-bell.js';
 import { KIYOMIZU, onMountOtowa, kiyomizuClearing } from './kiyomizu-layout.js';
@@ -59,7 +60,7 @@ const PICKUP_ACTION = {
   kyoTea: { activity: 'tea', duration: 2.2, label: '宇治茶をいただく' },
   mitarashi: { activity: 'mitarashi', duration: 2.5, label: 'みたらし団子を食べる' },
   tsukimi: { activity: 'tsukimi', duration: 2.6, label: '月見団子を食べる' },
-  onsen: { activity: 'bath', duration: 3.5, label: '温泉に入る' },
+  onsen: { activity: 'bath', duration: SOAK_SECONDS, label: '温泉に入る' },
   haramaki: { label: '腹巻きを巻く' }
 };
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -294,6 +295,12 @@ export function createGame(snapshot = null) {
   let bufferedJump = 0;
   let ledgeGrace = 0;
   let lastBath = null;
+  let berth = null;
+  Object.defineProperty(player, 'bathPose', {get() {
+    if(player.activity!=='bath' || !lastBath)return;
+    berth ??= floatBerth(player,lastBath,springRadius);
+    return bathingPose(player,berth);
+  }});
   // Old journals remember the bath ID. Rebuild its waterline from the site
   // so the first frame of a resumed soak uses the same level as the mesh.
   Object.defineProperty(player, 'bathWaterY', {get() {
@@ -421,9 +428,11 @@ export function createGame(snapshot = null) {
     player.activityTime = duration;
     if (activity !== 'fall') player.vx = player.vz = player.speed = 0;
   }
-  function collect(target) {
+  function collect(target, facing) {
     if (target.type === 'onsen') {
       lastBath = target;
+      berth=null;
+      if(Number.isFinite(facing))player.heading=Math.atan2(Math.sin(facing),Math.cos(facing));
       if (target.goemon) {
         player.x = target.x; player.z = target.z; player.y = target.y;
       }
@@ -556,7 +565,7 @@ export function createGame(snapshot = null) {
     sound('dismount');
     return true;
   }
-  function interact() {
+  function interact(facing) {
     if (player.mount) return dismount();
     const found = nearest();
     if (!found) return false;
@@ -584,7 +593,7 @@ export function createGame(snapshot = null) {
       player.mount = 'bike';
       message('電動自転車で出発。次のポートで返せる。');
     } else {
-      collect(target);
+      collect(target,facing);
       return true;
     }
     changeMode('normal');
@@ -661,7 +670,7 @@ export function createGame(snapshot = null) {
     if (action === 'jump') { heldJump = true; return jump(); }
     if (action === 'throw') return throwNotice(facing);
     if (action === 'dismount') return dismount();
-    if (action === 'interact') return interact();
+    if (action === 'interact') return interact(facing);
     if (!Object.hasOwn(MODE_COST, action) || player.activity) return false;
     if (player.mount) { message('変身するときは、乗り物から降りよう。'); return false; }
     if (action === 'kagami' && !state.kagamiUnlocked) return false;
@@ -1265,6 +1274,13 @@ export function createGame(snapshot = null) {
       visitor=restoreSnowVisitor(visitor);
       const position=restoreSnowVisitor(t), home=restoreSnowVisitor({x:t.homeX,z:t.homeZ});
       t={...t,x:position.x,z:position.z,homeX:home.x,homeZ:home.z};
+    }
+    // The clerk's inkstone kept its landmark ID when it left the outskirts.
+    // Only an active bather at that former site travels with the water.
+    if(visitor.activity==='bath' && data.lastBath==='onsen-capital-suzuri' &&
+       Math.hypot(visitor.x-121,visitor.z+911.75)<6.5) {
+      const pool=objects.find(o=>o.id===data.lastBath);
+      visitor={...visitor,x:pool.x,z:pool.z,y:pool.y};
     }
     if(visitor!==p && p.mount==='turtle')t={...t,x:visitor.x,z:visitor.z,homeX:visitor.x,homeZ:visitor.z};
     p=visitor;

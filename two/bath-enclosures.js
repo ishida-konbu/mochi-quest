@@ -12,7 +12,7 @@ const designs={
   maple:   ['crag','shake','split',1.15,2.65,1.22,'#624e40','#807764','#9c5746','楓'],
   susuki:  ['moor','hip','reed',1.0,2.78,1.26,'#75644f','#978465','#786885','弓月'],
   dawn:    ['dawn','hip','bamboo',1.0,2.89,1.18,'#7a624f','#8b7c69','#a76847','暁'],
-  capital: ['town','tile','lattice',.68,3.20,1.49,'#605146','#615f59','#576878','硯'],
+  // The inkstone occupies the little open square in front of the painted machiya.
   peach:   ['farm','steep','woven',1.0,2.58,1.23,'#795e4b','#a18c67','#9b6175','花桃'],
   temple:  ['temple','hipTile','plaster',.66,3.18,1.50,'#644b3b','#73695a','#736573','蓮華'],
   inari:   ['grove','shake','bamboo',1.05,2.80,1.29,'#85513d','#726b55','#a05a43','稲荷'],

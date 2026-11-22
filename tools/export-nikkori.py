@@ -102,6 +102,24 @@ def pressed(co):
     base = math.exp(-((h-.26)/.22)**2)
     return Vector((x*(1+.13*base),y*(1+.16*base),z-.13*smooth(.03,.72,h)))
 
+def bathed(co):
+    x,y,z = co
+    h = z/2.32
+    # Draw the dough from beneath the arms. Above the shoulder the face and
+    # both mitts travel as one, keeping the painted mouth and cheeks round.
+    # All four limbs sit outside the long-pull band. In particular the
+    # lowest palm vertices lie at h=.238, so the mitts move up intact.
+    draw = smooth(.070,.236,h)
+    heel = math.exp(-((h-.145)/.124)**2)
+    waist = math.exp(-((h-.345)/.16)**2)
+    width = 1 + .265*heel - .045*waist
+    # The back spreads flat against the water, with a plumper pillow beneath
+    # the head. The toes turn up and the waist follows a shallow lateral curve.
+    depth = .61 + .17*smooth(.40,.78,h)
+    toe = .11*(1-smooth(.05,.19,h))
+    bend = .13*math.sin(math.pi*draw)-.045*draw
+    return Vector((x*width+bend, y*depth-toe-.10*smooth(.42,.79,h), z+3.08*draw))
+
 base = [v.co.copy() for v in mesh.vertices]
 # The supplied clean-skin key flattens the carved mouth. Several collapsed
 # lip triangles still have nearly vertical normals in the middle of the
@@ -131,7 +149,7 @@ for co,lip_weight in zip(base,lip_weights):
     # the clean lip bed prepared for painted expressions in the gestures file.
     smile.append(co+offset*smooth(1.20,1.29,co.z)*(1-lip_weight))
 
-shapes=[smile, [pulled(v) for v in base], [pressed(v) for v in base]]
+shapes=[smile, [pulled(v) for v in base], [pressed(v) for v in base], [bathed(v) for v in base]]
 # Compute smooth normals once per original vertex, before splitting UV seams.
 def normals(vertices,deform=lambda p:p):
     for v,coord in zip(mesh.vertices,vertices):
@@ -146,7 +164,7 @@ def normals(vertices,deform=lambda p:p):
         result[i]=result[i].lerp(dx.cross(dz).normalized(),w).normalized()
     return result
 base_normals=normals(base)
-shape_normals=[normals(smile),normals(shapes[1],pulled),normals(shapes[2],pressed)]
+shape_normals=[normals(smile),normals(shapes[1],pulled),normals(shapes[2],pressed),normals(shapes[3],bathed)]
 normals(base)
 
 bones=list(arm.data.bones)
@@ -247,7 +265,7 @@ nodes[0]['extras']=dict(faceCues=face_cues)
 doc=dict(asset=dict(version='2.0',generator='Nikkori Mochi • Blender rig and eight gestures'),scene=0,
          scenes=[dict(nodes=[0,1])], nodes=nodes, skins=[dict(inverseBindMatrices=inverse,
          joints=list(range(1,len(bones)+1)),skeleton=1)], meshes=[dict(name='Nikkori Mochi',
-         primitives=[prim],weights=[0,0,0],extras=dict(targetNames=['Original smile','Taffy pull','Landing fold']))],
+         primitives=[prim],weights=[0,0,0,0],extras=dict(targetNames=['Original smile','Taffy pull','Landing fold','Hot spring float']))],
          animations=clips,bufferViews=views,accessors=access,buffers=[dict(byteLength=len(buffer))])
 meta=json.dumps(doc,separators=(',',':')).encode()
 meta+=b' '*(-len(meta)%4)
