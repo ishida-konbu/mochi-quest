@@ -1,4 +1,4 @@
-import { HIGASHIYAMA } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA } from './higashiyama.js';
 import { DISTRICTS } from './geography.js';
 import * as THREE from './vendor/three.module.min.js';
 import { HDRLoader } from './vendor/HDRLoader.js';
@@ -187,14 +187,17 @@ export function createAtmosphere(scene) {
         Math.hypot((player.x-DISTRICTS.inari.x+88)/292,(player.z-DISTRICTS.inari.z-99)/206));
       const mountain=1-THREE.MathUtils.smoothstep(mountainDistance,.6,1.35);
       const clearAir=mountain*(.67+.33*THREE.MathUtils.smoothstep(player.y,8,65));
-      // Looking along the east avenue, keep the nearby dark face distinct
-      // from the distant paper ridges, with the ordinary haze in other views.
-      const dx=HIGASHIYAMA.x-player.x,dz=HIGASHIYAMA.z-player.z;
-      const range=Math.hypot(dx,dz),view=camera.matrixWorld.elements;
-      const facing=-(dx*view[8]+dz*view[10])/Math.max(1,range);
-      const eastView=(1-THREE.MathUtils.smoothstep(range,210,294))*THREE.MathUtils.smoothstep(facing,.33,.84);
-      dome.material.uniforms.horizonInk.value=1-.42*Math.max(clearAir,eastView);
-      scene.fog.density = 0.0057 - Math.max(.0025*clearAir,.00365*eastView) + 0.003 * s.snow - 0.0008 * s.dawn;
+      // Leave enough space between ink values to see the middle spurs
+      // and the far ridge from either avenue, through a thin veil of haze.
+      const view=camera.matrixWorld.elements;
+      let hillView=0;
+      for(const summit of [HIGASHIYAMA,KITAYAMA]){
+        const dx=summit.x-player.x,dz=summit.z-player.z,range=Math.hypot(dx,dz);
+        const facing=-(dx*view[8]+dz*view[10])/Math.max(1,range);
+        hillView=Math.max(hillView,(1-THREE.MathUtils.smoothstep(range,495,650))*THREE.MathUtils.smoothstep(facing,.26,.79));
+      }
+      dome.material.uniforms.horizonInk.value=1-.42*Math.max(clearAir,hillView);
+      scene.fog.density = 0.0057 - Math.max(.0025*clearAir,.00415*hillView) + 0.003 * s.snow - 0.0008 * s.dawn;
       scene.environmentIntensity = 0.67 - 0.51 * s.moon;
     },
   };

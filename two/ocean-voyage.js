@@ -1,8 +1,8 @@
-import { SEAPORTS,portPoint,localPoint,DECK_Y,HOLD_Y,FIXED_BERTH } from './seaport-layout.js';
+import { WORLD_BOUND,wrapWorld } from './geography.js';
+import { SEAPORTS,OLD_TSURUGA,relocateOldQuay,portPoint,localPoint,DECK_Y,HOLD_Y,FIXED_BERTH } from './seaport-layout.js';
 
 const pi=Math.PI;
-const bound=416*Math.SQRT2*2;
-const wrap=v=>v>=-bound&&v<bound?v:((v+bound)%(2*bound)+2*bound)%(2*bound)-bound;
+const wrap=v=>wrapWorld(v);
 const mix=(a,b,t)=>a+(b-a)*t;
 
 // Arc-length samples avoid surging through a turn. In harbour the helm is
@@ -28,48 +28,58 @@ function seaLane(id,knots,closed=true){
   points.push(last);lengths.push(length);
   return {id,knots,points,lengths,length};
 }
-const t=SEAPORTS[0],s=SEAPORTS[1];
-const berth=p=>portPoint(p,-20,31.4);
-export const CROSSINGS=[
-  seaLane('tsuruga-sakai',[berth(t),portPoint(t,-28,31.4),portPoint(t,-45,31.4),[342,-1092],[323,-1121],[184,-1134],[52,-1144],
-    [-130,-1154],[-325,-1163],[-548,-1160],[-745,-1128],[-854,-1021],[-866,-854],[-806,-684],[-666,-595],
-    [-505,-553],[-377,-535],[-293,-548],[-260,-577],portPoint(s,8,34),portPoint(s,-5,31.4),portPoint(s,-14,31.4),berth(s)],false),
-  seaLane('sakai-tsuruga',[berth(s),portPoint(s,-28,31.4),portPoint(s,-39,31.4),portPoint(s,-40,59),portPoint(s,-36,108),
-    [-438,-610],[-588,-597],[-752,-644],[-881,-733],[-924,-900],[-893,-1058],[-803,-1122],[-694,-1163],
-    [-508,-1167],[-315,-1166],[-99,-1155],[54,-1132],[146,-1112],[197,-1094],[231,-1075],
-    portPoint(t,9,34),portPoint(t,-5,31.4),portPoint(t,-14,31.4),berth(t)],false)
-];
+const berth=p=>portPoint(p,-20,31.4),sakai=SEAPORTS[1];
 const serviceSpeed=8.4,berthTime=48;
-export const crossingTimes=CROSSINGS.map(leg=>leg.length/serviceSpeed+2+berthTime);
-// Keep the trade circuit outside the eastern headlands, southern pilgrim
-// peninsula and western mountains. Both lateral sea lanes have open water.
-const outer=[[540,-1193],[836,-1030],[989,-688],[966,-124],[825,387],[754,762],[625,1060],
-  [182,1080],[-345,901],[-820,671],[-1047,285],[-1114,-66],[-1100,-447],[-1072,-758],[-1000,-1080],[-820,-1214],[-498,-1225],[-110,-1222],[270,-1225]];
-const outerLane=seaLane('ocean',outer);
+function exchangeLanes(tsuruga,northbound,southbound){
+  return [
+    seaLane('tsuruga-sakai',[berth(tsuruga),portPoint(tsuruga,-28,31.4),portPoint(tsuruga,-45,31.4),...southbound,
+      [-854,-1021],[-866,-854],[-806,-684],[-666,-595],[-505,-553],[-377,-535],[-293,-548],[-260,-577],
+      portPoint(sakai,8,34),portPoint(sakai,-5,31.4),portPoint(sakai,-14,31.4),berth(sakai)],false),
+    seaLane('sakai-tsuruga',[berth(sakai),portPoint(sakai,-28,31.4),portPoint(sakai,-39,31.4),portPoint(sakai,-40,59),portPoint(sakai,-36,108),
+      [-438,-610],[-588,-597],[-752,-644],[-881,-733],[-924,-900],[-893,-1058],...northbound,
+      portPoint(tsuruga,9,34),portPoint(tsuruga,-5,31.4),portPoint(tsuruga,-14,31.4),berth(tsuruga)],false),
+  ];
+}
+export const CROSSINGS=exchangeLanes(SEAPORTS[0],
+  [[-850,-1212],[-697,-1328],[-483,-1417],[-242,-1493],[5,-1520],[153,-1508],[239,-1497],[294,-1488]],
+  [[411,-1518],[392,-1543],[249,-1553],[47,-1551],[-183,-1548],[-419,-1499],[-621,-1409],[-780,-1253]]);
+// Preserve the established sailing timetable, even as an extended fairway
+// changes a passage's length. Both ports still exchange boats at the same hour.
+export const crossingTimes=[330.33738208898944,321.12645907839567];
+function circuit(northeast,northwest){
+  return seaLane('ocean',[...northeast,[989,-688],[966,-124],[825,387],[754,762],[625,1060],
+    [182,1080],[-345,901],[-820,671],[-1047,285],[-1114,-66],[-1100,-447],[-1072,-758],[-1000,-1080],...northwest]);
+}
+const outerLane=circuit([[640,-1540],[930,-1340],[1038,-1092]],
+  [[-962,-1313],[-717,-1515],[-453,-1563],[-150,-1577],[231,-1579]]);
 export const SEAWAYS=[{id:'coastal-exchange',points:[...CROSSINGS[0].points,...CROSSINGS[1].points]},outerLane];
-export const FLEET=[
-  ...SEAPORTS.map((port,i)=>({id:port.id+'-trader',port,lane:null,color:i?'indigo':'red',index:i,moored:true})),
-  ...SEAPORTS.map((port,i)=>({id:port.id+'-voyager',port,exchange:true,speed:serviceSpeed,hold:berthTime,offset:i?crossingTimes[0]:0,color:i?'red':'indigo',index:2+i})),
-  ...[0,.45,.72].map((part,i)=>({id:'ocean-trader-'+i,lane:outerLane,speed:8.6,hold:0,offset:part*outerLane.length/8.6,color:i%2?'indigo':'red',index:4+i})),
-];
+function fleet(ports,circuit){
+  return [
+    ...ports.map((port,i)=>({id:port.id+'-trader',port,lane:null,color:i?'indigo':'red',index:i,moored:true})),
+    ...ports.map((port,i)=>({id:port.id+'-voyager',port,exchange:true,speed:serviceSpeed,hold:berthTime,offset:i?crossingTimes[0]:0,color:i?'red':'indigo',index:2+i})),
+    ...[0,.45,.72].map((part,i)=>({id:'ocean-trader-'+i,lane:circuit,speed:8.6,hold:0,offset:part*circuit.length/8.6,color:i%2?'indigo':'red',index:4+i})),
+  ];
+}
+export const FLEET=fleet(SEAPORTS,outerLane);
 function lanePoint(lane,along){
   let lo=0,hi=lane.points.length-1;
   while(hi-lo>1){const mid=(lo+hi)>>1;if(lane.lengths[mid]<=along)lo=mid;else hi=mid;}
   const a=lane.points[lo],b=lane.points[hi],t=(along-lane.lengths[lo])/(lane.lengths[hi]-lane.lengths[lo]);
   return [mix(a[0],b[0],t),mix(a[1],b[1],t)];
 }
-export function vesselPose(ship,time,out={}){
+export function vesselPose(ship,time,out={},lanes=CROSSINGS,bound=WORLD_BOUND){
   let x,z,yaw,docked=true;
   if(ship.moored){
     [x,z]=portPoint(ship.port,FIXED_BERTH,31.4);
     yaw=ship.port.yaw-pi/2;
   }else{
-    const {speed,hold}=ship;
-    let lane=ship.lane,phase;
+    const {hold}=ship;
+    let lane=ship.lane,speed=ship.speed,phase;
     if(ship.exchange){
       const round=(time+ship.offset)%(crossingTimes[0]+crossingTimes[1]);
       const leg=round<crossingTimes[0]?0:1;
-      lane=CROSSINGS[leg];phase=round-(leg?crossingTimes[0]:0);
+      lane=lanes[leg];phase=round-(leg?crossingTimes[0]:0);
+      speed=lane.length/(crossingTimes[leg]-hold-2);
     }else phase=(time+ship.offset)%(lane.length/speed);
     const travel=lane.length/speed;
     // Cubic end caps ease a laden hull away from and back to her mooring.
@@ -86,7 +96,7 @@ export function vesselPose(ship,time,out={}){
     const b=lanePoint(lane,ship.exchange?Math.min(lane.length,along+1.3):(along+1.3)%lane.length);
     yaw=Math.atan2(b[0]-a[0],b[1]-a[1]);
   }
-  Object.assign(out,{ship,x:wrap(x),z:wrap(z),yaw,y:(docked?.018:.058)*Math.sin(time*1.1+ship.index),docked});
+  Object.assign(out,{ship,x:wrapWorld(x,bound),z:wrapWorld(z,bound),yaw,y:(docked?.018:.058)*Math.sin(time*1.1+ship.index),docked});
   return out;
 }
 export function hullWidth(v){
@@ -96,8 +106,8 @@ export function hullWidth(v){
 export const hatch={left:-1.24,right:1.24,bottom:-4.5,top:2.5};
 export const stairTops=Array.from({length:16},(_,i)=>HOLD_Y+(DECK_Y-HOLD_Y)*i/15);
 export const stepDepth=(hatch.top-hatch.bottom)/stairTops.length;
-function localContact(p,x,z,feet,radius=0) {
-  const dx=wrap(x-p.x),dz=wrap(z-p.z);
+function localContact(p,x,z,feet,radius=0,bound=WORLD_BOUND) {
+  const dx=wrapWorld(x-p.x,bound),dz=wrapWorld(z-p.z,bound);
   if(Math.abs(dx)>19||Math.abs(dz)>19)return null;
   const local=localPoint({...p,x:0,z:0},dx,dz);
   const [u,v]=local,y=feet-p.y;
@@ -132,6 +142,33 @@ function localContact(p,x,z,feet,radius=0) {
     for(const v0 of [-8.35,6.65])wall(Math.abs(v-v0)<.13+radius&&Math.abs(u)>1.02-radius,DECK_Y-.16);
   }
   return {pose:p,u,v,floor:floor+p.y,ceiling:ceiling+p.y,solid:solid+p.y};
+}
+// Releases seven and eight recorded the position of a passenger in world
+// coordinates. Reconstruct the old hull at the saved instant, including hulls
+// straddling the former world seam, then carry the passenger's berth and bearing.
+const oldBound=416*Math.SQRT2*2;
+let legacyRoutes,legacyFleet;
+export function restoreHarbourTraveller(player,time){
+  if(!legacyFleet){
+    legacyRoutes=exchangeLanes(OLD_TSURUGA,
+      [[-803,-1122],[-694,-1163],[-508,-1167],[-315,-1166],[-99,-1155],[54,-1132],[146,-1112],[197,-1094],[231,-1075]],
+      [[342,-1092],[323,-1121],[184,-1134],[52,-1144],[-130,-1154],[-325,-1163],[-548,-1160],[-745,-1128]]);
+    const outer=circuit([[540,-1193],[836,-1030]],[[-820,-1214],[-498,-1225],[-110,-1222],[270,-1225]]);
+    legacyFleet=fleet([{...OLD_TSURUGA,id:'tsuruga'},sakai],outer);
+  }
+  if(player.mode!=='kusa' && !player.diveDepth){
+    const feet=player.y-player.h;
+    for(const ship of legacyFleet){
+      const old=vesselPose(ship,time,{},legacyRoutes,oldBound);
+      const hit=localContact(old,player.x,player.z,feet,0,oldBound);
+      if(!hit || !Number.isFinite(hit.floor) || Math.abs(feet-hit.floor)>.37)continue;
+      const now=vesselPose(FLEET[ship.index],time),[x,z]=portPoint(now,hit.u,hit.v);
+      const heading=player.heading+now.yaw-old.yaw;
+      return {...player,x:wrap(x),z:wrap(z),y:player.y+now.y-old.y,heading:Math.atan2(Math.sin(heading),Math.cos(heading))};
+    }
+  }
+  const [x,z]=relocateOldQuay(player.x,player.z);
+  return x===player.x && z===player.z ? player : {...player,x,z};
 }
 export function createVoyage(time=0){
   const poses=FLEET.map(s=>vesselPose(s,time)),prior=FLEET.map(s=>vesselPose(s,time));

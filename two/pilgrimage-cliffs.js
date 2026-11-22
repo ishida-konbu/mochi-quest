@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.min.js';
+import { TERRAIN_TILES,TERRAIN_SUBDIVISIONS } from './geography.js';
 import { terrainHeight, BOUND } from './terrain.js';
 import { CLIFF_PINES, PEACH } from './pilgrimage-layout.js';
 import { sculpture } from './pilgrimage-pigment.js';
@@ -32,7 +33,7 @@ function pine(i) {
 export function* paintPeachCliffs(p,map){
   // Reuse the ground mesh lattice exactly. The varnish sits directly on
   // the collidable stone even where a ledge has an almost vertical face.
-  const n=960,span=2*BOUND/n, index=v=>Math.floor((v+BOUND)/span);
+  const n=TERRAIN_TILES*TERRAIN_SUBDIVISIONS,span=2*BOUND/n, index=v=>Math.floor((v+BOUND)/span);
   const colMin=index(PEACH.x-251),colMax=index(PEACH.x+160)+1,rowMin=index(PEACH.z-189),rowMax=index(PEACH.z+130)+1;
   const surface=new T.MeshLambertMaterial({map,vertexColors:true,transparent:true,depthWrite:false,
     polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2,emissiveMap:map,emissive:'#a0a28b',emissiveIntensity:.19});

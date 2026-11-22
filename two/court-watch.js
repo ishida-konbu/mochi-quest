@@ -119,10 +119,34 @@ function guard(index){
     for(const s of [-1,1])g.stroke('#917854',[[s*.093,.101,.094],[s*.04,.166,.084],[0,.14,.151]],[.015,.018,.008],7);
     mesh(g.finish(),mat,leg);feet.push(leg);
   }
-  return {root,torso,arm,head,feet,tip};
+  torso.name='狩衣';arm.name='松明を持つ腕';head.name='烏帽子';feet[0].name='左足';feet[1].name='右足';
+  return {root,tip};
 }
 
-function woodBaskets(p,f){
+const patterns=[];
+let basket,flameShape,glowTexture,glowPlane;
+export function createWatchman(index){
+  const pattern=patterns[index%2]??=guard(index%2);
+  // All watches wear the same livery. Share the detailed sculpt, dyed cloth
+  // and painted faces; each figure still has its own arm, head and gait.
+  const root=pattern.root.clone(true),find=name=>root.getObjectByName(name);
+  const arm=find('松明を持つ腕'),fire=flame(arm,index*.91+4);
+  fire.position.fromArray(pattern.tip);
+  return {root,arm,fire,torso:find('狩衣'),head:find('烏帽子'),feet:[find('左足'),find('右足')]};
+}
+export function moveWatchman(g,q,time,index,floor){
+  const stride=sin(time*5.23+index)*q.walk;
+  g.root.position.set(q.x,floor,q.z);g.root.rotation.y=q.yaw;
+  g.torso.position.y=.018*Math.abs(stride)+.006*cos(time*2.3+index);
+  g.torso.rotation.x=.056*q.reach;
+  g.head.rotation.set(.07*q.reach+.018*sin(time*1.9),.087*sin(time*.66+index),0);
+  g.arm.rotation.x=.38*q.reach+.045*stride;
+  g.feet.forEach((leg,k)=>{const step=(k?1:-1)*stride;leg.position.z=.136*step;leg.position.y=.055*Math.max(0,step);});
+  g.fire.visible=q.taper>.012;g.fire.scale.setScalar(.38*q.taper);g.fire.material.uniforms.clock.value=time;
+}
+
+export function brazierGeometry(){
+  if(basket)return basket;
   const iron='#5b5b50',ashes='#625445';
   const g=sculpture();
   // A pierced iron kagari basket supported on splayed legs. Firelight can
@@ -145,7 +169,11 @@ function woodBaskets(p,f){
     g.stroke(i%2?ashes:'#79654c',[[-l*cos(a),1.26+i*.021,-l*sin(a)],[.02,1.33+i*.019,0],
       [l*cos(a),1.36+i*.022,l*sin(a)]],[.061,.065,.046],8);
   }
-  p.shapes.courtBrazier=g.finish();
+  basket=g.finish();
+  return basket;
+}
+function woodBaskets(p,f){
+  p.shapes.courtBrazier=brazierGeometry();
   for(const [x,z] of COURT_BRAZIERS){
     f.put('rock',x,.022,z,.78,.10,.76,'#999482',p.stone);
     f.put('courtBrazier',x,.08,z,1,1,1,'#fff',p.stems);
@@ -168,7 +196,8 @@ function fireGeometry(){
   }
   const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(xyz,3));geo.setAttribute('uv',new T.Float32BufferAttribute(uv,2));geo.setIndex(tri);return geo;
 }
-function flame(parent,geometry,seed){
+function flame(parent,seed){
+  const geometry=flameShape??=fireGeometry();
   const mat=new T.ShaderMaterial({transparent:true,side:T.DoubleSide,depthWrite:false,
     uniforms:{clock:{value:0},seed:{value:seed}},vertexShader:`
       uniform float clock,seed;varying vec2 v;
@@ -191,21 +220,31 @@ function sandGlow(){
   r.addColorStop(0,'rgba(255,205,126,.92)');r.addColorStop(.23,'rgba(252,171,83,.70)');r.addColorStop(.60,'rgba(221,112,56,.23)');r.addColorStop(1,'rgba(200,104,41,0)');
   g.fillStyle=r;g.fillRect(0,0,128,128);const map=new T.CanvasTexture(c);map.colorSpace=T.SRGBColorSpace;return map;
 }
+export function createWatchFire(parent,x,y,z,glowY,seed){
+  const fire=flame(parent,seed);
+  fire.position.set(x,y+1.48,z);fire.name='篝の炎';
+  const glow=new T.Mesh(glowPlane??=new T.PlaneGeometry(1,1),new T.MeshBasicMaterial({
+    map:glowTexture??=sandGlow(),transparent:true,depthWrite:false,blending:T.AdditiveBlending,
+  }));
+  glow.position.set(x,glowY,z);glow.rotation.x=-pi/2;glow.scale.set(6.8,6.8,1);
+  glow.renderOrder=3;parent.add(glow);
+  return {x,z,fire,glow};
+}
+export function burnWatchFire(hearth,strength,time,seed){
+  const flick=.91+.08*sin(8.2*time+seed)+.045*cos(11.8*time+seed*.5);
+  hearth.fire.visible=hearth.glow.visible=strength>.004;
+  hearth.fire.scale.set(1.37*strength,1.43*strength*flick,1.37*strength);
+  hearth.fire.material.uniforms.clock.value=time;
+  hearth.glow.material.opacity=.48*strength*flick;
+  return strength*flick;
+}
 export function dressCourtWatch(scene,p,f){
   woodBaskets(p,f);
   const root=new T.Group();root.name='京の評定所の夜回り';scene.add(root);
   const base=terrainHeight(COURT.x,COURT.z);root.position.set(COURT.x,base,COURT.z);
-  const geometry=fireGeometry(),glowMap=sandGlow(),circle=new T.PlaneGeometry(1,1);
-  const guards=[guard(0),guard(1)],poses=[{},{}],tipPoint=new T.Vector3();
-  for(const [i,g] of guards.entries()){
-    root.add(g.root);g.fire=flame(g.arm,geometry,4+i);g.fire.position.fromArray(g.tip);
-  }
-  const fires=COURT_BRAZIERS.map(([x,z],i)=>{
-    const fire=flame(root,geometry,i*2);fire.position.set(x,1.48,z);
-    const glow=new T.Mesh(circle,new T.MeshBasicMaterial({map:glowMap,transparent:true,depthWrite:false,blending:T.AdditiveBlending}));
-    glow.position.set(x,.109,z);glow.rotation.x=-pi/2;glow.scale.set(6.8,6.8,1);root.add(glow);
-    return {x,z,fire,glow};
-  });
+  const guards=[createWatchman(0),createWatchman(1)],poses=[{},{}],tipPoint=new T.Vector3();
+  for(const g of guards)root.add(g.root);
+  const fires=COURT_BRAZIERS.map(([x,z],i)=>createWatchFire(root,x,0,z,.109,i*2));
   // Keep the lighting program stable across the night. Each pair of fires
   // shares one local light, selecting the nearest lit hearth on that side.
   const lights=guards.map(()=>{const l=new T.PointLight(0xffac67,0,8,2);root.add(l);return l;});
@@ -215,14 +254,9 @@ export function dressCourtWatch(scene,p,f){
     root.position.set(player.x+dx,base,player.z+dz);
     const watchTime=kyoClock(time,player);
     for(const [i,g] of guards.entries()){
-      const q=watchPose(watchTime,i,poses[i]),stride=sin(time*5.23+i)*q.walk;
+      const q=watchPose(watchTime,i,poses[i]);
       const floor=groundHeight(COURT.x+q.x,COURT.z+q.z,base+1.09)-base;
-      g.root.position.set(q.x,floor,q.z);g.root.rotation.y=q.yaw;
-      g.torso.position.y=.018*Math.abs(stride)+.006*cos(time*2.3+i);
-      g.torso.rotation.x=.092*q.reach;g.head.rotation.set(.07*q.reach+.018*sin(time*1.9),.087*sin(time*.66+i),0);
-      g.arm.rotation.x=.61*q.reach+.045*stride;
-      g.feet.forEach((leg,k)=>{const step=(k?1:-1)*stride;leg.position.z=.136*step;leg.position.y=.055*Math.max(0,step);});
-      g.fire.visible=q.taper>.012;g.fire.scale.setScalar(.38*q.taper);g.fire.material.uniforms.clock.value=time;
+      moveWatchman(g,q,time,i,floor);
       const lit=[q.front,q.inner],light=lights[i];
       let nearest=Infinity;light.intensity=0;
       if(q.taper>.01){
@@ -234,12 +268,10 @@ export function dressCourtWatch(scene,p,f){
         light.intensity=7.8*q.taper*(.94+.06*sin(time*9+i));
       }
       for(let j=0;j<2;j++){
-        const fire=fires[2*i+j],a=lit[j],flick=.91+.08*sin(8.2*time+i+2*j)+.045*cos(11.8*time+j);
-        fire.fire.visible=fire.glow.visible=a>.004;
-        fire.fire.scale.set(1.37*a,1.43*a*flick,1.37*a);fire.fire.material.uniforms.clock.value=time;
-        fire.glow.material.opacity=.48*a*flick;
+        const fire=fires[2*i+j],a=lit[j];
+        const strength=burnWatchFire(fire,a,time,i+2*j);
         const d=(dx+fire.x)**2+(dz+fire.z)**2;
-        if(a>.01&&d<nearest){nearest=d;light.position.set(fire.x,1.98,fire.z);light.intensity=24*a*flick;}
+        if(a>.01&&d<nearest){nearest=d;light.position.set(fire.x,1.98,fire.z);light.intensity=24*strength;}
       }
     }
   };

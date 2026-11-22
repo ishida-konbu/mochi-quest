@@ -4,10 +4,10 @@ import { DISTRICTS } from './geography.js';
 import { SEAPORTS, PORT_BUILDINGS, QUAY_CENTER, QUAY_LENGTH, portPoint } from './seaport-layout.js';
 import { SEAWAYS, FLEET, vesselPose } from './ocean-voyage.js';
 import { COURT } from './retreat-layout.js';
-import { HIGASHIYAMA } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA } from './higashiyama.js';
 import { RASHOMON } from './kyo-layout.js';
 import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
-const SIZE = 1536, SPAN = 2 * BOUND, adj = SIZE / SPAN;
+const SIZE = 2048, SPAN = 2 * BOUND, adj = SIZE / SPAN;
 export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾', '十一', '十二', '十三', '十四', '十五', '十六', '十七'];
 const toX = (x) => SIZE / 2 + x * adj;
 const pigments = [
@@ -20,7 +20,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=kyoto-east', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=kyoto-foothills', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -30,7 +30,7 @@ export function regionPort(state, id) {
 }
 
 function drawPort(g, x, y, bikes, large) {
-  const pinX = large ? x + 16 : x, pinY = y - (large ? 19 : 12);
+  const pinX = large ? x + 16 : x, pinY = large ? Math.max(10,y-19) : y-12;
   const radius = large ? 8 : 9;
   g.fillStyle = bikes > 0 ? '#295d50' : '#736c60';
   g.strokeStyle = '#faf0d8';
@@ -57,9 +57,17 @@ export function paintMapPaper() {
   const c = document.createElement('canvas');
   c.width = c.height = SIZE;
   const g = c.getContext('2d'), step = 4;
-  // Sample the same shores and ground as the playable world, including the outer sea.
-  for (let z = -BOUND; z < BOUND; z += step) for (let x = -BOUND; x < BOUND; x += step) {
-    const a = terrainHeight(x, z), b = terrainHeight(x + step, z + step);
+  // Share height samples between adjacent cells so the atlas and contour lines
+  // follow the playable ground all the way from the quays to the high divide.
+  const cells=Math.ceil(SPAN/step),stride=cells+1,heights=new Float32Array(stride*stride);
+  for(let j=0;j<=cells;j++)for(let i=0;i<=cells;i++)
+    heights[j*stride+i]=terrainHeight(i*step-BOUND,j*step-BOUND);
+  const contours=new Path2D();
+  for (let j=0;j<cells;j++) for (let i=0;i<cells;i++) {
+    const x=i*step-BOUND,z=j*step-BOUND,idx=j*stride+i;
+    const a=heights[idx], b=heights[idx+stride+1];
+    const inRanges=z<DISTRICTS.kyo.z+140 && (Math.abs(x-KITAYAMA.x)<380 && z<DISTRICTS.kyo.z-75 ||
+      Math.abs(z-HIGASHIYAMA.z)<320 && x>DISTRICTS.kyo.x+115);
     if (a < WATER_Y) {
       const depth = Math.min(1, Math.max(0, -a / 28));
       g.fillStyle = 'rgb('+[169-79*depth,193-53*depth,183-40*depth].map(Math.round).join(',')+')';
@@ -72,15 +80,33 @@ export function paintMapPaper() {
       }
       const blush = Math.max(0,1-Math.hypot((x-DISTRICTS.peach.x)/78,(z-DISTRICTS.peach.z)/60));
       r+=(239-r)*blush; g1+=(182-g1)*blush; blue+=(181-blue)*blush;
-      const relief = Math.min(26, a * .48) + Math.max(-10, Math.min(10, (b-a)*2));
+      const relief = inRanges ? Math.min(24, a*.14) + Math.max(-12,Math.min(13,
+        (heights[idx+1]-a)*3+(heights[idx+stride]-a)*1.5)) :
+        Math.min(26, a * .48) + Math.max(-10, Math.min(10, (b-a)*2));
       g.fillStyle = 'rgb(' + [r-relief,g1-relief*.85,blue-relief*.62].map(Math.round).join(',') + ')';
     }
     g.fillRect(toX(x), toX(z), step * adj + 1, step * adj + 1);
-    if (a > 1 && Math.floor(a / 4) !== Math.floor(b / 4)) {
+    if(inRanges && a>11) {
+      const east=heights[idx+1],south=heights[idx+stride];
+      const low=Math.min(a,b,east,south),high=Math.max(a,b,east,south);
+      for(let level=Math.ceil(low/16)*16;level<high;level+=16){
+        // Interpolate where a real contour crosses two edges of this cell.
+        const points=[];
+        if((a<level)!==(east<level))points.push([(level-a)/(east-a),0]);
+        if((east<level)!==(b<level))points.push([1,(level-east)/(b-east)]);
+        if((b<level)!==(south<level))points.push([(level-south)/(b-south),1]);
+        if((south<level)!==(a<level))points.push([0,(level-a)/(south-a)]);
+        for(let k=0;k+1<points.length;k+=2){
+          contours.moveTo(toX(x+points[k][0]*step),toX(z+points[k][1]*step));
+          contours.lineTo(toX(x+points[k+1][0]*step),toX(z+points[k+1][1]*step));
+        }
+      }
+    } else if (a > 1 && Math.floor(a / 4) !== Math.floor(b / 4)) {
       g.fillStyle = '#78775b38';
       g.fillRect(toX(x), toX(z), step * adj, 1);
     }
   }
+  g.lineWidth=.9;g.strokeStyle='#726d5275';g.stroke(contours);
   // Tiny tapering ink strokes pick out real stands of trees at atlas scale.
   // The ground survey supplies the facing of the dry-brush marks on rock.
   for(const t of TREES){
@@ -161,10 +187,10 @@ export function paintMapPaper() {
     g.lineTo(u+r.rx*.77*adj,v+.4);g.closePath();g.fillStyle='#657677';g.fill();
   }
   g.setLineDash([3.5,6]);g.lineWidth=1;g.strokeStyle='#4e798880';
-  // The ocean circuit crosses the northern map edge and reappears to the south.
-  for(const lane of SEAWAYS)for(const zOffset of [0,SPAN]){
+  // The coastal crossing and offshore circuit both return to their first berth or buoy.
+  for(const lane of SEAWAYS){
     g.beginPath();
-    lane.points.forEach(([x,z],i)=>{if(i%4===0){if(i)g.lineTo(toX(x),toX(z+zOffset));else g.moveTo(toX(x),toX(z+zOffset));}});
+    lane.points.forEach(([x,z],i)=>{if(i%4===0){if(i)g.lineTo(toX(x),toX(z));else g.moveTo(toX(x),toX(z));}});
     g.closePath();g.stroke();
   }
   g.setLineDash([]);
@@ -206,22 +232,24 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     g.beginPath();g.moveTo(-5,0);g.lineTo(2,-7);g.quadraticCurveTo(1,-3,3,0);g.closePath();g.fill();g.stroke();
     g.beginPath();g.moveTo(-7,1);g.lineTo(7,1);g.lineTo(3,4);g.lineTo(-3,4);g.closePath();g.fillStyle='#705744';g.fill();g.restore();
   }
-  // The baths remain legible at both atlas and walking scales; names appear on arrival.
-  for(const site of [COURT,HIGASHIYAMA,...state.objects.filter(o=>o.retreat)]){
+  // Keep the fire characters at their surveyed summits at both map scales.
+  const marks=[[COURT,'裁'],[KITAYAMA,'大'],[HIGASHIYAMA,'福']];
+  for(const site of state.objects)if(site.retreat)marks.push([site,'♨']);
+  for(const [site,glyph] of marks){
     const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
     if(x<0||x>w||y<0||y>h)continue;
     g.font='bold '+(large?15:17)+'px serif';g.textAlign='center';g.textBaseline='middle';
     g.lineWidth=3;g.strokeStyle='#fff2d6';g.fillStyle=site===COURT?'#685449':'#8c5140';
-    const glyph=site===COURT?'裁':site===HIGASHIYAMA?'福':'♨', labelX=site===COURT && large?x-4:x;
+    const labelX=site===COURT && large?x-4:x;
     g.strokeText(glyph,labelX,y);g.fillText(glyph,labelX,y);
   }
   // With the original settlements close together on the full scroll, take
   // their labels out into the margins on short callouts.
   const callouts=[
-    [0,28,'center'],[-16,-7,'right'],[-6,-21,'right'],[3,-28,'center'],
-    [11,-12,'left'],[-13,11,'right'],[-5,-19,'center'],[17,-3,'left'],
-    [-2,21,'center'],[16,8,'left'],
-    [-15,-15,'right'],[0,22,'center'],[0,22,'center'],[0,22,'center'],[17,0,'left'],[18,0,'left'],[-16,0,'right'],
+    [4,30,'center'],[-18,-3,'right'],[-7,-24,'right'],[4,-30,'center'],
+    [17,-10,'left'],[-15,9,'right'],[-8,-17,'center'],[19,-2,'left'],
+    [-2,23,'center'],[17,9,'left'],
+    [14,-20,'left'],[-5,29,'center'],[0,22,'center'],[0,22,'center'],[17,0,'left'],[18,0,'left'],[-16,0,'right'],
   ];
   for (const [i, r] of REGIONS.entries()) {
     const x = w / 2 + wrapDelta(r.x - midX) * scale,

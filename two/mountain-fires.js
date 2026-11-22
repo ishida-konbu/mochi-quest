@@ -3,7 +3,7 @@ import { sculpture } from './pilgrimage-pigment.js';
 import { terrainHeight, wrapDelta } from './terrain.js';
 const TAU=2*Math.PI;
 
-// Fieldstone retaining blocks hold a level shelf on the steep western face.
+// Fieldstone retaining blocks hold a level shelf on the sloping meadow.
 // Split pine is cribbed in two courses over an ash bed, even when the fire is out.
 function firePits(hearths) {
   const art=sculpture(), stone=new THREE.DodecahedronGeometry(1,1);
@@ -36,7 +36,7 @@ function firePits(hearths) {
     dummy.position.set(x,y-.11,z);dummy.rotation.y=.42*Math.sin(i*1.77);
     dummy.scale.setScalar(.90+.12*Math.cos(i*2.51));dummy.updateMatrix();pits.setMatrixAt(i,dummy.matrix);
   });
-  pits.name='東山の石組みと割松';pits.receiveShadow=true;
+  pits.name='火床の石組みと割松';pits.receiveShadow=true;
   return pits;
 }
 // Low amber light washes across the actual grade. All of the firebeds
@@ -55,12 +55,16 @@ function groundLight(hearths) {
   geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
   geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geo.setIndex(tri);
   const mat=new THREE.ShaderMaterial({
-    transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+    transparent:true,depthWrite:false,
     polygonOffset:true,polygonOffsetFactor:-2,uniforms:{intensity:{value:0}},
     vertexShader:`varying vec2 washUv;void main(){washUv=uv*2.-1.;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
     fragmentShader:`varying vec2 washUv;uniform float intensity;void main(){
-      float glow=pow(max(0.,1.-dot(washUv,washUv)),2.5);
-      gl_FragColor=vec4(.95,.27,.055,.35*glow*intensity);
+      float radius=dot(washUv,washUv);
+      float glow=pow(max(0.,1.-radius),2.5);
+      // The same ground darkens with old charcoal when the stack is cold.
+      float ash=1.-smoothstep(.21,.57,radius+.045*sin(13.*washUv.x+4.*washUv.y));
+      vec3 tint=mix(vec3(.08,.066,.049),vec3(.95,.27,.055),intensity);
+      gl_FragColor=vec4(tint,mix(.31*ash,.40*glow,intensity));
       #include <colorspace_fragment>
     }`,
   });
@@ -69,9 +73,8 @@ function groundLight(hearths) {
 
 export function mountainFires(scene,hearths,cx,cz,east=false) {
   const group=new THREE.Group();group.name=east?'東山・福の送り火':'北山・大文字の送り火';scene.add(group);
-  const pits=east?firePits(hearths):null;
-  const wash=east?groundLight(hearths):null;
-  if(east)group.add(pits,wash);
+  const pits=firePits(hearths),wash=groundLight(hearths);
+  group.add(pits,wash);
   const geo=new THREE.PlaneGeometry(1,1),phases=[],coords=[];
   for(let i=0;i<hearths.length;i++){
     coords.push(...hearths[i]);phases.push(i*2.391);
@@ -80,7 +83,7 @@ export function mountainFires(scene,hearths,cx,cz,east=false) {
   sprites.instanceCount=hearths.length;
   sprites.setAttribute('hearth',new THREE.InstancedBufferAttribute(new Float32Array(coords),3));
   sprites.setAttribute('seed',new THREE.InstancedBufferAttribute(new Float32Array(phases),1));
-  const uniforms={clock:{value:0},intensity:{value:0},size:{value:east?1.47:1}};
+  const uniforms={clock:{value:0},intensity:{value:0},size:{value:east?2.02:2.26}};
   const flames=new THREE.Mesh(sprites,new THREE.ShaderMaterial({
     uniforms,transparent:true,depthWrite:false,side:THREE.DoubleSide,
     vertexShader:`
@@ -144,15 +147,12 @@ export function mountainFires(scene,hearths,cx,cz,east=false) {
   }));
   flames.frustumCulled=false;flames.renderOrder=6;group.add(flames);
   return (time,night,player)=>{
-    const dx=wrapDelta(cx-player.x),dz=wrapDelta(cz-player.z),range=east?400:238;
-    group.visible=(east||night>.08) && dx*dx+dz*dz<range**2;
+    const dx=wrapDelta(cx-player.x),dz=wrapDelta(cz-player.z),range=668;
+    group.visible=dx*dx+dz*dz<range**2 && (night>.08 || dx*dx+dz*dz<490**2);
     if(!group.visible)return;
     group.position.set(player.x+dx-cx,0,player.z+dz-cz);
-    flames.visible=night>.08;if(pits)pits.visible=dx*dx+dz*dz<154**2;
+    flames.visible=night>.08;pits.visible=dx*dx+dz*dz<250**2;
     uniforms.clock.value=time;uniforms.intensity.value=Math.max(0,Math.min(1,(night-.08)*1.3));
-    if(wash){
-      wash.visible=flames.visible;
-      wash.material.uniforms.intensity.value=uniforms.intensity.value;
-    }
+    wash.material.uniforms.intensity.value=uniforms.intensity.value;
   };
 }

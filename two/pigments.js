@@ -35,10 +35,10 @@ export function meadowMaterial(art) {
     shader.uniforms.woodFloor = { value: art.forest };
     shader.uniforms.bankStones = { value: art.gravel };
     shader.vertexShader =
-      'attribute float scrollAmount; varying float vScroll; varying vec3 inkPoint; attribute vec2 terrainMix; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
-      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvScroll=scrollAmount; inkPoint=position; vTerrainMix = terrainMix; vSeasons = seasons; incline=1.-abs(normal.y);');
+      'attribute vec2 ridgeRelief; varying vec2 vRidge; attribute float scrollAmount; varying float vScroll; varying vec3 inkPoint; attribute vec2 terrainMix; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
+      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRidge=ridgeRelief; vScroll=scrollAmount; inkPoint=position; vTerrainMix = terrainMix; vSeasons = seasons; incline=1.-abs(normal.y);');
     shader.fragmentShader =
-      'uniform sampler2D woodFloor, bankStones, impressions; varying float vScroll; varying vec3 inkPoint; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
+      'uniform sampler2D woodFloor, bankStones, impressions; varying vec2 vRidge; varying float vScroll; varying vec3 inkPoint; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
       shader.fragmentShader.replace(
         '#include <map_fragment>',
         `
@@ -99,6 +99,23 @@ export function meadowMaterial(art) {
           fieldWash*=1.-.59*stroke;
           fieldWash*=.93+.11*pool+.055*smoothstep(.08,.4,luma);
           ground=mix(ground,fieldWash,vScroll*.88);
+        }
+        float ridge=max(vRidge.x,vRidge.y);
+        if(ridge>.001){
+          // Copses of sasa and dry susuki sweep across the aspect, with ink
+          // pooling in folds. These coarse washes survive distant mip levels.
+          vec2 hill=vRidge.x>vRidge.y?inkPoint.xz:vec2(-inkPoint.z,inkPoint.x);
+          float t=hill.y+.24*hill.x+6.2*sin(.037*hill.x)+3.3*sin(.102*hill.y+.039*hill.x);
+          float fold=sin(.038*t+.55*sin(hill.x*.026));
+          float grain=sin(.39*t+.81*sin(hill.x*.095+t*.062))*.28+sin(t*.118+hill.x*.052)*.34;
+          float culm=smoothstep(-.54,.87,fold+.65*grain);
+          float brush=texture2D(impressions,(hill+vec2(2.7*fold,1.9*grain))/36.).r;
+          vec3 meadow=mix(vec3(.28,.34,.225),vec3(.78,.655,.423),culm);
+          float ledge=inkPoint.y*.117+.034*hill.y+.69*sin(hill.x*.046+hill.y*.016);
+          float shaleBand=(1.-smoothstep(.09,.49,abs(sin(ledge))))*smoothstep(.16,.70,grain+.32*fold+.22);
+          meadow=mix(meadow,vec3(.405,.414,.354),shaleBand*.8);
+          meadow*=1.-.22*brush-.11*shaleBand;
+          ground=mix(ground,meadow,ridge*.78);
         }
         diffuseColor.rgb *= ground;
       `,

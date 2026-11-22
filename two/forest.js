@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
+import { eastRidgeHeight, northRidgeHeight } from './higashiyama.js';
 import { TREES, terrainHeight, wrapDelta } from './terrain.js';
 import { TREE_FORM_COUNT } from './forest-forms.js';
 import { forestGeometry, forestMaterial, forestTexture } from './forest-mesh.js';
@@ -18,6 +19,7 @@ export function* prepareForest(scene, clock) {
   const records = trees.map(t=>{
     totals[t.form]++;
     return {tree:t, ground:terrainHeight(t.x,t.z), rotation:t.seed*2.39996323,
+      range:eastRidgeHeight(t.x,t.z)+northRidgeHeight(t.x,t.z)>8?640:RANGE,
       tint:.86+(t.seed%131)*.0019};
   });
   const loader=new THREE.TextureLoader();
@@ -115,10 +117,10 @@ export function* prepareForest(scene, clock) {
     lastX=eye.x;lastY=eye.y;lastZ=eye.z;
     for (const mesh of near) mesh.count=0;
     let used=0;
-    for(const {tree, ground, rotation, tint:brightness} of records) {
+    for(const {tree, ground, rotation, range, tint:brightness} of records) {
       const dx=wrapDelta(tree.x-eye.x), dz=wrapDelta(tree.z-eye.z);
       const d2=dx*dx+dz*dz+(ground-eye.y)**2;
-      if(d2>RANGE*RANGE) continue;
+      if(d2>range*range) continue;
       const x=eye.x+dx,z=eye.z+dz;
       if(d2<(FAR+STEP+1)**2) {
         const mesh=near[tree.form], idx=mesh.count++;

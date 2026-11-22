@@ -1,18 +1,19 @@
-import { HIGASHIYAMA, eastRidgeShore, eastRidgeHeight, inFireMeadow } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, FIRE_COAST, eastRidgeHeight, northRidgeHeight, inFireMeadow } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
-import { DISTRICTS, districtPoint } from './geography.js';
+import { DISTRICTS, districtPoint, WORLD_BOUND, wrapWorld } from './geography.js';
 import { RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, RASHOMON } from './kyo-layout.js';
 import { CEDAR_GROVES, INARI_ROUTE, PEACH_TREES, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS } from './trade-routes.js';
+import { STREET_BEATS } from './street-watch-layout.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
 import { roomPlan, pagodaPlan, roofForm, hipHeight } from './architecture.js';
 // Coordinates and dimensions are metres. Positive Z is south.
 const ORIGINAL_BOUND = 416;
-export const BOUND = ORIGINAL_BOUND * Math.SQRT2 * 2,
+export const BOUND = WORLD_BOUND,
   WATER_Y = 0.38;
-export const wrapCoord = (v) => v >= -BOUND && v < BOUND ? v : ((v + BOUND) % (2 * BOUND) + 2 * BOUND) % (2 * BOUND) - BOUND;
+export const wrapCoord = v => wrapWorld(v);
 export const wrapDelta = wrapCoord;
 export const ORIGINAL_REGIONS = [
   { id: 'river', name: '桜川の渡し', x: 0, z: 59 },
@@ -87,6 +88,9 @@ function originalShore(x, z) {
 export const PENINSULAS = [
   // The coastal lobe beneath each route supplies real foothills on either side.
   [0,-464,282,228], [93,-640,253,241], [108,-822,290,204], [237,-889,210,166],
+  // Beyond the mountain pass the valley broadens into the north-facing harbour.
+  [405,-1082,152,190], [430,-1228,148,196], [374,-1365,150,109],
+  [287,-1402,120,74], [475,-1378,99,74],
   [-155,-859,270,148], [-366,-903,339,240], [-521,-932,268,207],
   [394,-547,249,214], [433,-641,166,141], [316,-402,192,148],
   [-304,-91,178,86], [-502,-142,230,101], [-714,-170,224,137], [-782,-187,198,153],
@@ -95,6 +99,7 @@ export const PENINSULAS = [
   [336,707,177,163], [427,837,181,175],
   // Pine-covered islets flank the Ryugu sea lane, with open water between.
   [-413,121,62,27], [-492,311,52,30], [-583,174,24,15],
+  ...FIRE_COAST,
 ];
 export function shoreDistance(x,z) {
   let shore=originalShore(x,z);
@@ -106,7 +111,7 @@ export function shoreDistance(x,z) {
     const junction=max(0,1-abs(shore-margin)/24);
     shore=max(shore,margin)+6*junction*junction;
   }
-  return portShore(x,z,eastRidgeShore(x,z,shore));
+  return portShore(x,z,shore);
 }
 function outerHeight(x,z,base) {
   if (z > -305 && z < 311 && x > -180 && x < 310) return base;
@@ -115,7 +120,7 @@ function outerHeight(x,z,base) {
   if (originalShore(x,z)<22 && shore> -3.3) {
     const rolls=4.8+2.2*sin(x*.025+z*.008)*cos(z*.021)
       + 1.35*cos(x*.013-z*.018)+1.10*sin(x*.043+z*.039);
-    const hills=rolls + eastRidgeHeight(x,z) + 41*hill(x,z,DISTRICTS.kyo.x+2,DISTRICTS.kyo.z-112,71,32)
+    const hills=rolls + eastRidgeHeight(x,z) + northRidgeHeight(x,z)
       + 18*hill(x,z,-89,-592,101,91) + 22*hill(x,z,184,-694,74,69)
       + 26*hill(x,z,-563,-198,87,46) + 18*hill(x,z,-451,-80,72,39) + 6.4*hill(x,z,-240,-84,28,27)
       + 25*hill(x,z,219,556,64,89) + 32*hill(x,z,382,677,84,81)
@@ -706,11 +711,6 @@ for (const [cx,cz,rx,rz] of PENINSULAS) {
     for(let tree=0;tree<17;tree++) wildTree(x+(saplings()-.5)*79,z+(saplings()-.5)*65);
   }
 }
-for(let i=0;i<205;i++) {
-  const cx=DISTRICTS.kyo.x+2, cz=DISTRICTS.kyo.z-104;
-  const x=cx+(saplings()-.5)*176, z=cz+(saplings()-.5)*56;
-  if(z<cz-11 || abs(x-cx)>21) transplant(x,z,Math.floor(saplings()*4));
-}
 // Red pine and cypress take root in pockets between exposed western ledges.
 // The blooming floor of the valley and the eastern pass remain in view.
 const mountainSaplings=seeded(0x7e382);
@@ -722,15 +722,21 @@ for(let i=0;i<1100;i++){
   if(slope>.95 || mountainSaplings()<slope*.46)continue;
   transplant(x,z,[0,1,1,2,3][i%5]);
 }
-// Red pine and cypress follow the shoulders of the eastern fire mountain.
-const eastSeed=seeded(0x46554b55);
-for(let i=0;i<720;i++){
-  const x=HIGASHIYAMA.x+(eastSeed()-.47)*154,z=HIGASHIYAMA.z+(eastSeed()-.5)*223;
-  if(inFireMeadow(x,z)||eastRidgeHeight(x,z)<11||shoreDistance(x,z)<10||nearRoad(x,z,4)||
-     TREES.some(t=>(t.x-x)**2+(t.z-z)**2<37))continue;
-  const family=[0,1,1,2,3][i%5];
-  TREES.push({x,z,h:4.8+eastSeed()*5.4,kind:TREE_FAMILIES[family][0],
-    form:family*TREE_FORMS_PER_FAMILY+i%4,seed:181033+i*13});
+// Broken stands trace the long ridges. Red pine favours exposed shoulders,
+// while cypress and cedar gather in the lower folds beside the fire meadows.
+for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
+  const plant=seeded(east?0x46554b55:0x444149),height=east?eastRidgeHeight:northRidgeHeight;
+  for(let i=0;i<1750;i++){
+    const along=(plant()-.55)*511, across=(plant()-.5)*573;
+    const x=summit.x+(east?along:across),z=summit.z+(east?across:-along);
+    const high=height(x,z);
+    if(high<7 || inFireMeadow(x,z) || nearRoad(x,z,4) || portReserved(x,z) || protectedDistrict(x,z))continue;
+    if(Math.sin(across*.044+along*.013)+Math.sin(along*.055-across*.018)>.93 && plant()<.86)continue;
+    if(TREES.some(t=>(t.x-x)**2+(t.z-z)**2<68))continue;
+    const family=(high>96?[0,0,1,2,3]:[0,1,2,2,3])[i%5];
+    TREES.push({x,z,h:4.5+plant()*(high>116?4.8:7.3),kind:TREE_FAMILIES[family][0],
+      form:family*TREE_FORMS_PER_FAMILY+i%4,seed:(east?181033:390901)+i*13});
+  }
 }
 // These shrine cedars use the same forked trunks, needle sprays and moving
 // crowns as the surrounding woodland. A clear strip follows every gate.
@@ -881,6 +887,8 @@ for(const {x,z,width,height,yaw} of KYO_SCREENS) {
       base+height+.54,'wall',false);
   }
 }
+for(const {hearths} of STREET_BEATS)for(const {x,z} of hearths)
+  putSolid(x,z,.48,.48,0,terrainHeight(x,z)+1.68,'oval',false);
 gateSolids(terrainHeight,putSolid);
 pilgrimageSolids(terrainHeight,putSolid);
 civicAndBathSolids(terrainHeight,putSolid);

@@ -9,10 +9,15 @@ export function localPoint(p,x,z){
   const dx=x-p.x,dz=z-p.z,c=Math.cos(p.yaw),s=Math.sin(p.yaw);
   return [dx*c-dz*s,dx*s+dz*c];
 }
+export const OLD_TSURUGA={x:263,z:-1030,yaw:pi};
 export const SEAPORTS=[
-  {id:'tsuruga',name:'敦賀の津',x:263,z:-1030,yaw:pi},
+  {id:'tsuruga',name:'敦賀の津',x:330,z:-1450,yaw:pi},
   {id:'sakai',name:'堺の津',x:-193,z:-603,yaw:-pi/2},
 ].map(p=>({...p,port:portPoint(p,7,5.5)}));
+export function relocateOldQuay(x,z){
+  const [u,v]=localPoint(OLD_TSURUGA,x,z);
+  return u>=-45 && u<=67 && v>=-30 && v<=26 ? portPoint(SEAPORTS[0],u,v) : [x,z];
+}
 export const QUAY_Y=2.38,DECK_Y=3.58,HOLD_Y=.72;
 export const FIXED_BERTH=54,QUAY_CENTER=12.1,QUAY_LENGTH=107.2;
 const smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};

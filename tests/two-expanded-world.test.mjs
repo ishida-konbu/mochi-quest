@@ -12,8 +12,9 @@ import {merchantPosition} from '../two/travelling-merchants.js';
 import {createGame} from '../two/game.js';
 import {FLEET,vesselPose} from '../two/ocean-voyage.js';
 
-test('the expanded island doubles each horizontal dimension and joins at an even ocean floor',()=>{
-  assert.ok(Math.abs((2*BOUND)**2-8*832**2)<1e-8);
+test('the enlarged sea surrounds the distant ports and wraps at an even ocean floor',()=>{
+  const north=REGIONS.find(r=>r.id==='tsuruga');
+  assert.ok(north.z<DISTRICTS.kyo.z-580 && BOUND+north.z>120);
   assert.deepEqual(REGIONS.slice(0,10),ORIGINAL_REGIONS);
   for(const a of REGIONS.slice(10,14)) for(const b of REGIONS.slice(10,14)) {
     const oldA=FIFTH_EDITION_CENTRES[a.id],oldB=FIFTH_EDITION_CENTRES[b.id];

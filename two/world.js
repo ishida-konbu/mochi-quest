@@ -1,9 +1,9 @@
-import { HIGASHIYAMA, eastRidgeHeight } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, eastRidgeHeight, northRidgeHeight } from './higashiyama.js';
 import { dressSeaports } from './seaports.js';
 import { createOceanShips } from './ocean-ship-art.js';
 import { dressWardShop } from './kyo-market.js';
 import { dressOutcrops } from './outcrops.js';
-import { DISTRICTS } from './geography.js';
+import { DISTRICTS,TERRAIN_TILES,TERRAIN_SUBDIVISIONS } from './geography.js';
 import { scrollCoverage } from './scroll-paper.js';
 import { createKyo, kyoPavingMaterial } from './kyo.js';
 import { dressPilgrimage, pilgrimageLife } from './pilgrimage.js';
@@ -123,15 +123,15 @@ function* landscape(scene, art) {
         bins.get(key).push(tree);
       }
   }
-  const tiles=24, span=2*BOUND/tiles;
+  const tiles=TERRAIN_TILES, span=2*BOUND/tiles;
   for (let row=0; row<tiles; row++) for (let column=0; column<tiles; column++) {
     // Deep ocean is a level shelf. Keep the fine lattice for shores, roads,
     // palace and cliffs, without allocating a million detailed sea vertices.
     const midX=(column+.5)*span-BOUND, midZ=(row+.5)*span-BOUND;
     const deep=shoreDistance(midX,midZ)<-span*1.6 &&
       Math.hypot(midX-DISTRICTS.ryugu.x,midZ-DISTRICTS.ryugu.z)>span*1.8;
-    const grid=deep ? 1 : 40;
-    const p=[], ix=[], uv=[], col=[], surface=[], seasons=[], scroll=[];
+    const grid=deep ? 1 : TERRAIN_SUBDIVISIONS;
+    const p=[], ix=[], uv=[], col=[], surface=[], seasons=[], scroll=[], ridges=[];
     for (let j=0; j<=grid; j++) for (let i=0; i<=grid; i++) {
       const x=(column+i/grid)*span-BOUND, z=(row+j/grid)*span-BOUND, y=h(x,z);
       p.push(x,y,z);
@@ -139,14 +139,16 @@ function* landscape(scene, art) {
       const r=regionAt(x,z), river=abs(z-riverZ(x))-riverHalfWidth(x), coast=shoreDistance(x,z);
       c.copy(colors[r]).lerp(soil, max(0,1-abs(river-2)/7)*.72);
       c.lerp(stone, max(0,min(1,(y-15)/30))*.68);
-      const rise=eastRidgeHeight(x,z);
+      const east=eastRidgeHeight(x,z),north=northRidgeHeight(x,z),rise=Math.max(east,north);
+      ridges.push(THREE.MathUtils.smoothstep(east,4,33),THREE.MathUtils.smoothstep(north,4,33));
       if(rise>0){
-        // Darker ink collects in the diagonal gullies, leaving buff grass
-        // and exposed shale on the shoulder that catches the morning light.
-        const u=x-HIGASHIYAMA.x,v=z-HIGASHIYAMA.z;
-        const wash=.5+.5*cos(.096*v-.038*u+1.36*sin(u*.061+v*.029));
+        // Long brush washes follow the watershed, gathering in the gullies.
+        // Dry meadow and lit rock separate the spurs even at street level.
+        const u=east>north ? x-HIGASHIYAMA.x : KITAYAMA.z-z;
+        const v=east>north ? z-HIGASHIYAMA.z : x-KITAYAMA.x;
+        const wash=.5+.5*cos(.044*v-.018*u+1.38*sin(u*.034+v*.016));
         ridgeWash.copy(dryGrass).lerp(shale,.12+.76*wash*wash);
-        c.lerp(ridgeWash,.88*THREE.MathUtils.smoothstep(rise,4,43));
+        c.lerp(ridgeWash,.87*THREE.MathUtils.smoothstep(rise,3,53));
       }
       c.multiplyScalar(.96+.042*cos(x*.076+sin(z*.044))+.039*sin(z*.115+sin(x*.093)));
       let canopy=0;
@@ -165,11 +167,13 @@ function* landscape(scene, art) {
       }
     }
     const ground=geometry(p,ix,uv,col);
+    ground.setAttribute('ridgeRelief',new THREE.Float32BufferAttribute(ridges,2));
     ground.setAttribute('terrainMix',new THREE.Float32BufferAttribute(surface,2));
     ground.setAttribute('scrollAmount',new THREE.Float32BufferAttribute(scroll,1));
     ground.setAttribute('seasons',new THREE.Float32BufferAttribute(seasons,4));
     const land=new THREE.Mesh(ground,mat);
-    land.receiveShadow=true;land.userData.range=475;
+    land.receiveShadow=true;
+    land.userData.range=eastRidgeHeight(midX,midZ)+northRidgeHeight(midX,midZ)>0?710:475;
     scene.add(land);
     yield;
   }
@@ -226,7 +230,7 @@ function makeWater(scene, art, panorama) {
       ${waterWaveGLSL}
       #include <fog_pars_vertex>
       void main(){vec4 wp=modelMatrix*vec4(position,1.);
-        vec2 q=mod(wp.xz+${BOUND},${2*BOUND})-${BOUND};
+        vec2 q=mod(wp.xz+float(${BOUND}),float(${2*BOUND}))-float(${BOUND});
         wp.y+=waveHeight(q,clock);
         vWorld=wp.xyz;
         vec4 mvPosition=viewMatrix*wp;gl_Position=projectionMatrix*mvPosition;
@@ -250,7 +254,7 @@ function makeWater(scene, art, panorama) {
         return line*smoothstep(.31,.78,hash(cell+2.03));
       }
       void main(){
-        vec2 p=mod(vWorld.xz+${BOUND},${2*BOUND})-${BOUND};float t=clock;
+        vec2 p=mod(vWorld.xz+float(${BOUND}),float(${2*BOUND}))-float(${BOUND});float t=clock;
         float margin=hullMargin(p,(vWorld.y-${WATER_Y - HULL_DRAFT})/${HULL_HEIGHT});
         if(margin<0.)discard;
         float river=18.+9.*sin(p.x/51.)+3.3*sin(p.x/25.);
@@ -837,7 +841,7 @@ class Painter {
         m.setColorAt(index++, colors[i]);
       }
       if(stride>1) m.userData.foliageCount=matrices.length;
-      m.userData.range=Math.min(300,72+extent*24);
+      m.userData.range=geo.userData.range || Math.min(300,72+extent*24);
       m.computeBoundingSphere();
       m.castShadow = shadow;
       m.receiveShadow = true;

@@ -1,7 +1,7 @@
-import { createVoyage } from './ocean-voyage.js';
+import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
 import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
-import { SEAPORTS } from './seaport-layout.js';
+import { SEAPORTS,relocateOldQuay } from './seaport-layout.js';
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
 import { KYO_FOOD, KYO_ANIMALS, KYO_DAY_SECONDS, kyoNight, kyoInfluence } from './kyo-layout.js';
 import { makeScrollResidents, updateScrollResident } from './scroll-encounters.js';
@@ -864,7 +864,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 8, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 9, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: objects.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -875,7 +875,7 @@ export function createGame(snapshot = null) {
   function restore(data) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
     const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
-    if (!data || ![2,3,4,5,6,7,8].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    if (!data || ![2,3,4,5,6,7,8,9].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
     let p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
     // The original six districts occupy the prefix of the inventory. New
@@ -885,7 +885,7 @@ export function createGame(snapshot = null) {
     const validItemCounts = old ? [36] : data.version <= 4 ? [48,50] : data.version===5 ? [56] : data.version===6 ? [62] : [objects.length];
     if (!finite(data.time,0,1e9) || !Number.isSafeInteger(data.score) || data.score<0 ||
         !data.visited.every(id=>REGIONS.some(region=>region.id===id)) ||
-        !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,CEILING+160) ||
+        !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,CEILING+Math.max(160,terrainHeight(p.x,p.z)+20)) ||
         !finite(p.vx,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vz,-MAX_TRAVEL_SPEED,MAX_TRAVEL_SPEED) || !finite(p.vy,-135,27) ||
         !finite(p.speed,0,MAX_TRAVEL_SPEED) || !finite(p.heading,-Math.PI,Math.PI) || typeof p.grounded!=='boolean' ||
         !finite(p.hp,0,100) || !finite(p.mp,0,100) || !Object.hasOwn(MODE_COST,p.mode) ||
@@ -915,7 +915,12 @@ export function createGame(snapshot = null) {
       const [homeX,homeZ]=relocate(t.homeX,t.homeZ);
       t={...t,x:tx,z:tz,homeX,homeZ};
     }
-    const visitor=restoreKyotoLot(p,data.version);
+    let visitor=restoreKyotoLot(p,data.version);
+    if(data.version===7 || data.version===8){
+      visitor=restoreHarbourTraveller(visitor,data.time);
+      const [x,z]=relocateOldQuay(t.x,t.z),[homeX,homeZ]=relocateOldQuay(t.homeX,t.homeZ);
+      t={...t,x,z,homeX,homeZ};
+    }
     if(visitor!==p && p.mount==='turtle')t={...t,x:visitor.x,z:visitor.z,homeX:visitor.x,homeZ:visitor.z};
     p=visitor;
     for (const key of Object.keys(player)) {

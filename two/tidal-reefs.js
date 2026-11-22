@@ -1,3 +1,4 @@
+import { WORLD_BOUND } from './geography.js';
 import { SEAWAYS } from './ocean-voyage.js';
 import { portReserved } from './seaport-layout.js';
 
@@ -5,9 +6,10 @@ import { portReserved } from './seaport-layout.js';
 // tide; the navigable channels have at least a full hull of clearance.
 export function offshoreReefs(bed,coast,random){
   const reefs=[];
-  const span=4*416*Math.SQRT2;
+  const span=2*WORLD_BOUND;
   const distance=(a,b)=>Math.min(Math.abs(a-b),Math.abs(span-Math.abs(a-b)));
-  const centers=[[792,-988],[598,-1103],[154,-1112],[-76,-1101],[-780,-1114],
+  const centers=[[568,-1444],[447,-1482],[181,-1468],[-16,-1418],[-210,-1431],[-385,-1285],
+    [-940,-1279],[931,-1178],[983,-948],[593,-1533],[69,-1505],[792,-988],[598,-1103],[154,-1112],[-76,-1101],[-780,-1114],
     [-1010,-972],[-823,-755],[-916,-600],[-730,-539],[-499,-539],[-390,-606],
     [-298,-568],[-1141,-288],[-1096,-83],[-950,52],[-899,282],[-1085,436],
     [-763,527],[-616,639],[-869,808],[-706,962],[-488,1086],[-214,859],

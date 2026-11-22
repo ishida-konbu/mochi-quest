@@ -1,12 +1,13 @@
 import { SEAPORTS,portReserved } from './seaport-layout.js';
 // One repeatable planting plan per 26 m square. All coordinates here are canonical.
 import { RASHOMON } from './kyo-layout.js';
+import { STREET_BEATS } from './street-watch-layout.js';
 import { COURT, RETREATS, reservedScenery } from './retreat-layout.js';
 import { scrollCoverage } from './scroll-paper.js';
 import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, MARKET_STALLS, ROCKS, REGIONS, WATER_Y,
   nearRoad, seeded, seasonAt, shoreDistance, riverZ, riverHalfWidth, terrainHeight } from './terrain.js';
 
-export const MEADOW_TILES = 90;
+export const MEADOW_TILES = 122;
 export const MEADOW_TILE = 2 * BOUND / MEADOW_TILES;
 const rows = 29;
 const {abs, sin, cos, floor, hypot} = Math;
@@ -42,6 +43,7 @@ export function meadowExclusions(objects,residents=[]) {
   add(COURT.x,COURT.z+11.5,29,reservedScenery);
   for(const s of RETREATS)add(s.x,s.z,11,reservedScenery);
   for(const p of SEAPORTS)add(p.x,p.z,72,portReserved);
+  for(const beat of STREET_BEATS)for(const hearth of beat.hearths)circle(hearth.x,hearth.z,.80);
   add(SNOW_SPRING.x,SNOW_SPRING.z,17,(x,z)=>springRadius(x,z)<1.18);
   for (const b of BUILDINGS) add(b.x,b.z,hypot(b.w,b.d)*.65+5,(x,z)=>{
     const dx=x-b.x, dz=z-b.z;
