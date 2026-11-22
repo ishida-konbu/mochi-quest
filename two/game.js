@@ -1,14 +1,14 @@
 import { createVoyage } from './ocean-voyage.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
-import { RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
+import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
 import { SEAPORTS } from './seaport-layout.js';
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
-import { KYO_FOOD, KYO_ANIMALS, kyoNight, kyoInfluence } from './kyo-layout.js';
+import { KYO_FOOD, KYO_ANIMALS, KYO_DAY_SECONDS, kyoNight, kyoInfluence } from './kyo-layout.js';
 import { makeScrollResidents, updateScrollResident } from './scroll-encounters.js';
 import { SCROLL_FAUNA, makeScrollFauna, moveScrollFauna } from './scroll-fauna.js';
 import { SEA_SPECIES, makeRyuguResidents, updateRyuguResident } from './ryugu-residents.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
-import { ORIGINAL_REGIONS, terrainHeight, shoreDistance, WATER_Y, groundHeight, landscapeFloor, solidHeightAt, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
+import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, shoreDistance, WATER_Y, groundHeight, landscapeFloor, solidHeightAt, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
 import { POUNDING, POUNDING_CREW } from './festival.js';
 import { prepareVillageRoutes, animalRadius, openGround, walkCircuit } from './village-paths.js';
@@ -146,6 +146,32 @@ function makeWorld() {
   return { objects, npcs };
 }
 
+// Reopen older journals in the same room or yard of the relocated court.
+// Its southern boundary stops at the pavement so people on the avenue stay put.
+function restoreKyotoLot(p,edition) {
+  if(edition!==6 && edition!==7)return p;
+  const older=edition===6;
+  const oldX=older?162:155,oldZ=older?-872:-882;
+  const datum=older?4.06465:5.09111;
+  const u=p.x-oldX,v=p.z-oldZ,front=older?7:10;
+  const side=v<front?(older?14.5:20.5):(older?13.3:18.9);
+  if(Math.abs(u)<=side && v>=-front && v<=(older?20.5:30.5) && p.y<=datum+16)
+    return {...p,x:COURT.x+u,z:COURT.z+v,y:p.y+terrainHeight(COURT.x,COURT.z)-datum};
+  if(older)return p;
+  // Two workshops moved across their lane. Carry their upper floors and
+  // stairs with them, including the visitor's facing direction.
+  for(const [craft,x,base] of [['rush',151.5,7.05777],['lacquer',170,5.36271]]){
+    const dx=p.x-x,dz=p.z+904.06;
+    if(Math.abs(dx)>3.5 || Math.abs(dz)>3.1 || p.y>base+9.5)continue;
+    const shop=BUILDINGS.find(b=>b.kind==='wardShop' && b.craft===craft && b.x===x && b.z===-915.5);
+    if(shop && Math.abs(dx)<=shop.w/2 && Math.abs(dz)<=shop.d/2){
+      const heading=Math.atan2(-Math.sin(p.heading),-Math.cos(p.heading));
+      return {...p,x:shop.x-dx,z:shop.z-dz,y:p.y+shop.y-base,heading,vx:-p.vx,vz:-p.vz};
+    }
+  }
+  return p;
+}
+
 export function createGame(snapshot = null) {
   const { objects, npcs } = makeWorld();
   const riverRider = pairRiverTravellers(npcs);
@@ -153,7 +179,7 @@ export function createGame(snapshot = null) {
   const player = {
     x: 0, z: 62, y: groundHeight(0,62), h: 0, vx: 0, vz: 0, vy: 0, speed: 0, heading: 0,
     grounded: true, hp: MAX_VITAL, mp: MAX_VITAL, mode: 'normal', mount: null, activity: null,
-    activityTime: 0, idleTime: 0, airStretch: 0, diveDepth: 0, inWater: false, night: false, stretch: 0, landing: 0, impact: 0, throwTime: 0, invulnerable: 0,
+    activityTime: 0, idleTime: 0, airStretch: 0, diveDepth: 0, inWater: false, night: false, kyoClockOffset: 0, stretch: 0, landing: 0, impact: 0, throwTime: 0, invulnerable: 0,
     buffs: { warm: 0, swift: 0, drunk: 0, full: 0, wrap: 0 }
   };
   const region = REGIONS[regionAt(player.x,player.z)];
@@ -742,7 +768,7 @@ export function createGame(snapshot = null) {
     const region = REGIONS[regionAt(player.x,player.z)];
     const offshore = region.id === 'ryugu' && (player.diveDepth < 1 || player.y > terrainHeight(region.x,region.z) + 8);
     state.region = offshore ? '竜宮沖' : region.name; state.regionId = region.id;
-    player.night = Math.max(seasonAt(player.x,player.z,climate).moon,kyoNight(state.time)*kyoInfluence(player.x,player.z)) > .48;
+    player.night = Math.max(seasonAt(player.x,player.z,climate).moon,kyoNight(state.time,player)*kyoInfluence(player.x,player.z)) > .48;
     player.inWater = player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z) > .14 && player.y < waterSurfaceAt(player.x,player.z) - .08;
     if (region.id === 'ryugu' && (offshore || player.y > terrainHeight(region.x,region.z) + 3)) return;
     if (!collectStamp || state.visited.includes(region.id) || distance(player,region)>STAMP_RADIUS || player.h>3) return;
@@ -825,7 +851,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 7, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 8, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: objects.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -836,7 +862,7 @@ export function createGame(snapshot = null) {
   function restore(data) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
     const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
-    if (!data || ![2,3,4,5,6,7].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    if (!data || ![2,3,4,5,6,7,8].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
     let p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
     // The original six districts occupy the prefix of the inventory. New
@@ -876,9 +902,16 @@ export function createGame(snapshot = null) {
       const [homeX,homeZ]=relocate(t.homeX,t.homeZ);
       t={...t,x:tx,z:tz,homeX,homeZ};
     }
+    const visitor=restoreKyotoLot(p,data.version);
+    if(visitor!==p && p.mount==='turtle')t={...t,x:visitor.x,z:visitor.z,homeX:visitor.x,homeZ:visitor.z};
+    p=visitor;
     for (const key of Object.keys(player)) {
-      if (!['idleTime','buffs','landing','impact','airStretch','night','inWater','diveDepth'].includes(key)) player[key]=p[key];
+      if (!['idleTime','buffs','landing','impact','airStretch','night','kyoClockOffset','inWater','diveDepth'].includes(key)) player[key]=p[key];
     }
+    // Doubling the old 144-second cycle doubles a saved phase. Add the old
+    // elapsed time once to Kyoto's local clock; boats still use data.time.
+    if(data.version>=5 && data.version<8)player.kyoClockOffset=data.time%KYO_DAY_SECONDS;
+    else if(data.version>=8 && finite(p.kyoClockOffset,0,KYO_DAY_SECONDS))player.kyoClockOffset=p.kyoClockOffset%KYO_DAY_SECONDS;
     // These short pose cues were added after the first version-two saves.
     player.airStretch = !player.grounded && finite(p.airStretch,0,1) ? p.airStretch : 0;
     player.landing = finite(p.landing,0,.25) ? p.landing : 0;

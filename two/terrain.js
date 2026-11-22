@@ -1,3 +1,4 @@
+import { HIGASHIYAMA, eastRidgeShore, eastRidgeHeight, inFireMeadow } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint } from './geography.js';
@@ -105,7 +106,7 @@ export function shoreDistance(x,z) {
     const junction=max(0,1-abs(shore-margin)/24);
     shore=max(shore,margin)+6*junction*junction;
   }
-  return portShore(x,z,shore);
+  return portShore(x,z,eastRidgeShore(x,z,shore));
 }
 function outerHeight(x,z,base) {
   if (z > -305 && z < 311 && x > -180 && x < 310) return base;
@@ -114,7 +115,7 @@ function outerHeight(x,z,base) {
   if (originalShore(x,z)<22 && shore> -3.3) {
     const rolls=4.8+2.2*sin(x*.025+z*.008)*cos(z*.021)
       + 1.35*cos(x*.013-z*.018)+1.10*sin(x*.043+z*.039);
-    const hills=rolls + 41*hill(x,z,DISTRICTS.kyo.x+2,DISTRICTS.kyo.z-112,71,32)
+    const hills=rolls + eastRidgeHeight(x,z) + 41*hill(x,z,DISTRICTS.kyo.x+2,DISTRICTS.kyo.z-112,71,32)
       + 18*hill(x,z,-89,-592,101,91) + 22*hill(x,z,184,-694,74,69)
       + 26*hill(x,z,-563,-198,87,46) + 18*hill(x,z,-451,-80,72,39) + 6.4*hill(x,z,-240,-84,28,27)
       + 25*hill(x,z,219,556,64,89) + 32*hill(x,z,382,677,84,81)
@@ -659,7 +660,7 @@ export const TREES = trees.filter(t => !portReserved(t.x,t.z) && !reservedScener
 const saplings = seeded(0x5c311);
 function transplant(x,z,family) {
   if(abs(x-RASHOMON.x)<19 && abs(z-RASHOMON.z)<29)return false;
-  if(portReserved(x,z)||reservedScenery(x,z))return false;
+  if(portReserved(x,z)||reservedScenery(x,z)||inFireMeadow(x,z))return false;
   if(abs(x-DISTRICTS.peach.x)<220 && abs(z-DISTRICTS.peach.z)<180 &&
     PEACH_TREES.some(t=>(x-t.x)**2+(z-t.z)**2<25))return false;
   if (shoreDistance(x,z)<10 || landHeight(x,z)<2 || nearRoad(x,z,3.1) ||
@@ -721,6 +722,16 @@ for(let i=0;i<1100;i++){
   if(slope>.95 || mountainSaplings()<slope*.46)continue;
   transplant(x,z,[0,1,1,2,3][i%5]);
 }
+// Red pine and cypress follow the shoulders of the eastern fire mountain.
+const eastSeed=seeded(0x46554b55);
+for(let i=0;i<720;i++){
+  const x=HIGASHIYAMA.x+(eastSeed()-.47)*154,z=HIGASHIYAMA.z+(eastSeed()-.5)*223;
+  if(inFireMeadow(x,z)||eastRidgeHeight(x,z)<11||shoreDistance(x,z)<10||nearRoad(x,z,4)||
+     TREES.some(t=>(t.x-x)**2+(t.z-z)**2<37))continue;
+  const family=[0,1,1,2,3][i%5];
+  TREES.push({x,z,h:4.8+eastSeed()*5.4,kind:TREE_FAMILIES[family][0],
+    form:family*TREE_FORMS_PER_FAMILY+i%4,seed:181033+i*13});
+}
 // These shrine cedars use the same forked trunks, needle sprays and moving
 // crowns as the surrounding woodland. A clear strip follows every gate.
 for(const [i,t] of CEDAR_GROVES.entries()) {
@@ -733,7 +744,7 @@ const stoneSeed=seeded(0x11e41);
 for(const [cx,cz,rx,rz] of PENINSULAS) {
   for(let bed=0;bed<8;bed++){
     const ax=cx+(stoneSeed()-.5)*rx*1.85,az=cz+(stoneSeed()-.5)*rz*1.8;
-    if(originalShore(ax,az)>9 || protectedDistrict(ax,az) || shoreDistance(ax,az)<9) continue;
+    if(originalShore(ax,az)>9 || inFireMeadow(ax,az) || protectedDistrict(ax,az) || shoreDistance(ax,az)<9) continue;
     const yaw=.88*sin(az*.019)+.63, c=cos(yaw),s=sin(yaw);
     const high=terrainHeight(ax,az)>35;
     for(let n=0;n<5;n++){
@@ -741,7 +752,7 @@ for(const [cx,cz,rx,rz] of PENINSULAS) {
       const x=ax+c*along+s*side,z=az-s*along+c*side;
       const scale=(n===0?1.7:.48)+stoneSeed()*(high?2.05:1.56);
       const rx=scale*(1.04+stoneSeed()*.68),rz=scale*(.61+stoneSeed()*.34);
-      if(nearRoad(x,z,rx+2.6) || reservedScenery(x,z) || protectedDistrict(x,z) ||
+      if(nearRoad(x,z,rx+2.6) || inFireMeadow(x,z) || reservedScenery(x,z) || protectedDistrict(x,z) ||
          shoreDistance(x,z)<3 || TREES.some(t=>(t.x-x)**2+(t.z-z)**2<(rx+.45)**2))continue;
       ROCKS.push({x,z,rx,rz,h:scale*(high?1.16:.78),yaw:yaw+(stoneSeed()-.5)*.32,
         stratum:(bed+n)%4,tint:high?'#b7beb9':cz>0?'#cbc2a9':'#c6cbaf'});

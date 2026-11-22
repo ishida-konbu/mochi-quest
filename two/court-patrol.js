@@ -1,30 +1,45 @@
 // Local metres and seconds on the same noon-to-noon clock as the capital.
 // Rebuilding a saved night midway through the rounds reproduces every ember.
 import { COURT_BRAZIERS, COURT_GATE_Z } from './retreat-layout.js';
-const day=144,clamp=x=>Math.max(0,Math.min(1,x));
+import { KYO_DAY_SECONDS } from './kyo-layout.js';
+const clamp=x=>Math.max(0,Math.min(1,x));
 const fade=x=>{const t=clamp(x);return t*t*(3-2*t);};
 function itinerary(i){
   const side=i?1:-1, gate=COURT_GATE_Z, delay=i*2.35, first=COURT_BRAZIERS[i*2],second=COURT_BRAZIERS[i*2+1];
   const home=[side*5.88,gate+2.30,0,0];
   const reach=([x,z])=>[x+.35,z+.78,Math.PI,1];
   const aim=([x,z])=>[x+.35,z+.78,Math.PI,0];
+  const depart=KYO_DAY_SECONDS/4-16+delay;
+  const leaveHall=KYO_DAY_SECONDS*3/4-5+delay;
   const knots=[
-    [0,home],[28+delay,home],[30.6+delay,[side*2.75,gate+1,Math.PI]],
-    [32.4+delay,[side*2.75,gate-2.61,Math.PI]],[36.3+delay,aim(first)],
-    [38.4+delay,reach(first)],[39.9+delay,reach(first)],[41.3+delay,aim(first)],
-    [43.1+delay,[side*6.45,first[1]+.64,Math.PI]],[48.5+delay,aim(second)],[50.6+delay,reach(second)],[52.1+delay,reach(second)],[53.5+delay,aim(second)],
-    [57.6+delay,[side*3.66,13.65,Math.PI]],[62.7+delay,[side*3.68,6.9,Math.PI]],
-    [70.4+delay,[side*10.5,4.9,side*Math.PI*.5]],[76.5+delay,[side*13.65,-2.7,Math.PI]],
-    [79.1+delay,[side*13.65,-2.7,side*Math.PI*.5]],
-    [87.1+delay,[side*10.7,4.7,0]],[94.3+delay,[side*3.68,6.8,0]],
-    [100.5+delay,[side*3.66,15.2,0]],[113.4+delay,[side*2.75,gate+1,0]],
-    [116.4+delay,home],[day,home],
+    [0,home],[depart,home],[depart+2.6,[side*2.75,gate+1,Math.PI]],
+    [depart+4.4,[side*2.75,gate-2.61,Math.PI]],[depart+8.3,aim(first)],
+    [depart+10.4,reach(first)],[depart+11.9,reach(first)],[depart+13.3,aim(first)],
+    [depart+15.1,[side*6.45,first[1]+.64,Math.PI]],[depart+20.5,aim(second)],
+    [depart+22.6,reach(second)],[depart+24.1,reach(second)],[depart+25.5,aim(second)],
+    [depart+29.6,[side*3.66,13.65,Math.PI]],[depart+34.7,[side*3.68,6.9,Math.PI]],
   ];
-  return {knots,lights:[38.25+delay,50.45+delay]};
+  // Walk the clerks' aisle at the usual pace. Additional time in the longer
+  // night buys extra rounds and a short watch at the clerk's desk each lap.
+  const enterHall=depart+34.7, lapWalk=31.6;
+  const laps=Math.max(1,Math.floor((leaveHall-enterHall)/lapWalk));
+  const lap=(leaveHall-enterHall)/laps, stand=lap-lapWalk;
+  for(let j=0;j<laps;j++){
+    const start=enterHall+j*lap;
+    knots.push([start+7.7,[side*10.5,4.9,side*Math.PI*.5]],
+      [start+13.8,[side*13.65,-2.7,Math.PI]],
+      [start+16.4+stand,[side*13.65,-2.7,side*Math.PI*.5]],
+      [start+24.4+stand,[side*10.7,4.7,0]],[start+lap,[side*3.68,6.8,0]]);
+  }
+  const homeAt=leaveHall+22.1;
+  knots.push([leaveHall+6.2,[side*3.66,15.2,0]],
+    [leaveHall+19.1,[side*2.75,gate+1,0]],[homeAt,home],[KYO_DAY_SECONDS,home]);
+  return {knots,depart,homeAt,lights:[depart+10.25,depart+22.45]};
 }
 const rounds=[itinerary(0),itinerary(1)];
 export function watchPose(time,index,out={}){
-  const t=((time%day)+day)%day,{knots,lights}=rounds[index];
+  const t=((time%KYO_DAY_SECONDS)+KYO_DAY_SECONDS)%KYO_DAY_SECONDS;
+  const {knots,depart,homeAt,lights}=rounds[index];
   let end=1;while(end<knots.length-1 && t>=knots[end][0])end++;
   const [start,a]=knots[end-1],[finish,b]=knots[end],f=clamp((t-start)/(finish-start));
   const dx=b[0]-a[0],dz=b[1]-a[1],distance=Math.hypot(dx,dz);
@@ -37,8 +52,9 @@ export function watchPose(time,index,out={}){
   out.yaw=turn(enter,b[2],fade((f-.79)/.21));
   out.reach=(a[3]||0)+((b[3]||0)-(a[3]||0))*fade(f);
   out.walk=distance>.01?Math.min(1,distance/(finish-start))*Math.min(f/.12,1,(1-f)/.12):0;
-  out.taper=fade((t-26-index*2.35)/2.1)*fade((118+index*2.35-t)/3);
-  out.front=fade((t-lights[0])/.85)*fade((117-t)/10);
-  out.inner=fade((t-lights[1])/.85)*fade((117-t)/10);
+  out.taper=fade((t-depart+2)/2.1)*fade((homeAt+1.6-t)/3);
+  const embers=fade((homeAt-t)/12);
+  out.front=fade((t-lights[0])/.85)*embers;
+  out.inner=fade((t-lights[1])/.85)*embers;
   return out;
 }

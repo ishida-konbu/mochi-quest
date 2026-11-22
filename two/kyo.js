@@ -1,10 +1,12 @@
+import { mountainFires } from './mountain-fires.js';
+import { HIGASHIYAMA, eastRidgeHeight, fukuFirebeds, inFireMeadow } from './higashiyama.js';
 import { createRashomon } from './rashomon.js';
 import { districtPoint, DISTRICTS } from './geography.js';
 import * as THREE from './vendor/three.module.min.js';
 import { KYO_BUILDINGS, KYO_FOOD, KYO_SCREENS, screenFold, kyoNight } from './kyo-layout.js';
 import { scrollPaper, printSurface } from './kyo-scrollwork.js';
 import { createStreetCrowd } from './kyo-people.js';
-import { seeded, terrainHeight, wrapDelta } from './terrain.js';
+import { seeded, terrainHeight } from './terrain.js';
 import { sculpture } from './pilgrimage-pigment.js';
 
 const TAU=Math.PI*2;
@@ -289,8 +291,8 @@ export function kyoPavingMaterial() {
 
 // Short axe-cut strokes describe folds in the real slope. The gathering of darks
 // follows the spurs, leaving the grass in the fire clearing and the skyline in reserve.
-function hillsideInk(p) {
-  const [cx,cz]=districtPoint('kyo',122,-536);
+function hillsideInk(p,east=false) {
+  const [cx,cz]=east ? [HIGASHIYAMA.x,HIGASHIYAMA.z] : districtPoint('kyo',122,-536);
   const rand=seeded(66189), positions=[],colors=[],indices=[];
   const light=new THREE.Color('#8a8970'),dark=new THREE.Color('#666b56');
   function stroke(x,z,length,dx,width,tint){
@@ -306,10 +308,11 @@ function hillsideInk(p) {
       if(j<8){const k=base+j*2;indices.push(k,k+2,k+1,k+1,k+2,k+3);}
     }
   }
-  for(let i=0;i<67;i++){
-    const x=cx+(rand()-.5)*136,z=cz-3+rand()*43;
+  for(let i=0;i<(east?175:67);i++){
+    const x=cx+(rand()-.5)*(east?152:136),z=east?cz+(rand()-.5)*201:cz-3+rand()*43;
+    if(east && (eastRidgeHeight(x,z)<15 || inFireMeadow(x,z) && rand()<.76))continue;
     const side=x<cx?-1:1;
-    if(Math.abs(x-cx)<16 && z>cz+4 || terrainHeight(x,z)<12)continue;
+    if((!east && Math.abs(x-cx)<16 && z>cz+4) || terrainHeight(x,z)<12)continue;
     const count=2+Math.floor(rand()*5),length=1.2+rand()*5;
     for(let j=0;j<count;j++){
       const drift=rand()-.5;
@@ -319,13 +322,14 @@ function hillsideInk(p) {
   }
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
   g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));g.setIndex(indices);g.computeVertexNormals();
-  p.shapes.kyoHillInk=g;
+  const name=east?'eastHillInk':'kyoHillInk';
+  p.shapes[name]=g;
   const mat=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,transparent:true,
     opacity:.70,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2});
-  p.part('kyoHillInk',cx,0,cz,1,1,1,'#fff',0,0,0,mat,false,true);
+  p.part(name,cx,0,cz,1,1,1,'#fff',0,0,0,mat,false,true);
 }
 
-function mountainFires(scene) {
+function northHearths() {
   // Lay the 大 onto real terrain. Projecting each hearth from the centre of the avenue
   // keeps a level crossbar on the curved mountain and leaves real parallax at the sides.
   const hearths=[],viewerZ=DISTRICTS.kyo.z,viewY=terrainHeight(DISTRICTS.kyo.x,viewerZ)+1.9;
@@ -351,50 +355,7 @@ function mountainFires(scene) {
   row([-11.2,.62],[11.2,.62],19);
   row([.7,1],[-1.35,.46],10);row([-1.35,.46],[-6,.21],6);row([-6,.21],[-14,0],8);
   row([-.75,.52],[5.85,.25],8);row([5.85,.25],[13.7,.012],8);
-  const group=new THREE.Group(); group.name='東山・大文字の送り火';scene.add(group);
-  const geo=new THREE.PlaneGeometry(1,1),phases=[],coords=[];
-  for(let i=0;i<hearths.length;i++){
-    coords.push(...hearths[i]);phases.push(i*2.391);
-  }
-  const sprites=new THREE.InstancedBufferGeometry().copy(geo);
-  sprites.instanceCount=hearths.length;
-  sprites.setAttribute('hearth',new THREE.InstancedBufferAttribute(new Float32Array(coords),3));
-  sprites.setAttribute('seed',new THREE.InstancedBufferAttribute(new Float32Array(phases),1));
-  const uniforms={clock:{value:0},intensity:{value:0}};
-  const flames=new THREE.Mesh(sprites,new THREE.ShaderMaterial({
-    uniforms,transparent:true,depthWrite:false,side:THREE.DoubleSide,
-    vertexShader:`
-      attribute vec3 hearth; attribute float seed; varying vec2 flameUv; varying float flicker;
-      uniform float clock;
-      void main(){
-        flameUv=uv;flicker=.75+.15*sin(clock*6.1+seed)+.10*sin(clock*10.3+seed*2.73);
-        vec4 spot=modelViewMatrix*vec4(hearth,1.);
-        spot.x+=position.x*2.25+uv.y*uv.y*.20*sin(clock*3.5+seed);
-        spot.y+=(position.y+.28)*(1.9+.92*flicker);
-        gl_Position=projectionMatrix*spot;
-      }`,
-    fragmentShader:`
-      varying vec2 flameUv; varying float flicker; uniform float intensity;
-      void main(){
-        vec2 p=flameUv-vec2(.5,.40);
-        float dist=length(p*vec2(1.95,1.18));
-        float flare=exp(-dist*6.8);
-        float core=1.-smoothstep(.055,.30,dist+max(0.,p.y)*.5);
-        float alpha=(.88*flare+.75*core)*intensity;
-        if(alpha<.008)discard;
-        vec3 color=mix(vec3(1.,.105,.013),vec3(1.,.82,.33),core*flicker);
-        gl_FragColor=vec4(color,clamp(alpha,0.,1.));
-        #include <colorspace_fragment>
-      }`,
-  }));
-  flames.frustumCulled=false;flames.renderOrder=6;group.add(flames);
-  return (time,night,player)=>{
-    const dx=wrapDelta(cx-player.x),dz=wrapDelta(northZ-player.z);
-    group.visible=night>.08 && dx*dx+dz*dz<238**2;
-    if(!group.visible)return;
-    group.position.set(player.x+dx-cx,0,player.z+dz-northZ);
-    uniforms.clock.value=time; uniforms.intensity.value=Math.min(1,(night-.08)*1.3);
-  };
+  return hearths;
 }
 
 export function createKyo(scene,painter){
@@ -416,14 +377,16 @@ export function createKyo(scene,painter){
   for(let picture=0;picture<4;picture++) p.shapes['kyoScreen'+picture]=printSurface(picture,'screen');
   for(let picture=0;picture<2;picture++) p.shapes['kyoCurtain'+picture]=printSurface(picture,'curtain');
   const gateHouse=createRashomon(scene,p);
-  hillsideInk(p);shopFronts(p,light,windowPaper);
+  hillsideInk(p);hillsideInk(p,true);shopFronts(p,light,windowPaper);
   for(const stand of KYO_FOOD)foodCounter(p,stand,light);
   streetLamps(p,light);
-  const crowd=createStreetCrowd(scene), fires=mountainFires(scene);
+  const crowd=createStreetCrowd(scene);
+  const north=mountainFires(scene,northHearths(),DISTRICTS.kyo.x+2,DISTRICTS.kyo.z-112);
+  const east=mountainFires(scene,fukuFirebeds(terrainHeight),HIGASHIYAMA.x,HIGASHIYAMA.z,true);
   return (time,player,camera)=>{
-    const night=kyoNight(time);
+    const night=kyoNight(time,player);
     light.emissiveIntensity=.04+night*.94;
     windowPaper.emissiveIntensity=night*.46;
-    gateHouse(time,player);crowd(time,player,camera);fires(time,night,player);
+    gateHouse(time,player);crowd(time,player,camera);north(time,night,player);east(time,night,player);
   };
 }

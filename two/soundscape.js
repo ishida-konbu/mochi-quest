@@ -194,7 +194,7 @@ export function createSoundscape(ctx, master) {
   function updateEnvironment(state, now) {
     const p = state.player;
     const climate=seasonAt(p.x,p.z);
-    climate.moon=Math.max(climate.moon,kyoNight(state.time)*kyoInfluence(p.x,p.z));
+    climate.moon=Math.max(climate.moon,kyoNight(state.time,p)*kyoInfluence(p.x,p.z));
     const weights = landscapeMix(p,climate);
     const roof = Number.isFinite(overheadHeight(p.x, p.z, p.y));
     inside=roof;

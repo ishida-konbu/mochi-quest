@@ -4,6 +4,7 @@ import { DISTRICTS } from './geography.js';
 import { SEAPORTS, PORT_BUILDINGS, QUAY_CENTER, QUAY_LENGTH, portPoint } from './seaport-layout.js';
 import { SEAWAYS, FLEET, vesselPose } from './ocean-voyage.js';
 import { COURT } from './retreat-layout.js';
+import { HIGASHIYAMA } from './higashiyama.js';
 import { RASHOMON } from './kyo-layout.js';
 import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
 const SIZE = 1536, SPAN = 2 * BOUND, adj = SIZE / SPAN;
@@ -19,7 +20,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=17', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=kyoto-east', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -206,12 +207,12 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     g.beginPath();g.moveTo(-7,1);g.lineTo(7,1);g.lineTo(3,4);g.lineTo(-3,4);g.closePath();g.fillStyle='#705744';g.fill();g.restore();
   }
   // The baths remain legible at both atlas and walking scales; names appear on arrival.
-  for(const site of [COURT,...state.objects.filter(o=>o.retreat)]){
+  for(const site of [COURT,HIGASHIYAMA,...state.objects.filter(o=>o.retreat)]){
     const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
     if(x<0||x>w||y<0||y>h)continue;
     g.font='bold '+(large?15:17)+'px serif';g.textAlign='center';g.textBaseline='middle';
     g.lineWidth=3;g.strokeStyle='#fff2d6';g.fillStyle=site===COURT?'#685449':'#8c5140';
-    const glyph=site===COURT?'裁':'♨', labelX=site===COURT && large?x-4:x;
+    const glyph=site===COURT?'裁':site===HIGASHIYAMA?'福':'♨', labelX=site===COURT && large?x-4:x;
     g.strokeText(glyph,labelX,y);g.fillText(glyph,labelX,y);
   }
   // With the original settlements close together on the full scroll, take

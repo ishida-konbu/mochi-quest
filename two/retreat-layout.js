@@ -1,14 +1,17 @@
 // Positive local Z faces the road. Roofs, steps, pool lips and their
 // collision volumes share the same survey as the signposts on the map.
-import { districtPoint } from './geography.js';
+import { DISTRICTS, districtPoint } from './geography.js';
 import { TRADE_ROADS, measureRoute, cartPosition } from './trade-routes.js';
 
-const [cx,cz]=districtPoint('kyo',35,-458);
+const [cx,cz]=districtPoint('kyo',35,-470.5);
 export const COURT={x:cx,z:cz,name:'京の評定所',yaw:0};
 // The audience floor is a clear span. Transverse tie beams transfer the
 // roof load onto the two outer aisles, clear of the unbroken painted wall.
 export const COURT_COLUMNS=[-18.8,-14.6,-10.95,10.95,14.6,18.8];
 export const COURT_GATE_Z=33.52;
+export const COURT_PRECINCT={
+  west:cx-24.4,east:cx+24.4,north:cz-14.1,south:cz+37.2,
+};
 export const COURT_BRAZIERS=[[-8.2,29.5],[-9.8,14.4],[8.2,29.5],[9.8,14.4]];
 export const COURT_STEPS=Array.from({length:5},(_,i)=>({z:12.6-i*.64,top:.21+i*.21}));
 
@@ -45,14 +48,22 @@ export function bathRadius(s,x,z) {
   return Math.hypot(u,v)/springLip(s.index,Math.atan2(v,u));
 }
 export function reservedScenery(x,z) {
-  if(Math.abs(x-cx)<24.4 && z>cz-14.1 && z<cz+37.2) return true;
+  const {west,east,north,south}=COURT_PRECINCT;
+  if(x>west && x<east && z>north && z<south)return true;
   const s=nearbyRetreat(x,z);
   return !!s && Math.hypot(s.x-x,s.z-z)<(s.hut?9.6:7.1);
 }
 const ease=n=>{const t=Math.min(1,Math.max(0,n));return t*t*(3-2*t);};
 export function courtTerrain(x,z,native,base) {
-  const edge=Math.max(Math.abs(x-cx)-23.7,cz-13.3-z,z-cz-35.5);
-  return edge>=5 ? native : native+(base(cx,cz)-native)*(1-ease(edge/5));
+  // The stone approach descends continuously over the whole setback. A
+  // short shoulder here made the terrain cut through the paving in strips.
+  const threshold=cz+COURT_GATE_Z+.80;
+  // The back wall sits on the floor's ten-metre half depth. Release the
+  // terrace behind that foundation so the shops across the lane retain
+  // a level landing before their first tread.
+  const verge=Math.max((Math.abs(x-cx)-23.7)/5,(cz-10.25-z)/5,
+    (z-threshold)/(DISTRICTS.kyo.z-threshold));
+  return verge>=1 ? native : native+(base(cx,cz)-native)*(1-ease(verge));
 }
 export function bathTerrain(s,x,z,native,level) {
   const r=bathRadius(s,x,z);

@@ -5,10 +5,12 @@ import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, water
 import {RETREATS,sitePoint} from '../two/retreat-layout.js';
 import {INARI_GATES, INARI_ROUTE, PEACH_TREES, MOON_GATE} from '../two/pilgrimage-layout.js';
 import {PALACE_APPROACH} from '../two/ryugu-layout.js';
-import {kyoInfluence, kyoNight} from '../two/kyo-layout.js';
+import {HIGASHIYAMA} from '../two/higashiyama.js';
+import {kyoInfluence, kyoNight, kyoClock, KYO_DAY_SECONDS} from '../two/kyo-layout.js';
 import {measureRoute, cartPosition} from '../two/trade-routes.js';
 import {merchantPosition} from '../two/travelling-merchants.js';
 import {createGame} from '../two/game.js';
+import {FLEET,vesselPose} from '../two/ocean-voyage.js';
 
 test('the expanded island doubles each horizontal dimension and joins at an even ocean floor',()=>{
   assert.ok(Math.abs((2*BOUND)**2-8*832**2)<1e-8);
@@ -120,7 +122,44 @@ test('a fifth-edition save follows its district, including underwater depth and 
 
 test('city lights follow a local day and night cycle',()=>{
   assert.equal(kyoInfluence(DISTRICTS.kyo.x,DISTRICTS.kyo.z),1);assert.equal(kyoInfluence(0,62),0);
-  assert.equal(kyoNight(0),0);assert.equal(kyoNight(72),1);assert.equal(kyoNight(144),0);
+  for(let x=DISTRICTS.kyo.x;x<=HIGASHIYAMA.x;x+=5)assert.equal(kyoInfluence(x,DISTRICTS.kyo.z),1);
+  for(const place of REGIONS.filter(r=>['tsuruga','sakai','inari'].includes(r.id)))assert.equal(kyoInfluence(place.x,place.z),0);
+  assert.equal(KYO_DAY_SECONDS,288);
+  assert.equal(kyoNight(0),0);assert.equal(kyoNight(144),1);assert.equal(kyoNight(288),0);
+  // Dusk and dawn remain gradual and mirror one another on either side of midnight.
+  assert.equal(kyoNight(54),0);
+  assert.ok(kyoNight(72)>0 && kyoNight(72)<kyoNight(84) && kyoNight(84)<1);
+  assert.equal(kyoNight(102),1);
+  for(const t of [0,54,72,84,102,144]){
+    assert.ok(Math.abs(kyoNight(t)-kyoNight(288-t))<1e-12);
+    assert.ok(Math.abs(kyoNight(t)-kyoNight(288+t))<1e-12);
+  }
+});
+
+test('the longer Kyoto cycle preserves the light of an older journey without rescheduling its ships',()=>{
+  const fresh=createGame(),p=fresh.state.player;
+  Object.assign(p,{x:DISTRICTS.kyo.x,z:DISTRICTS.kyo.z});
+  fresh.state.time=144;fresh.step(.01);
+  assert.ok(p.night);
+  for(const [version,time] of [[5,72],[6,175.75],[7,144],[7,1000072]]){
+    const oldSave=fresh.save();oldSave.time=time;oldSave.version=version;
+    delete oldSave.player.kyoClockOffset;
+    if(version===5)Object.assign(oldSave.player,FIFTH_EDITION_CENTRES.kyo);
+    if(version<=6){oldSave.items.length=version===5?56:62;oldSave.bikes.length=14;}
+    const resumed=createGame(oldSave),hero=resumed.state.player;
+    assert.ok(resumed.restored);assert.equal(resumed.state.time,time);
+    assert.equal(hero.night,kyoNight(time*2)>.48);
+    assert.equal(kyoClock(time,hero)%288,(2*time)%288);
+    const ship=resumed.voyage.poses[2],scheduled=vesselPose(FLEET[2],time);
+    assert.deepEqual([ship.x,ship.z],[scheduled.x,scheduled.z]);
+    resumed.step(.05);
+    const again=createGame(resumed.save());
+    assert.ok(again.restored);
+    assert.equal(kyoClock(again.state.time,again.state.player),kyoClock(resumed.state.time,hero));
+    assert.equal(again.state.player.night,hero.night);
+  }
+  const bad=fresh.save();bad.player.kyoClockOffset='bad';
+  assert.equal(createGame(bad).state.player.kyoClockOffset,0);
 });
 
 test('both ox teams reach each town on dry roads and all three merchants keep to water',()=>{

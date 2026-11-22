@@ -1,3 +1,4 @@
+import { HIGASHIYAMA, eastRidgeHeight } from './higashiyama.js';
 import { dressSeaports } from './seaports.js';
 import { createOceanShips } from './ocean-ship-art.js';
 import { dressWardShop } from './kyo-market.js';
@@ -111,6 +112,7 @@ function* landscape(scene, art) {
   const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
     '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd','#e4d5b5','#efd5ce','#a9c1b3','#e1d8bb','#dbd6bb','#d8d7bf','#e1d1b4'].map(css);
   const soil = css('#efeadc'), stone = css('#d5d4c6'), c = new THREE.Color(), season = {};
+  const shale=css('#6e7564'),dryGrass=css('#aa9e7e'),ridgeWash=new THREE.Color();
   const bins = new Map();
   for (const tree of TREES) {
     const rad = tree.h*.67+2.3;
@@ -137,6 +139,15 @@ function* landscape(scene, art) {
       const r=regionAt(x,z), river=abs(z-riverZ(x))-riverHalfWidth(x), coast=shoreDistance(x,z);
       c.copy(colors[r]).lerp(soil, max(0,1-abs(river-2)/7)*.72);
       c.lerp(stone, max(0,min(1,(y-15)/30))*.68);
+      const rise=eastRidgeHeight(x,z);
+      if(rise>0){
+        // Darker ink collects in the diagonal gullies, leaving buff grass
+        // and exposed shale on the shoulder that catches the morning light.
+        const u=x-HIGASHIYAMA.x,v=z-HIGASHIYAMA.z;
+        const wash=.5+.5*cos(.096*v-.038*u+1.36*sin(u*.061+v*.029));
+        ridgeWash.copy(dryGrass).lerp(shale,.12+.76*wash*wash);
+        c.lerp(ridgeWash,.88*THREE.MathUtils.smoothstep(rise,4,43));
+      }
       c.multiplyScalar(.96+.042*cos(x*.076+sin(z*.044))+.039*sin(z*.115+sin(x*.093)));
       let canopy=0;
       for (const tree of bins.get(Math.floor(x/18)*256+Math.floor(z/18)) || []) {

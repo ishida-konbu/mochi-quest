@@ -1,4 +1,6 @@
 import { districtPoint, DISTRICTS, DISTRICT_SHIFT } from './geography.js';
+import { HIGASHIYAMA } from './higashiyama.js';
+import { COURT, COURT_GATE_Z, COURT_PRECINCT } from './retreat-layout.js';
 
 // The main avenue is kept open from the southern gate right up to the hillside fires.
 const oldRoads = [
@@ -16,15 +18,19 @@ const crossings=[-81,-62,-42,-22,0,17,41,63,85];
 const avenues=[-100,-77,-49,-25,0,25,44,74,100];
 const grid=[];
 for(const u of avenues){
-  if(u===-77||u===-100){
-    grid.push([3.7,[[120+u,-505],[120+u,-479]]],[3.7,[[120+u,-418],[120+u,-339]]]);
-  } else grid.push([u===0?8:3.8,[[120+u,-506],[120+u,u===0?-336:-339]],u===0]);
+  grid.push([u===0?8:3.8,[[120+u,-506],[120+u,u===0?-336:-339]],u===0]);
 }
-for(const v of crossings){
-  const west=v>=-48 && v<0?66:20;
-  grid.push([v===0?7:3.7,[[west,-424+v],[220,-424+v]],v===0]);
-}
-// The gate of the magistrates hall opens directly onto the west end of the avenue.
+for(const v of crossings) grid.push([v===0?7:3.7,[[20,-424+v],[220,-424+v]],v===0]);
+
+// Work in the same survey coordinates as the lots, with enough clearance
+// for the roof overhang and eaves of the court.
+const shift=DISTRICT_SHIFT.kyo;
+const courtBlock={
+  west:COURT_PRECINCT.west-shift.x,east:COURT_PRECINCT.east-shift.x,
+  north:COURT_PRECINCT.north-shift.z,south:COURT_PRECINCT.south-shift.z,
+};
+const courtEntry=[COURT.x-shift.x,COURT.z+COURT_GATE_Z-shift.z];
+const courtWalk=[4.6,[courtEntry,[courtEntry[0],-424]],true];
 
 export function inCapitalWard(x,z,pad=0){
   return Math.abs(x-DISTRICTS.kyo.x)<=KYO_WARD.width/2+pad && Math.abs(z-DISTRICTS.kyo.z)<=KYO_WARD.depth/2+pad;
@@ -58,6 +64,11 @@ houses.push(
   [175,-444,9.8,7.6,4.1,3.6,-Math.PI/2,'shop','dye'],
   [62,-406,9.2,7.0,3.9,2.9,Math.PI/2,'cottage','tea'],
   [175,-401,9.0,7.4,3.5,2.7,-Math.PI/2,'shop','brew'],
+  // Keep the rear silk shop in place. The mat and lacquer sellers face it
+  // from the opposite side of the same lane, clear of the new north eave.
+  [64,-480.06,6.02,5.79,6.1,2.47,Math.PI,'wardShop','cloth'],
+  [31.5,-491.5,6.4,5.94,6.1,2.17,0,'wardShop','rush'],
+  [50,-491.5,6.78,6.09,6.1,2.32,0,'wardShop','lacquer'],
 );
 // Divert the new side lanes at the walls of older temples and shops. A common
 // centre line is paved once, preserving the courses on the original avenues.
@@ -68,6 +79,9 @@ function newLane([width,[[x,z],[ex,ez]],paved]) {
   function clip(lo,hi){
     pieces=pieces.flatMap(([a,b])=>hi<=a || lo>=b?[[a,b]]:[[a,Math.min(b,lo)],[Math.max(a,hi),b]].filter(([u,v])=>v-u>1.5));
   }
+  const {west,east,north,south}=courtBlock;
+  if(alongX ? near>north && near<south : near>west && near<east)
+    clip(alongX?west:north,alongX?east:south);
   for(const [xx,zz,w,d,,,yaw] of established){
     const co=Math.abs(Math.cos(yaw)),si=Math.abs(Math.sin(yaw)),rw=(co*w+si*d)/2,rd=(si*w+co*d)/2;
     if(Math.abs(near-(alongX?zz:xx))<(alongX?rd:rw)+width/2){
@@ -83,19 +97,21 @@ function newLane([width,[[x,z],[ex,ez]],paved]) {
   }
   return pieces.filter(([a,b])=>b-a>2.8).map(([a,b])=>[width,alongX?[[a,z],[b,z]]:[[x,a],[x,b]],paved]);
 }
-export const KYO_ROADS=[...oldRoads,...grid.flatMap(newLane)]
+export const KYO_ROADS=[...oldRoads,...grid.flatMap(newLane),courtWalk]
   .map(([w,knots,paved])=>[w,knots.map(([x,z])=>districtPoint('kyo',x,z)),paved]);
 
 // Rows of street-facing shops share party alleys. Survey the covered frontage,
 // existing doors, festival spaces, and the land reserved for the magistrate.
 const wares=Object.keys(WARD_TRADES);
 function clearParcel(x,z,w,d){
-  const xx=x+120,zz=z-424;
-  if(xx-w/2<182 && xx+w/2>128 && zz-d/2<-842 && zz+d/2>-900)return false;
+  const {west,east,north}=courtBlock;
+  // Leave service alleys outside the two eaves, and an open sightline from
+  // the south pavement across the forecourt to the gate.
+  if(x-w/2<east+2.6 && x+w/2>west-2.6 && z+d/2>north && z-d/2<-424+4.5)return false;
   if(Math.abs(x-120)<17 && z>-352)return false;
   if(Math.abs(x-137)<10 && Math.abs(z+417)<9)return false;
   if(Math.abs(x-120)<22 && Math.abs(z+424)<19)return false;
-  for(const [width,line] of [...oldRoads,...grid])for(let i=1;i<line.length;i++){
+  for(const [width,line] of [...oldRoads,...grid,courtWalk])for(let i=1;i<line.length;i++){
     const [a,b]=line[i-1],[c,e]=line[i],dx=c-a,dz=e-b;
     const t=Math.max(0,Math.min(1,((x-a)*dx+(z-b)*dz)/(dx*dx+dz*dz)));
     if(Math.abs(x-a-dx*t)<w/2+width*.5+.48 && Math.abs(z-b-dz*t)<d/2+width*.5+.48)return false;
@@ -153,11 +169,18 @@ const smooth = (a,b,x) => {
   return t * t * (3 - 2 * t);
 };
 export function kyoInfluence(x,z) {
-  return 1 - smooth(.52, 1.08, Math.hypot((x - DISTRICTS.kyo.x) / 156, (z - DISTRICTS.kyo.z + 11) / 130));
+  const urban=Math.hypot((x-DISTRICTS.kyo.x)/156,(z-DISTRICTS.kyo.z+11)/130);
+  // The same night sky follows the road out of the east ward and up the fire slope.
+  const hills=Math.hypot((x-HIGASHIYAMA.x+46)/142,(z-HIGASHIYAMA.z)/102);
+  return 1 - smooth(.52, 1.08, Math.min(urban,hills));
 }
-export function kyoNight(time) {
-  // 144 seconds from noon to the next noon, with a long dusk for the mountain lookout.
-  const phase = -Math.cos(time * Math.PI * 2 / 144);
+// Daylight, the curfew, the night watch and both mountains use this noon-to-noon period.
+export const KYO_DAY_SECONDS = 288;
+export function kyoClock(time,player) {
+  return time+(player?.kyoClockOffset ?? 0);
+}
+export function kyoNight(time,player) {
+  const phase = -Math.cos(kyoClock(time,player) * Math.PI * 2 / KYO_DAY_SECONDS);
   return smooth(-.35, .48, phase);
 }
 
