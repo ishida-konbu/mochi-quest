@@ -1,6 +1,6 @@
 import { evidence as storyEvidence } from './mystery-data.js';
 import { createMystery } from './mystery-state.js';
-import { createMysteryWorld, storyResidentIds } from './mystery-world.js';
+import { createMysteryWorld, storyResidentPosts } from './mystery-world.js';
 import { WAYSIDE_HUTS,KETTLE,CHAYA_SITES,CHAYA_SEAT } from './wayside-hut-layout.js';
 import { planTurtleLeg } from './turtle-trail.js';
 import { BELL_FIRST, BELL_INTERVAL, noticeBellDistance, templeBellHour } from './kiyomizu-bell.js';
@@ -172,7 +172,7 @@ function makeWorld() {
     objects.at(-1).goemon=hut;
   }
   for(const site of RETREATS)if(site.regional)placeSpring(site);
-  prepareVillageRoutes(npcs,objects,storyResidentIds);
+  prepareVillageRoutes(npcs,objects,storyResidentPosts);
   npcs.push(...makeScrollResidents(), ...makeRyuguResidents(), ...makeScrollFauna());
   return { objects, npcs, inventory };
 }

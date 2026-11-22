@@ -100,15 +100,19 @@ const workshops={
   ink:['scribe','scribe'], tea:['tea','tea'], lodge:['tea','tea'], brew:['tea','ladle'],
   dye:['scribe','loom'], rice:['rake','winnow'], net:['fisher','mend']
 };
-function seatWorkers(npcs) {
+function seatWorkers(npcs,storyResidentPosts) {
   for(const [i,b] of BUILDINGS.entries()) {
     const style=workshops[buildingCraft(b)];
     if(!style) continue;
     const workers=npcs.filter(n=>n.area===REGIONS[regionAt(b.x,b.z)].id && n.room===undefined);
     const preference=n=>(n.role===style[0]?0:1000)+Math.hypot(n.x-b.x,n.z-b.z);
-    workers.sort((a,c)=>preference(a)-preference(c));
-    if (!workers.length) continue;
-    const n=workers[0], plan=roomPlan(b), bench=plan.workbench;
+    const appointed=workers.find(n=>{
+      const post=storyResidentPosts.get(n.id);
+      return post && post.x===b.x && post.z===b.z;
+    });
+    const n=appointed || workers.filter(n=>!storyResidentPosts.has(n.id)).sort((a,c)=>preference(a)-preference(c))[0];
+    if(!n) continue;
+    const plan=roomPlan(b), bench=plan.workbench;
     // The working paw is on the doorway side, above the near vat,
     // writing paper or net frame. This leaves the demonstration in profile.
     const targetV=({ink:.03,net:0,rice:.20,dye:.19,brew:.19,tea:.26,lodge:.26})[plan.craft];
@@ -123,8 +127,8 @@ function seatWorkers(npcs) {
 }
 // Small scenes on the longer walks use the same working animals, clothes,
 // tools and delivery entries as the ten original village processions.
-function seatWaysideTravellers(npcs,storyResidentIds) {
-  const workers=npcs.filter(n=>n.area && n.room===undefined && !storyResidentIds.has(n.id));
+function seatWaysideTravellers(npcs,storyResidentPosts) {
+  const workers=npcs.filter(n=>n.area && n.room===undefined && !storyResidentPosts.has(n.id));
   const scenes=[
     ...CHAYA_SITES.map((site,i)=>({site,u:-6,v:3,roles:i%2?['flute','fan']:['tea','flowers']})),
     ...WAYSIDE_HUTS.filter(s=>s.kind==='fisher').map(site=>({site,u:6.7,v:3.6,roles:['fisher','scribe']})),
@@ -196,14 +200,14 @@ function settlePredator(n, workers, objects) {
   n.habitat=REGIONS[regionAt(n.homeX,n.homeZ)].id;
 }
 let villagePlan;
-export function prepareVillageRoutes(npcs,objects,storyResidentIds) {
+export function prepareVillageRoutes(npcs,objects,storyResidentPosts) {
   if(villagePlan) {
     for(const n of npcs) Object.assign(n,villagePlan.get(n.id));
     return;
   }
   registerVillageObjects(objects);
-  seatWorkers(npcs);
-  seatWaysideTravellers(npcs,storyResidentIds);
+  seatWorkers(npcs,storyResidentPosts);
+  seatWaysideTravellers(npcs,storyResidentPosts);
   const workers=npcs.filter(n=>n.area);
   const occupied=[];
   for(const n of npcs) {
@@ -214,6 +218,10 @@ export function prepareVillageRoutes(npcs,objects,storyResidentIds) {
     }
     const pad=animalRadius(n);
     if(n.area) {
+      const post=storyResidentPosts.get(n.id);
+      if(post?.facing!==undefined){
+        n.homeX=post.x;n.homeZ=post.z;n.facing=n.heading=post.facing;
+      }
       const sweep=pad+.46;
       findSite(n,(x,z)=>openGround(x,z,sweep) && !nearRoad(x,z,1.9) &&
         objects.every(o=>(o.x-x)**2+(o.z-z)**2>=5.6**2) &&

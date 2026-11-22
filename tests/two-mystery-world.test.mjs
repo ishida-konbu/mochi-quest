@@ -50,6 +50,19 @@ test('each of the 48 stations has a reachable approach and a visible E interacti
   }
   assert.deepEqual(blocked,[]);
 });
+test('the seven craft witnesses remain at their published workplaces when the processions move',()=>{
+  for(const [id,x,z,craft] of [
+    ['NPC_MASUME',174.45,131.37,'winnow'], ['NPC_TAKEJI',-103.41,-61.71,undefined],
+    ['NPC_YUKITSUZURI',-56.72,-277.95,'loom'], ['NPC_AIZO',275.36,-128.85,'loom'],
+    ['NPC_NAMISUKE',-118.72,122.28,'mend'], ['NPC_SUZUNA',-66.93,280.95,'scribe'],
+    ['NPC_YUKEMARU',120.14,-123.66,'tea'],
+  ]){
+    const person=world.people().find(n=>n.npcId===id),station=world.locate(person.locationId);
+    assert.ok(Math.hypot(station.x-x,station.z-z)<.15,id);
+    assert.equal(station.onWorkbench,Boolean(craft),id);
+    assert.equal(person.entity.craft,craft,id);
+  }
+});
 test('a surface swimmer cannot inspect the palace and a player below the gallery cannot inspect its upper floor',()=>{
   for(const s of world.stations.filter(s=>s.submerged)){
     visit(s);p.diveDepth=0;p.grounded=true;p.y=WATER_Y-.57;

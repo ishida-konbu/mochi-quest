@@ -12,7 +12,16 @@ import { createTravellerTalk } from './mystery-travellers.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { SCROLL_FAUNA } from './scroll-fauna.js';
 
-export const storyResidentIds = new Set(cast.map(person=>person.sourceBinding.legacyId).filter(Boolean));
+// The witnesses work at these specific benches in the published story. A
+// different candidate can otherwise win the distance tie when a forest moves.
+const workstations={
+  NPC_MASUME:{x:173,z:133}, NPC_YUKITSUZURI:{x:-59,z:-277},
+  NPC_NAMISUKE:{x:-120,z:124}, NPC_YUKEMARU:{x:118,z:-123},
+  NPC_AIZO:{x:274,z:-127}, NPC_SUZUNA:{x:-69,z:282},
+  NPC_TAKEJI:{x:-103.41011170836231,z:-61.7052111399616,facing:2.2087},
+};
+export const storyResidentPosts = new Map(cast.filter(p=>p.sourceBinding.legacyId)
+  .map(p=>[p.sourceBinding.legacyId,workstations[p.id]]));
 
 const hall = {
   LOC_KYO_REQUEST: [-3.1, COURT_GATE_Z + 3.5],
@@ -187,7 +196,7 @@ export function createMysteryWorld(gameState, mystery) {
       }
     }
     for (const n of gameState.nearbyNpcs) {
-      if (storyResidentIds.has(n.id) || n.mounted) continue;
+      if (storyResidentPosts.has(n.id) || n.mounted) continue;
       const submerged=n.y<-.8 && (n.seaResident || n.type==='fishfolk');
       add({entity:n, legacyId:n.id,locationId:null,label:speciesNames[n.type] || '里の住人',
         species:n.type,x:n.x,y:n.y,z:n.z},2.75,submerged);
