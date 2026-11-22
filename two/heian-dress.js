@@ -14,12 +14,18 @@ const styles=[
   ['#555b59','#a8a495','#87816e','#625c53',4],
 ];
 const cache=new Map();
-const monkKind=5, monkSleeves=[];
+const monkKind=5, monkSleeves=[], workingSleeves=new Map();
 export function monasticHabit(){
   return {body:ancientClothing(monkKind),sleeves:monkSleeves};
 }
-export function ancientClothing(kind){
-  if(cache.has(kind))return cache.get(kind);
+export function workingHabit(kind){
+  if(kind===monkKind)return monasticHabit();
+  const body=ancientClothing(kind,true);return {body,sleeves:workingSleeves.get(kind)};
+}
+export function ancientClothing(kind,separate=false){
+  const key=separate?kind+'-sleeves':kind;
+  if(cache.has(key))return cache.get(key);
+  if(separate)workingSleeves.set(kind,[]);
   const [outer,lining,accent,hakama,bolt]=styles[kind],p=new SilkPanels();
   const officer=kind===1,journey=kind===0,monk=kind===monkKind,hem=monk?.19:journey?.33:officer?.38:kind===3?.57:.46;
   // The split hakama has separate tubular legs. Six pleats in each leg catch the wash.
@@ -100,7 +106,7 @@ export function ancientClothing(kind){
     for(const band of [0,.96])p.cut(2,60,(u,v)=>kesa(u,band+v*.04,.007),4,'#c8ac77');
   }
   for(const side of [-1,1]){
-    const sleevePanels=monk?new SilkPanels():p;
+    const sleevePanels=monk||separate?new SilkPanels():p;
     const wide=officer||journey,forward=side===1?.212:.11;
     const wrist=kind===1&&side===1?.037:kind===3?-.052:0;
     const sleeve=(u,v)=>{
@@ -131,8 +137,9 @@ export function ancientClothing(kind){
         edge[1]*(1-.22*v)+.157*v,edge[2]-.025*v+.004*sin(a)*v];
     },4,accent);
     if(monk)monkSleeves.push(sleevePanels.finish());
+    else if(separate)workingSleeves.get(kind).push(sleevePanels.finish());
   }
-  const g=p.finish();cache.set(kind,g);return g;
+  const g=p.finish();cache.set(key,g);return g;
 }
 export function townHeadwear(b,kind){
   const hat=new SilkPanels(),travel=kind===0,ink=kind===4?'#827971':'#373638';

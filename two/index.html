@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <meta name="theme-color" content="#eae5d7" />
-    <title>Mochi Quest 2 ｜ 四季十七景巡り</title>
+    <title>十七景もち寄り帖 ｜ Mochi Quest 2</title>
     <meta
       name="description"
-      content="お餅になって、鳥獣戯画の里を歩く。京の大通りから海底の竜宮城まで、十七の名所がつながる三次元のオープンワールド。"
+      content="十二個の桜餅が、渡し舟を下りたら十一個。鳥獣戯画の十七景を旅して、人と道具に残る手掛かりから七つの謎を解く。"
     />
     <script>
       if (location.hash.startsWith('#mochi2=')) {
@@ -21,7 +21,7 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=audio-controls-1" />
+    <link rel="stylesheet" href="./game.css?v=audio-controls-1-mochiyori-1" />
     <script type="importmap">
       {
         "imports": {
@@ -105,17 +105,17 @@
           "./craftwork.js": "./craftwork.js?v=sakuragawa-yumeguri",
           "./crane-flight.js": "./crane-flight.js?v=3.3",
           "./dragon-flight.js": "./dragon-flight.js?v=ryu-emaki-1",
-          "./festival.js": "./festival.js?v=world-footings-1",
+          "./festival.js": "./festival.js?v=mochiyori-2",
           "./forest-forms.js": "./forest-forms.js?v=3.3",
           "./forest-mesh.js": "./forest-mesh.js?v=kyoto-groves-snow-1",
           "./bamboo-culms.js": "./bamboo-culms.js?v=kyoto-groves-snow-1",
           "./forest.js": "./forest.js?v=kyoto-groves-snow-1",
-          "./game.js": "./game.js?v=suzuri-roji-1",
+          "./game.js": "./game.js?v=mochiyori-2",
           "./handscroll-beasts.js": "./handscroll-beasts.js?v=3.3",
           "./inari-rain.js": "./inari-rain.js?v=inari-rain-1",
           "./inari-weather.js": "./inari-weather.js?v=inari-rain-1",
-          "./ink.js": "./ink.js?v=ryu-emaki-1",
-          "./interface.js": "./interface.js?v=surface-jump-1",
+          "./ink.js": "./ink.js?v=mochiyori-2",
+          "./interface.js": "./interface.js?v=mochiyori-2",
           "./kagami-fern.js": "./kagami-fern.js?v=6.3",
           "./kagami-mochibana.js": "./kagami-mochibana.js?v=6.5",
           "./mochibana-rice.js": "./mochibana-rice.js?v=6.5",
@@ -132,13 +132,13 @@
           "./mochi-model.js": "./mochi-model.js?v=yumeguri-shohou-1",
           "./mochi-pounding.js": "./mochi-pounding.js?v=3.3",
           "./ground-print.js": "./ground-print.js?v=emaki-landscape-1",
-          "./pigments.js": "./pigments.js?v=islet-escarpment-1",
+          "./pigments.js": "./pigments.js?v=mochiyori-2",
           "./places.js": "./places.js?v=sakuragawa-yumeguri",
           "./predator-trails.js": "./predator-trails.js?v=winter-coast-1",
           "./preparation.js": "./preparation.js?v=3.3",
           "./procession-view.js": "./procession-view.js?v=ryu-emaki-1",
           "./procession.js": "./procession.js?v=sakuragawa-yumeguri",
-          "./resident-art.js": "./resident-art.js?v=3.3",
+          "./resident-art.js": "./resident-art.js?v=mochiyori-2",
           "./scanned-stone.js": "./scanned-stone.js?v=sakuragawa-yumeguri",
           "./scroll-riders.js": "./scroll-riders.js?v=3.3",
           "./scroll-sculpt.js": "./scroll-sculpt.js?v=3.3",
@@ -163,8 +163,8 @@
           "./spring-water.js": "./spring-water.js?v=suzuri-roji-1",
           "./stone-water.js": "./stone-water.js?v=3.3",
           "./maple-crossing.js": "./maple-crossing.js?v=world-footings-1",
-          "./terrain.js": "./terrain.js?v=suzuri-roji-1",
-          "./trade-tools.js": "./trade-tools.js?v=3.3",
+          "./terrain.js": "./terrain.js?v=mochiyori-2",
+          "./trade-tools.js": "./trade-tools.js?v=mochiyori-2",
           "./turtle-art.js": "./turtle-art.js?v=3.3",
           "./village-paths.js": "./village-paths.js?v=kyoto-groves-snow-1",
           "./wake.js": "./wake.js?v=ryugu-goten-1",
@@ -195,10 +195,10 @@
           "./pilgrimage-pigment.js": "./pilgrimage-pigment.js?v=amimoto-yudono-1",
           "./ryugu-architecture.js": "./ryugu-architecture.js?v=ryugu-goten-1",
           "./ryugu-ink.js": "./ryugu-ink.js?v=ryugu-brush-1",
-          "./ryugu-performers.js": "./ryugu-performers.js?v=ryugu-turtle-face-1",
+          "./ryugu-performers.js": "./ryugu-performers.js?v=mochiyori-2",
           "./ryugu-residents.js": "./ryugu-residents.js?v=ryugu-brush-1",
           "./scroll-encounters.js": "./scroll-encounters.js?v=yuya-emaki-1",
-          "./scroll-paper.js": "./scroll-paper.js?v=winter-coast-1",
+          "./scroll-paper.js": "./scroll-paper.js?v=mochiyori-2",
           "./pilgrimage-cliffs.js": "./pilgrimage-cliffs.js?v=peach-gorge-1",
           "./civic-art.js": "./civic-art.js?v=6.0-otowa-1",
           "./geography.js": "./geography.js?v=winter-coast-1",
@@ -224,7 +224,7 @@
           "./scroll-fauna.js": "./scroll-fauna.js?v=ryugu-goten-1",
           "./wayside-baths.js": "./wayside-baths.js?v=amimoto-yudono-1",
           "./costume-distance.js": "./costume-distance.js?v=5.0",
-          "./world.js": "./world.js?v=amimoto-yudono-1",
+          "./world.js": "./world.js?v=mochiyori-2",
           "./court-patrol.js": "./court-patrol.js?v=kyoto-east-1",
           "./court-watch.js": "./court-watch.js?v=kyoto-foothills-1",
           "./flowering-peaches.js": "./flowering-peaches.js?v=painted-peach-426",
@@ -258,7 +258,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=audio-controls-1" />
+    <link rel="modulepreload" href="./main.js?v=audio-controls-1-mochiyori-1" />
   </head>
   <body>
     <main id="stage">
@@ -274,7 +274,7 @@
           ></a>
           <div class="wordmark">
             <span>Mochi Quest <b>2</b></span
-            ><small>鳥獣戯画　四季十七景巡り</small>
+            ><small>鳥獣戯画　十七景もち寄り帖</small>
           </div>
         </div>
         <div class="course" title="カメラの方角">
@@ -304,6 +304,10 @@
           </button>
         </nav>
       </header>
+      <button id="story-book" aria-label="頼まれごとと手掛かりの帳面を開く（J）" title="帳面を開く（J）">
+        <span class="book-stitch" aria-hidden="true"></span><small id="story-volume">第一話</small>
+        <strong id="story-title">十二個目の桜餅</strong><span class="book-turn" aria-hidden="true">›</span>
+      </button>
       <div id="target" hidden></div>
       <div class="place">
         <span><i></i>現在地</span>
@@ -359,8 +363,12 @@
         </div>
       </div>
       <div id="loading" role="status">
-        <img src="../assets/ui/seal.svg" alt="" /><span id="loading-copy">絵巻をひらいています…</span
-        ><a href="../" hidden id="load-back">作品選択へ</a>
+        <div class="loading-folio">
+          <p lang="en">MOCHI QUEST <b>II</b></p>
+          <h2>十七景もち寄り帖</h2>
+          <img src="./assets/world/mochiyori-frontispiece.webp" alt="桜の下で籠をのぞく兎と蛙" />
+          <span id="loading-copy">絵巻をひらいています…</span>
+        </div><a href="../" hidden id="load-back">作品選択へ</a>
       </div>
     </main>
     <section id="audio-settings" role="dialog" aria-labelledby="audio-settings-title" hidden>
@@ -401,7 +409,7 @@
         <div id="dialog-content"></div>
       </div>
     </dialog>
-    <script type="module" src="./main.js?v=audio-controls-1"></script>
+    <script type="module" src="./main.js?v=audio-controls-1-mochiyori-1"></script>
     <noscript>JavaScript を有効にして遊んでください。</noscript>
   </body>
 </html>

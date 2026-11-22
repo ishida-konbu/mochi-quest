@@ -48,7 +48,7 @@ export function meadowMaterial(art) {
     shader.uniforms.escarpmentInk = { value: art.escarpment };
     shader.vertexShader =
       'attribute float ridgeRelief; varying float vRidge; attribute float scrollAmount; varying float vScroll; varying vec3 inkPoint; attribute vec2 terrainMix; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
-      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRidge=ridgeRelief; vScroll=scrollAmount; inkPoint=position; vTerrainMix = terrainMix; vSeasons = seasons; incline=1.-abs(normal.y);');
+      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRidge=ridgeRelief; vScroll=.76+.24*scrollAmount; inkPoint=position; vTerrainMix = terrainMix; vSeasons = seasons; incline=1.-abs(normal.y);');
     shader.fragmentShader =
       groundPrintGLSL + 'uniform sampler2D fieldInk, woodFloor, bankStones, impressions, hillPainting, escarpmentInk; varying float vRidge; varying float vScroll; varying vec3 inkPoint; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
       shader.fragmentShader.replace(
@@ -109,7 +109,7 @@ export function meadowMaterial(art) {
           float stria=max(mark.g,bedding*.62)*cliff;
           float stroke=mix(max(grass,stria),mark.b,damp);
           float mottling=clamp(.55*luma+.10*pool+.09*woodland,0.,.55);
-          vec3 fieldWash=mix(vec3(.77,.72,.59),vec3(.41,.46,.32),mottling+.13*woodland);
+          vec3 fieldWash=mix(vec3(.87,.83,.72),vec3(.44,.48,.39),mottling+.17*woodland);
           fieldWash=mix(fieldWash,vec3(.57,.58,.51)*(.85+.17*pool),cliff*.83);
           fieldWash=mix(fieldWash,vec3(.63,.70,.64)*(.88+.21*pool),damp);
           // Scuffs in the earth curve around the wrestlers. Leave broken
@@ -128,7 +128,7 @@ export function meadowMaterial(art) {
           ground=mix(ground,fieldWash,vScroll*.88);
         }
         float exposed=(1.-.80*bank)*(1.-.91*snowCover)*smoothstep(-.8,1.3,inkPoint.y);
-        ground*=1.-exposed*(.75*brush+.09*(1.-wash));
+        ground*=1.-exposed*(.54*brush+.07*(1.-wash));
         if(vRidge>.001){
           // One painted sheet covers the three ranges. Every inked rock face
           // and patch of foliage stays registered to its own slope in all views.
@@ -221,8 +221,10 @@ export function trailMaterial(art) {
       float ochre=dot(pigment,vec3(.37,.51,.12));
       float worn=smoothstep(.08,.36,edge+.18*(wash-.5));
       vec3 dirt=mix(pigment,vec3(ochre*1.11,ochre*1.01,ochre*.88),.44);
-      dirt=mix(dirt,vec3(.54,.427,.30),.20+.18*worn);
-      diffuseColor.rgb*=dirt*(.91+.16*wash)+vec3(.042,.044,.040);
+      // Feet sweep the middle of the road clean. At the verge, broken
+      // wheel marks, pebbles and grass still carry the darker earth pigment.
+      dirt=mix(dirt,vec3(.72,.665,.54),.22+.34*worn);
+      diffuseColor.rgb*=dirt*(.93+.12*wash)+vec3(.044,.041,.033);
       vec3 snowPath=mix(vec3(.48,.56,.61),vec3(.77,.84,.88),smoothstep(.03,.48,ochre));
       diffuseColor.rgb=mix(diffuseColor.rgb,snowPath,snowCover*.94);
       diffuseColor.a *= fade*smoothstep(0.,1.,vMapUv.y);

@@ -13,6 +13,10 @@ import { loadRiceModel } from './mochi-model.js';
 import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS_KEY as settingsKey,
   transferURL, decodeTransfer, storeTransfer } from './journey-transfer.js';
 import { createGame } from './game.js';
+import { createStoryWorld, storyDestination } from './mochiyori-world.js';
+import { createPerformance } from './mochiyori-performance.js';
+import { createBookView } from './mochiyori-book.js';
+import { chapterLabel } from './mochiyori-progress.js';
 import { SPECIES } from './bestiary.js';
 import { SCROLL_FAUNA, faunaDrawing, FAUNA_SHEET } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
@@ -127,6 +131,7 @@ let nextFrame = 0,
   previous = 0,
   renderer,
   world,
+  storyWorld,
   meadow,
   actors,
   bathReflection,
@@ -209,9 +214,64 @@ function dispatchEvents() {
     }
   }
 }
+function nearbyAction() {
+  const original = game.nearest();
+  const encounter = storyWorld?.nearest(p);
+  return encounter && (!original || encounter.distance < original.distance + .3) ? encounter : original;
+}
+let cinemaViewer, localResidentName, localResident, residentVisibility;
+const performancePlayer = createPerformance({
+  scene,camera,dialog,
+  enter(site) {
+    localResidentName={rashomon:'羅生門の老婆餅',bell:'鐘を守る僧餅'}[site.place];
+    localResident=null;
+    storyWorld.visible(false);
+    actors.visible(false);
+    cinemaViewer = {...p,x:site.x,y:site.y,z:site.z,activity:null,mount:null};
+    sun.target.position.set(site.x,site.y,site.z);
+    applyClimateLights(hemisphere,sun,bounce,cinemaViewer,state.time);
+  },
+  draw(site,time) {
+    const t=state.time+time;
+    world.update(t,cinemaViewer,camera,state.time,state.bellStrike,state.inariWeather);
+    if(localResidentName){
+      if(!localResident){localResident=scene.getObjectByName(localResidentName);residentVisibility=localResident?.visible;}
+      if(localResident)localResident.visible=false;
+    }
+    meadow(t,cinemaViewer,camera);
+    bathReflection(cinemaViewer,t,camera);
+    ink.draw(scene,0,scrollCoverage(site.x,site.z),t);
+  },
+  leave() {
+    if(localResident)localResident.visible=residentVisibility;
+    localResident=null;localResidentName=null;
+    storyWorld.visible(true);actors.visible(true);
+    sun.target.position.set(p.x,p.y,p.z);
+    applyClimateLights(hemisphere,sun,bounce,p,state.time);
+    updateCamera(0,true);
+    world.update(state.time,p,camera,state.time,state.bellStrike,state.inariWeather);
+    meadow(state.time,p,camera);storyWorld.update(state.time,p);
+    drawScene();previous=0;updateHUD();
+  }
+});
+const notebook = createBookView({
+  dialog, body: $('dialog-content'), heading: $('dialog-title'), book: game.notebook,
+  save, perform: performancePlayer.start, here: () => storyWorld?.nearest(p)?.site,
+  invalidate: () => storyWorld?.invalidate(),
+  track(dest) {
+    trackedAnimal = trackedHabitat = goal = null;
+    persistSettings();
+    lastFocus = canvas;
+    dialog.close();
+    message(dest.name + 'に道しるべを付けました');
+    updateHUD();
+  }
+});
 function action(name) {
   if (dialog.open || photoMode) return;
   unlock();
+  const found = (name === 'interact' || name === 'story') && nearbyAction();
+  if (found?.site) { openDialog('story', found.site); return; }
   // As the traveller lies back, the toes drift towards the near corner
   // of the frame. The direction is saved with the rest of the journey.
   game.act(name, name === 'throw' ? actors?.hero.rotation.y : name==='interact' ? yaw+.77 : undefined);
@@ -413,7 +473,7 @@ $('send').onpointerdown = (e) => {
   e.preventDefault();
   action('throw');
 };
-$('context').onclick = () => action(game.nearest()?.action || 'interact');
+$('context').onclick = () => action(nearbyAction()?.action || 'interact');
 const bindings = new Set([
   'ArrowLeft',
   'ArrowRight',
@@ -429,6 +489,7 @@ const bindings = new Set([
   'KeyE',
   'KeyZ',
   'KeyM',
+  'KeyJ',
   'KeyH',
   'KeyP',
   'Escape',
@@ -445,7 +506,7 @@ document.addEventListener('keydown', (e) => {
   if (dialog.open) {
     if (
       !e.repeat &&
-      ((dialogKind === 'map' && e.code === 'KeyM') ||
+      ((dialogKind === 'story' && e.code === 'KeyJ') || (dialogKind === 'map' && e.code === 'KeyM') ||
         (dialogKind === 'guide' && ['KeyH', 'KeyP'].includes(e.code)))
     ) {
       e.preventDefault();
@@ -467,6 +528,7 @@ document.addEventListener('keydown', (e) => {
     togglePhoto();
     return;
   }
+  if (e.code === 'KeyJ' && !photoMode) { openDialog('story'); return; }
   if (e.code === 'KeyM') {
     openDialog('map');
     return;
@@ -661,7 +723,10 @@ function updateHUD() {
     $('effects').textContent = effectsText;
     lastEffects = effectsText;
   }
-  const near = game.nearest();
+  const chapter = game.notebook.current();
+  $('story-volume').textContent = chapter ? chapterLabel(game.notebook.index+1) + (game.notebook.index ? '　·　もち寄り帖' : '　·　旅控え') : '結び　·　もち寄り帖';
+  $('story-title').textContent = chapter?.title || '祭のあとの一服';
+  const near = nearbyAction();
   $('context').hidden = !near || dialog.open || photoMode;
   if (near) $('context').querySelector('span').textContent = near.label;
   const deg = -THREE.MathUtils.radToDeg(yaw),
@@ -674,7 +739,8 @@ function updateHUD() {
     el.classList.toggle('major', n % 3 === 0);
     el.firstElementChild.textContent = n % 3 === 0 ? directions[(((n / 3) % 8) + 8) % 8] : '';
   });
-  const dest = trackedAnimal || REGIONS.find(r => r.id === goal);
+  const targetSite = storyDestination(game.notebook);
+  const dest = targetSite || trackedAnimal || REGIONS.find(r => r.id === goal);
   $('target').hidden = !dest;
   if (dest) {
     const dx = wrapDelta(dest.x - p.x),
@@ -683,15 +749,16 @@ function updateHUD() {
     const pointer = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][
       ((Math.round(heading / (Math.PI / 4)) % 8) + 8) % 8
     ];
-    const name = trackedAnimal ? speciesNames[dest.type] : dest.name;
-    const height = trackedAnimal ? trackedAnimal.y - p.y : dest.id === 'ryugu' ? Math.min(0,terrainHeight(dest.x,dest.z)+1-p.y) : 0;
+    const name = targetSite ? targetSite.name : trackedAnimal ? speciesNames[dest.type] : dest.name;
+    const height = targetSite ? targetSite.y - p.y : trackedAnimal ? trackedAnimal.y - p.y : dest.id === 'ryugu' ? Math.min(0,terrainHeight(dest.x,dest.z)+1-p.y) : 0;
     const elevation = Math.abs(height) > 2 ? '　' + (height > 0 ? '上 ' : '下 ') + Math.round(Math.abs(height)) + ' m' : '';
     $('target').textContent = pointer + '　' + name + '　' + Math.round(Math.hypot(dx, dz)) + ' m' + elevation;
   }
-  if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, trackedAnimal);
+  if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, targetSite || trackedAnimal);
 }
-function openDialog(kind) {
+function openDialog(kind, site = null) {
   if (!renderer || dialog.open) return;
+  if (kind === 'story') unlock();
   clearInput();
   save();
   audioSettings.close();
@@ -699,8 +766,9 @@ function openDialog(kind) {
   dialogKind = kind;
   $('dialog-title').textContent = kind === 'map' ? '十七景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
   dialog.showModal();
+  if (kind === 'story') { notebook.open(site); return; }
   if (kind === 'map') {
-    selectedPlace = goal || state.regionId;
+    selectedPlace = storyDestination(game.notebook)?.region || goal || state.regionId;
     jumpPin = null;
     mapDialog();
   } else if (kind === 'journal') journalDialog();
@@ -751,6 +819,7 @@ function mapDialog() {
   body.querySelector('.actions').append(bookLink);
   $('set-goal').onclick = () => {
     trackedAnimal = trackedHabitat = null;
+    game.notebook.track(null);
     goal = selectedPlace;
     lastFocus = canvas;
     persistSettings();
@@ -758,8 +827,9 @@ function mapDialog() {
     updateHUD();
   };
   $('local-animal').onclick=()=>trackDelivery(nearestUndelivered(undefined,selectedPlace),selectedPlace);
-  $('clear-goal').hidden = !goal && !trackedAnimal;
+  $('clear-goal').hidden = !goal && !trackedAnimal && !game.notebook.pin;
   $('clear-goal').onclick = () => {
+    game.notebook.track(null);
     trackedAnimal = trackedHabitat = null;
     goal = null;
     lastFocus = canvas;
@@ -771,6 +841,7 @@ function mapDialog() {
 }
 function trackDelivery(animal, habitat=null) {
   if(!animal) return;
+  game.notebook.track(null);
   trackedAnimal=animal; trackedHabitat=habitat; goal=null;
   persistSettings();lastFocus=canvas;dialog.close();updateHUD();
 }
@@ -823,10 +894,11 @@ function journalDialog() {
 }
 function redrawAtlas() {
   const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
-  const name = trackedAnimal ? speciesNames[trackedAnimal.type] : '';
+  const storyTarget = storyDestination(game.notebook);
+  const name = storyTarget?.name || (trackedAnimal ? speciesNames[trackedAnimal.type] : '');
   const atlas = $('atlas');
-  atlas.setAttribute('aria-label', '十七の名所、主湯と脇湯、茶屋と小屋、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
-  drawMap(atlas,state,yaw,selectedPlace,true,point,trackedAnimal,name);
+  atlas.setAttribute('aria-label', '十七の名所、主湯と脇湯、茶屋と小屋、お餅の現在地と選んだ名所の自転車ポート' + (storyTarget ? '、調査先の' + name : name ? '、配達先の' + name + 'の現在地' : ''));
+  drawMap(atlas,state,yaw,selectedPlace,true,point,storyTarget || trackedAnimal,name);
 }
 function directions(from,to,originLabel) {
   const dx=wrapDelta(to.x-from.x),dz=wrapDelta(to.z-from.z);
@@ -916,6 +988,7 @@ function helpDialog(tab) {
 $('map').onclick = $('mini-button').onclick = () => openDialog('map');
 $('journal').onclick = () => openDialog('journal');
 $('guide').onclick = () => openDialog('guide');
+$('story-book').onclick = () => openDialog('story');
 $('dismiss').onclick = () => dialog.close();
 dialog.addEventListener('click', (e) => {
   if (e.target === dialog) dialog.close();
@@ -923,6 +996,7 @@ dialog.addEventListener('click', (e) => {
 dialog.addEventListener('close', () => {
   if (dialog.open) return;
   previous = 0;
+  if (dialogKind === 'story') { performancePlayer.close(); notebook.close(); }
   dialogKind = '';
   (lastFocus?.tagName === 'BUTTON' ? lastFocus : canvas).focus({ preventScroll: true });
 });
@@ -968,6 +1042,7 @@ function frame(now) {
   const paused = document.hidden || dialog.open || contextLost;
   audio.setPaused(paused);
   if (paused) {
+    if (performancePlayer.active && !document.hidden && !contextLost) performancePlayer.frame(now);
     previous = 0;
     return;
   }
@@ -1013,6 +1088,7 @@ function frame(now) {
   applyClimateLights(hemisphere, sun, bounce, p, sceneTime);
   wake(p, sceneTime);
   audio.updateWorld(state, sceneTime, yaw, photoMode);
+  storyWorld.update(sceneTime, p);
   world.update(sceneTime, p, camera, state.time, state.bellStrike, state.inariWeather);
   meadow(sceneTime, p, camera);
   // Keep the photographic pose alive while the travel clock is paused.
@@ -1082,6 +1158,8 @@ async function boot() {
       loadRiceModel(), finishInSlices(prepareWorld(scene)), preloadBeastCoats(), loadMapPaper(),
     ]);
     world = landscape;
+    storyWorld = createStoryWorld(scene, game.notebook, game.storyCollisions);
+    storyWorld.update(state.time,p);
     meadow = createMeadow(scene, state.objects, coarse, state.npcs);
     wake = createWake(scene);
     sun.target.position.set(p.x,p.y,p.z);

@@ -4,6 +4,10 @@ import { peachHazeShader, peachHazeUniforms, updatePeachHaze } from './peach-haz
 // Work in linear light until the last pass, so a little reflected sun on the
 // wet dough can be brighter than flour without turning the whole face white.
 export function createInkPass(renderer, camera) {
+  // Use the same fine grain as the margin of the journal; a stationary sheet
+  // avoids crawling noise on moving silhouettes and during camera turns.
+  const paper = new THREE.TextureLoader().load(new URL('../assets/ui/paper.png', import.meta.url).href);
+  paper.wrapS = paper.wrapT = THREE.RepeatWrapping;
   const hdr = renderer.extensions.has('EXT_color_buffer_float');
   const target = new THREE.WebGLRenderTarget(1, 1, {
     minFilter: THREE.LinearFilter,
@@ -19,6 +23,8 @@ export function createInkPass(renderer, camera) {
     uniforms: {
       ...peachHazeUniforms(),
       painted: { value: target.texture },
+      paperFibre: { value: paper },
+      daylight: { value: 1 },
       depthMap: { value: target.depthTexture },
       pixel: { value: new THREE.Vector2() },
       lens: { value: new THREE.Vector2() },
@@ -32,9 +38,9 @@ export function createInkPass(renderer, camera) {
       void main() { paperUV=uv; gl_Position=vec4(position.xy,0.,1.); }`,
     fragmentShader: `
       varying vec2 paperUV;
-      uniform sampler2D painted,depthMap;
+      uniform sampler2D painted,depthMap,paperFibre;
       uniform vec2 pixel,lens,clip;
-      uniform float focus,scroll,inkFogDensity;
+      uniform float focus,scroll,inkFogDensity,daylight;
       ${peachHazeShader}
       float meters(vec2 uv) {
         float d = texture2D(depthMap,uv).r;
@@ -88,21 +94,6 @@ export function createInkPass(renderer, camera) {
                    +occlusion(uv+stepUV*vec2(-.31,-.28),p,n);
           c*=exp(-mix(.235,.077,portrait)*occ*(1.-smoothstep(18.,48.,z)));
         }
-        if(scroll>.001 && z<clip.y*.995) {
-          float l=dot(c,vec3(.2126,.7152,.0722));
-          float lit=smoothstep(.055,.32,l);
-          // Thin washes leave the paper luminous. Keep saturated pigments
-          // in the peach buds, red torii, deep water and the hillside fires.
-          float chroma=max(max(c.r,c.g),c.b)-min(min(c.r,c.g),c.b);
-          vec3 lampblack=mix(vec3(l)*vec3(1.025,1.,.958),c,.68+.27*smoothstep(.05,.43,chroma));
-          vec3 lifted=lampblack+vec3(.076,.066,.049)*lit*(1.-smoothstep(.55,.95,l));
-          float line=max(ridge*.91,brush*.66)*(1.-smoothstep(36.,168.,z));
-          // Distance fog has already mixed the surface into the sky.
-          // Lift only its surviving pigment, or fully fogged water cuts a
-          // straight, pale strip across the sky at the far clipping plane.
-          float fogPath=inkFogDensity*z;
-          c=mix(c,lifted*(1.-.64*line*inkVisibility),scroll*exp(-fogPath*fogPath));
-        }
         // The light portrait blur leaves small, distant ink silhouettes legible.
         if (focus>0. && z>focus+1.) {
           float blur=1.3*smoothstep(focus+1.,focus+16.,z);
@@ -117,6 +108,25 @@ export function createInkPass(renderer, camera) {
           c=sum/count;
         }
         c=valleyMist(c,viewPoint(uv,1.),z);
+        // Separate the drawing from the underlying wash. Reserved highlights
+        // take the paper tone; only deep pools and contours carry dense ink.
+        float paperLight = dot(c,vec3(.2126,.7152,.0722));
+        float lean = smoothstep(.012,.31,paperLight) * (1.-smoothstep(.66,1.24,paperLight));
+        float wash = paperLight + (.075 + .192*daylight) * lean;
+        vec3 stock = mix(vec3(.99,1.,1.02),vec3(1.045,1.015,.934),daylight);
+        float chroma = max(max(c.r,c.g),c.b) - min(min(c.r,c.g),c.b);
+        // A pale distant wash gives way to the actual dye, glaze and lacquer at hand.
+        float dye = smoothstep(.11,.54,chroma / (.038 + max(max(c.r,c.g),c.b)));
+        float closeDye = 1.-smoothstep(12.,78.,z);
+        vec3 drawing = wash*stock + (c-vec3(paperLight))*(.16+.21*dye+.55*dye*closeDye);
+        vec3 glaze = c * (1. + .22*(wash-paperLight)/max(.018,paperLight));
+        drawing=mix(drawing,glaze,.65*dye*closeDye);
+        float fibre = texture2D(paperFibre,uv/(224.*pixel)).a;
+        float fogPath = inkFogDensity*z;
+        float stroke = max(ridge*.91,brush*.66) * (1.-smoothstep(36.,168.,z));
+        float pressure = (.73+.09*scroll)*stroke*inkVisibility*exp(-fogPath*fogPath);
+        drawing *= 1. - pressure + pressure*3.*fibre;
+        c = drawing*(1.-.53*fibre);
         // A gentle photographic shoulder preserves warm highlights in bright silk
         // and water, while leaving ordinary paper and ink at their original values.
         const float knee=.70;
@@ -154,12 +164,15 @@ export function createInkPass(renderer, camera) {
       target.setSize(size.x, size.y);
       const w = Math.min(1.35, Math.max(1, renderer.getPixelRatio()));
       material.uniforms.pixel.value.set(w / size.x, w / size.y);
-      const halfFov = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
-      material.uniforms.lens.value.set(camera.aspect * halfFov, halfFov);
     },
     draw(scene, focusDistance = 0, scroll = 0, time = 0) {
+      const halfFov = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+      material.uniforms.lens.value.set(camera.aspect * halfFov, halfFov);
+      material.uniforms.clip.value.set(camera.near,camera.far);
       camera.updateWorldMatrix(true,false);
       updatePeachHaze(material.uniforms,camera,scene.fog,time);
+      const light = scene.fog?.color;
+      material.uniforms.daylight.value = light ? THREE.MathUtils.smoothstep(light.g, .085, .46) : 1;
       material.uniforms.scroll.value = scroll;
       material.uniforms.inkFogDensity.value = scene.fog?.density || 0;
       material.uniforms.focus.value = focusDistance;

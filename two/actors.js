@@ -613,7 +613,23 @@ function armLimb(parent, s, kind, role) {
       30,
       kind,
     );
-    for (let k = -1; k <= 1; k++) {
+    if (frogKind && robed) {
+      // Four foredigits. The short inner digit opposes the other three under
+      // the workpiece. Narrow knuckles and expanded terminal discs read in ink.
+      for(let k=0;k<4;k++){
+        const spread=[-.068,-.026,.025,.074][k]*s;
+        const length=[.071,.131,.151,.109][k];
+        const x=paw[0]+spread*.42,y=paw[1],z=paw[2]+.019;
+        const fingertip=[paw[0]+spread,y-.011-(k===0?.017:0),z+length];
+        inkVolume(b,[[x,y,z,.014,.012],
+          [x+spread*.20,y+.013,z+length*.37,.012,.009],
+          [x+spread*.30,y+.009,z+length*.62,.013,.008],
+          [x+spread*.48,y-.005,z+length*.79,.009,.0065],
+          [...fingertip,.014,.007],
+          [fingertip[0]+spread*.04,fingertip[1]-.002,fingertip[2]+.011,.002,.0015]],skin,21);
+        b.stroke([[x+spread*.30-.006,y+.017,z+length*.585],[x+spread*.30,y+.018,z+length*.61],[x+spread*.30+.005,y+.016,z+length*.635]],.0017,'#796f52',5,4);
+      }
+    } else for (let k = -1; k <= 1; k++) {
       const start = [paw[0] + k * 0.023, paw[1], paw[2] + 0.025];
       const end = [
         paw[0] + k * (frogKind ? 0.085 : 0.029),
@@ -1947,5 +1963,5 @@ export function createActors(scene, renderer) {
         else root.remove(m);
       }
   }
-  return { update, prepare, hero: h.root };
+  return { update, prepare, hero: h.root, visible(value) { root.visible=value; } };
 }

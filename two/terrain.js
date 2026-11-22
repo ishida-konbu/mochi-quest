@@ -22,6 +22,7 @@ import { snowBathLip } from './main-bath-outlines.js';
 import { springGroundSurvey } from './spring-ground-survey.js';
 import { COURT, RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
+import { FERRY_CURTAIN, ferryCurtainPoint } from './festival.js';
 import { CEDAR_GROVES, CLIFF_PINES, PEACH_TREES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS, freightRoadEarthwork } from './trade-routes.js';
 import { STREET_BEATS } from './street-watch-layout.js';
@@ -1309,6 +1310,10 @@ function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0, bottom = 
 for(const part of PALACE_SHELL) {
   const {x,z}=palacePoint(part.u,part.v);
   putSolid(x,z,part.d/2,part.w/2,0,PALACE_BED+part.top,part.kind,part.kind!=='wall',0,PALACE_BED+part.bottom);
+}
+for (const side of [-1,1]) {
+  const [x,z] = ferryCurtainPoint(side * FERRY_CURTAIN.span / 2);
+  putSolid(x,z,.056,.056,0,terrainHeight(FERRY_CURTAIN.x,FERRY_CURTAIN.z)+FERRY_CURTAIN.height+.19,'oval',false);
 }
 for(const [u,v,y,scale] of COURT_CANDLES){
   const base=terrainHeight(COURT.x,COURT.z);

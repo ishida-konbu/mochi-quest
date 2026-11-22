@@ -37,6 +37,7 @@ import { winterSurfGLSL } from './winter-surf.js';
 import { winterPagodaRoof } from './winter-coast.js';
 import { POUNDING } from './festival.js';
 import { createMochiPounding } from './actors.js';
+import { dressFerryShop } from './ferry-curtain.js';
 import { dressPlaces } from './places.js';
 import { BOATS, HULL_HEIGHT, HULL_DRAFT, waterWaveGLSL, hullWaterGLSL } from './shoreline.js';
 import { createAtmosphere } from './atmosphere.js';
@@ -2003,6 +2004,7 @@ export function* prepareWorld(scene) {
   hillsideStairs(painter);
   roadsideInscriptions(painter);
   stampStations(painter);
+  dressFerryShop(painter, terrainHeight);
   details(painter);
   yield;
   yield* woodland(painter, art);

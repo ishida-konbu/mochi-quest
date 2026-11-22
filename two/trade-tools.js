@@ -1,3 +1,4 @@
+import { inkVolume } from './scroll-sculpt.js';
 // Coordinates are relative to the gripping paw. These single-batch props
 // follow the wrists when a musician plays or a gardener sweeps.
 const cane='#a7875c', binding='#665442', reed='#c9b17b', ink='#514940';
@@ -140,12 +141,50 @@ function fishnet(b) {
   }
   b.rod([-.11,0,0],[.11,0,0],.011,binding);
 }
+// The ferryman's oar has a flat, willow-shaped blade; the baker's paddle
+// has a short, broad working face. Both are held at the balance point.
+function paddle(b,long){
+  const k=long?1:.43;
+  inkVolume(b,[[0,-.82*k,.025,.003,.002],[0,-.76*k,.025,.073,.011],
+    [0,-.64*k,.02,.087,.016],[0,-.38*k,.012,.061,.013],[0,-.24*k,0,.020,.015],
+    [0,.04,0,.018,.019],[.016,.71*k,-.015,.014,.015],[.016,.74*k,-.015,.013,.013]],cane,28);
+  b.stroke([[0,-.74*k,.036],[0,-.53*k,.04],[0,-.31*k,.028],[0,-.19*k,.019]],.003,binding);
+}
+function pestle(b){
+  b.rod([0,-.24,0],[.004,.42,0],.018,cane,.024);
+  inkVolume(b,[[0,.428,-.21,.006,.006],[0,.428,-.206,.058,.058],[0,.429,-.172,.068,.067],
+    [0,.429,.175,.073,.074],[0,.428,.202,.069,.070],[0,.428,.205,.006,.006]],cane,22);
+}
+function cordBundle(b){
+  for(let j=0;j<5;j++){
+    const x=(j-2)*.012;
+    b.stroke([[x,.016,0],[x+.093,-.045,0],[x+.082,-.19,.009],[x,-.253,.023],
+      [x-.070,-.156,.018],[x-.068,-.059,0],[x,.016,0]],.0065,j%2?reed:cane,16);
+  }
+  b.stroke([[-.057,-.054,-.017],[0,-.047,.025],[.069,-.054,.013]],.009,binding);
+}
+function servingBoard(b) {
+  b.box(0,.016,0,.30,.029,.19,cane);
+  for(const x of [-.072,.070])b.ball(x,.05,.003,.052,.028,.047,'#e4d6ba');
+}
+function notebook(b){
+  for(let i=0;i<4;i++)b.box(.018,.039-i*.006,0,.209,.009,.136,i%2?'#dfd1ac':'#d6c39c',[-.25,0,0]);
+  b.box(.018,.046,0,.219,.010,.144,'#7c8984',[-.25,0,0]);
+  for(const z of [-.046,-.014,.019,.048])b.stroke([[-.063,.042+z*.25,z],[-.083,.048+z*.25,z],[-.094,.036+z*.25,z],[-.088,.014+z*.25,z]],.0035,'#c3b48d');
+}
 const tools = {
+  feast:[servingBoard], ferry:[b=>paddle(b,true)], bake:[b=>paddle(b,false),servingBoard], pound:[pestle],
+  wrap:[cordBundle,shuttle], account:[notebook], guide:[b=>paddle(b,true)],
   loom:[hank,shuttle], winnow:[winnow], ladle:[ladle,bowl], mend:[shuttle,fishnet],
   fan:[fan], lantern:[lantern], scribe:[scribe,letter], tea:[tea], rake:[b=>fieldTool(b,false)],
   broom:[b=>fieldTool(b,true)], fisher:[fisher,basket], flute:[flute],
   drum:[b=>b.rod([-.084,-.07,0],[.112,.138,0],.012,cane,.022),littleDrum], flowers:[flowers,basket]
 };
+export function drawTradeTool(role,index,batch){
+  const make=tools[role]?.[index];
+  if(!make)throw new RangeError("Unknown trade tool "+role+"/"+index);
+  make(batch);
+}
 export function dressArtisan(limbs, role, model, batch) {
   tools[role].forEach((draw,index)=>{
     const prop=model('craft-'+role+index,root=>batch(root,draw));
@@ -160,6 +199,7 @@ export const WORKSHOP_TOOLS=['loom','winnow','ladle','mend'];
 const rhythms = {
   flute:2.15, fan:2.28, lantern:1.5, scribe:2.85, tea:1.4, rake:1.95, fisher:1.18,
   drum:4.15, flowers:1.75, broom:2.38, loom:2.88, winnow:2.15, ladle:1.7, mend:2.55,
+  feast:.83, ferry:1.1, bake:1.5, pound:1.1, wrap:1.7, account:1.15, guide:1,
   porter:4.45, wander:4.45, sumo:.82
 };
 export const workRate = craft => rhythms[craft];
@@ -189,6 +229,24 @@ export function poseArtisan(limbs,n,t) {
       body.set(.32+.07*turn,.11*beat,-.035);
       head.set(.28+.09*turn,.14*beat,-.08);
       break;
+    case 'ferry':
+    case 'guide':
+      hand.set(-.24-.22*rise,-.17,.08+.09*turn);
+      body.x=.08+.07*rise;head.y=.12*turn;
+      break;
+    case 'bake':
+    case 'pound':
+      hand.set(-.44-.39*rise,-.21,.15+.075*turn);other.set(-.59,.42,-.18);
+      body.x=.10+.07*turn;
+      break;
+    case 'feast':
+      hand.set(-.37+.075*rise,-.30,.04);other.set(-.13,.16,-.08);
+      body.x=.035;head.y=.12*turn;head.x=.06*rise;
+      break;
+    case 'account':
+      hand.set(-.63,-.36,.14+.025*turn);body.x=.055;head.x=.08+.08*rise;
+      break;
+    case 'wrap':
     case 'mend':
       hand.set(-.48+.27*turn, -.65+.43*beat,.13+.24*Math.sin(phase*2));
       other.set(-.54-.075*turn,.52-.12*beat,-.15);

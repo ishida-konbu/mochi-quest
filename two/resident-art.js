@@ -98,15 +98,13 @@ function addSurface(b, positions, indices, shade) {
   geometry.dispose();
 }
 
-function robeShape(b, kind, working = false) {
+export function residentRobeSurface(kind) {
   const frog = kind === 'frog',
     width = frog ? [0.37, 0.368, 0.34, 0.33, 0.275, 0.207] : [0.3, 0.285, 0.273, 0.26, 0.215, 0.16];
   const depth = frog
     ? [0.31, 0.345, 0.328, 0.294, 0.224, 0.163]
     : [0.276, 0.282, 0.277, 0.256, 0.206, 0.143];
-  const dye = working ? (frog ? '#aaa998' : '#829098') : frog ? '#c4b59c' : '#dec7ac';
-  const thread = working ? '#c2ba9e' : '#a28b65';
-  function cloth(a, t, offset = 0) {
+  return function cloth(a, t, offset = 0) {
     const i = Math.min(4, Math.floor(t * 5)),
       f = t * 5 - i;
     const r = THREE.MathUtils.lerp(width[i], width[i + 1], f),
@@ -120,7 +118,13 @@ function robeShape(b, kind, working = false) {
       (frog ? 0.532 : 0.557) + (frog ? 0.659 : 0.82) * t + hem - neck,
       (frog ? 0.036 : 0.012) + 0.075 * t + Math.cos(a) * (d + fold + offset),
     ];
-  }
+  };
+}
+
+function robeShape(b, kind, working = false) {
+  const frog = kind === 'frog', cloth=residentRobeSurface(kind);
+  const dye = working ? (frog ? '#aaa998' : '#829098') : frog ? '#c4b59c' : '#dec7ac';
+  const thread = working ? '#c2ba9e' : '#a28b65';
   function panel(where, low, high, shade, count = 48) {
     const pts = [],
       ix = [];

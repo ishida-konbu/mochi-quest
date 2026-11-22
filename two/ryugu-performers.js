@@ -237,8 +237,8 @@ function flipper(f,s,back=false){
 function turtle() {
   const rigs=[part('turtle-shell',[0,.85,-.14],turtleShell),turtleHead()];
   for(const s of [-1,1]){
-    rigs.push(part(s<0?'turtle-left':'turtle-right',[s*.34,1.02,.084],f=>{
-      flipper(f,s);
+    rigs.push(part(s<0?'turtle-left':'turtle-right',[s*.34,1.02,.084],f=>flipper(f,s)));
+    rigs.push(part(s<0?'turtle-stick-left':'turtle-stick-right',[s*.34,1.02,.084],f=>{
       brush(f,[[s*.415,-.061,.37],[s*.43,.28,.50]],[.021,.014],umber);
       f.oval([s*.433,.303,.507],[.042,.069,.045],PAPER,[-.39,0,0]);
     }));
@@ -367,6 +367,8 @@ const armGestures=[
   [[0,0,0],[-.189,-.217,-.013],[-.311,-.451,.045],[-.415,-.621,.14],[-.577,-.649,.235],[-.701,-.585,.218],[-.739,-.478,.158],[-.683,-.445,.132]],
   [[0,0,0],[-.142,-.173,.109],[-.308,-.264,.267],[-.448,-.259,.38],[-.478,-.181,.43],[-.437,-.145,.47],[-.396,-.151,.467]],
 ];
+// The close-study skeleton follows the exact control points of the sculpted arm.
+export function seaArmSpine(index){return armGestures[index].map(p=>p.slice());}
 function sculptArm(f,index) {
   const curve=new THREE.CatmullRomCurve3(armGestures[index].map(p=>new THREE.Vector3(...p)));
   const steps=36,frames=curve.computeFrenetFrames(steps,false);
@@ -405,8 +407,8 @@ function octopus() {
   const rigs=[part('octopus-mantle',[0,.86,0],octopusMantle)];
   for(let i=0;i<8;i++){
     const holdsBrush=i===1,holdsPaper=i===7;
-    rigs.push(part('octopus-arm-'+i,armRoot(i),f=>{
-      sculptArm(f,i);
+    rigs.push(part('octopus-arm-'+i,armRoot(i),f=>sculptArm(f,i)));
+    if(holdsBrush||holdsPaper)rigs.push(part(holdsBrush?'octopus-brush':'octopus-paper',armRoot(i),f=>{
       if(holdsBrush){
         f.stroke([[.41,.055,.17],[.37,.48,.165],[.32,.87,.14]],[.034,.039,.037],WARM);
         f.stroke([[.32,.865,.14],[.304,.934,.137]],.049,INK);
@@ -455,7 +457,7 @@ const nib=new THREE.Vector3(.213,1.155,.135),nibDirection=nib.clone().normalize(
 const scratchTip=new THREE.Vector3(),touchPaper=new THREE.Quaternion();
 const readyBrush=new THREE.Quaternion().setFromEuler(new THREE.Euler(-.18,0,.15));
 function movement(rig,n,t,d) {
-  const beat=n.beat,accent=n.gesture,answer=Math.min(1,(n.flash||0)*2.5),name=rig.name;
+  const beat=n.beat,accent=n.gesture,answer=Math.min(1,(n.flash||0)*2.5),name=rig.name.replace('turtle-stick-','turtle-').replace('octopus-brush','octopus-arm-1').replace('octopus-paper','octopus-arm-7');
   d.position.fromArray(rig.pivot);d.scale.setScalar(1);d.rotation.set(0,0,0);
   if(name==='letter'){
     d.position.y+=.21*(1-answer);d.rotation.z=-.18+.08*sin(t*6);
@@ -505,6 +507,20 @@ function movement(rig,n,t,d) {
     const i=Number(name.slice(-1));
     d.rotation.z=.16*sin(beat+i*1.1);d.rotation.x=.09*cos(beat*.81+i);d.rotation.y=.07*cos(beat+i*.6);
   }
+}
+const soloParts=new Map();
+export function makeSeaSolo(type,root,phase){
+  if(!soloParts.has(type))soloParts.set(type,({bream,seaTurtle:turtle,octopus})[type]());
+  const rigs=soloParts.get(type).map(rig=>{
+    const mesh=new THREE.Mesh(rig.geometry,rig.material||pigment());
+    mesh.name=rig.name;mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);return {rig,mesh};
+  });
+  const resident={phase,flash:0,gesture:0,beat:0};
+  return (time,engaged)=>{
+    resident.gesture=engaged?.78:.35;
+    resident.beat=time*(type==='seaTurtle'?3.9:type==='bream'?2.15:1.79)+phase;
+    for(const {rig,mesh} of rigs)movement(rig,resident,time,mesh);
+  };
 }
 export function createRyuguPerformers(scene) {
   const root=new THREE.Group();root.name='竜宮の舞楽と書会';scene.add(root);

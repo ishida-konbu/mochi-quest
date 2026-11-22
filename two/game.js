@@ -1,3 +1,5 @@
+import { createStoryCollisions } from './story-collisions.js';
+import { createNotebook } from './mochiyori-progress.js';
 import { onSuzuriLand,okaFront } from './suzuri-basin-plan.js';
 import { tideRise } from './pilgrim-bathing-plan.js';
 import { SAZAE_SPRING } from './ryugu-shell-bath.js';
@@ -327,8 +329,11 @@ export function createGame(snapshot = null) {
   let turtleLeg = 0;
   let turtlePath = null, recoverRider = false;
   const ambientContact = createAmbientContacts(), pickupContact=createPickupContacts(objects);
-  function propOverlap(x,z,y,height,radius) {
-    return Math.max(pickupContact(x,z,y,height,radius),Number(ambientContact(x,z,y,height,radius,state.time,player,true)));
+  const storyCollisions = createStoryCollisions();
+  const noticeContact = {};
+  function propOverlap(x,z,y,height,radius,contact) {
+    return Math.max(storyCollisions.penetration(x,z,y,height,radius,contact),
+      pickupContact(x,z,y,height,radius),Number(ambientContact(x,z,y,height,radius,state.time,player,true)));
   }
   let bumped = null;
   const contactNormal={}, hitNormal={}, fromBody={};
@@ -892,8 +897,10 @@ export function createGame(snapshot = null) {
         }
         const feet=shot.y-.045;
         const ship=voyage.sample(x,z,feet,.045,.09);
-        if(staticVolumeAt(x,z,feet,.045,.09) || propOverlap(x,z,feet,.09,.045) || ship &&
+        noticeContact.person=null;
+        if(staticVolumeAt(x,z,feet,.045,.09) || propOverlap(x,z,feet,.09,.045,noticeContact) || ship &&
           (ship.solid>feet || ship.floor>=feet && ship.floor<=feet+.09 || ship.ceiling<=feet+.09)) {
+          if(noticeContact.person){message(noticeContact.person+'が三条通知を受け取った。');sound('pickup');}
           stopped=true;hit=null;break;
         }
       }
@@ -1283,7 +1290,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 12, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 12, notebook: notebook.save(), flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: inventory.map(o => o?.cooldown ?? 0),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -1491,6 +1498,7 @@ export function createGame(snapshot = null) {
     return true;
   }
   const restored = restore(snapshot) === true;
+  const notebook = createNotebook(restored ? snapshot.notebook : null);
   // Older scrolls have no sky seed. Give their existing journey a stable
   // migration, so a second import opens onto exactly the same stretch of sky.
   const savedSeed=restored ? snapshot.flightSeed : null;
@@ -1507,5 +1515,5 @@ export function createGame(snapshot = null) {
   }
   updateHareRider(riverRider,state.time);
   refreshCrowd();
-  return { state, act, step, nearest, teleport, save, restored, voyage };
+  return { state, act, step, nearest, teleport, save, restored, voyage, notebook, storyCollisions };
 }
