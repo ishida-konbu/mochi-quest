@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createGame} from '../two/game.js';
 import {moveWildlife, kirinFlight, dragonVisible} from '../two/bestiary.js';
+import {canopyHeight} from '../two/village-paths.js';
 import {dragonWave, walkingScore} from '../two/animal-motion.js';
 import {terrainHeight, groundHeight, WATER_Y, REGIONS} from '../two/terrain.js';
 
@@ -22,9 +23,10 @@ test('flight strata span each district and a distant crane moves on every tick',
 });
 
 test('a crane at the outer turn of its ellipse streams across the player cell boundary',()=>{
-  const game=createGame(),crane=game.state.npcs.find(n=>n.id==='bird-531'),p=game.state.player;
+  const game=createGame(),crane=game.state.npcs.find(n=>n.type==='bird'),p=game.state.player;
   // At t=12 the crane is inside the view radius although its perch lies
   // 158 metres from the next cell centre. Crossing x=96 must not drop it.
+  Object.assign(crane,{homeX:-46,radius:14,phase:-Math.PI/2,cruise:Math.PI/12});
   game.state.time=12;
   moveWildlife(crane,game.state.time);
   for(const x of [95.95,96.05,97.95]) {
@@ -65,7 +67,8 @@ test('the kirin wanders through fresh horizontal and vertical waypoints above th
     kirinFlight(n,i*.2,point);
     const ground=Math.max(WATER_Y,terrainHeight(point.x,point.z));
     const h=point.y-ground;
-    assert.ok(h>2 && h<12,`kirin clearance ${h}`);
+    assert.ok(h>2 && h<15,`kirin clearance ${h}`);
+    assert.ok(point.y>canopyHeight(point.x,point.z,3),'paws clear the trees and shrine bamboo');
     low=Math.min(low,h); high=Math.max(high,h);
     headings.add(Math.round(point.heading*2));
     if(prev){

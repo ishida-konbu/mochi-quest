@@ -5,7 +5,8 @@ import * as THREE from './vendor/three.module.min.js';
 import { buildPounding } from './mochi-pounding.js';
 import { addSpringSurface } from './spring-water.js';
 import { finishResident, residentLimb, residentTorso } from './resident-art.js';
-import { inkVolume, sculptHead, scrollParasol, scrollShell, sculptTurtleHead } from './scroll-sculpt.js';
+import { inkVolume, sculptHead, scrollParasol } from './scroll-sculpt.js';
+import { buildTurtle } from './turtle-art.js';
 import { DYES } from './procession.js';
 import { distantProcession, preparePlates, VILLAGERS, beastFrame } from './procession-view.js';
 import { finishInSlices } from './preparation.js';
@@ -835,23 +836,7 @@ export function createMochiPounding(parent) {
   return buildPounding(parent, { animal, batch, group, shadow });
 }
 function turtle(parent) {
-  scrollShell(parent);
-  batch(parent, b=>b.ball(0,.175,-.027,.345,.087,.449,'#ae8757'));
-  for (const side of [-1,1]) for(const front of [-1,1]) {
-    const joint=group(parent,'turtleFoot'+side+','+front,side*.235,.178,front*.226);
-    joint.userData.stride=side*front;
-    batch(joint, b=>{
-      inkVolume(b,[[0,0,0,.08,.072],[side*.078,-.027,-.031,.087,.072],
-        [side*.133,-.081,-.019,.071,.073],[side*.157,-.105,.043,.071,.051],
-        [side*.191,-.13,.085,.054,.034]],'#ac8b5d',22,'frog');
-      for(let i=-1;i<=1;i++)
-        inkVolume(b,[[side*.166+i*.021,-.121,.055,.024,.022],
-          [side*.194+i*.026,-.134,.109,.018,.019],[side*.213+i*.031,-.154,.148,.004,.006]],
-          '#bfa477',12);
-    });
-  }
-  const head=group(parent,'turtleNeck');
-  sculptTurtleHead(head);
+  buildTurtle(parent, { group, batch });
 }
 function turtleGait(mesh, time, movement, resting) {
   const stride = Math.min(1, movement / 1.25);
@@ -1530,8 +1515,9 @@ export function makeNPC(entity, root) {
     }
     for(const part of [coat,mesh.getObjectByName('haori-sleeve-1'),mesh.getObjectByName('haori-sleeve1')])
       part.material=dyedCloth.get(key);
-    dressArtisan(limbs,entity.role,model,batch);
-    mesh.scale.set(entity.stature*entity.build,entity.stature,entity.stature);
+    dressArtisan(limbs,entity.craft || entity.role,model,batch);
+    const handedness=entity.room===undefined ? 1 : -1;
+    mesh.scale.set(handedness*entity.stature*entity.build,entity.stature,entity.stature);
   }
   if (kind === 'turtle') mesh.scale.setScalar(2);
   const shadowMesh = shadow(mesh, kind === 'turtle' ? 1.19 : 1.2, kind === 'turtle' ? 1.32 : 1.0);
@@ -1739,9 +1725,9 @@ export function createActors(scene, renderer) {
     for (const n of nearest) {
       if(n.atMortar || n.type==='bird') continue;
       const key=n.type+'-'+(n.area?'artisan':n.role)+(n.type==='shishi' ? n.variant : '');
-      if(bodies.has(key) && (!n.area || tools.has(n.role))) continue;
+      if(bodies.has(key) && (!n.area || tools.has(n.craft || n.role))) continue;
       bodies.add(key);
-      if(n.area) tools.add(n.role);
+      if(n.area) tools.add(n.craft || n.role);
       const rec=makeNPC(n,stage);rec.entity=n;
       park(rec);
       yield;

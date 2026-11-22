@@ -28,7 +28,8 @@ test('turning a cloned deer moves its ink outline and leaves its neighbour in pl
   moving.getObjectByName('leg-1,-1').rotation.x = .5;
   moving.updateMatrixWorld(true);
   const joins = new Map(), rest = new THREE.Vector3(), posed = new THREE.Vector3(), neighbour = new THREE.Vector3();
-  let duplicates = 0, furthest = 0;
+  const torsoPigment = new Map(), { uv, flankInk } = animal.geometry.attributes;
+  let duplicates = 0, stitchedColours = 0, furthest = 0;
   const vertices = animal.geometry.attributes.position;
   for (let i = 0; i < vertices.count; i++) {
     rest.fromBufferAttribute(vertices, i);
@@ -39,6 +40,15 @@ test('turning a cloned deer moves its ink outline and leaves its neighbour in pl
     // Front and underside UV charts split render vertices along the shoulder.
     // Both copies must still meet after the neck and far hind leg turn.
     const key = rest.toArray().join(',');
+    if (flankInk.getZ(i) === 1) {
+      // A leg uses a different atlas after the shoulder. The exact boundary
+      // samples the flank on the same side of the animal, even in a deep stride.
+      const torsoUV = torsoPigment.get(key);
+      assert.deepEqual([flankInk.getX(i), flankInk.getY(i)], torsoUV);
+      stitchedColours++;
+    } else if (!torsoPigment.has(key)) {
+      torsoPigment.set(key, [uv.getX(i), uv.getY(i)]);
+    }
     const twin = joins.get(key);
     if (twin) {
       duplicates++;
@@ -46,5 +56,6 @@ test('turning a cloned deer moves its ink outline and leaves its neighbour in pl
     } else joins.set(key, posed.clone());
   }
   assert.ok(duplicates > 50);
+  assert.ok(stitchedColours > 90);
   assert.ok(furthest > .2);
 });

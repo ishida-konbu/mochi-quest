@@ -1,9 +1,26 @@
+// The market uses named trades so its sign, tools and resident agree.
+export function buildingCraft(b) {
+  return b.craft || ({ temple: 'ink', inn: 'lodge', pagoda: 'pagoda' }[b.kind]) || 'tea';
+}
+
+export function roofForm(b) {
+  return ['net', 'rice', 'lodge'].includes(buildingCraft(b)) ? 'hip' : 'gable';
+}
+
+// Coordinates range from -1 to 1 across the eaves. The hipped roof has a
+// short ridge and four pitched faces, with a slight bell at the eaves.
+export function hipHeight(x, z) {
+  const pitch = Math.min(1, Math.max(Math.abs(z), (Math.abs(x) - .46) / .54));
+  return (1 - pitch) ** 1.28;
+}
+
 // Measurements in the building's local frame. The entrance faces positive Z.
 export function roomPlan(b) {
   const pagoda = b.kind === 'pagoda';
   const width = b.w * (pagoda ? 0.73 : 1);
   const depth = b.d * (pagoda ? 0.73 : 1);
-  const door = Math.min(width * 0.46, 3.25);
+  const craft = buildingCraft(b);
+  const door = pagoda ? Math.min(width * .46, 3.25) : width * (craft === 'brew' || craft === 'ink' ? .55 : .69);
   const panel = (width - door) / 2;
   const floor = 0.48;
   const ceiling = pagoda ? 3.05 : b.wall + 0.1;
@@ -14,7 +31,17 @@ export function roomPlan(b) {
       { u: (sign * width) / 2, v: 0, width: 0.18, depth },
     ]),
   ];
-  return { width, depth, door, floor, ceiling, walls };
+  const workbench = pagoda ? null : { u: width * .36, v: -depth * .22, width: width * .21, depth: depth * .39, height: .49 };
+  const porch = b.kind === 'temple' || b.kind === 'inn' ? {
+    u: 0, v: depth*.49, width: depth*.51, depth: width*.48,
+    eave: b.wall*.78, rise: b.kind === 'temple' ? 1.16 : .78, rotation: Math.PI/2,
+  } : null;
+  const monitor = craft === 'dye' || craft === 'tea' ? {
+    u: width * (craft === 'dye' ? -.06 : .19), v: 0, width: width * (craft === 'dye' ? .48 : .29),
+    depth: depth*.255, eave: b.wall + b.roof + (craft === 'dye' ? .63 : .45),
+    rise: craft === 'dye' ? .44 : .30, rotation: 0,
+  } : null;
+  return { width, depth, door, floor, ceiling, walls, craft, workbench, porch, monitor };
 }
 
 // Five open storeys around paired stair flights. Rendering and collision use

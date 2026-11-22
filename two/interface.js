@@ -18,6 +18,7 @@ export const EMOTES = [
   ['sleepy', 'うとうと'],
 ];
 const glyphs = {
+  'open-book': '<path d="M2.5 5.8c3.1-1.4 6.7-.8 9.5 1.2 3-2 6.5-2.6 9.5-1.2v12.6c-3.7-1.2-6.6-.6-9.5 1.1-2.7-1.7-6.4-2.2-9.5-1.1zM12 7v12"/>',
   back: '<path d="m14 5-7 7 7 7"/>',
   camera: '<path d="M3 7h4l1.5-3h7l1.5 3h4v13H3z"/><circle cx="12" cy="13" r="3.5"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
@@ -33,103 +34,88 @@ export function paintGlyphs(root = document) {
   for (const el of root.querySelectorAll('[data-glyph]')) el.innerHTML = glyph(el.dataset.glyph);
 }
 
+// The portraits share a brush contour. The feet, leaf and feathers keep each
+// silhouette legible when a mode is only a few dozen pixels wide.
 export function drawFace(canvas, mode, mood = 'joy') {
-  const g = canvas.getContext('2d'),
-    w = canvas.width,
-    h = canvas.height;
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.clearRect(0, 0, w, h);
-  const s = Math.min(w / 61, h / 50);
-  g.translate(w / 2, h / 2 + 1 * s);
-  g.scale(s, s);
-  const oval = (x, y, rx, ry, fill) => {
+  const g = canvas.getContext('2d');
+  const scale = Math.min(canvas.width / 76, canvas.height / 59);
+  g.resetTransform();
+  g.clearRect(0, 0, canvas.width, canvas.height);
+  g.save();
+  g.translate(canvas.width / 2, canvas.height / 2 + scale);
+  g.scale(scale, scale);
+  g.lineJoin = g.lineCap = 'round';
+  const ink = '#403c32';
+  function shape(path, fill, edge = null, width = 1) {
+    const drawing = new Path2D(path);
+    if (fill) { g.fillStyle = fill; g.fill(drawing); }
+    if (edge) {
+      g.lineWidth = width; g.strokeStyle = edge; g.stroke(drawing);
+    }
+  }
+  function dab(x,y,rx,ry,fill,rotation = 0) {
     g.beginPath();
-    g.ellipse(x, y, rx, ry, 0, 0, 2 * Math.PI);
-    g.fillStyle = fill;
-    g.fill();
-  };
-  const body = g.createRadialGradient(-8, -11, 2, 1, 4, 28);
-  const colors =
-    mode === 'kusa'
-      ? ['#d3dc98', '#a3b96e', '#859959']
-      : mode === 'kinako'
-        ? ['#ffe4ad', '#dcb16d', '#bd8a45']
-        : ['#fffdf5', '#fbefda', '#d9c6a7'];
-  colors.forEach((c, i) => body.addColorStop([0, 0.74, 1][i], c));
+    g.ellipse(x,y,rx,ry,rotation,0,Math.PI*2);
+    g.fillStyle = fill; g.fill();
+  }
+  const grass = mode === 'kusa', flour = mode === 'kinako';
+  const wash = g.createLinearGradient(-8,-21,4,20);
+  wash.addColorStop(0,grass ? '#d3d8a6' : flour ? '#f4d598' : '#fffdf4');
+  wash.addColorStop(.62,grass ? '#abbc88' : flour ? '#e4b782' : '#faf6e9');
+  wash.addColorStop(1,grass ? '#849572' : flour ? '#cb9965' : '#ddd8c9');
+  dab(1,18.3,22,2.2,'#645f4830',-.025);
   if (mode === 'kagami') {
-    g.translate(0, -2);
-    oval(0, 13, 23, 9.4, '#dccbab');
-    oval(0, 11.6, 22, 9, body);
-    g.scale(.76,.73);
-    oval(0,-22,6.4,5.6,'#ce7739');
-    oval(4,-27,4.6,1.8,'#557345');
+    shape('M-25 15 Q-24 7 -12 6 Q8 1 20 9 Q30 15 23 19 Q2 26 -21 21 Q-26 20 -25 15Z', wash, ink,1.4);
+    g.translate(0,-3); g.scale(.77,.77);
+    shape('M-1 -24 Q4 -33 13 -30 Q10 -24 2 -23Z','#687c55',ink,.9);
+    dab(0,-22,6.7,5.2,'#b96c3b');
   }
   if (mode === 'habutae') {
-    for (const side of [-1, 1]) {
-      g.save();
-      g.scale(side, 1);
-      g.beginPath();
-      g.moveTo(15, 4);
-      g.quadraticCurveTo(30, -18, 29, -7);
-      g.quadraticCurveTo(30, 8, 17, 9);
-      g.strokeStyle = '#ac9e80';
-      g.fillStyle = '#fff9e7';
-      g.fill();
-      g.stroke();
+    for (const side of [-1,1]) {
+      g.save(); g.scale(side,1);
+      shape('M16 5 Q23 -2 33 -17 Q34 -10 30 -3 L34 -7 Q34 0 27 4 L30 2 Q27 10 17 10Z','#f6f3e3',ink,1.35);
+      shape('M19 7 Q28 0 31 -8',null,'#8d9082',.8);
       g.restore();
     }
   }
-  oval(-10, 16.4, 6.4, 4.4, body);
-  oval(10, 16.4, 6.4, 4.4, body);
-  g.beginPath();
-  if (mode === 'dango') g.ellipse(0, -1, 18.4, 19, 0, 0, 2 * Math.PI);
-  else {
-    g.moveTo(0, -20.8);
-    g.bezierCurveTo(11.2, -20.8, 20.8, -12, 21.2, 0);
-    g.bezierCurveTo(22, 13.3, 16.7, 17.4, 0, 17.4);
-    g.bezierCurveTo(-16.6, 17.4, -22.3, 13, -21.6, 0.1);
-    g.bezierCurveTo(-21.2, -11.8, -12, -20.5, 0, -20.8);
+  if (mode === 'dango') {
+    shape('M-29 -12 Q-24 -22 -15 -24 M-32 -5 L-29 -9 M15 19 Q24 16 27 11',null,'#72695a',1.1);
+  } else {
+    shape('M-15 11 Q-22 19 -11 19 Q-4 18 -4 13 M5 13 Q9 20 16 18 Q21 16 15 10',wash,ink,1.15);
   }
-  g.fillStyle = body;
-  g.fill();
-  if (mode === 'kusa') {
-    g.save();
-    g.rotate(-0.4);
-    oval(1, -20, 8, 3, '#647e49');
-    g.restore();
+  const outline = mode === 'dango'
+    ? 'M1 -21 C11 -22 21 -14 22 -2 C23 9 15 18 3 19 C-9 21 -20 13 -21 1 C-22 -10 -14 -20 1 -21Z'
+    : 'M-1 -20 C10 -21 18 -13 21 -4 C24 5 25 10 18 14 C10 19 -6 19 -16 15 C-22 13 -24 10 -23 4 C-22 -6 -17 -17 -7 -19 Q-3 -20 -1 -20Z';
+  shape(outline, wash,ink,1.45);
+  shape('M-22 4 Q-23 13 -11 16 Q-6 18 1 17 Q-14 18 -20 13 Q-24 9 -22 4Z','#474636');
+  shape('M-16 -12 Q-11 -19 -3 -19',null,'#817968',.7);
+  if (grass) {
+    shape('M-3 -16 Q-11 -21 -13 -26 Q-5 -26 0 -20 Q5 -27 15 -26 Q11 -20 -1 -17Z','#667e51',ink,1.1);
+    shape('M-3 -17 L10 -24 M-2 -18 L-10 -24',null,'#ced2a3',.9);
   }
-  for (const side of [-1, 1]) {
-    const x = side * 13;
-    const blush = g.createRadialGradient(x, 2, 1, x, 2, 6);
-    blush.addColorStop(0, '#ed9c8e');
-    blush.addColorStop(1, 'rgba(230,145,126,0)');
-    oval(x, 2, 6, 4, blush);
-    g.lineWidth = 2.2;
-    g.lineCap = 'round';
-    g.strokeStyle = '#503c32';
-    g.beginPath();
-    const a = side * 7;
-    if (['surprise', 'curious', 'calm', 'blush'].includes(mood))
-      oval(a, -3, 1.7, mood === 'surprise' ? 3 : 2.3, '#44322b');
-    else if (mood === 'determined' || mood === 'hurt') {
-      g.moveTo(a - side * 2, -4);
-      g.lineTo(a + side * 2, -6);
-      g.moveTo(a - side * 2, -4);
-      g.lineTo(a + side * 2, -2);
-      g.stroke();
-    } else {
-      g.moveTo(a - 3, -2);
-      g.quadraticCurveTo(a, ['sleepy', 'bath'].includes(mood) ? 2 : -8, a + 3, -2);
-      g.stroke();
+  if (grass || flour) {
+    for (let i=0; i<34; i++) {
+      const a=i*2.4, radius=Math.sqrt((i+.5)/34);
+      const x=Math.cos(a)*radius*19, y=Math.sin(a)*radius*16;
+      dab(x,y,.5+(i%4)*.22,.38+(i%3)*.16,grass ? '#546e432f' : '#8e552a39',a);
     }
   }
-  if (mood === 'sleepy' || mood === 'bath') {
-    oval(0, 4, 2.2, 1.3, '#7d5241');
-  } else {
-    oval(0, 4, mood === 'surprise' ? 3 : 4, mood === 'surprise' ? 5 : 3.8, '#814b3b');
-    oval(0.3, 6, 2.6, 1.6, '#e99183');
+  for (const side of [-1,1]) {
+    const x=side*7.4;
+    dab(side*13.6,4.7,4.6,2.1,'#be776550',side*-.15);
+    if (['curious','calm','surprise','blush'].includes(mood)) {
+      dab(x,-2.3,1.65,mood==='surprise'?3.1:2.35,ink,side*.12);
+    } else if (mood==='determined'||mood==='hurt') {
+      shape('M'+(x-side*2.5)+' -5 l'+(side*4)+' 2.7 l'+(-side*3)+' 1.7',null,ink,1.7);
+    } else {
+      const arc=['sleepy','bath'].includes(mood)?1.3:-7.8;
+      shape('M'+(x-3.1)+' -1.5 Q'+x+' '+arc+' '+(x+3.2)+' -2.1',null,ink,1.9);
+    }
   }
-  g.setTransform(1, 0, 0, 1, 0, 0);
+  if (['sleepy','bath'].includes(mood)) dab(0,5,1.9,1,ink);
+  else if (['surprise','calling'].includes(mood)) dab(0,5.3,2.7,3.9,'#764a3d');
+  else shape('M-4 3.2 Q-.4 4.5 4 3 Q3 8.6 -.4 8.2 Q-2.7 8 -4 3.2Z','#995342',ink,.9);
+  g.restore();
 }
 
 export const HELP = {
@@ -162,7 +148,7 @@ export const HELP = {
     ],
     [
       '草餅／きなこ餅',
-      '2 の草餅は緑に染まって自然に同化し、住人との衝突を避けます。3 のきなこ餅は足元に粉を舞わせ、三条通知を周囲八方向へ同時に届けます。',
+      '2 の草餅は地面に沿って進み、動物・木・岩・建物をすり抜けます。橋の下では泳げます。道具を使うときは E を押します。3 のきなこ餅は三条通知を周囲八方向へ届けます。',
     ],
     ['空の配達', '龍は十五夜の薄野の高い空にいます。羽二重餅で上昇し、龍と高さをそろえて通知を届けましょう。丹頂と雲を踏む麒麟にも通知が届きます。小さな渡り鳥の群れは配達の対象外です。'],
     ['鏡餅', '動物全員に三条通知を届けると、5 で鏡餅に変身できます。歩く速さは白餅の三倍、通知は常に八方向。地図に行き先の印を置くと、そこへ瞬間移動できます。'],

@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { roomPlan } from './architecture.js';
+import { workshopArt, fitWorkshop } from './workshops.js';
 
 function roomMaterials() {
   const canvas = document.createElement('canvas');
@@ -39,15 +40,16 @@ function roomMaterials() {
 
 export function furnishRoom(p, b, index, part, local) {
   const wood = '#69513b',
-    deep = '#554b3e',
-    plaster = '#ded0a3';
+    deep = '#554b3e';
   const plan = roomPlan(b);
   const { width, depth, door, floor, ceiling } = plan;
   const art = (p.roomArt ??= roomMaterials());
+  const shopArt = (p.workshopArt ??= workshopArt(p));
   const innerHeight = ceiling - floor;
+  const workroom = ['dye','brew','net','rice'].includes(plan.craft);
   // Timber-framed shell, with a genuinely open central bay.
   for (const panel of plan.walls) {
-    part('box', panel.u, floor + innerHeight / 2, panel.v, panel.width, innerHeight, panel.depth, plaster);
+    part('box', panel.u, floor + innerHeight / 2, panel.v, panel.width, innerHeight, panel.depth, plan.craft === 'net' ? '#d0b894' : '#f6ead5', shopArt.clay);
     part(
       'box',
       panel.u,
@@ -56,8 +58,8 @@ export function furnishRoom(p, b, index, part, local) {
       panel.width + 0.025,
       0.38,
       panel.depth + 0.025,
-      '#a08b70',
-      p.boarding,
+      plan.craft === 'brew' ? '#ebe1ca' : '#b09b81',
+      plan.craft === 'brew' ? shopArt.namako : p.boarding,
     );
   }
   for (const sign of [-1, 1]) {
@@ -67,47 +69,61 @@ export function furnishRoom(p, b, index, part, local) {
     part('box', u, floor + innerHeight / 2, depth * 0.5, 0.16, innerHeight, 0.24, wood, p.wood);
   }
   part('box', 0, ceiling - 0.07, depth / 2, width + 0.12, 0.22, 0.28, deep, p.wood);
-  // Tatami seams turn around the central mat, leaving a clear path from the engawa.
-  part('box', 0, floor - 0.038, 0, width, 0.078, depth, '#777958', p.deck);
-  const mats = [
-    [-0.25, -0.33, 0.49, 0.32],
-    [0.25, -0.33, 0.49, 0.32],
-    [-0.375, 0.17, 0.24, 0.65],
-    [0.375, 0.17, 0.24, 0.65],
-    [0, 0, 0.49, 0.32],
-    [0, 0.335, 0.49, 0.32],
-  ];
-  for (const [u, v, wu, dv] of mats)
-    part('box', u * width, floor - 0.009, v * depth, wu * width, 0.024, dv * depth, '#fff5d6', art.tatami);
+  if(workroom) {
+    // A packed-earth doma can take spilled indigo, wet nets and casks.
+    part('box',0,floor-.025,0,width,.05,depth,'#a38a69',shopArt.earth);
+    const planks = plan.craft === 'net' ? 15 : 6;
+    const boardDepth = depth/15;
+    for(let k=0;k<planks;k++)
+      part('box',0,floor+.001,-depth*.5+(k+.5)*boardDepth,width-.035,.027,boardDepth-.019,
+        k%4===1?'#a58d6e':'#b99f7e',p.deck);
+    part('box',0,floor+.015,depth*.50,width,.052,.16,'#785e40',p.wood);
+  } else {
+    // Tatami seams turn around the central mat, leaving a clear path from the engawa.
+    part('box', 0, floor - 0.038, 0, width, 0.078, depth, '#777958', p.deck);
+    const mats = [
+      [-0.25, -0.33, 0.49, 0.32],
+      [0.25, -0.33, 0.49, 0.32],
+      [-0.375, 0.17, 0.24, 0.65],
+      [0.375, 0.17, 0.24, 0.65],
+      [0, 0, 0.49, 0.32],
+      [0, 0.335, 0.49, 0.32],
+    ];
+    for (const [u, v, wu, dv] of mats)
+      part('box', u * width, floor - 0.009, v * depth, wu * width, 0.024, dv * depth, '#fff5d6', art.tatami);
+  }
   const back = -depth * 0.5 + 0.15;
-  part('box', 0, floor + 0.13, back + 0.33, width * 0.54, 0.26, 0.72, '#9d7955', p.wood);
-  // A hanging scroll in the tokonoma, a red seal and a single arranged branch.
-  part('box', 0, floor + innerHeight * 0.54, back, 0.92, innerHeight * 0.66, 0.052, '#5e7063');
-  part('box', 0, floor + innerHeight * 0.54, back + 0.03, 0.72, innerHeight * 0.47, 0.033, '#f2e3c4');
-  const paintedHeight = Math.min(1.08, innerHeight * 0.44);
-  const painting = index % 2 ? art.hare : art.frog;
-  part(
-    'plane',
-    0,
-    floor + innerHeight * 0.54,
-    back + 0.062,
-    paintedHeight * painting.aspect,
-    paintedHeight,
-    1,
-    '#eedfc3',
-    painting.material,
-  );
-  part('box', 0.24, floor + innerHeight * 0.36, back + 0.065, 0.07, 0.07, 0.02, '#aa503b');
-  for (const end of [-1, 1])
-    part('box', 0, floor + innerHeight * (0.54 + end * 0.33), back + 0.02, 1.06, 0.048, 0.09, wood, p.wood);
+  if (!workroom) {
+    part('box', 0, floor + 0.13, back + 0.33, width * 0.54, 0.26, 0.72, '#9d7955', p.wood);
+    // A hanging scroll in the tokonoma, a red seal and a single arranged branch.
+    part('box', 0, floor + innerHeight * 0.54, back, 0.92, innerHeight * 0.66, 0.052, '#5e7063');
+    part('box', 0, floor + innerHeight * 0.54, back + 0.03, 0.72, innerHeight * 0.47, 0.033, '#f2e3c4');
+    const paintedHeight = Math.min(1.08, innerHeight * 0.44);
+    const painting = index % 2 ? art.hare : art.frog;
+    part(
+      'plane',
+      0,
+      floor + innerHeight * 0.54,
+      back + 0.062,
+      paintedHeight * painting.aspect,
+      paintedHeight,
+      1,
+      '#eedfc3',
+      painting.material,
+    );
+    part('box', 0.24, floor + innerHeight * 0.36, back + 0.065, 0.07, 0.07, 0.02, '#aa503b');
+    for (const end of [-1, 1])
+      part('box', 0, floor + innerHeight * (0.54 + end * 0.33), back + 0.02, 1.06, 0.048, 0.09, wood, p.wood);
 
+  }
   // Backlit shoji and their kumiko lattice bring the daylight down to tatami height.
   const screenHeight = innerHeight * 0.51;
   const screenWidth = depth * 0.53;
   const mid = floor + innerHeight * 0.55;
   for (const side of [-1, 1]) {
     const sideX = side * (width * 0.5 - 0.135);
-    part('box', sideX, mid, 0, 0.035, screenHeight, screenWidth, '#fff2cf', art.paper);
+    const opaque = workroom && side < 0;
+    part('box', sideX, mid, 0, 0.035, screenHeight, screenWidth, opaque ? '#b6a384' : '#fff2cf', opaque ? shopArt.reed : art.paper);
     const trim = sideX - side * 0.028;
     for (let j = -3; j <= 3; j++)
       part(
@@ -136,10 +152,12 @@ export function furnishRoom(p, b, index, part, local) {
     part('box', 0, mid + screenHeight * 0.57, side * (depth * 0.5 - 0.12), width, 0.105, 0.13, wood, p.wood);
   }
   if (b.kind !== 'pagoda') {
-  part('box', 0, ceiling - 0.015, 0, width - 0.12, 0.08, depth - 0.12, '#bb9d7c', p.deck);
-  for (let j = -1; j <= 1; j++)
-    part('box', 0, ceiling - 0.1, j * depth * 0.32, width, 0.16, 0.17, deep, p.wood);
+    part('box', 0, ceiling - 0.015, 0, width - 0.12, 0.08, depth - 0.12, '#bb9d7c', p.deck);
+    for (let j = -1; j <= 1; j++)
+      part('box', 0, ceiling - 0.1, j * depth * 0.32, width, 0.16, 0.17, deep, p.wood);
   }
+  fitWorkshop(p, plan, part);
+  if (workroom) return;
   const vaseX = -width * 0.19;
   part('ball', vaseX, floor + 0.43, back + 0.34, 0.18, 0.23, 0.17, '#637971');
   part('round', vaseX, floor + 0.62, back + 0.34, 0.099, 0.13, 0.099, '#55665e');

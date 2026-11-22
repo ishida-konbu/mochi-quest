@@ -1,5 +1,5 @@
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
-import { roomPlan, pagodaPlan } from './architecture.js';
+import { roomPlan, pagodaPlan, roofForm, hipHeight } from './architecture.js';
 // Coordinates and dimensions are metres. Positive Z is south.
 export const BOUND = 416,
   WATER_Y = 0.38;
@@ -301,8 +301,8 @@ export function nearRoad(x, z, extra = 0) {
 }
 
 const structures = [];
-function house(x, z, w, d, wall, roof, yaw = 0, kind = 'cottage') {
-  const b = { x, z, w, d, wall, roof, yaw, kind, y: ungradedHeight(x, z), cos: cos(yaw), sin: sin(yaw), snow: z < -240 };
+function house(x, z, w, d, wall, roof, yaw = 0, kind = 'cottage', craft) {
+  const b = { x, z, w, d, wall, roof, yaw, kind, craft, y: ungradedHeight(x, z), cos: cos(yaw), sin: sin(yaw), snow: z < -240 };
   structures.push(b);
   const extent = hypot(w/2+5,d/2+6);
   for (let i = Math.floor((x-extent)/24); i <= Math.floor((x+extent)/24); i++)
@@ -313,36 +313,36 @@ function house(x, z, w, d, wall, roof, yaw = 0, kind = 'cottage') {
     }
 }
 // The inhabited squares remain open around each region's center.
-house(-15, -15, 9, 7, 3.2, 2.8, 0.15);
-house(18, -20, 8, 6, 3, 2.6, -0.2, 'shop');
-house(-11, -35, 9.2, 7, 3.5, 2.8, 0.15, 'shop');
-house(22, -38, 8, 6, 3.4, 2.5, -0.15);
-house(-8, -57, 8.5, 7.5, 3.2, 2.7, 0.04, 'shop');
-house(37, -83, 9, 7, 3.5, 2.7, -0.17, 'shop');
-house(44, -56, 8, 8, 3.3, 2.7, 0.1);
-house(-3, -88, 8.8, 7.3, 3.5, 2.6, -0.1, 'shop');
+house(-15, -15, 9, 7, 3.2, 2.8, 0.15, 'cottage', 'tea');
+house(18, -20, 8, 6, 3, 2.6, -0.2, 'shop', 'brew');
+house(-11, -35, 9.2, 7, 3.5, 2.8, 0.15, 'shop', 'dye');
+house(22, -38, 8, 6, 3.4, 2.5, -0.15, 'cottage', 'rice');
+house(-8, -57, 8.5, 7.5, 3.2, 2.7, 0.04, 'shop', 'tea');
+house(37, -83, 9, 7, 3.5, 2.7, -0.17, 'shop', 'dye');
+house(44, -56, 8, 8, 3.3, 2.7, 0.1, 'cottage', 'brew');
+house(-3, -88, 8.8, 7.3, 3.5, 2.6, -0.1, 'shop', 'brew');
 house(-23, -117, 12, 11, 4.3, 14.5, 0, 'pagoda');
 house(-48, -127, 11, 8, 4.6, 3.4, 0.09, 'temple');
 house(-129, -105, 12, 9.5, 4.3, 3.4, 0.14, 'temple');
-house(-174, -112, 8, 7, 3.8, 2.4, -0.12);
+house(-174, -112, 8, 7, 3.8, 2.4, -0.12, 'cottage', 'ink');
 house(151, -137, 13, 9, 4.2, 3.2, 0.09, 'inn');
-house(118, -123, 9, 7, 3.5, 2.8, -0.22);
-house(173, 133, 8.5, 6.6, 3.4, 3.1, 0.25);
-house(132, 127, 8, 7, 3.8, 2.8, -0.12);
-house(-179, 139, 8, 6.8, 3, 2.6, 0.3);
-house(-120, 124, 7, 6, 3.2, 2.6, 0.09);
-house(-34, 49, 6.8, 6, 3.1, 2.5, 0.2, 'shop');
-house(35, 61, 8, 6.4, 3, 2.7, -0.3);
+house(118, -123, 9, 7, 3.5, 2.8, -0.22, 'cottage', 'tea');
+house(173, 133, 8.5, 6.6, 3.4, 3.1, 0.25, 'cottage', 'rice');
+house(132, 127, 8, 7, 3.8, 2.8, -0.12, 'cottage', 'rice');
+house(-179, 139, 8, 6.8, 3, 2.6, 0.3, 'cottage', 'net');
+house(-120, 124, 7, 6, 3.2, 2.6, 0.09, 'cottage', 'net');
+house(-34, 49, 6.8, 6, 3.1, 2.5, 0.2, 'shop', 'tea');
+house(35, 61, 8, 6.4, 3, 2.7, -0.3, 'cottage', 'net');
 // The snow capital has a processional avenue, a side market and a pagoda at its head.
 house(-80,-323,13,12,4.4,14.5,.06,'pagoda');
 house(-93,-306,10,8,3.9,3.6,.15,'temple');
-house(-63,-305,9,8,3.6,3.1,-.12,'shop');
+house(-63,-305,9,8,3.6,3.1,-.12,'shop', 'brew');
 house(-99,-281,9.5,7,3.4,3.3,.14,'inn');
-house(-59,-277,9,7.6,3.5,3.3,-.28,'shop');
-house(-96,-264,7.6,7,3.2,3.2,.27);
-house(-69,-258,8.8,7.5,3.4,3.3,-.24,'shop');
-house(-114,-303,8.8,7.5,3.4,3.1,.1);
-house(274,-127,8.6,6.6,3.3,2.8,.29,'shop');
+house(-59,-277,9,7.6,3.5,3.3,-.28,'shop', 'dye');
+house(-96,-264,7.6,7,3.2,3.2,.27, 'cottage', 'rice');
+house(-69,-258,8.8,7.5,3.4,3.3,-.24,'shop', 'tea');
+house(-114,-303,8.8,7.5,3.4,3.1,.1, 'cottage', 'ink');
+house(274,-127,8.6,6.6,3.3,2.8,.29,'shop', 'dye');
 house(-69,282,7.8,6.6,3.2,2.6,-.34,'temple');
 house(288,160,8.6,6.6,3.3,2.7,.3,'inn');
 export const BUILDINGS = structures;
@@ -557,6 +557,24 @@ for (const t of emptySites) {
 export const TREES = trees.filter(t => isBamboo(t) || keep.has(t));
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
+// The shrine's small bamboo stands are planted individually between its
+// lanterns. Share the exact leaning culms with the painter and the path grid.
+export const SHRINE_BAMBOO=[];
+{
+  const grove=REGIONS.find(r=>r.id==='shrine'), random=seeded(92327);
+  const openings=[[-4,1],[-13,-9],[6,14],[15,-11],[-9,15],[-17,4],[12,5],
+    [-4,5],[4,-7],[6,-7],[-7,-12],[10,-15],[-19,5],[-8.7,-5.6]];
+  const clusters=[[-11,18],[10,21],[12,7],[-12,8],[-15,-2],[9,-4],[15,-13],
+    [-14,-19],[4,-20],[-21,0],[16,-23],[13,25],[-10,23]];
+  for(const [dx,dz] of clusters) for(let i=0;i<9;i++) {
+    const x=grove.x+dx+(random()-.5)*6, z=grove.z+dz+(random()-.5)*6;
+    if(nearRoad(x,z,1) || openings.some(([u,v])=>hypot(x-grove.x-u,z-grove.z-v)<2.4)) continue;
+    const height=5.2+random()*3.8, sx=(random()-.5)*.94, sz=(random()-.5)*.86, radius=.063+random()*.04;
+    const sprays=Array.from({length:3},()=>({angle:random()*2*Math.PI,width:1.68+random()*.71,
+      height:1.03+random()*.53,tilt:(random()-.5)*.72}));
+    SHRINE_BAMBOO.push({x,z,height,sx,sz,radius,sprays,tint:i%3?'#9ba575':'#b7bd86'});
+  }
+}
 // Individual stones leave real bathing entrances on the avenue, at the
 // south bank, and at the steps to the washing pavilion.
 export const SPRING_STONES = [];
@@ -575,7 +593,8 @@ function cell(x, z) {
 }
 function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0, bottom = -Infinity) {
   const item = { x, z, rx, rz, c: cos(yaw), s: sin(yaw), top, kind, support, roofRise, bottom };
-  const r = hypot(rx, rz) + 1.0;
+  // Include the turning clearance of the largest ground animal (the shishi).
+  const r = hypot(rx, rz) + 6.8;
   for (let a = Math.floor((x - r) / 16); a <= Math.floor((x + r) / 16); a++)
     for (let b = Math.floor((z - r) / 16); b <= Math.floor((z + r) / 16); b++) {
       const id = a + ',' + b;
@@ -613,7 +632,21 @@ for (const b of BUILDINGS) {
     }
   } else {
     localSolid(0, 0, b.w * 1.08, b.d * 1.08, plan.ceiling, 'ceiling', false);
-    putSolid(b.x, b.z, b.w * 0.61, b.d * 0.63, b.yaw, b.y + b.wall + 0.29, 'roof', true, b.roof);
+    const roof = putSolid(b.x, b.z, b.w * 0.62, b.d * 0.64, b.yaw, b.y + b.wall + 0.29, 'roof', true, b.roof);
+    roof.form = roofForm(b);
+    for (const cap of [plan.porch, plan.monitor]) {
+      if (!cap) continue;
+      const cx=b.x+cap.u*b.cos+cap.v*b.sin, cz=b.z-cap.u*b.sin+cap.v*b.cos;
+      const cover=putSolid(cx,cz,cap.width*.5,cap.depth*.5,b.yaw+cap.rotation,
+        b.y+cap.eave,'roof',true,cap.rise);
+      cover.overhang=true;
+    }
+    if (plan.porch) for (const side of [-1,1])
+      localSolid(side*b.w*.207,plan.porch.v+b.d*.19,.15,.16,plan.porch.eave,'wall',false);
+    if (plan.workbench) {
+      const f = plan.workbench;
+      localSolid(f.u, f.v, f.width, f.depth, plan.floor + f.height, 'box', true);
+    }
   }
 }
 for(const stone of SPRING_STONES) {
@@ -639,6 +672,13 @@ for (const t of TREES)
     'oval',
     false,
   );
+for(const t of SHRINE_BAMBOO) {
+  // One low and one high span approximate the lean without a thick invisible wall.
+  for(let k=0;k<2;k++) {
+    const f=(k+.5)/2, radius=t.radius+Math.hypot(t.sx,t.sz)*.25, y=terrainHeight(t.x,t.z);
+    putSolid(t.x+t.sx*f,t.z+t.sz*f,radius,radius,0,y+t.height*(k+1)/2,'oval',false,0,y+t.height*k/2-.1);
+  }
+}
 for (const g of GATES)
   for (const sign of [-1, 1]) {
     const x = g.x + sign * g.w * 0.36 * cos(g.yaw),
@@ -660,6 +700,7 @@ function surfaceHeight(s, x, z, pad) {
     return s.top+s.roofRise*((1-t)**1.59+.17*corner**3.8*t**1.7);
   }
   if (s.kind === 'roof') {
+    if (s.form === 'hip') return s.top + s.roofRise * hipHeight(a / s.rx, b / s.rz);
     const v = min(1, abs(b) / (s.rz * 1.12)),
       end = min(1, abs(a) / s.rx);
     return s.top + s.roofRise * ((1 - v) ** 1.62 + end ** 5 * (0.045 + 0.12 * v));
@@ -683,12 +724,15 @@ function highest(x, z, pad, feet, supportOnly) {
   return height;
 }
 export const solidHeightAt = (x, z, clearance = 0, y = Infinity) => highest(x, z, clearance, y, false);
-const waterFloor = WATER_Y - 0.57;
+// The swimming line is part of locomotion even when grass mochi passes through scenery.
+export function landscapeFloor(x, z) {
+  return max(WATER_Y - 0.57, terrainHeight(x, z));
+}
 export function groundHeight(x, z, feet = -Infinity) {
   const b = bridgeAt(x, z);
   const deck = b ? bridgeHeight(b, z) : -Infinity;
   const onBridge = b && (feet === -Infinity || feet >= deck - .36);
-  return max(onBridge ? deck : -Infinity, waterFloor, terrainHeight(x, z), highest(x, z, 0, feet, true));
+  return max(onBridge ? deck : -Infinity, landscapeFloor(x, z), highest(x, z, 0, feet, true));
 }
 export function waterDepth(x, z) {
   return max(0, waterSurfaceAt(x,z) - terrainHeight(x, z));
@@ -699,7 +743,7 @@ export function overheadHeight(x, z, feet) {
   let ceiling = feet < deck - .36 ? deck - .17 : Infinity;
   const items = cells.get(cell(x, z));
   if (items) for (const item of items) {
-    if (item.kind === 'pagodaEave') {
+    if (item.kind === 'pagodaEave' || item.overhang) {
       const roof=surfaceHeight(item,x,z,0);
       if (feet<roof-.55) ceiling=min(ceiling,roof-.08);
     }
@@ -714,13 +758,13 @@ export function canLand(x, z, feet) {
   const floor = groundHeight(x, z, feet);
   return highest(x, z, 0.12, feet ?? floor, false) <= floor + 0.33;
 }
-export function constrainMove(fromX, fromZ, toX, toZ, aboveGround = 0, feetY = groundHeight(fromX, fromZ) + aboveGround) {
+export function constrainMove(fromX, fromZ, toX, toZ, aboveGround = 0, feetY = groundHeight(fromX, fromZ) + aboveGround, radius = .24) {
   const dx = wrapDelta(toX - fromX), dz = wrapDelta(toZ - fromZ);
   const steps = max(1, Math.ceil(hypot(dx, dz) / 0.55));
   let x = fromX, z = fromZ;
   for (let i = 0; i < steps; i++) {
     const feet = max(feetY, groundHeight(x, z, feetY));
-    const free = (nx, nz) => highest(nx, nz, 0.24, feet, false) <= feet + 0.34 &&
+    const free = (nx, nz) => highest(nx, nz, radius, feet, false) <= feet + 0.34 &&
       overheadHeight(nx, nz, feet) >= feet + 1.42;
     const nx = wrapCoord(x + dx / steps), nz = wrapCoord(z + dz / steps);
     if (free(nx, nz)) { x = nx; z = nz; }

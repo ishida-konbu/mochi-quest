@@ -6,7 +6,9 @@ import { SPECIES } from './bestiary.js';
 import { seasonAt } from './terrain.js';
 import { finishInSlices } from './preparation.js';
 
-const roles=['porter','wander','sumo',...TRADES];
+import { WORKSHOP_TOOLS, workRate } from './trade-tools.js';
+
+export const residentRoles=['porter','wander','sumo',...TRADES,...WORKSHOP_TOOLS];
 // Keep every atlas dimension under the 4096-pixel limit of smaller GPUs.
 export const beastDrawings = [];
 let poseCount = 0;
@@ -22,7 +24,8 @@ const illustrations = new Map(beastDrawings.map(d => [d.type + d.variant, d]));
 export function beastDrawing(type, variant=0) {
   return illustrations.get(type + (type === 'shishi' ? variant : 0));
 }
-export const VILLAGERS={columns:16,rows:13,width:144,height:160,frameX:2.88,frameY:3.24,center:1.37};
+export const VILLAGERS={poses:6,columns:42,rows:39,width:96,height:104,frameX:2.88,frameY:3.24,center:1.37};
+export const residentFrameX=craft=>craft==='fisher'?3.48:VILLAGERS.frameX;
 export const BEASTS={columns:24,rows:Math.ceil(poseCount/3),width:160,height:160};
 // Three-quarter and broadside views need room for the full brush tail,
 // wingtips and dragon whiskers, including a gutter at the coarsest mip.
@@ -32,7 +35,7 @@ export const clothGround='#999999';
 const base=new THREE.Color(clothGround);
 const dyes=DYES.map(hex=>new THREE.Color(hex).multiplyScalar(1/base.r));
 const white=new THREE.Color(1,1,1);
-const roleIndex=new Map(roles.map((name,i)=>[name,i]));
+const roleIndex=new Map(residentRoles.map((name,i)=>[name,i]));
 const tau=Math.PI*2;
 
 // Sample the same gait cycle used by the live rig.
@@ -74,8 +77,8 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   const geometry=new THREE.PlaneGeometry(1,1);
   const cells=new THREE.InstancedBufferAttribute(new Float32Array(capacity*3),3).setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('tileCell',cells);
-  const motion = beasts ? new THREE.InstancedBufferAttribute(new Float32Array(capacity*3),3).setUsage(THREE.DynamicDrawUsage) : null;
-  if (motion) geometry.setAttribute('nextPose',motion);
+  const motion=new THREE.InstancedBufferAttribute(new Float32Array(capacity*3),3).setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('nextPose',motion);
   const atlas=plate(beasts?'beasts.webp':'procession.webp',true).texture;
   const cloth=beasts ? null : plate('procession-dyes.webp',false).texture;
   const material=new THREE.MeshBasicMaterial({map:atlas,transparent:true,alphaTest:.035});
@@ -83,13 +86,11 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
     shader.vertexShader=shader.vertexShader
       .replace('#include <common>','#include <common>\nattribute vec3 tileCell; varying float presence;')
       .replace('#include <uv_vertex>', `#include <uv_vertex>
-        presence=tileCell.z; vMapUv=(tileCell.xy+vMapUv)/vec2(${sheet.columns}.0,${sheet.rows}.0);`);
-    if (beasts) {
-      shader.vertexShader = 'attribute vec3 nextPose; varying vec3 poseBlend;\n' + shader.vertexShader.replace(
+        presence=abs(tileCell.z); if(tileCell.z<0.) vMapUv.x=1.-vMapUv.x; vMapUv=(tileCell.xy+vMapUv)/vec2(${sheet.columns}.0,${sheet.rows}.0);`);
+    shader.vertexShader = 'attribute vec3 nextPose; varying vec3 poseBlend;\n' + shader.vertexShader.replace(
         '#include <uv_vertex>', `#include <uv_vertex>
         poseBlend = vec3(nextPose.xy/vec2(${sheet.columns}.0,${sheet.rows}.0), nextPose.z);`);
-      shader.fragmentShader = 'varying vec3 poseBlend;\n' + shader.fragmentShader;
-    }
+    shader.fragmentShader = 'varying vec3 poseBlend;\n' + shader.fragmentShader;
     // The full next cell starts beyond the transparent gutter. Limit the
     // coarsest sample footprint before it can touch another animal's ink.
     shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying float presence;');
@@ -99,14 +100,17 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
       float footprint=max(length(dx*plateSize),length(dy*plateSize));
       float gutter=min(1.0,16.0/max(footprint,1.0));
       vec4 texel=textureGrad(map,vMapUv,dx*gutter,dy*gutter);
-      ${beasts ? 'texel=mix(texel,textureGrad(map,vMapUv+poseBlend.xy,dx*gutter,dy*gutter),poseBlend.z);' : ''}
+      texel=mix(texel,textureGrad(map,vMapUv+poseBlend.xy,dx*gutter,dy*gutter),poseBlend.z);
       texel.rgb=sRGBTransferEOTF(vec4(texel.rgb/max(texel.a,.001),1.)).rgb;
       diffuseColor*=texel;diffuseColor.a*=presence;`;
     if (cloth) {
       shader.uniforms.clothPlate={value:cloth};
       shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nuniform sampler2D clothPlate;')
         .replace('#include <map_fragment>',cellFilter)
-        .replace('#include <color_fragment>', 'diffuseColor.rgb*=mix(vec3(1.),vColor,textureGrad(clothPlate,vMapUv,dx*gutter,dy*gutter).r);');
+        .replace('#include <color_fragment>', `
+          float fabric=mix(textureGrad(clothPlate,vMapUv,dx*gutter,dy*gutter).r,
+            textureGrad(clothPlate,vMapUv+poseBlend.xy,dx*gutter,dy*gutter).r,poseBlend.z);
+          diffuseColor.rgb*=mix(vec3(1.),vColor,fabric);`);
     } else {
       shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',cellFilter);
     }
@@ -139,7 +143,8 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   function add(n,x,z,camera,time,fade) {
     const vx=camera.position.x-x, vz=camera.position.z-z;
     const facing=Math.atan2(vx,vz);
-    const turn=(facing-(n.heading||0))*8/tau;
+    const handedness=n.room===undefined ? 1 : -1;
+    const turn=(facing-(n.heading||0))*8/tau*handedness;
     const last=headings.get(n);
     // A small dead band straddles each sector boundary. Small back-and-forth
     // head motions no longer flash between two drawings.
@@ -147,26 +152,32 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
     const direction=Math.abs(drift)>.58 ? THREE.MathUtils.euclideanModulo(Math.round(turn),8) : last;
     headings.set(n,direction);
     const spec=SPECIES[n.type];
-    let tile;
+    let start,poses,cycle;
     if (beasts) {
-      const drawing = beastDrawing(n.type, n.variant);
-      const phase = THREE.MathUtils.euclideanModulo((time+(n.phase||0))*gaitFrequency(n.type)/tau,1)*drawing.poses;
-      const pose = Math.floor(phase);
-      tile = drawing.start + pose*8 + direction;
-      const next = drawing.start + (pose+1)%drawing.poses*8 + direction;
-      motion.setXYZ(count, next%sheet.columns - tile%sheet.columns,
-        Math.floor(tile/sheet.columns)-Math.floor(next/sheet.columns), phase-pose);
+      const drawing=beastDrawing(n.type,n.variant);
+      start=drawing.start;poses=drawing.poses;
+      cycle=(time+(n.phase||0))*gaitFrequency(n.type)/tau;
     } else {
-      tile = (roleIndex.get(n.role)+(n.type==='rabbit'?0:roles.length))*8 + direction;
+      const craft=n.craft || n.role;
+      const index=roleIndex.get(craft)+(n.type==='rabbit'?0:residentRoles.length);
+      poses=sheet.poses;start=index*poses*8;
+      cycle=(time*workRate(craft)+(n.phase||0))/tau;
     }
-    cells.setXYZ(count,tile%sheet.columns,sheet.rows-1-Math.floor(tile/sheet.columns),fade);
+    const phase=THREE.MathUtils.euclideanModulo(cycle,1)*poses, pose=Math.floor(phase);
+    const tile=start+pose*8+direction, next=start+(pose+1)%poses*8+direction;
+    // Hold the ink drawing through the centre of a worker's gesture.
+    // A short dissolve as the brush changes direction avoids double outlines.
+    const mix=beasts ? phase-pose : THREE.MathUtils.smoothstep(phase-pose,.30,.70);
+    motion.setXYZ(count,next%sheet.columns-tile%sheet.columns,
+      Math.floor(tile/sheet.columns)-Math.floor(next/sheet.columns),mix);
+    cells.setXYZ(count,tile%sheet.columns,sheet.rows-1-Math.floor(tile/sheet.columns),fade*handedness);
     if (cloth) figures.setColorAt(count,n.area ? dyes[n.dye] : white);
     const scale=n.stature||1, build=n.build||1;
     const center=n.y+(spec?.center??VILLAGERS.center)*scale;
     transform.position.set(x,center,z);
     transform.rotation.set(-Math.atan2(camera.position.y-center,Math.hypot(vx,vz)),facing,0,'YXZ');
     const span=spec ? beastFrame(n.type) : 0;
-    transform.scale.set((span||VILLAGERS.frameX)*scale*build,(span||VILLAGERS.frameY)*scale,1);
+    transform.scale.set((span||residentFrameX(n.craft || n.role))*scale*build,(span||VILLAGERS.frameY)*scale,1);
     transform.updateMatrix();figures.setMatrixAt(count,transform.matrix);
     shadow.position.set(x,n.y-(n.altitude||0)+.025,z);
     const contact=Math.max(0,1-(n.altitude||0)/12);

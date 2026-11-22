@@ -16,9 +16,14 @@ function paintMask(g,type) {
     g.bezierCurveTo(c[0]+2,c[1]+7,b[0]+2,b[1]+7,...a);g.fill();
   }
   if(tiger){
-    g.strokeStyle='#4f4033';g.lineCap='round';g.lineWidth=11;g.beginPath();g.moveTo(162,96);g.quadraticCurveTo(259,89,408,96);g.stroke();
-    for(const [u,v,w] of [[197,47,13],[276,37,10],[349,28,8]]){
-      g.lineWidth=w;g.beginPath();g.moveTo(u-10,96-v);g.quadraticCurveTo(u+17,97,u-4,96+v);g.stroke();
+    flick(g,136,96,314,-.8,8.4,'#514638');
+    for(const [x,depth,w] of [[180,73,8.6],[263,54,7.5],[346,31,6.2]]){
+      for(const s of [-1,1]){
+        fill(g,'#4b4134',()=>{
+          g.moveTo(x-8,96);g.bezierCurveTo(x+12,96+s*depth*.35,x-8,96+s*depth*.57,x-42,96+s*depth);
+          g.bezierCurveTo(x-13,96+s*depth*.80,x+25,96+s*depth*.53,x+w,96);
+        });
+      }
     }
   }
   for(const [y,sign] of [[0,1],[192,-1],[384,1]]){
@@ -144,7 +149,7 @@ function scales(g,kind) {
     g.fillStyle=base;g.fillRect(0,0,768,192);
     const dx=kirin?40:23,dy=kirin?27:22;
     for(let j=0;j<Math.ceil(140/dy);j++)for(let k=-1;k<Math.ceil(768/dx)+1;k++) {
-      const x=k*dx+(j%2)*dx*.49,y=j*dy+5;
+      const x=k*dx+(j%2)*dx*.49+2*Math.sin(k*.83+j*.52),y=j*dy+5+2.7*Math.sin(k*.55+j*.9);
       const fade=kirin?.62:.72;
       g.globalAlpha=fade;
       fill(g,j%3===0?(kirin?'#7e9983':'#668577'):(kirin?'#a0b398':'#708e79'),()=>{
@@ -184,12 +189,47 @@ function down(g,rng) {
   });
 }
 
+// The four studio swatches are overprinted only at bake time. Match marks
+// to the nap of each hide, and reflect the brush at the UV seam on the belly.
+const brushwork = new Image();
+brushwork.src = new URL('./animal-brushwork.webp', import.meta.url).href;
+await brushwork.decode();
+function printBrushwork(g,type,part) {
+  const tile = type==='bird' ? 2 : ['kirin','dragon'].includes(type) ? 3 :
+    ['boar','monkey','shishi'].includes(type) || part==='brush' ? 1 : 0;
+  const source = brushwork.naturalWidth / 2;
+  const originX = (tile%2)*source + 3, originY = (tile>>1)*source + 3;
+  g.save();
+  g.globalCompositeOperation='multiply';
+  g.globalAlpha = part==='face' ? .48 : ['deer','tiger','fox'].includes(type) ? .76 : .58;
+  // Subrectangles overlap with mirrored edges. No wrap line is drawn at 0/360.
+  for(let j=0;j<2;j++) for(let i=0;i<3;i++){
+    const w=256,h=192;
+    g.save();g.translate(i*w+(i%2?w:0),j*h+(j%2?h:0));g.scale(i%2?-1:1,j%2?-1:1);
+    g.drawImage(brushwork,originX,originY,source-6,source-6,0,0,w,h);g.restore();
+  }
+  g.restore();
+}
+
 export function paintBeastCoat(type,part) {
   const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=512;
   const g=canvas.getContext('2d');g.scale(4/3,4/3);g.lineCap=g.lineJoin='round';
   const rng=seeded(318+type.charCodeAt(2)*103+part.charCodeAt(0));
   g.fillStyle=pigment[type];g.fillRect(0,0,768,384);
-  if(part==='mane')lionMane(g);
+  if(part==='tail' && type==='tiger'){
+    flanks(g,()=>{
+      const wash=g.createLinearGradient(0,0,0,192);
+      wash.addColorStop(0,'#b58855');wash.addColorStop(.65,'#d1a46f');wash.addColorStop(1,'#d8c49c');
+      g.fillStyle=wash;g.fillRect(0,0,768,192);
+      for(let k=0;k<9;k++){
+        const x=43+k*83,w=10+k*.95,curve=8*Math.sin(k*2);
+        fill(g,'#514738',()=>{g.moveTo(x-w,-3);g.bezierCurveTo(x+curve,32,x-19,62,x+4,105);
+          g.quadraticCurveTo(x+13,150,x+8,191);g.lineTo(x+w*.9,192);
+          g.bezierCurveTo(x+29,145,x+w*.9,112,x+w*.7,90);g.quadraticCurveTo(x-2,37,x+w,-3);});
+      }
+      g.fillStyle='#514738';g.fillRect(718,0,50,192);
+    });
+  } else if(part==='mane')lionMane(g);
   else if(['deer','boar','shishi'].includes(type))scrollHide(g,type,rng);
   else if(part==='wing')vanes(g,rng);
   else if(part==='leg')legs(g,type);
@@ -207,6 +247,7 @@ export function paintBeastCoat(type,part) {
       }
     });
   }
+  printBrushwork(g,type,part);
   // Broken fibres and blooms are layered last so the deposits continue over
   // the mask, stripes and shell markings instead of showing a tiled noise field.
   for(let i=0;i<13000;i++){
@@ -317,7 +358,7 @@ function scrollHide(g,type,rng) {
 
 function lionMane(g){
   const wash=g.createLinearGradient(0,0,768,0);
-  wash.addColorStop(0,'#b4a58b');wash.addColorStop(.30,'#c9bba0');wash.addColorStop(.76,'#bbb099');wash.addColorStop(1,'#ad9e82');
+  wash.addColorStop(0,'#8c8778');wash.addColorStop(.30,'#c9bba0');wash.addColorStop(.76,'#bbb099');wash.addColorStop(1,'#ad9e82');
   g.fillStyle=wash;g.fillRect(0,0,768,384);
   const curve=(x,i)=>i*3.7+11*Math.sin(x*.010+i*.079)+5*Math.sin(x*.018+i*.175)+7*Math.sin(i*.44+x*.004);
   for(let i=-8;i<113;i++){
@@ -328,4 +369,61 @@ function lionMane(g){
     g.strokeStyle=i%7===0?'#645c4c':i%3?'#9c907a':'#e1d4b7';
     g.lineWidth=wide;g.stroke(path);
   }
+}
+
+// A seamless map of a pond turtle. The first half of the circumference carries
+// the vertebral, costal and marginal scutes. The second half is its plastron.
+export function paintTurtleShell() {
+  const canvas=document.createElement('canvas');
+  canvas.width=1024;canvas.height=768;
+  const g=canvas.getContext('2d'), rand=seeded(63729);
+  const W=canvas.width,H=canvas.height*.5;
+  g.fillStyle='#c3b48e';g.fillRect(0,0,W,2*H);
+  function scute(poly,tones,seed) {
+    const pts=poly.map(([x,y])=>[x*W,y*H]);
+    const center=pts.reduce((v,p)=>[v[0]+p[0]/pts.length,v[1]+p[1]/pts.length],[0,0]);
+    const nucleus=[center[0]+Math.sin(seed*.91)*7,center[1]+Math.cos(seed*2)*5];
+    function ring(radius,color,width) {
+      g.strokeStyle=color;g.lineWidth=width;g.beginPath();
+      pts.forEach((p,k)=>{
+        const q=pts[(k+1)%pts.length];
+        for(let i=0;i<10;i++) {
+          const t=i/10, bend=1+.025*Math.sin(t*Math.PI)*Math.sin(seed+k*.83+t*5.1);
+          const x=nucleus[0]+(p[0]*(1-t)+q[0]*t-nucleus[0])*radius*bend;
+          const y=nucleus[1]+(p[1]*(1-t)+q[1]*t-nucleus[1])*radius*bend;
+          if(!k&&!i)g.moveTo(x,y);else g.lineTo(x,y);
+        }
+      });
+      g.closePath();g.stroke();
+    }
+    g.beginPath();pts.forEach(([x,y],k)=>k?g.lineTo(x,y):g.moveTo(x,y));g.closePath();
+    const stain=g.createRadialGradient(...nucleus,3,...nucleus,Math.max(34,Math.abs(pts[0][0]-nucleus[0])*1.8));
+    stain.addColorStop(0,tones[1]);stain.addColorStop(.65,tones[0]);stain.addColorStop(1,tones[2]);
+    g.fillStyle=stain;g.fill();g.save();g.clip();
+    for(let k=0;k<7;k++)ring(.22+k*.116,k%2?tones[2]:tones[1],k%2?1.9:2.6);
+    ring(.955,tones[1],3.6);ring(.997,'#574f40',4);g.restore();
+  }
+  const dorsal=['#a1997f','#c8b995','#827c67'],belly=['#d0c29e','#e4d3ac','#a79b7f'];
+  for(let k=0;k<5;k++) {
+    const start=k*.2,end=start+.2,mid=start+.097;
+    scute([[start,.36],[mid,.265],[end,.36],[end,.64],[mid,.735],[start,.64]],dorsal,k);
+    for (const sign of [-1,1]) {
+      const y=a=>sign===1?a:1-a;
+      scute([[start,y(.12)],[end,y(.12)],[end,y(.36)],[mid,y(.265)],[start,y(.36)]],dorsal,k+sign*11);
+    }
+  }
+  for (const sign of [-1,1]) for (let i=0;i<12;i++) {
+    const x=i/12,y=(n)=>sign===1?n:1-n;
+    scute([[x,y(0)],[x+1/12,y(0)],[x+1/12,y(.12)],[x,y(.12)]],dorsal,51+i);
+  }
+  for (const sign of [-1,1]) for(let i=0;i<6;i++) {
+    const x=i/6,next=(i+1)/6,at=a=>1.5+sign*a;
+    scute([[x,at(0)],[next,at(0)],[next+.018*Math.sin(next*Math.PI),at(.23)],
+      [next,at(.5)],[x,at(.5)],[x+.018*Math.sin(x*Math.PI),at(.23)]],belly,81+i);
+  }
+  for(let i=0;i<23000;i++){
+    const x=rand()*W,y=rand()*H*2;
+    stroke(g,i%3?'rgba(51,48,40,.09)':'rgba(255,246,218,.17)',x,y,x+1,y-.6,x+rand()*6,y+rand()*1.7,.6+rand());
+  }
+  return canvas;
 }

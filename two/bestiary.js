@@ -1,6 +1,7 @@
 // The illustrated menagerie ranges through the same ten districts as the procession.
 import { REGIONS, groundHeight, waterDepth, solidHeightAt, terrainHeight, WATER_Y, seeded, wrapCoord, wrapDelta } from './terrain.js';
 
+import { canopyHeight, walkCircuit } from './village-paths.js';
 import { dragonWave, dragonPhase, kirinPath, walkingScore } from './animal-motion.js';
 export { dragonVisible } from './animal-motion.js';
 
@@ -61,7 +62,8 @@ function requiredHeight(n,time) {
     samplePath.clearance=clearanceBands[0]+3.1*Math.sin(angle*.57+n.phase)+1.5*Math.cos(angle*1.17);
   }
   const {x,z,clearance}=samplePath;
-  return Math.max(Math.max(WATER_Y,terrainHeight(x,z))+clearance,solidHeightAt(x,z,1.45)+2.15);
+  const reach=n.type==='kirin'?3.0:1.9;
+  return Math.max(Math.max(WATER_Y,terrainHeight(x,z))+clearance,solidHeightAt(x,z,reach)+2.15,canopyHeight(x,z,reach)+.95);
 }
 // Follow a smooth vertical envelope above the entire route. A solitary roof
 // or boulder must be cleared on approach, not with a vertical pop at its edge.
@@ -71,11 +73,13 @@ function courseHeight(n,time) {
   if(!course) {course={samples:new Map(),index:NaN,levels:[]};altitudeCourses.set(n,course);}
   if(course.index!==i) {
     course.index=i;
-    for(const k of course.samples.keys()) if(k<i-13||k>i+14)course.samples.delete(k);
-    for(let k=i-13;k<=i+14;k++) if(!course.samples.has(k))course.samples.set(k,requiredHeight(n,k*spacing));
+    // Allow time to climb over mature woodland before the next sharp crown edge.
+    const reach=n.type==='kirin'?34:22;
+    for(const k of course.samples.keys()) if(k<i-reach-1||k>i+reach+2)course.samples.delete(k);
+    for(let k=i-reach-1;k<=i+reach+2;k++) if(!course.samples.has(k))course.samples.set(k,requiredHeight(n,k*spacing));
     for(let j=0;j<4;j++) {
       const middle=i+j-1;let highest=-Infinity;
-      for(let k=middle-12;k<=middle+12;k++){
+      for(let k=middle-reach;k<=middle+reach;k++){
         const drop=Math.max(0,Math.abs(k-middle)-1)*spacing*(n.type==='kirin'?1.05:2.35);
         highest=Math.max(highest,course.samples.get(k)-drop);
       }
@@ -97,15 +101,9 @@ export function moveWildlife(n,time) {
   const air=isFlying(n.type);
   if(!air) walkingScore(time,n,motion);
   const angle=(air?time:motion.travel)*n.cruise+n.phase;
-  const tx=n.homeX+n.radius*(Math.sin(angle)-Math.sin(n.phase));
-  const tz=n.homeZ+n.radius*.66*(Math.cos(angle)-Math.cos(n.phase));
-  if(!air) {
-    n.gesture=motion.gesture;n.variation=motion.variation;
-    if(waterDepth(tx,tz)>.12 || solidHeightAt(tx,tz,.65)>groundHeight(tx,tz)+.22) {
-      n.speed=0; return;
-    }
-  }
-  n.x=wrapCoord(tx); n.z=wrapCoord(tz);
+  walkCircuit(n,angle,n);
+  n.x=wrapCoord(n.x);n.z=wrapCoord(n.z);
+  if(!air) {n.gesture=motion.gesture;n.variation=motion.variation;}
   n.heading=Math.atan2(Math.cos(angle),-.66*Math.sin(angle));
   n.speed=n.radius*n.cruise*Math.hypot(Math.cos(angle),.66*Math.sin(angle))*(air?1:motion.pace);
   if (air) {

@@ -10,6 +10,8 @@ function dragonSkin(mesh) {
   const pos=geometry.attributes.position, normal=geometry.attributes.normal;
   pos.setUsage(T.DynamicDrawUsage);normal.setUsage(T.DynamicDrawUsage);
   mesh.geometry=geometry;
+  const contour=mesh.getObjectByName('墨の輪郭');
+  if(contour)contour.geometry=geometry;
   geometry.computeBoundingSphere();geometry.boundingSphere.radius+=1.2;
   const rings=[], width=33;
   for(let k=0;k<rest.count;k+=width){

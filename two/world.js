@@ -1,5 +1,7 @@
 import { noren } from './craftwork.js';
-import { pagodaPlan } from './architecture.js';
+import { pagodaPlan, roomPlan, roofForm } from './architecture.js';
+import { hipRoof, tradeFacade } from './workshops.js';
+import { wetStone } from './stone-water.js';
 import { prepareForest } from './forest.js';
 import { furnishRoom } from './interiors.js';
 import * as THREE from './vendor/three.module.min.js';
@@ -7,6 +9,7 @@ import { dressSeasonalPlaces, seasonalWeather } from './seasons.js';
 import { POUNDING } from './festival.js';
 import { createMochiPounding } from './actors.js';
 import { dressPlaces } from './places.js';
+import { BOATS, HULL_HEIGHT, HULL_DRAFT, waterWaveGLSL, hullWaterGLSL } from './shoreline.js';
 import { createAtmosphere } from './atmosphere.js';
 import { loadPigments, meadowMaterial, trailMaterial, tintedSurface, roundedStone } from './pigments.js';
 import { plantInkTrees, plantUnderstory } from './wilds.js';
@@ -169,13 +172,15 @@ function buildRoads(scene, art) {
 }
 function makeWater(scene, art, panorama) {
   const mat = new THREE.ShaderMaterial({
-    fog: true,
+    fog: true, transparent: true, depthWrite: true,
     side: THREE.DoubleSide,
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.fog,
       {
         clock: { value: 0 },
         climate: {value:new THREE.Vector4()},
+        hullPlacement: {value: BOATS.map(b => new THREE.Vector4(b.x,b.z,cos(b.yaw),sin(b.yaw)))},
+        hullSize: {value: BOATS.map(b => new THREE.Vector4(b.length,b.width,0,0))},
         pebble: { value: null },
         horizon: { value: null },
         deep: { value: css('#65898a') },
@@ -184,17 +189,18 @@ function makeWater(scene, art, panorama) {
       },
     ]),
     vertexShader: `varying vec3 vWorld; uniform float clock;
+      ${waterWaveGLSL}
       #include <fog_pars_vertex>
       void main(){vec4 wp=modelMatrix*vec4(position,1.);
         vec2 q=mod(wp.xz+416.,832.)-416.;
-        float sea=max(smoothstep(175.,275.,-q.x),max(smoothstep(312.,383.,q.x),smoothstep(350.,410.,abs(q.y))));
-        wp.y+=(.014+.086*sea)*(sin(q.x*.54+q.y*.31-clock*1.23)+.29*sin(q.y*.84-clock*1.42));
+        wp.y+=waveHeight(q,clock);
         vWorld=wp.xyz;
         vec4 mvPosition=viewMatrix*wp;gl_Position=projectionMatrix*mvPosition;
         #include <fog_vertex>
       }`,
     fragmentShader: `uniform float clock;uniform vec4 climate;uniform sampler2D pebble,horizon;uniform vec3 deep,jade,foam;
       varying vec3 vWorld;
+      ${hullWaterGLSL}
       #include <fog_pars_fragment>
       float hash(vec2 v){return fract(sin(dot(v,vec2(41.23,73.11)))*21314.5);}
       float curl(vec2 at,float phase){
@@ -211,6 +217,8 @@ function makeWater(scene, art, panorama) {
       }
       void main(){
         vec2 p=mod(vWorld.xz+416.,832.)-416.;float t=clock;
+        float margin=hullMargin(p,(vWorld.y-${WATER_Y - HULL_DRAFT})/${HULL_HEIGHT});
+        if(margin<0.)discard;
         float river=18.+9.*sin(p.x/51.)+3.3*sin(p.x/25.);
         float halfBank=8.6+1.9*sin(p.x/38.+.35)+.95*sin(p.x/14.);
         float coastBand=(p.y-112.)/75.;float shoreX=-250.+64.*exp(-coastBand*coastBand)+5.5*sin(p.y/23.);
@@ -253,6 +261,9 @@ function makeWater(scene, art, panorama) {
         col+=vec3(.12,.155,.10)*caustic*(1.-depth)*.8;
         col=mix(col,col*vec3(.52,.67,.67),inkline*.6);
         col=mix(col,foam,glint*.46+hair*.20+shore*.48);
+        float meniscus=1.-smoothstep(.008,.056+min(.05,length(fwidth(p))),margin);
+        col=mix(col,col*vec3(.57,.61,.58),meniscus*.58);
+        col=mix(col,foam,.25*(1.-smoothstep(.012,.059,abs(margin-.086+.013*slow)))*(.52+.41*sidle));
         float under=(1.-smoothstep(3.5,5.1,abs(p.x+.4*sidle)))*smoothstep(-.4,2.,inside);
         col*=1.-under*.19;
         vec3 nightWater=mix(vec3(.015,.035,.075),vec3(.080,.12,.19),fresnel+glint*.17);
@@ -266,13 +277,18 @@ function makeWater(scene, art, panorama) {
         float spark=.12+.65*smoothstep(.35,.90,choppy)+.51*glint+.23*hair;
         col+=vec3(1.55,.82,.33)*exp(-26.*length((reflection-sunDir)*vec3(1.,.63,1.)))*spark*climate.w;
         col+=vec3(.54,.69,.92)*exp(-24.*length((reflection-moonDir)*vec3(1.,.63,1.)))*spark*climate.z;
-        gl_FragColor=vec4(col,1.);
+        // A thin film reveals the actual stones and bank through the painted
+        // gravel. Deep channels and grazing-angle reflections close the wash.
+        float opacity=mix(.51,.995,smoothstep(-.8,5.3,inside));
+        opacity=mix(opacity,1.,clamp(fresnel*.79+glint*.24+shore*.20,0.,1.));
+        gl_FragColor=vec4(col,opacity);
         #include <fog_fragment>
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
   });
   // Keep the live asynchronously loaded sources in the merged fog/water uniforms.
+  mat.uniforms.clock = scene.userData.waterClock ??= {value:0};
   mat.uniforms.pebble.value = art.gravel;
   mat.uniforms.horizon.value = panorama || art.gravel;
   // Concentrate vertices at water level around the traveller. The outskirts
@@ -283,6 +299,7 @@ function makeWater(scene, art, panorama) {
   for(let i=0;i<verts.count;i++) verts.setXYZ(i,spread(verts.getX(i)),0,-spread(verts.getY(i)));
   grid.computeBoundingSphere();
   const m = new THREE.Mesh(grid, mat);
+  m.name = '桜川と潮';
   m.position.y = WATER_Y;
   scene.add(m);
   return {uniforms:mat.uniforms,update(time,player){
@@ -497,12 +514,25 @@ function stripedThatch() {
           ctx.stroke();
         }
       }
+      for(let row=-1;row<5;row++) {
+        for(let i=0;i<120;i++){
+          const x=i*w/120, y=row*64+29+3*sin(x*.058+row)+2*rnd();
+          ctx.strokeStyle='rgba(83,66,46,.24)';ctx.lineWidth=.9+rnd();
+          ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+1.2,y-6-rnd()*7);ctx.stroke();
+          ctx.strokeStyle='rgba(249,232,187,.62)';
+          ctx.beginPath();ctx.moveTo(x+1,y-3);ctx.lineTo(x+1.7,y+2+rnd()*6);ctx.stroke();
+        }
+      }
     }),
   );
   return new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide });
 }
 const labels = {
   桜川: ['#392e23', '#e6c983'],
+  染: ['#f3e8cc','#415b68'],
+  書: ['#f1e4c8','#584f40'],
+  米: ['#eee2bf','#686a48'],
+  網: ['#eee1c2','#5f6960'],
   茶: ['#f1e3be', '#56645a'],
   酒: ['#efe0b1', '#4b5562'],
   湯: ['#f4e0ac', '#9b4d3f'],
@@ -580,6 +610,7 @@ class Painter {
       leaf: leafBlade(),
       plane: new THREE.PlaneGeometry(1, 1),
       roof: roofShape(),
+      hipRoof: hipRoof(),
       pagodaRoof: pagodaRoofShape(),
       pagodaCrown: pagodaRoofShape(.026),
       pyramid: new THREE.ConeGeometry(1, 1, 4, 1),
@@ -589,7 +620,7 @@ class Painter {
     this.roofs = tintedSurface(art.tile, 0.56, 0.72, 0.022);
     this.lacquer = tintedSurface(art.cedar, 0.13, 0.69, 0.009);
     this.thatch = stripedThatch();
-    this.stone = tintedSurface(art.rock, 0.58);
+    this.stone = wetStone(tintedSurface(art.rock, .58), WATER_Y, this.sway);
     this.boarding = tintedSurface(art.cedar, 0.36);
     const oldCompile = this.boarding.onBeforeCompile;
     this.boarding.onBeforeCompile = (shader) => {
@@ -1145,22 +1176,24 @@ function building(p, b, index) {
     part('finial',0,apex+3.19,0,.41,.72,.41,'#9d8c5f',p.bronze);
     return;
   }
-  const tiled = kind !== 'cottage' && kind !== 'inn';
+  const plan = roomPlan(b), hip = roofForm(b) === 'hip';
+  const tiled = ['ink','dye','brew'].includes(plan.craft);
+  const fascia = tiled ? '#4d5651' : '#786950';
   part('box', 0, wall + 0.23, 0, w * 1.08, 0.26, d * 1.08, deep);
   part(
-    'roof',
+    hip ? 'hipRoof' : 'roof',
     0,
     wall + 0.29,
     0,
     w * 1.24,
     roof,
     d * 1.28,
-    b.snow ? '#e5eef4' : tiled ? '#89918c' : '#bda57a',
+    b.snow ? '#e5eef4' : tiled ? '#89918c' : '#d1bb94',
     b.snow ? p.solid : tiled ? p.roofs : p.thatch,
   );
-  part('box', 0, wall + roof + 0.35, 0, w * 1.05, 0.23, 0.28, tiled ? '#59645d' : '#8a7251', p.wood);
+  part('box', 0, wall + roof + 0.35, 0, w * (hip ? .59 : 1.05), 0.23, hip ? .39 : .28, tiled ? '#59645d' : '#8a7251', p.wood);
   if (b.snow) {
-    part('box', 0, wall + roof + 0.51, 0, w * 1.075, 0.16, 0.35, '#eff5fc');
+    part('box', 0, wall + roof + 0.51, 0, w * (hip ? .60 : 1.075), 0.16, 0.35, '#eff5fc');
     for (const side of [-1, 1])
       for (let j = -5; j <= 5; j++) {
         const u = j * w * 0.111;
@@ -1180,10 +1213,13 @@ function building(p, b, index) {
       if (tiled) {
         for (const extra of [-0.026, 0.026]) {
           const q = local(u + extra * w, yy + 0.063 + 0.07 * (j / 4) ** 4, side * d * 0.629);
-          p.part('round', q.x, q.y, q.z, 0.09, 0.23, 0.09, '#81887e', yaw, PI * 0.49 * side, 0, p.solid);
+          p.part('round', q.x, q.y, q.z, .091, .23, .091, '#758078', yaw, PI*.5*side, 0, p.fine);
+          const end=local(u+extra*w,yy+.063+.07*(j/4)**4,side*(d*.629+.117));
+          p.part('tileEnd',end.x,end.y,end.z,.089,.089,1,'#ede9dd',yaw+(side<0?PI:0),0,0,p.workshopArt.tileEnd,false);
         }
       }
     }
+    if (hip) continue;
     // Braced gable and vent on either end of the building.
     const e = side * w * 0.504,
       look = local(e, wall + roof * 0.4 + 0.13, 0);
@@ -1205,7 +1241,7 @@ function building(p, b, index) {
   }
   if (!tiled) {
     for (let j = -2; j <= 2; j++) {
-      const u = j * w * 0.18;
+      const u = j * w * (hip ? .114 : .18);
       p.link(
         local(u, wall + roof * 0.97 + 0.24, -d * 0.035),
         local(u + 0.2, wall + roof + 0.64, d * 0.066),
@@ -1229,14 +1265,51 @@ function building(p, b, index) {
     }
   }
   for (const sg of [-1, 1]) {
-    const mid = sg * w * 0.275,
+    const mid = sg * (w + plan.door) / 4, panel = (w-plan.door)/2,
       zw = d * 0.512;
-    part('box', mid, wall * 0.52 + 0.25, zw, w * 0.19, wall * 0.46, 0.11, '#adab87');
+    part('box', mid, wall * 0.52 + 0.25, zw, panel * .79, wall * 0.46, 0.11, '#adab87');
     for (let j = -1; j <= 1; j++)
-      part('box', mid + j * w * 0.042, wall * 0.52 + 0.25, zw + 0.065, 0.065, wall * 0.48, 0.08, deep);
-    part('box', mid, wall * 0.52 + 0.25, zw + 0.071, w * 0.205, 0.079, 0.09, wood);
+      part('box', mid + j * panel * .19, wall * 0.52 + 0.25, zw + 0.065, 0.065, wall * 0.48, 0.08, deep);
+    part('box', mid, wall * 0.52 + 0.25, zw + 0.071, panel * .85, 0.079, 0.09, wood);
   }
 
+  tradeFacade(p,b,plan,part);
+  // Plastered firebreaks rise beyond the eaves of the tile-roofed storehouses.
+  // The writing halls instead turn a second gable toward the front veranda.
+  if (plan.craft === 'brew') {
+    for (const side of [-1,1]) {
+      const xx=side*w*.485;
+      for(const front of [-1,1]) {
+        const zz=front*d*.50;
+        part('box',xx,wall+.53,zz,.24,.99,.83,'#efe5d0',p.workshopArt.clay);
+        part('roof',xx,wall+.97,zz,.48,.20,1.05,fascia,p.roofs);
+      }
+    }
+  } else if (plan.porch) {
+    const {v:porch, rise:pitch, width, depth, eave, rotation}=plan.porch;
+    part('roof',0,eave,porch,width,pitch,depth,fascia,p.roofs,rotation);
+    part('box',0,wall*.78,porch+.23*d,w*.48,.12,.11,deep,p.wood);
+    for(const sg of [-1,1]) {
+      const xx=sg*w*.207;
+      part('box',xx,wall*.395+.15,porch+.19*d,.15,wall*.75-.27,.16,wood,p.wood);
+      p.link(local(xx,wall*.78,porch+.20*d),local(0,wall*.78+pitch*.84,porch+.20*d),
+        .09,'#b1956b',true,true,false,p.wood);
+    }
+  }
+  if (plan.monitor) {
+    // A louvred koshi-yane vents steam from the tea hearth or drying loft.
+    const {u,v,width,depth,eave,rise}=plan.monitor;
+    const base=wall+roof+.16, height=eave-base;
+    part('box',u,base+height*.5,v,width*.85,height,depth*.66,'#564e3c',p.boarding);
+    for(const side of [-1,1]) {
+      for(let j=0;j<3;j++)part('box',u,base+(j+.45)*height/3,v+side*depth*.341,
+        width*.86,.035,.063,'#aa9170',p.wood);
+      for(const end of [-1,1])part('box',u+end*width*.41,base+height*.5,v+side*depth*.34,
+        .075,height+.05,.086,'#80674d',p.wood);
+    }
+    part('roof',u,eave,v,width,rise,depth,b.snow?'#e5eef4':'#7d8276',b.snow?p.solid:p.roofs);
+    part('box',u,eave+rise+.014,v,width*.86,.083,.10,'#636b5f',p.wood);
+  }
   if (kind === 'shop' || kind === 'inn' || kind === 'temple') {
     // The raised engawa has individual cedar boards and an open fascia.
     const deckWidth = w * 0.78,
@@ -1275,7 +1348,7 @@ function building(p, b, index) {
       yaw,
       0,
       0,
-      p.signs[kind === 'inn' ? '湯' : kind === 'temple' ? '社' : index % 3 ? '茶' : '酒'],
+      p.signs[{brew:'酒',dye:'染',ink:'書',rice:'米',tea:'茶',net:'網',lodge:'湯'}[plan.craft]],
     );
     for (const side of [-1, 1]) {
       const a = local(side * w * 0.34, wall * 0.75, d * 0.583);
@@ -1357,7 +1430,7 @@ function details(p) {
     p.part(
       'rock',
       x,
-      y + 0.05,
+      y - s * .12,
       z,
       s * 1.33,
       s * 0.67,

@@ -16,7 +16,7 @@ const plans = {
       [.441,1.165,.179,.214],[.532,1.378,.147,.155],[.604,1.554,.126,.125],
       [.668,1.683,.138,.159],[.754,1.757,.154,.162],[.844,1.751,.14,.123],
       [.951,1.712,.108,.089],[1.064,1.687,.079,.059],[1.109,1.692,.056,.045],[1.131,1.697,.008,.012]
-    ], head:[0,1.56,.622], hind:[2,4], fore:[7,9], legX:.147, skin:'deer', hoof:true,
+    ], head:[0,1.015,.31], hind:[2,4], fore:[7,9], legX:.147, skin:'deer', hoof:true,
   },
   boar: {
     profile:[
@@ -46,11 +46,11 @@ function skin(body,plan,material,group,type) {
   const centers=new T.CatmullRomCurve3(plan.profile.map(([z,y])=>new T.Vector3(0,y,z)));
   const radii=new T.CatmullRomCurve3(plan.profile.map(([, , w,h])=>new T.Vector3(w,h,0)));
   let startLegs, endLegs;
-  const faces=[], pos=[], uv=[], joints=[], weights=[], regular=[], caps=[], soften=[], welds=[];
+  const faces=[], pos=[], uv=[], flank=[], joints=[], weights=[], regular=[], caps=[], soften=[], welds=[];
   const rows=(plan.profile.length-1)*4, sides=32;
-  const joint=(x,y,z,u,v,bone=0,amount=0)=>{
+  const joint=(x,y,z,u,v,bone=0,amount=0,fu=u,fv=v,flankWeight=0)=>{
     const i=pos.length/3;
-    pos.push(x,y,z);uv.push(u,v);
+    pos.push(x,y,z);uv.push(u,v);flank.push(fu,fv,flankWeight);
     joints.push(0,bone,0,0);weights.push(1-amount,amount,0,0);return i;
   };
   const point=i=>new T.Vector3().fromArray(pos,i*3);
@@ -70,9 +70,16 @@ function skin(body,plan,material,group,type) {
     for(let k=0;k<=sides;k++){
       const a=k*tau/sides;
       const spine=type==='boar' ? Math.max(0,Math.sin(a))**13 * .055*Math.sin(Math.PI*Math.min(1,t/.65)) : 0;
-      const x=r.x*Math.cos(a), y=center.y+r.y*dir.z*Math.sin(a)+spine,z=center.z-r.y*dir.y*Math.sin(a);
-      const weight=plan.shortNeck ? smooth(t,.70,.99) : smooth(t,type==='boar'?.51:.53,type==='boar'?.69:.72);
-      const index=joint(x,y,z,plan.shortNeck?Math.min(1,t*1.30):.774*t,1-k/sides,1,weight);
+      // The pelvis and scapula run diagonally under the hide. Give them
+      // separate ridges with a hollow behind each, including the opposite flank.
+      const side=Math.abs(Math.cos(a)), level=Math.sin(a), section=j/4;
+      const haunch=Math.exp(-((section-(plan.hind[0]+.95-.62*level))**2)/.94);
+      const scapula=Math.exp(-((section-(plan.fore[0]+.83-.78*level))**2)/.48);
+      const flankHollow=Math.exp(-((section-(plan.hind[1]+.46-.38*level))**2)/.66);
+      const relief=side**2*(.15*haunch+.13*scapula-.115*flankHollow);
+      const x=r.x*(1+relief)*Math.cos(a), y=center.y+r.y*dir.z*level+spine,z=center.z-r.y*dir.y*level;
+      const weight=plan.shortNeck ? smooth(t,.70,.99) : smooth(t,type==='deer'?.40:type==='boar'?.51:.53,type==='deer'?.64:type==='boar'?.69:.72);
+      const index=joint(x,y,z,plan.shortNeck?t:.774*t,1-k/sides,1,weight);
       regular.push(index);
       if(patch.some(p=>j>=p.j0-3&&j<=p.j1+3&&k>=p.k0-2&&k<=p.k1+2))soften[index]=1;
       if(j===rows || k===sides || patch.some(p=>j>=p.j0&&j<p.j1&&k>=p.k0&&k<p.k1))continue;
@@ -94,21 +101,24 @@ function skin(body,plan,material,group,type) {
     const angles=ring.map(p=>Math.atan2((p.z-middle.z)/(hi.z-lo.z),(p.x-middle.x)/(hi.x-lo.x)));
     const shoulder=ring.reduce((a,p)=>a+p.y,0)/ring.length, heavy=type==='shishi'||type==='tiger', pig=type==='boar';
     const upper=plan.upper??(heavy?.161:pig?.122:.087), ankle=plan.ankle??(heavy?.072:pig?.046:.033);
-    const hock=f<0?-.119:0, bend=f<0?.106:-.047;
+    const hind=f<0, feline=type==='tiger'||type==='shishi';
+    const hock=hind?-(type==='boar'?.106:heavy?.19:.15):-.027;
+    const bend=hind?(feline?.17:pig?.104:.133):-(feline?.095:.056);
+    const thigh=hind?(feline?1.28:1.15):.96;
     const sections=[
-      [.90,.008,upper*1.08,upper*1.18,.19],[.76,.006,upper,upper*1.31,.46],
-      [.59,bend,upper*.77,upper*.84,.78],[.46,bend*.72,upper*.66,upper*.68,.96],
-      [.31,hock*.70,ankle*1.21,ankle*1.24,1],[.23,hock,ankle*1.17,ankle*1.46,1],
+      [.90,.008,upper*1.08,upper*1.18,.19],[.76,bend*.28,upper*thigh,upper*1.35*thigh,.46],
+      [.59,bend,upper*.77,upper*.94,.78],[.46,bend*.72,upper*.66,upper*.68,.96],
+      [.31,hock*.80,ankle*1.21,ankle*1.53,1],[.23,hock,ankle*1.17,ankle*1.46,1],
       [.155,hock+.008,ankle*.89,ankle,1],[.098,hock+.034,ankle*1.17,ankle*1.55,1],
       [.067,hock+.052,ankle*(heavy?2.10:1.16),ankle*(heavy?2.17:1.44),1],
-      [.036,hock+.077,ankle*(heavy?2.29:1.20),ankle*(heavy?2.00:1.65),1],
+      [.036,hock+.077,ankle*(heavy?1.91:1.20),ankle*(heavy?2.34:1.65),1],
       [.017,hock+.069,ankle*(heavy?1.62:.91),ankle*(heavy?1.47:1.32),1]
     ];
     // Give both sides of the atlas seam a shared position, weight and normal.
     // Interpolating from torso UVs across the entire print to the leg strip
     // otherwise leaves a horizontal band across the moving shoulder.
     let last=perimeter.map((original,i)=>{
-      const p=ring[i],dup=joint(p.x,p.y,p.z,plan.shortNeck?0:.803,.5+.475*Math.cos(angles[i]),joints[4*original+1],weights[4*original+1]);
+      const p=ring[i],dup=joint(p.x,p.y,p.z,plan.shortNeck?0:.803,.5+.475*Math.cos(angles[i]),joints[4*original+1],weights[4*original+1],uv[2*original],uv[2*original+1],1);
       welds.push([original,dup]);soften[dup]=1;return dup;
     });
     for(const [height,zOff,w,depth,weight] of sections){
@@ -119,7 +129,10 @@ function skin(body,plan,material,group,type) {
         // The first two rings follow the axilla and the fold behind the stifle.
         const ease=Math.min(1,(1-height)*4.3);
         const xx=T.MathUtils.lerp(ring[i].x,x,ease),zz=T.MathUtils.lerp(ring[i].z,z,ease);
-        const q=joint(xx,y+height**3*(ring[i].y-shoulder),zz,plan.shortNeck?1-height:.803+(1-height)*.193,.5+.475*Math.cos(a),bone,weight);
+        const anchorUV=perimeter[i]*2;
+        const shoulderU=uv[anchorUV],shoulderV=uv[anchorUV+1];
+        const q=joint(xx,y+height**3*(ring[i].y-shoulder),zz,plan.shortNeck?1-height:.803+(1-height)*.193,.5+.475*Math.cos(a),bone,weight,
+          shoulderU, T.MathUtils.lerp(shoulderV,.25,1-height), smooth(height,.48,.98));
         next.push(q);
         soften[q]=height>.65?1:height>.3?.42:.13;
       }
@@ -164,6 +177,7 @@ function skin(body,plan,material,group,type) {
   const geo=new T.BufferGeometry();
   geo.setAttribute('position',new T.Float32BufferAttribute(pos,3));
   geo.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+  geo.setAttribute('flankInk',new T.Float32BufferAttribute(flank,3));
   geo.setAttribute('skinIndex',new T.Uint16BufferAttribute(joints,4));
   geo.setAttribute('skinWeight',new T.Float32BufferAttribute(weights,4));
   geo.setIndex(faces);geo.computeVertexNormals();
@@ -271,19 +285,24 @@ function pinna(b,base,end,width,s,boar=false){
   const start=new T.Vector3(...base),tip=new T.Vector3(...end),nx=new T.Vector3(0,.12,1).normalize();
   const axis=tip.clone().sub(start),side=axis.clone().cross(nx).normalize();
   const vertex=(t,w,off)=>start.clone().addScaledVector(axis,t).addScaledVector(side,w).addScaledVector(nx,off).toArray();
-  for(const [color,w,low,high,depth] of [[ink,1.08,0,1,.023],['#c7b69b',1,.022,.96,.028],
-    [boar?'#a18976':'#c1a58d',.73,.115,.84,.043]]){
-    const xyz=[],ids=[];
-    for(let i=0;i<=18;i++){
-      const t=i/18,offset=low+(high-low)*t,ry=width*(.015+.985*Math.sin(Math.PI*t**.80)**.86);
-      xyz.push(...vertex(offset,-ry*w,depth),...vertex(offset,0,depth-.022*Math.sin(Math.PI*t)),...vertex(offset,ry*w,depth));
-      if(i<18){let k=i*3;ids.push(k,k+3,k+1,k+3,k+4,k+1,k+1,k+4,k+2,k+4,k+5,k+2);}
-    }
-    const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(xyz,3));g.setIndex(ids);g.computeVertexNormals();
-    b.add(g,color);g.dispose();
+  const xyz=[],faces=[],colors=['#a79a80','#bcb097',ink,'#c4af92',boar?'#a8937d':'#bbaa91'];
+  const hoops=[[0,0,-.016],[1.0,-.5,-.017],[1.045,0,.003],[.92,.2,.020],[.70,.35,.022],[.006,.3,-.002]];
+  const count=32;
+  for(const [r,slant,depth] of hoops) for(let i=0;i<count;i++) {
+    const a=tau*i/count, t=.5+.49*r*Math.sin(a),w=width*r*Math.cos(a)*(1.16-.67*t);
+    xyz.push(...vertex(t,w,depth+.011*slant*Math.sin(a)+.014*Math.cos(a)**2));
   }
-  dab(b,[vertex(.14,s*.009,.047),vertex(.38,-s*.011,.049),vertex(.67,0,.046),vertex(.82,s*.007,.042)],
-    .006,.003,softInk,[0,0,1]);
+  for(let j=0;j<hoops.length-1;j++){
+    faces.length=0;
+    for(let i=0;i<count;i++) {
+      const k=j*count+i,n=j*count+(i+1)%count;
+      faces.push(k,n,k+count,n,n+count,k+count);
+    }
+    const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(xyz,3));
+    g.setIndex(faces);g.computeVertexNormals();b.add(g,colors[j]);g.dispose();
+  }
+  dab(b,[vertex(.17,s*.005,.012),vertex(.34,-s*.013,.011),vertex(.53,-s*.006,.011),vertex(.76,s*.007,.013)],
+    .005,.003,softInk,[0,0,1]);
 }
 function stagAntler(b,s) {
   const beam=[[s*.108,1.862,.666],[s*.14,1.994,.657],[s*.20,2.141,.583],
@@ -304,14 +323,17 @@ function stagAntler(b,s) {
 function ungulate(body,head,plan,type,{group,batch},tail) {
   const deer=type==='deer',surface=skullSurface(plan);
   const details=group(head,'面相の筆',0,-plan.head[1],-plan.head[2]);
+  for(const s of [-1,1]){
+    const base=deer?[s*.091,1.799,.704]:[s*.128,.819,.646];
+    const ear=group(details,'pinna'+s,...base),end=deer?[s*.281,.207,-.108]:[s*.128,.268,-.130];
+    batch(ear,b=>pinna(b,[0,0,0],end,deer?.069:.093,s,!deer));
+  }
   batch(details,b=>{
     for(const s of [-1,1]){
       eyes(b,surface,deer?13.30:11.25,s,type);
       if(deer){
         stagAntler(b,s);
-        pinna(b,[s*.091,1.799,.704],[s*.372,2.006,.596],.069,s);
       }else{
-        pinna(b,[s*.128,.819,.646],[s*.256,1.087,.516],.093,s,true);
         const tusk=[[s*.093,.556,.988],[s*.134,.526,1.015],[s*.166,.536,1.049],
           [s*.191,.593,1.054],[s*.178,.647,1.047]];
         twig(b,tusk,.039,'#d2bd91');
@@ -426,6 +448,13 @@ function shishi(body,head,plan,{group,batch},tail,variant,coat) {
           [s*(x+.062),y+.074+.084*Math.sin(k*1.4),z-.357-.028*k]];
         curlyLock(b,path,.041+.009*Math.sin(f*Math.PI),[s,.13,-.08],k);
       }
+      for(let tier=0;tier<3;tier++){
+        const y=1.79-.102*tier,x=.207+.026*tier,z=.889+.019*tier;
+        curlyLock(b,[[s*x,y+.037,z+.061],[s*(x+.064),y+.056,z+.025],
+          [s*(x+.111),y+.003,z-.056],[s*(x+.126),y-.071,z-.114],
+          [s*(x+.111),y-.119,z-.102],[s*(x+.083),y-.132,z-.037],
+          [s*(x+.065),y-.085,z+.002]],.051-.004*tier,[s,.16,.33],tier+2);
+      }
       for(let k=0;k<4;k++){
         const y=1.956-.103*k,z=1.077+.014*Math.cos(k);
         const path=[[s*.156,y+.050,z-.021],[s*.229,y+.068,z+.004],[s*.281,y+.031,z+.043],
@@ -492,9 +521,38 @@ function shishi(body,head,plan,{group,batch},tail,variant,coat) {
   });
 }
 
+// Both sides of a moving shoulder sample the *same* pigment at the stitch.
+const legPaint = new WeakMap();
+function legMaterials(type, coat) {
+  const body = coat(type,'body');
+  const leg = ['fox','tiger','kirin'].includes(type) ? coat(type,'leg') : body;
+  if (!legPaint.has(body)) {
+    const paint = leg.clone();
+    paint.onBeforeCompile = (shader, renderer) => {
+      leg.onBeforeCompile(shader, renderer);
+      // Texture requests finish asynchronously and already-instantiated herds share the update.
+      shader.uniforms.flankMap = { get value() { return body.map; } };
+      shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 flankInk; varying vec3 vFlankInk;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlankInk=flankInk;');
+      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D flankMap; varying vec3 vFlankInk;')
+        .replace('#include <map_fragment>', `#include <map_fragment>
+          #ifdef USE_MAP
+            diffuseColor.rgb=mix(diffuseColor.rgb, texture2D(flankMap,vFlankInk.xy).rgb,vFlankInk.z);
+          #endif`);
+    };
+    paint.customProgramCacheKey = () => leg.customProgramCacheKey()+'-shoulder';
+    // Preloads are optional. A clone made before a coat arrives must see the
+    // texture and switch programs at the same time as the ordinary leg coat.
+    paint.color=leg.color;
+    if (!leg.map) leg.addEventListener('pigmentready',()=>{paint.map=leg.map;paint.needsUpdate=true;});
+    legPaint.set(body,[body,paint]);
+  }
+  return legPaint.get(body);
+}
+
 export function buildScrollBeast(root,type,{group,batch},variant,coat){
   const plan=plans[type],body=group(root,'trunk');
-  const {head,caps}=skin(body,plan,coat(type,'body'),group,type);
+  const {head,caps}=skin(body,plan,legMaterials(type,coat),group,type);
   for(const c of caps)batch(c.group,b=>splitFoot(b,c,plan.hoof));
   const p=plan.profile[1];
   const tail=group(body,'tail',0,p[1]+(type==='shishi'?.138:.055),p[0]);
@@ -546,7 +604,7 @@ export function buildQuadrupedTrunk(body,type,trunk,neckTop,length,wide,group,ba
   const plan={profile,shortNeck:true,head:[0,neckTop,length*.86],
     hind:[1,3],fore:[5,7],legX:wide*.70,upper:type==='tiger'?.119:type==='kirin'?.104:.078,
     ankle:type==='tiger'?.059:type==='kirin'?.037:.035};
-  const {head,caps}=skin(body,plan,[coat(type,'body'),coat(type,'leg')],group,type);
+  const {head,caps}=skin(body,plan,legMaterials(type,coat),group,type);
   for(const c of caps) {
     const hoof=batch(c.group,b=>splitFoot(b,c,type==='kirin'));
     if(type==='kirin')measureKirinSole(c,hoof,body.getObjectByName('絵巻の一枚皮'));

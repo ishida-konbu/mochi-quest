@@ -6,8 +6,6 @@ const pigments = {
   hare: [77, 0, 0, 0],
   frog: [175, 0, 320, 0],
   leaf: [18, 0, 580, 0],
-  shell: [36, 0, 0, 170],
-  turtle: [430, 50, 495, 228],
 };
 let painted;
 function illustrationMaterial() {
@@ -80,15 +78,13 @@ function paintedMesh(parent, name, region, evaluate, rows = 32, sides = 48, clos
   const wash = [],
     normal = geo.attributes.normal,
     skin = new THREE.Color();
-  const portrait = (region === 'hare' && name === '面相') || region === 'frog' || region === 'turtle';
+  const portrait = (region === 'hare' && name === '面相') || region === 'frog';
   skin.set(
     region === 'hare'
       ? '#e2cfb8'
-      : region === 'turtle'
-        ? '#ad8c60'
-        : name === '眉と上あご'
-          ? '#baaa85'
-          : '#dbc4a0',
+      : name === '眉と上あご'
+        ? '#baaa85'
+        : '#dbc4a0',
   );
   for (let k = 0; k < normal.count; k++) {
     const t = Math.floor(k / (sides + 1)) / rows;
@@ -293,68 +289,6 @@ export function sculptHead(parent, kind, role) {
   }
 }
 
-export function scrollShell(parent) {
-  const rows = [
-    [39, 209, 212, 0.008],
-    [52, 192, 217, 0.113],
-    [69, 169, 223, 0.181],
-    [90, 139, 228, 0.252],
-    [117, 102, 234, 0.303],
-    [150, 66, 241, 0.35],
-    [192, 37, 244, 0.387],
-    [235, 17, 244, 0.407],
-    [278, 5, 240, 0.412],
-    [318, 4, 233, 0.403],
-    [356, 11, 222, 0.384],
-    [395, 28, 204, 0.342],
-    [432, 49, 181, 0.273],
-    [463, 73, 154, 0.201],
-    [488, 88, 125, 0.128],
-    [506, 93, 106, 0.057],
-    [511, 98, 99, 0.004],
-  ];
-  return tracedVolume(parent, '甲羅の岩絵具', 'shell', rows, {
-    origin: [277, 272],
-    scale: 0.0021,
-    deform: (p, side, level) => {
-      p[1] += 0.072;
-      p[2] -= 0.027;
-      return p;
-    },
-  });
-}
-
-export function sculptTurtleHead(parent) {
-  tracedVolume(
-    parent,
-    '首から嘴',
-    'turtle',
-    [
-      [433, 164, 195, 0.041],
-      [449, 154, 194, 0.085],
-      [469, 133, 181, 0.092],
-      [492, 110, 174, 0.098],
-      [513, 96, 166, 0.091],
-      [535, 81, 154, 0.091],
-      [556, 74, 143, 0.101],
-      [580, 66, 132, 0.112],
-      [602, 60, 120, 0.117],
-      [624, 58, 113, 0.1],
-      [641, 62, 106, 0.081],
-      [650, 71, 100, 0.049],
-      [651, 91, 95, 0.006],
-    ],
-    {
-      origin: [424, 262],
-      scale: 0.0024,
-      deform: (p) => {
-        p[2] += 0.243;
-        return p;
-      },
-    },
-  );
-}
-
 export function scrollParasol(parent) {
   // The original lotus leaf's veins converge at (154, 109). Shape every rib
   // in 3D, including its irregular scallops and the raised edge opposite the stalk.
@@ -459,6 +393,10 @@ export function inkVolume(b, stations, pigment, steps = 24, markings) {
       }
     }
   }
+  for(let i=1;i<sides-1;i++){
+    const last=steps*sides;
+    ix.push(0,i+1,i,last,last+i,last+i+1);
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(xyz, 3));
   g.setIndex(ix);
@@ -514,6 +452,32 @@ export function brushWash(material,strength=.50) {
         #include <opaque_fragment>`);
   };
   material.customProgramCacheKey=()=>program+'-emaki-pen-'+strength;
+  return material;
+}
+
+// A dry wash follows the local surface, so posed fingers, silk and skin have
+// the same paper tooth at their joins without painting every small sculpt an atlas.
+let brushGrain;
+export function surfaceGrain(material, scale=3) {
+  if(!brushGrain) {
+    brushGrain=new THREE.TextureLoader().load(new URL('./assets/bestiary/brush-grain.webp',import.meta.url).href);
+    brushGrain.wrapS=brushGrain.wrapT=THREE.MirroredRepeatWrapping;
+  }
+  const earlier=material.onBeforeCompile, key=material.customProgramCacheKey();
+  material.onBeforeCompile=function(shader,renderer){
+    earlier.call(this,shader,renderer);
+    shader.uniforms.grainOfBrush={value:brushGrain};
+    shader.vertexShader=shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 inkPos, inkNormal;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ninkPos=position; inkNormal=normal;');
+    shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 inkPos, inkNormal; uniform sampler2D grainOfBrush;')
+      .replace('#include <opaque_fragment>',`
+        vec3 axis=pow(abs(normalize(inkNormal)),vec3(3.)); axis/=max(.001,dot(axis,vec3(1.)));
+        vec3 p=inkPos*${scale.toFixed(2)};
+        float mineral=dot(axis,vec3(texture2D(grainOfBrush,p.zy).r,texture2D(grainOfBrush,p.zx).r,texture2D(grainOfBrush,p.xy).r));
+        outgoingLight*=.63+.44*mineral;
+        #include <opaque_fragment>`);
+  };
+  material.customProgramCacheKey=()=>key+'-dry-brush-'+scale;
   return material;
 }
 

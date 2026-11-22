@@ -1,7 +1,8 @@
 import * as THREE from './vendor/three.module.min.js';
+import { BOATS, HULL_HEIGHT, HULL_DRAFT, halfBreadth, sheerHeight } from './shoreline.js';
 import {
   BUILDINGS,
-  MARKET_STALLS,
+  MARKET_STALLS, SHRINE_BAMBOO,
   REGIONS,
   TREES,
   WATER_Y,
@@ -543,90 +544,15 @@ function emaRack(p, a) {
   }
 }
 function grove(p, a) {
-  const { x: cx, z: cz } = byId('shrine'),
-    rng = seeded(92327);
-  const reserved = [
-    [-4, 1],
-    [-13, -9],
-    [6, 14],
-    [15, -11],
-    [-9, 15],
-    [-17, 4],
-    [12, 5],
-    [-4, 5],
-    [4, -7],
-    [6, -7],
-    [-7, -12],
-    [10, -15],
-    [-19, 5],
-    [-8.7, -5.6],
-  ];
-  const groups = [
-    [-11, 18],
-    [10, 21],
-    [12, 7],
-    [-12, 8],
-    [-15, -2],
-    [9, -4],
-    [15, -13],
-    [-14, -19],
-    [4, -20],
-    [-21, 0],
-    [16, -23],
-    [13, 25],
-    [-10, 23],
-  ];
-  for (const [dx, dz] of groups) {
-    for (let i = 0; i < 9; i++) {
-      const x = cx + dx + (rng() - 0.5) * 6,
-        z = cz + dz + (rng() - 0.5) * 6;
-      if (nearRoad(x, z, 1.0) || reserved.some(([u, v]) => Math.hypot(x - cx - u, z - cz - v) < 2.4))
-        continue;
-      const ground = terrainHeight(x, z),
-        hi = 5.2 + rng() * 3.8,
-        sx = (rng() - 0.5) * 0.94,
-        sz = (rng() - 0.5) * 0.86;
-      p.link(
-        v(x, ground - 0.1, z),
-        v(x + sx, ground + hi, z + sz),
-        0.063 + rng() * 0.04,
-        i % 3 ? '#9ba575' : '#b7bd86',
-        false,
-        true,
-        true,
-        a.bamboo
-      );
-      for (let k = 0; k < 3; k++) {
-        const ang = rng() * TAU,
-          y = ground + hi * (0.61 + 0.14 * k),
-          xx = x + sx * 0.76 + sin(ang) * 0.54,
-          zz = z + sz * 0.76 + cos(ang) * 0.54;
-        p.link(
-          v(x + sx * 0.73, y - 0.13, z + sz * 0.73),
-          v(xx, y + 0.28, zz),
-          0.022,
-          '#859263',
-          false,
-          false,
-          true
-        );
-        p.part(
-          'plane',
-          xx,
-          y + 0.4,
-          zz,
-          1.68 + rng() * 0.71,
-          1.03 + rng() * 0.53,
-          1,
-          '#d0d6ab',
-          ang,
-          0.11,
-          (rng() - 0.5) * 0.72,
-          p.sprays.bamboo,
-          false,
-          true
-        );
-      }
+  for(const {x,z,height,sx,sz,radius,tint,sprays} of SHRINE_BAMBOO) {
+    const ground=terrainHeight(x,z);
+    p.link(v(x,ground-.1,z),v(x+sx,ground+height,z+sz),radius,tint,false,true,true,a.bamboo);
+    for(const [k,spray] of sprays.entries()) {
+      const y=ground+height*(.61+.14*k);
+      const xx=x+sx*.76+sin(spray.angle)*.54, zz=z+sz*.76+cos(spray.angle)*.54;
+      p.link(v(x+sx*.73,y-.13,z+sz*.73),v(xx,y+.28,zz),.022,'#859263',false,false,true);
+      p.part('plane',xx,y+.4,zz,spray.width,spray.height,1,'#d0d6ab',spray.angle,.11,
+        spray.tilt,p.sprays.bamboo,false,true);
     }
   }
   // Pairs of low votive lanterns draw the eye up the rising approach.
@@ -906,48 +832,66 @@ function terraces(p, a) {
 }
 
 function makeBoatShape() {
-  const positions = [],
-    indices = [],
-    uv = [],
-    sections = 14,
-    around = 8;
-  for (let i = 0; i <= sections; i++) {
-    const u = i / sections,
-      t = u * 2 - 1,
-      w = Math.max(0.012, 0.5 * (1 - Math.abs(t) ** 2.45)),
-      sheer = 0.54 + 0.43 * Math.abs(t) ** 2.8 + 0.045 * t;
-    const section = [
-      [-w * 0.91, sheer - 0.025],
-      [-w, sheer],
-      [-w * 0.87, 0.285 + Math.abs(t) * 0.1],
-      [-w * 0.47, 0.035 + Math.abs(t) ** 2 * 0.15],
-      [w * 0.47, 0.035 + Math.abs(t) ** 2 * 0.15],
-      [w * 0.87, 0.285 + Math.abs(t) * 0.1],
-      [w, sheer],
-      [w * 0.91, sheer - 0.025],
-    ];
-    for (const [j, [x, y]] of section.entries()) {
-      positions.push(x, y, u - 0.5);
-      uv.push(u * 2, j / 7);
-      if (i < sections && j < around - 1) {
-        const k = i * around + j;
-        indices.push(k, k + around, k + 1, k + 1, k + around, k + around + 1);
+  const positions = [], indices = [], uv = [], colors = [], sections = 30;
+  // Paired side planks, solid gunwales, inner lining and a continuous keel.
+  // Each strake has its own UV strip and face normal across the hard chine.
+  function profile(t) {
+    const w=halfBreadth(t), rim=sheerHeight(t), k=.035+t*t*.15, chine=.285+Math.abs(t)*.1;
+    return [[-w*.47,k],[-w*.87,chine],[-w,rim],[-w*.90,rim+.012],[-w*.80,chine+.025],[-w*.42,k+.059],
+      [w*.42,k+.059],[w*.80,chine+.025],[w*.90,rim+.012],[w,rim],[w*.87,chine],[w*.47,k]];
+  }
+  const finish=['#8e7056','#a58968','#d9bb87','#bca17d','#b59a75','#b09972','#b59a75','#bca17d','#d9bb87','#a58968','#8e7056','#746556'];
+  for(let j=0;j<finish.length;j++) {
+    const base=positions.length/3;
+    const tint=new THREE.Color(finish[j]);
+    for(let i=0;i<=sections;i++){
+      const t=i/sections*2-1, section=profile(t);
+      for(let edge=0;edge<2;edge++){
+        const [x,y]=section[(j+edge)%section.length];
+        positions.push(x,y,t*.5);
+        uv.push(.08+j*.083+edge*.138,i/sections*1.65);
+        colors.push(tint.r,tint.g,tint.b);
       }
+      if(i<sections){const a=base+2*i;indices.push(a,a+1,a+2,a+2,a+1,a+3);}
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.setIndex(indices);
-  g.computeVertexNormals();
-  return g;
+  for(const t of [-1,1]){
+    const base=positions.length/3;
+    for(const [x,y] of profile(t)){
+      positions.push(x,y,t*.5); uv.push(x+.5,y); colors.push(.36,.24,.13);
+    }
+    for(let j=1;j<10;j++)indices.push(base,base+j,base+j+1);
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+  geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  geo.setIndex(indices); geo.computeVertexNormals();
+  return geo;
 }
-function boat(p, x, z, yaw, length, width, sail = false) {
-  const f = fixture(p, x, z, yaw, WATER_Y - 0.16),
-    height = 0.76;
-  f.part('boatHull', 0, 0, 0, width, height, length, '#977047', 0, 0, 0, p.solid, true);
-  const half = (t) => Math.max(0.012, 0.5 * (1 - Math.abs(t) ** 2.45)) * width;
-  const rim = (t) => (0.54 + 0.43 * Math.abs(t) ** 2.8 + 0.045 * t) * height;
+function boat(p, {x,z,yaw,length,width,sail}) {
+  const f=fixture(p,x,z,yaw,WATER_Y-HULL_DRAFT), height=HULL_HEIGHT;
+  const half=t=>halfBreadth(t)*width, rim=t=>sheerHeight(t)*height;
+  f.part('boatHull',0,0,0,width,height,length,'#ffffff',0,0,0,p.hullWood,true);
+  // Removable bottom boards run fore and aft. Their ends fit the taper.
+  for(let j=-2;j<=2;j++){
+    const u=j*width*.068, span=length*(.61-.09*Math.abs(j));
+    f.part('box',u,.128,0,width*.066,.044,span,j%2?'#b19878':'#c1aa83',0,0,0,p.wood);
+  }
+  // Steam-bent ribs rise from the sole to the gunwale on both sides.
+  for(const t of [-.76,-.56,-.31,.01,.31,.56,.76]){
+    const v=t*length*.5, w=half(t);
+    for(const side of [-1,1]){
+      const foot=[side*w*.41,.115+t*t*.11,v],turn=[side*w*.78,.248+Math.abs(t)*.07,v];
+      f.line(foot,turn,.030,'#886b4c',p.wood,true);
+      f.line(turn,[side*w*.92,rim(t)-.018,v],.031,'#997953',p.wood,true);
+    }
+  }
+  for(let i=0;i<4;i++){
+    const t=.68+i*.07;
+    f.part('box',0,rim(t)-.036,t*length*.5,half(t+.032)*1.89,.048,length*.032,'#ad906d',0,0,0,p.deck);
+  }
+  for(let i=0;i<4;i++)f.part('ropeCoil',.055,.154+i*.018,-length*.21,.15,.33,.19,'#b19664',0,0,0,p.wood);
   for (const side of [-1, 1])
     for (let k = 0; k < 11; k++) {
       const u = (k / 11) * 2 - 1,
@@ -1063,18 +1007,12 @@ function coast(p, a) {
   netRack(p, a, -155.9, 95.5, -0.12, 3.8);
   fishRack(p, a, -165.8, 111.3, 0.53);
   netRack(p, a, -174.8, 107.4, 0.34, 4.6);
-  const x1 = coastX(110) - 8.9,
-    x2 = coastX(124) - 5.3;
-  boat(p, x1, 110, -0.44, 5.4, 1.48, true);
-  boat(p, x2, 124, 0.76, 4.65, 1.18);
-  for (const [x, z, s] of [
-    [x1, 110, 1],
-    [x2, 124, -1],
-  ]) {
-    const a = v(x + 1.05, WATER_Y + 0.35, z + 0.62),
-      xx = coastX(z) + 2.3,
-      zz = z + s * 0.83;
-    const b = v(xx, Math.max(WATER_Y, terrainHeight(xx, zz)) + 0.87, zz);
+  for (const boat of BOATS.filter(v=>v.mooring)) {
+    const {x,z,yaw,length,mooring:s}=boat;
+    const bow=fixture(p,x,z,yaw,WATER_Y-HULL_DRAFT);
+    const a=bow.at(0,sheerHeight(.83)*HULL_HEIGHT+.01,length*.415);
+    const xx=coastX(z)+2.3, zz=z+s*.83;
+    const b=v(xx,Math.max(WATER_Y,terrainHeight(xx,zz))+.87,zz);
     p.link(v(b.x, terrainHeight(b.x, b.z) - 0.3, b.z), b, 0.084, '#857252', false, true, true, p.wood);
     const mid = a.clone().lerp(b, 0.49);
     mid.y = Math.min(a.y, b.y) - 0.23;
@@ -1097,10 +1035,14 @@ function coast(p, a) {
 export function dressPlaces(p) {
   const art = createArt(p);
   p.shapes.boatHull = makeBoatShape();
+  p.shapes.ropeCoil = new THREE.TorusGeometry(1,.059,6,48).rotateX(Math.PI/2);
+  p.hullWood = p.wood.clone();
+  p.hullWood.onBeforeCompile = p.wood.onBeforeCompile;
+  p.hullWood.vertexColors = true;
   market(p, art);
   grove(p, art);
   baths(p);
   terraces(p, art);
   coast(p, art);
-  boat(p, -11.9, 18.2, -0.92, 4.55, 1.2);
+  for(const vessel of BOATS) boat(p,vessel);
 }

@@ -1,7 +1,8 @@
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
-import { groundHeight, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
+import { groundHeight, landscapeFloor, solidHeightAt, constrainMove, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
 import { POUNDING, POUNDING_CREW } from './festival.js';
+import { prepareVillageRoutes, animalRadius, openGround, walkCircuit } from './village-paths.js';
 import { procession } from './procession.js';
 import { walkingScore } from './animal-motion.js';
 import { SPECIES, wildlifeHomes, moveWildlife, recipientContact } from './bestiary.js';
@@ -104,9 +105,10 @@ function makeWorld() {
   for (const visitor of wildlifeHomes([...objects,...npcs])) {
     const {type,role,x,z,phase}=visitor;
     npc(type,role,x,z,phase);
-    const n=Object.assign(npcs.at(-1),visitor);
-    moveWildlife(n,0);
+    Object.assign(npcs.at(-1),visitor);
   }
+  prepareVillageRoutes(npcs,objects);
+  for(const n of npcs) if(SPECIES[n.type]) moveWildlife(n,0);
   return { objects, npcs };
 }
 
@@ -286,7 +288,7 @@ export function createGame(snapshot = null) {
       message('電動自転車を返した。');
     } else {
       turtle.mounted = false;
-      const position = constrainMove(player.x, player.z, player.x - Math.sin(player.heading), player.z - Math.cos(player.heading), 0, player.y);
+      const position = constrainMove(player.x, player.z, player.x - Math.sin(player.heading), player.z - Math.cos(player.heading), 0, player.y,animalRadius(turtle));
       turtle.x = turtle.homeX = position.x;
       turtle.z = turtle.homeZ = position.z;
       turtle.y = groundHeight(turtle.x,turtle.z);
@@ -320,7 +322,7 @@ export function createGame(snapshot = null) {
       collect(target);
       return true;
     }
-    player.mode = 'normal';
+    changeMode('normal');
     sound('mount');
     return true;
   }
@@ -346,6 +348,37 @@ export function createGame(snapshot = null) {
     say('三条通知！'); sound('throw');
     return true;
   }
+  function changeMode(mode) {
+    const leavingGrass = player.mode === 'kusa';
+    player.mode = mode;
+    if (!leavingGrass && mode !== 'kusa') return;
+    if (leavingGrass) {
+      // Find room for the whole mochi if the last point of MP expires inside a trunk or wall.
+      const fits = (x,z) => {
+        const floor = groundHeight(x,z,player.y);
+        const feet = Math.max(player.y,floor);
+        return floor <= player.y + .52 && solidHeightAt(x,z,.26,feet) <= feet + .34 &&
+          overheadHeight(x,z,feet) >= feet + 1.66 * (player.buffs.full > 0 ? 1.28 : 1);
+      };
+      if (!fits(player.x,player.z)) {
+        let found = false;
+        for (let r=.35; !found && r<=20; r+=.35) {
+          const directions = Math.ceil(2*Math.PI*r/.5);
+          for (let i=0; i<directions; i++) {
+            const a = player.heading + 2*Math.PI*i/directions;
+            const x = wrapCoord(player.x + r*Math.sin(a)), z = wrapCoord(player.z + r*Math.cos(a));
+            if (!fits(x,z)) continue;
+            player.x=x; player.z=z; found=true;
+            break;
+          }
+        }
+      }
+    }
+    const floor = mode === 'kusa' ? landscapeFloor(player.x,player.z) : groundHeight(player.x,player.z,player.y);
+    player.y = Math.max(floor,player.y);
+    player.h = player.y-floor;
+    player.grounded = player.h <= .001 && player.vy <= 0;
+  }
   function act(action, facing) {
     if (action === 'jump') { heldJump = true; return jump(); }
     if (action === 'throw') return throwNotice(facing);
@@ -358,7 +391,7 @@ export function createGame(snapshot = null) {
     if (!spendMP(MODE_COST[action])) {
       message('モッチポイントが回復するまで、ちょっとひと休み。'); return false;
     }
-    player.mode = action;
+    changeMode(action);
     message(MODE_NAME[action] + 'になった。'); sound('mode');
     return true;
   }
@@ -387,7 +420,8 @@ export function createGame(snapshot = null) {
     }
     turtle.heading = Math.atan2(tx,tz);
     const step = Math.min(length, Math.min(2.3, turtle.speed + 1.8 * dt) * dt);
-    const at = constrainMove(turtle.x,turtle.z,turtle.x+tx/length*step,turtle.z+tz/length*step,0);
+    const x=turtle.x+tx/length*step, z=turtle.z+tz/length*step;
+    const at=openGround(x,z,animalRadius(turtle)) ? {x,z} : turtle;
     turtle.speed = distance(turtle,at) / dt;
     turtle.x = at.x; turtle.z = at.z; turtle.y = groundHeight(at.x,at.z);
     if (turtle.speed < .015) { turtlePause = 5; turtleLeg = (turtleLeg+1) % route.length; }
@@ -425,6 +459,7 @@ export function createGame(snapshot = null) {
       if (n.area) {
         const distance2=wrapDelta(n.x-player.x)**2+wrapDelta(n.z-player.z)**2;
         if (distance2>25**2 && Math.floor((state.time+n.phase)*4)===Math.floor((state.time+n.phase-dt)*4)) continue;
+        if(n.room!==undefined) continue;
         const beat=state.time*.65+n.phase;
         const sway=n.role==='fan' ? .35 : n.role==='broom'||n.role==='rake' ? .15 : 0;
         n.heading=n.facing+.17*Math.sin(beat*.5);
@@ -449,16 +484,15 @@ export function createGame(snapshot = null) {
         z = n.homeZ + Math.cos(sway) * .14;
         n.heading = n.side * Math.PI / 2;
       } else {
-        const a = n.role === 'porter' ? 2.5 : 3.4;
-        x = n.homeX + (Math.sin(t) - Math.sin(n.phase)) * a;
-        z = n.homeZ + (Math.sin(t*.71) - Math.sin(n.phase*.71)) * 1.8;
-        n.heading = Math.atan2(Math.cos(t)*a, Math.cos(t*.71)*1.278);
+        walkCircuit(n,t,streetScore);
+        x=streetScore.x;z=streetScore.z;
+        n.heading=Math.atan2(Math.cos(t),-.66*Math.sin(t));
       }
       // Faraway routines still follow their paths; static terrain sampling is amortized.
       if (Math.abs(n.x-player.x)+Math.abs(n.z-player.z) > 85 && Math.floor(state.time*3) === Math.floor((state.time-dt)*3)) continue;
-      const at = constrainMove(n.x,n.z,x,z,0);
-      n.speed = Math.min(2.3, distance(n,at)/dt);
-      n.x = at.x; n.z = at.z; n.y = groundHeight(n.x,n.z);
+      if(n.role==='sumo' && !openGround(x,z,animalRadius(n))) continue;
+      n.speed = Math.min(2.3, Math.hypot(x-n.x,z-n.z)/dt);
+      n.x=x; n.z=z; n.y=groundHeight(x,z);
     }
     updateHareRider(riverRider, state.time);
   }
@@ -534,13 +568,15 @@ export function createGame(snapshot = null) {
     }
     if (Math.abs(player.vx)<.002) player.vx = 0;
     if (Math.abs(player.vz)<.002) player.vz = 0;
-    const at = constrainMove(player.x,player.z,player.x+player.vx*dt,player.z+player.vz*dt,player.h,player.y);
+    const x = player.x+player.vx*dt, z = player.z+player.vz*dt;
+    const phasing = player.mode === 'kusa';
+    const at = phasing ? { x:wrapCoord(x), z:wrapCoord(z) } : constrainMove(player.x,player.z,x,z,player.h,player.y,player.mount==='turtle' ? animalRadius(turtle) : undefined);
     player.vx = wrapDelta(at.x-player.x)/dt;
     player.vz = wrapDelta(at.z-player.z)/dt;
     player.speed = Math.hypot(player.vx,player.vz);
     player.x = at.x; player.z = at.z;
-    const floor = groundHeight(at.x,at.z,player.y);
-    const ceiling = overheadHeight(at.x,at.z,player.y);
+    const floor = phasing ? landscapeFloor(at.x,at.z) : groundHeight(at.x,at.z,player.y);
+    const ceiling = phasing ? Infinity : overheadHeight(at.x,at.z,player.y);
     const wasGrounded = player.grounded;
     if (player.grounded && floor >= player.y-.32 && player.vy<=0) player.y = floor;
     if (player.mode==='habutae' && !player.mount && input.jump && !player.activity) {
@@ -576,15 +612,15 @@ export function createGame(snapshot = null) {
     }
   }
   function checkContact() {
-    if (player.activity || player.h > 1.15) return;
+    if (lastBath && (lastBath.grand ? springRadius(player.x,player.z)>1 : gap(lastBath)>3.35)) lastBath=null;
+    if (player.activity || player.h > 1.15 || player.mode === 'kusa') return;
     if (!player.mount && player.grounded) {
-      if (lastBath && (lastBath.grand ? springRadius(player.x,player.z)>1 : gap(lastBath)>3.35)) lastBath=null;
       for (const o of objects) {
         if (!o.grand && o.type !== 'tsukimi' && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
             gap(o) <= (o.type === 'onsen' ? 1.55 : .83)) { collect(o); return; }
       }
     }
-    if (player.invulnerable > 0 || player.mode === 'kusa') return;
+    if (player.invulnerable > 0) return;
     for (const n of state.nearbyNpcs) {
       if (n.area || n.atMortar || n === turtle || Math.abs(n.y-player.y) > 1.25 || gap(n) > (player.buffs.full ? 1.07 : .84)) continue;
       player.invulnerable = 2.1;
@@ -655,7 +691,7 @@ export function createGame(snapshot = null) {
     }
     if (player.mode === 'normal' || player.activity) player.mp = Math.min(MAX_VITAL, player.mp + dt * 5.2);
     else if (!spendMP(MODE_DRAIN[player.mode] * dt)) {
-      player.mode = 'normal'; player.mp = 0;
+      changeMode('normal'); player.mp = 0;
       message('モッチポイントを使い切って、ふつうのお餅に戻った。');
     }
     if (player.activity) {
@@ -730,7 +766,13 @@ export function createGame(snapshot = null) {
     player.landing = finite(p.landing,0,.25) ? p.landing : 0;
     player.impact = finite(p.impact,0,1) ? p.impact : 0;
     for (const key of Object.keys(BUFF_TIME)) player.buffs[key]=p.buffs[key];
-    player.y = groundHeight(player.x,player.z,p.y - p.h)+player.h;
+    if (player.mode === 'kusa') {
+      const floor = landscapeFloor(player.x,player.z);
+      // Older saves can start on a roof. Resume from the saved altitude and fall through it.
+      player.h = clamp(p.y-floor,0,CEILING);
+      player.y = floor+player.h;
+      player.grounded = player.h <= .001 && player.vy <= 0;
+    } else player.y = groundHeight(player.x,player.z,p.y - p.h)+player.h;
     // Older journals recorded points without identifying recipients. The score survives.
     const ids=new Set(npcs.map(n=>n.id));
     if(Array.isArray(data.delivered)) state.delivered=new Set(data.delivered.filter(id=>ids.has(id)));

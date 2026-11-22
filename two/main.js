@@ -14,7 +14,7 @@ import { createGame } from './game.js';
 import { SPECIES, dragonVisible } from './bestiary.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
 import { preloadBeastCoats } from './beast-art.js';
-import { REGIONS, groundHeight, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
+import { REGIONS, groundHeight, landscapeFloor, solidHeightAt, wrapDelta, BOUND } from './terrain.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
 import { createAudio } from '../sound.js';
@@ -218,12 +218,8 @@ for (const [i, [id, name]] of MODES.entries()) {
   b.className = 'mode';
   b.dataset.mode = id;
   b.title = name + '（' + i + '）';
-  b.innerHTML =
-    '<canvas width="64" height="52" aria-hidden="true"></canvas><span>' +
-    name +
-    '<small>' +
-    i +
-    '</small></span>';
+  b.setAttribute('aria-label', name + '（' + i + '）');
+  b.innerHTML = '<small aria-hidden="true">' + i + '</small><canvas width="104" height="80" aria-hidden="true"></canvas><span>' + name + '</span>';
   drawFace(b.querySelector('canvas'), id);
   b.onclick = () => {
     action(id);
@@ -467,12 +463,18 @@ function updateCamera(dt, snap = false) {
     dy = Math.sin(pitch) * d + (photoMode ? 0.1 : 0.62),
     dz = sz * Math.cos(pitch) * d;
   let fraction = 1;
+  // While the grass mochi is inside a trunk, start the camera ray on the
+  // outward side of that trunk. A second wall still shortens the camera arm.
+  let emerging = p.mode === 'kusa' && solidHeightAt(focus.x,focus.z,.2,focus.y) + .19 > focus.y;
   for (let i = 1, n = Math.ceil(d / 0.4); i <= n; i++) {
     const t = i / n,
       x = focus.x + dx * t,
       z = focus.z + dz * t,
       y = focus.y + dy * t;
-    if (Math.max(groundHeight(x, z, y), solidHeightAt(x, z, 0.2, y)) + 0.19 > y) {
+    const solid = solidHeightAt(x,z,.2,y);
+    if (emerging && solid + .19 <= y) emerging = false;
+    const floor = emerging ? landscapeFloor(x,z) : Math.max(groundHeight(x,z,y),solid);
+    if (floor + .19 > y) {
       fraction = Math.max(0.16, (i - 1) / n);
       break;
     }
@@ -481,7 +483,8 @@ function updateCamera(dt, snap = false) {
   eye.x += dx * fraction;
   eye.y += dy * fraction;
   eye.z += dz * fraction;
-  eye.y = Math.max(eye.y, groundHeight(eye.x, eye.z, eye.y) + 0.2);
+  const eyeFloor = emerging ? landscapeFloor(eye.x,eye.z) : groundHeight(eye.x,eye.z,eye.y);
+  eye.y = Math.max(eye.y, eyeFloor + .2);
   camera.position.copy(eye);
   aim.copy(focus);
   if (!photoMode) {
@@ -492,13 +495,22 @@ function updateCamera(dt, snap = false) {
   camera.lookAt(aim);
   camera.updateMatrixWorld();
 }
+const fullScore = new Intl.NumberFormat('ja-JP');
+const shortScore = new Intl.NumberFormat('ja-JP', { notation:'compact', maximumFractionDigits:1 });
+let lastScore = -1;
 function updateHUD() {
   $('region').textContent = state.region;
   $('delivered-count').textContent = (state.delivered?.size || 0) + ' / ' + (state.recipientTotal ?? state.npcs.length);
   cards.get('kagami').hidden = !state.kagamiUnlocked;
   if (trackedAnimal && state.delivered.has(trackedAnimal.id)) trackedAnimal = nearestUndelivered(trackedAnimal.type) || nearestUndelivered();
-  $('score').textContent = state.score;
-  $('visits').textContent = state.visited.length + '/' + REGIONS.length;
+  if (lastScore !== state.score) {
+    const score = $('score'), exact = fullScore.format(state.score);
+    score.textContent = state.score < 10000000 ? exact : shortScore.format(state.score);
+    score.title = exact + ' 点';
+    score.setAttribute('aria-label', score.title);
+    lastScore = state.score;
+  }
+  $('visits').textContent = state.visited.length + ' / ' + REGIONS.length;
   for (const k of ['hp', 'mp']) {
     $(k).textContent = Math.ceil(p[k]);
     $(k + '-bar').style.width = p[k] + '%';
@@ -533,7 +545,7 @@ function updateHUD() {
   if (near) $('context').querySelector('span').textContent = near.label;
   const deg = -THREE.MathUtils.radToDeg(yaw),
     base = Math.round(deg / 15),
-    directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    directions = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
   compassTicks.forEach((el, i) => {
     const n = base + i - 4,
       angle = n * 15;
@@ -640,6 +652,7 @@ function journalDialog() {
   const count=state.delivered.size, total=state.recipientTotal;
   $('ledger-count').textContent=count+' / '+total;
   $('ledger-note').textContent=count===total ? '全員に配達しました。鏡餅で十景の旅をどうぞ。' : state.kagamiUnlocked ? '鏡餅が使えます。新しく加わった動物にも通知を届けてみましょう。' : '動物を選ぶと、まだ届いていない一匹へご案内します。全員に届けると鏡餅が開きます。';
+  if (state.score >= 10000000) $('ledger-note').append('　通知点 ' + fullScore.format(state.score) + ' 点。');
   for (const [type,name] of Object.entries(speciesNames)) {
     const group=state.npcs.filter(n=>n.type===type);
     const number=group.filter(n=>state.delivered.has(n.id)).length;

@@ -177,7 +177,7 @@ test('bicycles travel between ports and validated version-two saves retain their
 });
 
 test('a player can walk across the modeled bridge and stretch onto the riverbank shop roof',()=>{
-  const game=createGame(); game.act('kusa'); run(game,15,{z:-1});
+  const game=createGame(); game.state.player.invulnerable=16; run(game,15,{z:-1});
   assert.ok(game.state.player.z < -30);
   assert.equal(game.state.player.hp,100);
   const landed=[];
@@ -301,7 +301,7 @@ test('every house admits the player through its rotated doorway, has a floor and
     const g = createGame(), p = g.state.player;
     const approach = b.d/2 + 2.5;
     moveTo(g,b.x + Math.sin(b.yaw)*approach,b.z + Math.cos(b.yaw)*approach);
-    g.act('kusa');
+    p.invulnerable=2.9; // ordinary mochi uses the floor, walls and ceiling
     for (const item of g.state.objects) item.active = false;
     const inward = { x:-Math.sin(b.yaw), z:-Math.cos(b.yaw) };
     for (let i = 0; i < 180 && Math.hypot(b.x-p.x,b.z-p.z) > .2; i++) g.step(1/60,inward);

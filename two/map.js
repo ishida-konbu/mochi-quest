@@ -176,9 +176,9 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   g.restore();
   g.textAlign = 'center';
   g.textBaseline = 'top';
-  g.font = 'bold ' + (large ? 13 : 17) + 'px Georgia';
+  g.font = 'bold ' + (large ? 13 : 17) + 'px "Hiragino Mincho ProN", "Yu Mincho", serif';
   g.fillStyle = '#544231';
-  g.fillText('N', large ? w - 17 : w / 2, large ? 10 : 5);
+  g.fillText('北', large ? w - 17 : w / 2, large ? 10 : 5);
 }
 export function mapHit(canvas, e) {
   const b = canvas.getBoundingClientRect(),

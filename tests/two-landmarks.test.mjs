@@ -9,7 +9,6 @@ function stand(game,x,z,y=groundHeight(x,z)) {
 test('both five-storey pagodas can be climbed, saved and descended entirely on foot',()=>{
   for(const b of BUILDINGS.filter(b=>b.kind==='pagoda')) {
     const g=createGame(),p=g.state.player;
-    g.act('kusa');
     const point=(u,v)=>[b.x+u*b.cos+v*b.sin,b.z-u*b.sin+v*b.cos];
     stand(g,...point(0,b.d/2+2));
     function walk(u,v) {
@@ -17,7 +16,7 @@ test('both five-storey pagodas can be climbed, saved and descended entirely on f
       for(let i=0;i<290;i++) {
         const dx=x-p.x,dz=z-p.z,length=Math.hypot(dx,dz);
         if(length<.072) return;
-        p.mp=100;g.step(1/60,{x:.66*dx/length,z:.66*dz/length});
+        p.invulnerable=2;g.step(1/60,{x:.66*dx/length,z:.66*dz/length});
       }
       assert.fail('Stairs blocked at '+[u,v,p.y-b.y]);
     }

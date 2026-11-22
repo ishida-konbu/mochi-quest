@@ -7,28 +7,99 @@ import { kirinTouchdowns } from './handscroll-beasts.js';
 const TAU=Math.PI*2;
 const clamp=x=>Math.max(0,Math.min(1,x));
 
-function migratoryBird(swift) {
-  const points=[],colors=[],motion=[];
-  function facet(a,b,c,color) {
-    const tint=new T.Color(color);
-    for(const [x,y,z,wing=0] of [a,b,c]) {
-      points.push(x,y,z);colors.push(tint.r,tint.g,tint.b);motion.push(wing);
+export function migratoryBird(swift,distant=false) {
+  const points=[],colors=[],motion=[],indices=[];
+  const ink=swift?'#454943':'#514c40',belly=swift?'#d8cdb2':'#d2c4a4';
+  function vertex(x,y,z,wing,shade) {
+    const i=points.length/3,tint=new T.Color(shade);
+    points.push(x,y,z);colors.push(tint.r,tint.g,tint.b);motion.push(wing);
+    return i;
+  }
+  // The cheek and neck of the goose and the short, russet chin of the
+  // swallow are modelled all the way round, including the ventral silhouette.
+  const spine=swift?[[-.35,.015,.015,.012],[-.23,.003,.058,.050],[-.10,.01,.084,.078],
+    [.06,.012,.093,.092],[.15,.045,.071,.067],[.212,.062,.064,.059],
+    [.257,.048,.046,.032],[.300,.045,.003,.003]]:
+    [[-.42,-.01,.014,.013],[-.31,-.003,.061,.057],[-.17,.01,.10,.085],[.006,.018,.116,.112],
+      [.16,.037,.087,.089],[.245,.062,.052,.057],[.35,.091,.039,.044],[.445,.119,.040,.048],
+      [.514,.138,.058,.063],[.567,.142,.053,.052],[.607,.137,.035,.021],[.685,.125,.003,.003]];
+  const sides=distant?6:14;
+  for(let j=0;j<spine.length;j++)for(let k=0;k<sides;k++){
+    const [z,y,w,h]=spine[j],a=k*TAU/sides,upper=Math.sin(a);
+    let shade=upper<-.18?belly:ink;
+    if(j===spine.length-1)shade=swift?ink:'#a38b65';
+    else if(swift&&j>=4&&upper<.08)shade='#8b6651';
+    else if(!swift&&j>=6&&j<=8&&upper<.38&&upper>-.65)shade='#cabea1';
+    else if(upper>.7)shade=swift?'#555c57':'#827a65';
+    const i=vertex(Math.cos(a)*w,y+upper*h,z,0,shade);
+    if(j<spine.length-1){const next=j*sides+(k+1)%sides;indices.push(i,next,i+sides,next,next+sides,i+sides);}
+  }
+  function feather(start,end,width,shade,dark) {
+    const [x,y,z]=start,[dx,dy,dz]=end.map((v,i)=>v-start[i]);
+    const d=Math.hypot(dx,dz),rx=-dz/d,rz=dx/d;
+    let prev;
+    const steps=distant?2:5;
+    for(let i=0;i<=steps;i++){
+      const u=i/steps,w=Math.max(.001,width*Math.sin(Math.PI*u**.78)**.78);
+      const row=[-1,0,1].map(v=>{
+        const xx=x+u*dx+v*w*rx,zz=z+u*dz+v*w*rz;
+        return vertex(xx,y+u*dy+.018*Math.sin(Math.PI*u)+.009*(1-Math.abs(v)),zz,Math.max(-1,Math.min(1,xx)),
+          v===-1?dark:shade);
+      });
+      if(prev)for(let k=0;k<2;k++)indices.push(prev[k],prev[k+1],row[k],prev[k+1],row[k+1],row[k]);
+      prev=row;
     }
   }
-  const ink=swift?'#444644':'#555148',belly=swift?'#bdb5a0':'#d0c5a9';
   for(const s of [-1,1]) {
-    const nose=[0,.055,swift?.36:.62], keel=[0,-.07,-.04], back=[0,.08,-.11], flank=[s*.072,0,-.06];
-    const rump=[0,0,-.35], tail=[s*(swift?.20:.12),.05,swift?-.60:-.42];
-    facet(nose,flank,back,ink);facet(nose,keel,flank,belly);
-    facet(back,flank,rump,ink);facet(rump,flank,keel,belly);facet(rump,flank,tail,ink);
-    const elbow=[s*.34,.10,.02,s*.34],wrist=[s*.62,.17,swift?.06:.11,s*.62];
-    const tip=[s*(swift?1.0:.96),.04,swift?-.30:-.09,s], base=[s*.08,0,-.23,s*.05];
-    const fan=[s*.55,.105,-.24,s*.55],secondary=[s*.42,.04,-.31,s*.42];
-    facet(flank,elbow,base,ink);facet(base,elbow,secondary,belly);
-    facet(elbow,wrist,fan,swift?'#737469':'#958c76');facet(elbow,fan,secondary,ink);facet(wrist,tip,fan,ink);
+    // A swallow's fork and narrow swept primaries differ from the rounded
+    // secondary fan of the migrating goose.
+    const tailCount=distant?2:swift?3:5;
+    for(let k=0;k<tailCount;k++){
+      const u=k/(tailCount-1);
+      feather([s*(.009+.025*u),.006,-.235],[s*(.016+u*(swift?.170:.107)),.009,
+        swift?-.39-.21*u:-.485+.048*u],swift?.031:.039,ink,'#797464');
+    }
+    const sections=swift?[[.04,.018,.104,-.175],[.28,.094,.084,-.25],[.53,.147,.014,-.282],
+      [.77,.111,-.107,-.281],[.995,.032,-.286,-.291]]:
+      [[.04,.018,.132,-.17],[.31,.102,.142,-.30],[.53,.152,.136,-.31],
+        [.69,.167,.098,-.254],[.81,.142,.035,-.218],[.978,.076,-.041,-.056]];
+    const first=points.length/3, spanSteps=distant?5:16, chords=distant?6:16;
+    const leading=new T.CatmullRomCurve3(sections.map(([x,y,z])=>new T.Vector3(x,y,z)));
+    const trailing=new T.CatmullRomCurve3(sections.map(([x,y,l,z])=>new T.Vector3(x,y,z)));
+    for(let j=0;j<=spanSteps;j++) {
+      const u=j/spanSteps, front=leading.getPoint(u),rear=trailing.getPoint(u);
+      for(let k=0;k<chords;k++) {
+        const a=k*TAU/chords,v=(1-Math.cos(a))*.5,z=T.MathUtils.lerp(front.z,rear.z,v);
+        const fleck=v>.47&&Math.sin(u*49+v*2.5)>.29;
+        const upper=swift?(fleck?'#575c54':'#464c47'):(fleck?'#897f6a':'#746c5d');
+        const lower=swift?(fleck?'#8c8a76':'#6d746c'):(fleck?'#bcb399':'#a49b85');
+        const shade=Math.sin(a)<-.01?lower:upper;
+        const i=vertex(s*front.x,front.y+.040*Math.sin(a)*(1-.87*front.x)+.023*Math.sin(v*Math.PI),z,s*front.x,shade);
+        if(j<spanSteps){const next=first+j*chords+(k+1)%chords;indices.push(i,next,i+chords,next,next+chords,i+chords);}
+      }
+    }
+    if(!distant){
+      const face=swift?[.052,.082,.227]:[.053,.151,.540],r=swift?.009:.012;
+      for(const [radius,tone,lift] of [[r*1.34,'#bfaf88',0],[r,ink,.0015]]){
+        const center=vertex(s*(face[0]+lift),face[1],face[2],0,tone);
+        for(let k=0;k<12;k++){
+          const a=k*TAU/12;
+          vertex(s*(face[0]+lift-radius*.32*Math.cos(a)),face[1]+radius*Math.sin(a),
+            face[2]+radius*Math.cos(a),0,tone);
+          indices.push(center,center+1+k,center+1+(k+1)%12);
+        }
+      }
+    }
+    const quills=distant?3:8;
+    for(let k=0;k<quills;k++){
+      const u=k/(quills-1),x=.115+.63*u;
+      feather([s*x,.021+.127*Math.sin(u*1.9),.050],
+        [s*(x+.12+.14*u),.015+.113*Math.sin(u*2.7),-.315+.06*u],swift?.054:.069,
+        k>4?ink:'#938c79',k>4?'#3c403a':'#6a685b');
+    }
   }
   const geometry=new T.BufferGeometry();
-  geometry.setAttribute('position',new T.Float32BufferAttribute(points,3));
+  geometry.setIndex(indices);geometry.setAttribute('position',new T.Float32BufferAttribute(points,3));
   geometry.setAttribute('color',new T.Float32BufferAttribute(colors,3));
   geometry.setAttribute('wingSpan',new T.Float32BufferAttribute(motion,1));
   geometry.computeVertexNormals();
@@ -67,11 +138,11 @@ function flockFlights(scene) {
     flocks.push({x,z,y:Math.max(WATER_Y,terrainHeight(x,z))+45+random()*49,
       angle, radius:17+random()*28, cruise:.065+random()*.045, kind,birds});
   }
-  const batches=counts.map((count,i)=>{
-    const geo=migratoryBird(i===1), beat=new T.InstancedBufferAttribute(new Float32Array(count),1);
+  const batches=[...counts,...counts].map((count,i)=>{
+    const geo=migratoryBird(i%2===1,i>=2), beat=new T.InstancedBufferAttribute(new Float32Array(count),1);
     beat.setUsage(T.DynamicDrawUsage);geo.setAttribute('wingBeat',beat);
     const mesh=new T.InstancedMesh(geo,material,count);
-    mesh.name=i?'高空の燕の群れ':'渡り雁の雁行';
+    mesh.name=i%2?'高空の燕の群れ':'渡り雁の雁行';
     mesh.frustumCulled=false;mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
     scene.add(mesh);return mesh;
   });
@@ -86,7 +157,7 @@ function flockFlights(scene) {
       const distance=Math.hypot(x-camera.position.x,z-camera.position.z);
       if(distance>=240)continue;
       const coverage=1-T.MathUtils.smoothstep(distance,202,240);
-      const heading=Math.atan2(cs,-sn*.72), dx=Math.sin(heading), dz=Math.cos(heading), mesh=batches[f.kind];
+      const heading=Math.atan2(cs,-sn*.72), dx=Math.sin(heading), dz=Math.cos(heading), mesh=batches[f.kind+(Math.hypot(distance,f.y-camera.position.y)>46?2:0)];
       for(const bird of f.birds) {
         const side=bird.side+.55*Math.sin(t*.49+bird.beat);
         const forward=bird.forward+.42*Math.cos(t*.36+bird.beat);
