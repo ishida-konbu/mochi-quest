@@ -214,13 +214,15 @@ function gateBlossoms(scene){
     const canopy=new T.Group(),local=new T.Object3D();
     for(let kind=0;kind<3;kind++){
       const mesh=new T.InstancedMesh(peachSprig([0,3,1][kind],kind,detailed),peachPetals,buds.length);
+      let count=0;
       for(const [i,[tip,yaw]] of buds.entries()){
+        if(kind===1 && i%4===2)continue;
         const j=(kind-i%3+3)%3,w=2.16+.55*cos(i+j);
         local.position.set(...tip).sub(levels.position);local.scale.set(w,w*.92,w);
         local.rotation.set(.42-.38*j,yaw+(j-1)*.99,-.16+.14*j,'YXZ');
-        local.updateMatrix();mesh.setMatrixAt(i,local.matrix);
+        local.updateMatrix();mesh.setMatrixAt(count++,local.matrix);
       }
-      mesh.receiveShadow=true;canopy.add(mesh);
+      mesh.count=count;mesh.receiveShadow=true;canopy.add(mesh);
     }
     levels.addLevel(canopy,detailed?0:10,.12);
   }
@@ -251,10 +253,10 @@ function groveShrine(p){
   }
 }
 function fallenBlossoms(p) {
-  const rng=seeded(96254), bins=new Map(), colors=['#f493a1','#fed3d4','#da788e','#e8a29c','#fff0db'].map(c=>new T.Color(c));
+  const rng=seeded(96254), bins=new Map(), colors=['#c89387','#e4c6b8','#b68789','#d5bbb1','#ebe0ca'].map(c=>new T.Color(c));
   const material=new T.MeshLambertMaterial({side:T.DoubleSide,vertexColors:true,emissive:'#a68b81',emissiveIntensity:.14});
   for(const tree of PEACH_TREES){
-    const count=tree.upland?(tree.wayside?10:0):tree.cliff?7:48;
+    const count=tree.upland?(tree.wayside?6:0):tree.cliff?5:24;
     for(let j=0;j<count;j++){
       const a=rng()*TAU,d=(.21+rng()**.7*4.32)*tree.size;
       const x=tree.x+cos(a)*d,z=tree.z+sin(a)*d, key=Math.floor(x/30)+','+Math.floor(z/30);
@@ -410,7 +412,7 @@ function fallingPetals(scene) {
   const geo=new T.ShapeGeometry(shape,5),mat=new T.MeshLambertMaterial({side:T.DoubleSide});
   const capacity=256,petals=new T.InstancedMesh(geo,mat,capacity),obj=new T.Object3D();
   const soil=new WeakMap();
-  for(let i=0;i<capacity;i++)petals.setColorAt(i,new T.Color(i%3?'#ee8fa3':'#ffd2d4'));
+  for(let i=0;i<capacity;i++)petals.setColorAt(i,new T.Color(i%4?'#e6ccbf':'#c28a89'));
   petals.frustumCulled=false;petals.instanceMatrix.setUsage(T.DynamicDrawUsage);scene.add(petals);
   return (time,player)=>{
     let count=0;
@@ -421,7 +423,7 @@ function fallingPetals(scene) {
       if(Math.abs(player.y-y-height*.6)>22)return;
       // A gust loosens a few petals from this actual crown. The release
       // point stays on the tree as the camera turns or crosses a cell.
-      for(let j=0;j<4 && count<capacity;j++){
+      for(let j=0;j<2 && count<capacity;j++){
         const a=tree.turn+j*2.4,seed=(tree.seed*.2781+j*.471)%1;
         const phase=(time*(.087+seed*.053)+seed)%1,swirl=TAU*phase;
         obj.position.set(tree.x+tree.size*1.8*cos(a)+phase*3.1+.53*sin(a+swirl*2),

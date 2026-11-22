@@ -8,11 +8,13 @@ const orchard = DISTRICTS.peach;
 // Each entry gives the centre relative to the orchard (y is elevation), the
 // three radii in metres, and extinction per metre at the heart of the bank.
 const banks = [
-  [-18,  9, -16, 92,  6, 32, .023],
-  [ 19, 14,  30, 98,  8, 29, .022],
-  [-43, 29, -29, 72,  8, 42, .018],
-  [ -7, 46, -33, 112, 7, 56, .017],
-  [ 36, 72,  30, 148, 6, 70, .014],
+  // From the western shoulder the gate lies between the two low banks.
+  // Leave air in that opening and let the north-facing gully hold the mist.
+  [-15, 10, -31, 78,  5, 22, .021],
+  [ 32, 15,  39, 69,  6, 24, .023],
+  [-52, 28, -39, 61,  6, 28, .019],
+  [ 15, 46, -48, 91,  6, 42, .017],
+  [ 52, 70,  53, 119, 5, 47, .014],
   [ 98, 17,  14, 53,  9, 59, .025],
   [148, 22, -43, 77,  7, 33, .023],
   [206, 35,   6, 72, 10, 77, .015],

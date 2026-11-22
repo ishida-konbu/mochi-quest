@@ -25,7 +25,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=kyoto-open-basin-1', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=peach-ink-groves-1', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -98,8 +98,6 @@ export function paintMapPaper() {
         const k = weights[key];
         r += (rgb[0] - r) * k; g1 += (rgb[1] - g1) * k; blue += (rgb[2] - blue) * k;
       }
-      const blush = Math.max(0,1-Math.hypot((x-DISTRICTS.peach.x)/78,(z-DISTRICTS.peach.z)/60));
-      r+=(239-r)*blush; g1+=(182-g1)*blush; blue+=(181-blue)*blush;
       const relief = inRanges ? Math.min(24, a*.14) + Math.max(-12,Math.min(13,
         (heights[idx+1]-a)*3+(heights[idx+stride]-a)*1.5)) :
         Math.min(26, a * .48) + Math.max(-10, Math.min(10, (b-a)*2));
@@ -211,9 +209,19 @@ export function paintMapPaper() {
       g.quadraticCurveTo(u+w*.49,v+.1,u+w,v);g.strokeStyle='#517d8052';g.lineWidth=.75;g.stroke();
     }
   }
-  for(const [i,tree] of PEACH_TREES.entries()){
-    g.fillStyle=['#cc7884b0','#d98f9fa8','#ecb9c0bc'][i%3];
-    g.beginPath();g.arc(toX(tree.x),toX(tree.z),tree.size*(tree.cliff?1.88:1.53),0,2*Math.PI);g.fill();
+  // At scroll scale a fork of ink and two dabs of colour identify a stand.
+  // Place them on the surveyed roots, leaving the rock and the path legible.
+  const twig=new Path2D('M0,0 Q-.13,-.4 .04,-.62 L.76,-1.02 M.01,-.58 Q-.33,-.57 -.52,-.91');
+  const blossoms=new Path2D();
+  blossoms.ellipse(.65,-.99,.40,.24,-.32,0,2*Math.PI);
+  blossoms.moveTo(-.22,-.96);
+  blossoms.ellipse(-.53,-.96,.31,.21,.18,0,2*Math.PI);
+  const petalInk=['#cda49e','#ddc9b8','#bb9fa7','#b87b80','#d1b29b'];
+  for(const tree of PEACH_TREES){
+    const size=tree.size*1.72;
+    g.save();g.translate(toX(tree.x),toX(tree.z));g.scale(Math.cos(tree.turn)<0?-size:size,size);
+    g.strokeStyle='#73665bbd';g.lineWidth=.29;g.stroke(twig);
+    g.fillStyle=petalInk[tree.form??0];g.fill(blossoms);g.restore();
   }
   function gateStone(u,v,width,depth,colour){
     g.fillStyle=colour;

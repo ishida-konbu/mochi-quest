@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, roadSurfaceHeight, groundHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
 import {RETREATS,bathRadius,sitePoint} from '../two/retreat-layout.js';
-import {INARI_GATES, INARI_ROUTE, PEACH_TREES, MOON_GATE} from '../two/pilgrimage-layout.js';
+import {INARI_GATES, INARI_ROUTE, PEACH_TREES, nearPeachTrunk, MOON_GATE} from '../two/pilgrimage-layout.js';
 import {PALACE_APPROACH} from '../two/ryugu-layout.js';
 import {HIGASHIYAMA} from '../two/higashiyama.js';
 import {kyoInfluence, kyoNight, kyoClock, KYO_DAY_SECONDS} from '../two/kyo-layout.js';
@@ -70,18 +70,23 @@ test('the peach orchard lies inside a mountain range with a low eastern pass',()
   }
 });
 
-test('flowering peach colonies follow the wooded slopes and gorge while keeping the moon gate and spring open',()=>{
-  const mountain=PEACH_TREES.filter(t=>t.upland),basin=PEACH_TREES.filter(t=>!t.cliff);
-  const centre=DISTRICTS.peach,spring=RETREATS.find(s=>s.kind==='peach'),aspects=new Array(8).fill(0);
-  const heights=mountain.map(t=>terrainHeight(t.x,t.z));
-  assert.ok(basin.length>=200 && mountain.length>=600);
-  assert.ok(heights.filter(y=>y>80).length>=100 && heights.filter(y=>y>30 && y<60).length>=70);
-  assert.ok(mountain.filter(t=>t.wayside).length>=40);
-  for(const t of mountain){
-    const a=Math.atan2(t.z-centre.z,t.x-centre.x)+Math.PI;
-    aspects[Math.floor(a*4/Math.PI)%8]++;
+test('small peach groves frame the moon gate and leave the western outlook and rock shoulders open',()=>{
+  const centre=DISTRICTS.peach,spring=RETREATS.find(s=>s.kind==='peach');
+  const basin=PEACH_TREES.filter(t=>!t.cliff),mountain=PEACH_TREES.filter(t=>t.upland);
+  assert.ok(PEACH_TREES.length>=180 && PEACH_TREES.length<=280);
+  assert.ok(basin.length>=35 && basin.length<=70);
+  assert.ok(mountain.some(t=>terrainHeight(t.x,t.z)>85));
+  assert.ok(PEACH_TREES.some(t=>t.wayside && t.x>centre.x+170),'flowers on the outer bends');
+  // Follow the line of sight from the west bluff to the roof, then check
+  // separate open shelves against the north and south flowering stands.
+  for(let u=-104;u<=-25;u+=4){
+    assert.equal(nearPeachTrunk(centre.x+u,centre.z+(-u-14)*.065,7.2),false,'west outlook at '+u);
   }
-  assert.ok(aspects.every(n=>n>=25),'blooming slopes in all eight directions: '+aspects);
+  assert.ok(nearPeachTrunk(centre.x-103,centre.z+20,4),'flowering branch on the near bluff');
+  assert.ok(nearPeachTrunk(centre.x-50,centre.z-52,10),'a stand on the opposite bank');
+  for(const [u,v] of [[31,63],[61,-75],[-100,90]]){
+    assert.equal(nearPeachTrunk(centre.x+u,centre.z+v,17),false,'open rock at '+[u,v]);
+  }
   for(const t of PEACH_TREES){
     assert.ok(Math.hypot(t.x-MOON_GATE.x,t.z-MOON_GATE.z)>8.9);
     assert.ok(bathRadius(spring,t.x,t.z)>=1.38);
