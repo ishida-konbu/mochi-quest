@@ -3,7 +3,6 @@ import { hasPilgrimBathhouse,addPilgrimFurnitureSolids } from './pilgrim-lodge-p
 // dimensions locate the screens in the picture, the graded earth and the walls.
 import { suzuriParcel, suzuriTerrace, suzuriSolids } from './kyo-bath-layout.js';
 import { addVillageWorkshopSolids,addVillageYardSolids } from './village-workshop-plan.js';
-import { regionalSpringLip } from './regional-springs.js';
 
 const designs={
   sakura:  ['ferry','hip','reed', 1.3,3.00,1.15,'#615347','#745f52','#a35f70','桜筏'],
@@ -72,14 +71,15 @@ export function bathEnclosure(s){
       annex={u:-w+.40,v:-.25*s.rz,w:1.52,d:deep,eave:s.kind==='inari'?2.55:2.22};
     }
     const trough=[];
-    if(['paddy','sulfur','maple'].includes(s.kind)){
-      const a=-Math.PI*.62,lip=regionalSpringLip(s.shape,a);
-      const end=s.rx*lip*Math.cos(a),v=s.rz*lip*Math.sin(a)-.76;
-      const start=-w+.03,n=s.kind==='paddy'?3:2,step=(end-start)/n;
-      const lift=s.kind==='paddy'?.24:s.kind==='sulfur'?.71:.86;
-      for(let i=0;i<n;i++)trough.push({u:start+(i+.5)*step,v,w:step,y:1.01+(n-i)*lift,i});
+    // Feed the specific inlet at the working elevation of the last device.
+    // The last flume empties onto the maple header, the upper sulfur shelf
+    // or the rice field's intake. In all three cases the water runs downhill.
+    const outlet={paddy:[-3.71,-3.79,.86,.19],sulfur:[-1.82,-3.97,1.16,.43],maple:[-2.62,-2.72,2.81,.24]}[s.kind];
+    if(outlet){
+      const [end,v,h,lift]=outlet,start=-w+.03,n=s.kind==='paddy'?3:2,step=(end-start)/n;
+      for(let i=0;i<n;i++)trough.push({u:start+(i+.5)*step,v,w:step,y:h+(n-i)*lift,i});
     }
-    plan={style,roof,wall,wood,roofTint,dye,motif,closed,w,fore,room,segments,annex,trough};
+    plan={style,roof,wall,wood,roofTint,dye,motif,closed,w,fore,room,segments,annex,trough,outletY:outlet?.[2]};
   }else if(s.rank==='sub'){
     const [cover,wall,w,d,eave,rise,wood]=waysideShelters[s.kind];
     const u=Math.min(1.35,s.rx*.39),v=-s.rz*1.25-.76-d/2;

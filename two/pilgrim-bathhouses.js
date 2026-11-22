@@ -1,8 +1,9 @@
 // Seven full-scale shelters, each grounded on its own walkable floor. Their
 // front galleries look across the bath while the old traffic lanes stay clear.
 import * as T from './vendor/three.module.min.js';
+import { pilgrimBathInstallation } from './pilgrim-bathing-effects.js';
 import { RETREATS,sitePoint } from './retreat-layout.js';
-import { SNOW_SPRING,waterSurfaceAt,wrapDelta } from './terrain.js';
+import { SNOW_SPRING,springLevel,wrapDelta } from './terrain.js';
 import { bathEnclosure } from './bath-enclosures.js';
 import { hasPilgrimBathhouse,lodgeFurniture,yardFixture,snowLamp } from './pilgrim-lodge-plan.js';
 import { sculpture } from './pilgrimage-pigment.js';
@@ -516,9 +517,9 @@ export function createPilgrimBathhouses(scene){
   for(const item of houses){
     const r=item.plan.room,site=item.site;
     [item.x,item.z]=sitePoint(site,r.u,r.v);
-    item.y=site.kind==='snow'?site.level+.52:waterSurfaceAt(site.x,site.z);
+    item.y=site.kind==='snow'?site.level+.52:springLevel(site);
   }
-  return player=>{
+  return (player,time=0)=>{
     for(const h of houses){
       const dx=wrapDelta(h.x-player.x),dz=wrapDelta(h.z-player.z);
       if(dx*dx+dz*dz>158**2){if(h.group)h.group.visible=false;continue;}
@@ -527,9 +528,15 @@ export function createPilgrimBathhouses(scene){
         const mesh=new T.Mesh(geo,scrollPigment());mesh.castShadow=mesh.receiveShadow=true;
         h.group=new T.Group();h.group.name=h.site.name+'の湯屋';h.group.add(mesh);
         addScroll(h.group,h.site,h.plan);
+        h.installation=pilgrimBathInstallation(h.site);
+        const r=h.plan.room;
+        h.installation.root.position.set(-r.u,h.site.kind==='snow'?-.52:0,-r.v);
+        h.group.add(h.installation.root);
         h.group.rotation.y=h.site.yaw;scene.add(h.group);
       }
       h.group.position.set(player.x+dx,h.y,player.z+dz);h.group.visible=true;
+      const c=Math.cos(h.site.yaw),k=Math.sin(h.site.yaw),r=h.plan.room;
+      h.installation.update(time,r.u-dx*c+dz*k,r.v-dx*k-dz*c);
     }
   };
 }

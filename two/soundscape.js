@@ -293,14 +293,29 @@ export function createSoundscape(ctx, master) {
     }
   }
 
+  let lastRinseTime=0;
   function activity(p, yaw, now, photo) {
+    const rinse=p.bathPose?.action==='rinse' ? p.activityTime : 0;
+    if(!photo && rinse>0 && lastRinseTime>1.20 && rinse<=1.20){
+      // Tip the dipper when its lip actually reaches the shoulder.
+      brush(now,2050,670,.45,.18,.15);
+      splash(now+.26,.095,-.06);
+    }
+    lastRinseTime=rinse;
     if (now < nextActivity) return;
     nextActivity = now + .55 + Math.random() * .37;
     if (bathGain > .04) {
       const pan = panTo(p, nearestBath, yaw);
-      for (let i = 0; i < 3; i++) {
-        const hz = 240 + Math.random() * 390;
-        note(now + .065 * i, hz, hz * 1.56, .09, .057 * bathGain, pan, 'sine', outdoor);
+      const kind=nearestBath.retreat?.kind;
+      if(kind==='sakai' && nearestBath.rank==='main'){
+        brush(now,2750,1160,.64,bathGain*(inside?.10:.045),pan,outdoor);
+      }else{
+        const shower=nearestBath.rank==='main' && ['inari','maple','bamboo'].includes(kind);
+        if(shower)brush(now,1690,970,.67,.093*bathGain,pan,outdoor);
+        for (let i=0;i<(shower?2:3);i++){
+          const hz=kind==='earthen'?245+Math.random()*130:240+Math.random()*390;
+          note(now+.065*i,hz,hz*1.56,kind==='earthen'?.18:.09,.057*bathGain,pan,'sine',outdoor);
+        }
       }
     }
     if (photo) return;

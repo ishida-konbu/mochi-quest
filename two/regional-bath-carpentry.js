@@ -97,7 +97,7 @@ function aqueduct(p,f,s,plan){
     }
     f.put('box',t.u,y-.082,v,t.w,.10,channelW,hue,longitudinal);
     f.put('box',t.u,y-.014,v,t.w-.02,.018,channelW-.13,'#99b4a0',p.springFlow);
-    const next=plan.trough[i+1]?.y??.98,drop=y-next;
+    const next=plan.trough[i+1]?.y??plan.outletY,drop=y-next;
     if(drop>.035){
       f.put('box',lip+.026,y-drop/2-.006,v,.041,drop+.066,channelW-.15,'#c2d4c2',p.springFlow,0,0,.05);
       f.put('rock',lip+.05,next+.022,v,.17,.027,.16,'#cbd4bc',p.fine);

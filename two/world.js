@@ -2056,7 +2056,7 @@ export function* prepareWorld(scene) {
         updateShrines(time,player,camera,inariWeather);
         updateTrade(time,player,camera);
         updateHuts(player);
-        updateBathTableaux(player);
+        updateBathTableaux(player,time);
         updateWaterfalls(time,player,camera);
         updateLake(time,player);
         updateOcean(voyageTime,player);

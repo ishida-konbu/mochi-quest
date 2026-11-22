@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.min.js';
+import { seatedGesture,rinsingPalms } from './bath-gestures.js';
 import { GLTFLoader } from './vendor/GLTFLoader.min.js';
 import { addKagamiOrnaments } from './kagami-ornaments.js';
 import { addKagamiFern } from './kagami-fern.js';
@@ -248,6 +249,17 @@ export function gripChayaServing(r,item,cup){
   item.position.copy(palm).sub(back.multiply(item.scale).applyQuaternion(item.quaternion));
 }
 
+// Read the actual mitt after the seated pose has compressed the belly. The
+// wooden ladle follows the palm as it turns to pour over the other shoulder.
+export function gripRinsingLadle(r,player){
+  r.rinseGrip??={sample:palmSamples(r.body,r.hands[1]),palm:new T.Vector3(),back:new T.Vector3()};
+  const {sample,palm,back}=r.rinseGrip;
+  r.model.updateWorldMatrix(true,true);
+  r.body.getVertexPosition(sample.front,palm);r.body.getVertexPosition(sample.back,back);
+  r.body.localToWorld(palm.lerp(back,.5));
+  rinsingPalms.set(player,palm);
+}
+
 function kagamiLayers(r) {
   const parent=r.model.parent;
   const stack = new T.Group();
@@ -337,9 +349,10 @@ export function makeRiceModel(parent) {
   const legs=['Foot_R','Foot_L'].map(name=>model.getObjectByName(name));
   const hands=['Hand_R','Hand_L'].map(name=>model.getObjectByName(name));
   const chest=model.getObjectByName('Chest');
-  const bones=[...legs,...hands,chest];
+  const head=model.getObjectByName('Head');
+  const bones=[...legs,...hands,chest,head];
   const samples=bones.map(b=>({p:b.position.clone(),q:b.quaternion.clone()}));
-  return { model,body,uniforms,mixer,actions,legs,hands,chest,bones,samples,
+  return { model,body,uniforms,mixer,actions,legs,hands,chest,head,bones,samples,
     plainSkin:material, kagami:null, faceCues:body.userData.faceCues, clip:null,
     step:0,press:0,velocity:0,pull:0,pullV:0,smile:1 };
 }
@@ -396,7 +409,9 @@ export function poseRice(r,p,t,dt,mood,bath) {
   const stretch=clamp(1+r.press+breath+.045*pull,.67,1.32);
   const joy=mood==='joy' && p.activity!=='read';
   const name=p.activity==='read' ? 'Read' : (poses[mood]||'Normal');
-  const cell=playGesture(r,bath ? 'Float' : name,dt,name);
+  const seated=seatedGesture(bath,t,p.activityTime);
+  const bathFace=seated && !p.emote && (bath.action==='steam' || bath.action==='seat')?'Warm':name;
+  const cell=playGesture(r,bath?'Float':name,dt,bathFace);
   const melt=bath?.melt || 0, recline=bath?.recline || 0;
   r.smile=T.MathUtils.damp(r.smile,joy?1:0,42,dt);
   r.body.morphTargetInfluences[0]=r.smile;
@@ -435,6 +450,37 @@ export function poseRice(r,p,t,dt,mood,bath) {
       hand.position.z+=.09*recline;
       foot.position.z+=(.13+.025*side*Math.cos(t*1.9))*recline;
     }
+    if(seated){
+      const {beat,reach,lift,wipe}=seated,q=bath.settle,action=bath.action;
+      let forward=.18,toe=.24,spread=.02,handsUp=.035,handsIn=.10,handsAhead=.14;
+      if(action==='rinse'){
+        forward=.27;toe=.36;
+        if(i===1){
+          handsIn=.10*reach-.04*lift;handsUp=.025+.065*reach+.19*lift;
+          handsAhead=.075+.16*reach+.065*lift;
+        }else{handsIn=.11+.12*wipe;handsUp=.055+.12*wipe;handsAhead=.095+.073*wipe;}
+      }else if(action==='jar'){
+        // Crook the elbows over the narrow round ceramic rim.
+        forward=.075;toe=.13;spread=-.08;handsIn=-.17;handsUp=.12+.027*beat;handsAhead=.13;
+      }else if(action==='steam'){
+        forward=.32;toe=.36;
+        handsIn=i?.22+.20*wipe:.17;handsUp=i?.10+.42*wipe:.04;handsAhead=i?.20+.12*wipe:.22;
+      }else if(action==='cascade' || action==='bamboo'){
+        // Under the heavy fall one mitt kneads a shoulder. Under the three
+        // light bamboo jets both palms open to the water and turn with it.
+        const heavy=action==='cascade';
+        forward=heavy?.11:.16;spread=heavy?.10:.05;toe=.20;
+        handsIn=heavy?(i?.62:.13):.23;handsUp=heavy?(i?.34+.10*beat:.075):.20+.13*(i?beat:1-beat);
+        handsAhead=heavy?(i?.26:.18):.28;
+      }else if(action==='deep'){
+        forward=.09;toe=.12;handsIn=.19;handsUp=.29+.05*beat;handsAhead=.19;
+      }else{
+        handsAhead=.18+.02*beat;handsIn=.14;
+      }
+      foot.position.x+=side*spread*q;foot.position.z+=forward*q;foot.rotateX(-toe*q);
+      hand.position.x-=side*handsIn*q;hand.position.y+=handsUp*q;hand.position.z+=handsAhead*q;
+      hand.rotateX(-(.08+handsAhead*.40)*q);hand.rotateZ(side*handsIn*.49*q);
+    }
     if (!grounded || ride) {
       foot.position.y+=(ride ? .053 : .080);
       foot.position.z+=(ride ? .132 : .058);
@@ -462,6 +508,13 @@ export function poseRice(r,p,t,dt,mood,bath) {
     }
   }
   r.chest.rotateZ(step*stride*.023+.034*pull*Math.sin(t*3.8));
+  if(seated){
+    const q=bath.settle;
+    r.chest.rotateX(seated.bow*.62*q);
+    r.head.rotateX((bath.action==='deep'?-.17:bath.action==='steam'?-.12+seated.wipe*.08:
+      bath.action==='rinse'?seated.reach*.15-seated.lift*.12:seated.bow*.47)*q);
+    r.head.rotateZ((seated.roll*.55+(bath.action==='rinse'?-.09*seated.wipe:0))*q);
+  }
   if(stack){
     r.kagami.stack.visible=true;
     r.body.material=r.kagami.upperSkin;
@@ -486,7 +539,7 @@ export function poseRice(r,p,t,dt,mood,bath) {
   }
   const floatDraw=floatExtension*melt*r.model.scale.y;
   const floatLength=r.model.position.y+2.32*r.model.scale.y+floatDraw;
-  return {stretch,width:1/Math.sqrt(stretch),pull,extension:pullExtension*pull,floatDraw,floatLength,
+  return {stretch,width:1/Math.sqrt(stretch),pull,seated,extension:pullExtension*pull,floatDraw,floatLength,
     bob:Math.abs(step)*stride*.046,lean:-step*stride*.040-.028*tug,
     pitch:stride*(-.036+plant*.023)-.045*tug,breath};
 }

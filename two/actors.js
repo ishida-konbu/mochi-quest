@@ -1,3 +1,5 @@
+import { tideRise } from './pilgrim-bathing-plan.js';
+import { bathPools } from './bath-places.js';
 import { goemonWaterWash } from './goemon-bath-art.js';
 import { KETTLE } from './wayside-hut-layout.js';
 import { addFlumes } from './snow-bath.js';
@@ -21,7 +23,8 @@ import { updateScrollResident } from './scroll-encounters.js';
 import { createScrollFaunaView } from './scroll-fauna-view.js';
 import { createRyuguPerformers } from './ryugu-performers.js';
 import { dressArtisan, poseArtisan } from './trade-tools.js';
-import { makeRiceModel, poseRice, gripChayaServing } from './mochi-model.js';
+import { seatedFeet } from './bath-gestures.js';
+import { makeRiceModel, poseRice, gripChayaServing, gripRinsingLadle } from './mochi-model.js';
 
 const PI = Math.PI,
   TAU = PI * 2;
@@ -1356,7 +1359,8 @@ function gaitHero(h, p, t, dt, state) {
     sit = servingPose(p),
     speed = p.speed || 0;
   const riding = !!p.mount;
-  const target = p.heading || 0;
+  const bath=p.bathPose,walking=p.heading || 0;
+  const target=Number.isFinite(bath?.heading)?walking+shortest(walking,bath.heading)*bath.settle:walking;
   if (h.angle === undefined) h.angle = target;
   if (!state.photo) {
     const turn = shortest(h.angle, target);
@@ -1365,7 +1369,6 @@ function gaitHero(h, p, t, dt, state) {
   const giant = p.buffs?.full > 0,
     dango = p.mode === 'dango',
     wings = p.mode === 'habutae';
-  const bath=p.bathPose;
   h.root.position.set(bath?.x ?? p.x, p.y, bath?.z ?? p.z);
   h.root.rotation.y = h.angle;
   const response=poseRice(h.rice,p,t,dt,mood,bath);
@@ -1390,7 +1393,14 @@ function gaitHero(h, p, t, dt, state) {
     h.pose.rotation.x+=.07;
   }
   if(sit==='sleep'){h.pose.scale.y*=.76;h.pose.rotation.z=-.13;h.pose.position.y=.009;}
-  if(bath){
+  if(response.seated){
+    const {posture,bow,roll}=response.seated,q=bath.settle;
+    const lift=bath.action==='deep'?.022*Math.sin(t*1.8):.005*Math.sin(t*1.68);
+    h.pose.position.y=(seatedFeet(p,bath)-p.y+lift)*q;
+    h.pose.rotation.set((posture.pitch+bow)*q,0,roll*q);
+    h.pose.scale.set(g*THREE.MathUtils.lerp(response.width,posture.width,q),
+      g*THREE.MathUtils.lerp(response.stretch,posture.height,q),g*THREE.MathUtils.lerp(response.width,1.025,q));
+  }else if(bath){
     const {recline,settle}=bath, breath=Math.sin(t*1.85);
     const tilt=THREE.MathUtils.lerp(.065,-1.53,recline);
     const halfLength=response.floatLength*.50*g;
@@ -1401,6 +1411,7 @@ function gaitHero(h, p, t, dt, state) {
     h.pose.scale.set(g*(1+.035*recline),g,g*(1+.018*breath*recline));
   }
   if(p.buffs?.drunk>0) h.pose.rotation.z+=.115*Math.sin(t*3.7);
+  if(bath?.action==='rinse')gripRinsingLadle(h.rice,p);
   h.leaves.visible = p.mode === 'kusa';
   h.leaves.position.y = response.extension+response.floatDraw;
   h.wrap.visible = p.buffs?.wrap > 0;
@@ -1469,8 +1480,8 @@ function gaitHero(h, p, t, dt, state) {
   h.dust.visible = false;
   if (p.mode === 'kinako' && speed > 0.12) mistAt(h.dust, t, false, 1);
   h.warm.visible = false;
-  if (p.buffs?.warm > 0 || sit === 'bath') {
-    h.warm.position.y = bath ? p.bathWaterY-p.y+.06 : .56;
+  if (bath?.action!=='rinse' && (p.buffs?.warm > 0 || sit === 'bath')) {
+    h.warm.position.y = bath ? (bath.wet===false?seatedFeet(p,bath)+.21:p.bathWaterY+.06)-p.y : .56;
     h.warm.scale.z = 1+(bath?.melt || 0);
     mistAt(h.warm, t, true, 1.24);
   }
@@ -1622,7 +1633,7 @@ export function animateNPC(record, n, t) {
   }
 }
 function makeObject(o, parent) {
-  let mesh, feature, steam, flumes;
+  let mesh, feature, steam, flumes, smallerMist;
   if(o.goemon) {
     mesh=new THREE.Group();
     const line=KETTLE.water-KETTLE.board;
@@ -1632,14 +1643,22 @@ function makeObject(o, parent) {
   } else if(o.retreat) {
     mesh=new THREE.Group();
     addSpringSurface(mesh,o.retreat.rx,o.retreat.rz,.52,o.retreat);
-    steam=particles('steam',o.retreat.kind==='sulfur'?42:30);
-    steam.position.y=.51;
-    if(o.retreat.regional){
-      // Mist rises from within the basin, including its narrower cross axis.
-      steam.scale.z=o.retreat.rz/o.retreat.rx;
-      steam.scale.y=o.retreat.kind==='snow'||o.retreat.kind==='sulfur'?1.24:.9;
+    const pools=bathPools(o.retreat);
+    if(pools){
+      smallerMist=pools.map((q,i)=>{
+        const heat=q.mist??1;
+        const mist=particles('steam',Math.round((7+3*q.rx)*heat));
+        mist.position.set(q.u,.52+q.y,q.v);
+        mist.scale.set(1,.83*heat,q.rz/q.rx);
+        mesh.add(mist);
+        return {mist,spread:q.rx*.80,phase:i*.58};
+      });
+    }else{
+      steam=particles('steam',30);
+      steam.position.y=.51;
+      steam.scale.set(1,.9,o.retreat.rz/o.retreat.rx);
+      mesh.add(steam);
     }
-    mesh.add(steam);
   } else if(o.grand) {
     mesh=new THREE.Group();
     addSpringSurface(mesh,SNOW_SPRING.rx,SNOW_SPRING.rz,SNOW_SPRING.level-o.y,SNOW_SPRING);
@@ -1658,7 +1677,7 @@ function makeObject(o, parent) {
     mesh.add(feature);
   }
   parent.add(mesh);
-  return { mesh, feature, steam, flumes };
+  return { mesh, feature, steam, flumes, smallerMist };
 }
 function within(entity, player, limit) {
   return wrapDelta(entity.x - player.x) ** 2 + wrapDelta(entity.z - player.z) ** 2 < limit * limit;
@@ -1886,13 +1905,14 @@ export function createActors(scene, renderer) {
       if (!rec) continue;
       rec.mesh.visible = near;
       if (!near) continue;
-      rec.mesh.position.set(p.x + wrapDelta(o.x - p.x), o.y, p.z + wrapDelta(o.z - p.z));
+      rec.mesh.position.set(p.x + wrapDelta(o.x - p.x), o.y+tideRise(o.retreat,t), p.z + wrapDelta(o.z - p.z));
       rec.mesh.rotation.y = o.heading || 0;
       if (rec.feature) {
         rec.feature.position.y = 0.395 + 0.011 * Math.sin(t * 2 + o.x);
         rec.feature.rotation.y = 0.15 * Math.sin(t * 0.8 + o.z);
       }
       if (rec.steam) mistAt(rec.steam, t + 0.01 * o.x, true, o.goemon ? .63 : o.grand ? 12.5 : o.retreat ? o.retreat.rx*.78 : 1.65);
+      if(rec.smallerMist)for(const {mist,spread,phase} of rec.smallerMist)mistAt(mist,t+phase,true,spread);
       if (rec.flumes) rec.flumes(t);
       if (o.type === 'port') {
         rec.mesh.getObjectByName('park0').visible = o.bikes > 0;

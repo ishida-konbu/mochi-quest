@@ -1,3 +1,5 @@
+import { bathPools,bathLocal,poolAt,stationRadius } from './bath-places.js';
+import { addPilgrimBathSolids,pilgrimStations,tideRise } from './pilgrim-bathing-plan.js';
 import { pilgrimRoofContact,snowLamp } from './pilgrim-lodge-plan.js';
 import { SNOW_TOWN, FOREST_LAKE, SNOW_PASS, LAKE_ISLET, isletRadius, snowPoint, lakeRadius, lakePoint } from './snow-country.js';
 import { LAKE_WILLOWS, LAKE_ANIMALS } from './lake-grove-layout.js';
@@ -334,7 +336,7 @@ function groundBeforeBath(x,z) {
 // A waterline cut into the local slope. The lower of the upstream plot and
 // its front approach keeps the entrance from projecting above the meadow.
 const springLevels=new WeakMap();
-function springLevel(site) {
+export function springLevel(site) {
   if(!springLevels.has(site)){
     const front=sitePoint(site,0,site.rz+1.7);
     const base=groundBeforeBath(site.x,site.z);
@@ -354,7 +356,9 @@ export function terrainHeight(x,z) {
   if(site) return bathTerrain(site,x,z,native,springLevel(site));
   if (abs(x-SNOW_SPRING.x)>23 || abs(z-SNOW_SPRING.z)>16) return native;
   const r = springRadius(x,z);
-  const bed = SNOW_SPRING.level-.61+smooth(.70,1.03,r)*.87;
+  const deep=pilgrimStations(SNOW_SPRING)[0];
+  const plunge=(deep.depth-.61)*(1-smooth(.52,1.30,stationRadius(deep,x-bathX,z-bathZ)));
+  const bed = SNOW_SPRING.level-.61-plunge+smooth(.70,1.03,r)*.87;
   const ground=bed+(native-bed)*smooth(1.08,1.60,r);
   return r>1?tableauGround(SNOW_SPRING,x-bathX,z-bathZ,ground,SNOW_SPRING.level):ground;
 }
@@ -371,11 +375,17 @@ export function roadSurfaceHeight(x,z) {
   const step=gateStoneRise(x-RASHOMON.x,z-RASHOMON.z);
   return step>0 ? terrainHeight(RASHOMON.x,RASHOMON.z)+step : terrainHeight(x,z);
 }
-export function waterSurfaceAt(x,z) {
+export function waterSurfaceAt(x,z,time=0) {
   const hut=nearbyHut(x,z);
   if(hut?.bath && (x-hut.bath.x)**2+(z-hut.bath.z)**2<KETTLE.widthScale**2) return terrainHeight(hut.x,hut.z)+KETTLE.water;
   const site=nearbyRetreat(x,z);
-  if(site && bathRadius(site,x,z)<1) return springLevel(site);
+  if(site){
+    const pools=bathPools(site);
+    if(pools){
+      const pool=poolAt(pools,...bathLocal(site,x,z));
+      if(pool)return springLevel(site)+pool.y;
+    }else if(bathRadius(site,x,z)<1)return springLevel(site)+tideRise(site,time);
+  }
   if(abs(x-SNOW_SPRING.x)<15 && abs(z-SNOW_SPRING.z)<10 && springRadius(x,z)<1)return SNOW_SPRING.level;
   return max(WATER_Y,mountainStreamWaterAt(x,z));
 }
@@ -1394,13 +1404,15 @@ for(const {hearths} of STREET_BEATS)for(const {x,z} of hearths)
 gateSolids(terrainHeight,putSolid);
 pilgrimageSolids(terrainHeight,putSolid);
 kiyomizuSolids(terrainHeight,putSolid);
-civicAndBathSolids(terrainHeight,putSolid);
+civicAndBathSolids(terrainHeight,putSolid,springLevel);
 hutSolids(terrainHeight,putSolid);
 portSolids(putSolid);
 lakeHokoraSolids(putSolid);
 for(const {x,z,rx,rz,yaw,top,rise} of SOURCE_STONES){
   putSolid(x,z,rx,rz,yaw,top,'springRock',true).roundHeight=rise;
 }
+addPilgrimBathSolids(SNOW_SPRING,(u,v,w,d,y,kind,support,angle=0)=>
+  putSolid(bathX+u,bathZ+v,w/2,d/2,angle,SNOW_SPRING.level+y,kind,support),SNOW_SPRING.level);
 const winterCarving=tableauFooting(SNOW_SPRING,terrainHeight);
 putSolid(winterCarving.x,winterCarving.z,1.65,.90,winterCarving.yaw,winterCarving.ground+1.77,'oval',false);
 for(const stone of SPRING_STONES) {
@@ -1569,8 +1581,8 @@ export function groundHeight(x, z, feet = -Infinity) {
   const onBridge = b && (feet === -Infinity || feet >= deck - .36);
   return max(onBridge ? deck : -Infinity, landscapeFloor(x, z), highest(x, z, 0, feet, true));
 }
-export function waterDepth(x, z) {
-  return max(0, waterSurfaceAt(x,z) - terrainHeight(x, z));
+export function waterDepth(x,z,time=0) {
+  return max(0, waterSurfaceAt(x,z,time) - terrainHeight(x, z));
 }
 function lowerFace(item,top) {
   if (item.kind === 'roof' || item.kind === 'pagodaEave') return top - (item.thickness ?? Math.max(.10,item.form==='hip'?.09*item.roofRise:0));

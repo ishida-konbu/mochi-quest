@@ -1,5 +1,7 @@
+import { tideRise } from './pilgrim-bathing-plan.js';
 import { WAYSIDE_HUTS,KETTLE,CHAYA_SITES,CHAYA_SEAT } from './wayside-hut-layout.js';
 import { SUZURI_COURT,suzuriParcel } from './kyo-bath-layout.js';
+import { bathPools,bathStations,bathLocal,poolAt,stationAt,poolRadius,stationRadius } from './bath-places.js';
 import { SOAK_SECONDS, floatBerth, bathingPose } from './bathing.js';
 import { planTurtleLeg } from './turtle-trail.js';
 import { BELL_FIRST, BELL_INTERVAL, noticeBellDistance, templeBellHour } from './kiyomizu-bell.js';
@@ -18,7 +20,7 @@ import { makeScrollResidents, updateScrollResident } from './scroll-encounters.j
 import { SCROLL_FAUNA, makeScrollFauna, moveScrollFauna } from './scroll-fauna.js';
 import { SEA_SPECIES, retiredSeaIds, makeRyuguResidents, updateRyuguResident } from './ryugu-residents.js';
 import { RYUGU } from './ryugu-layout.js';
-import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, shoreDistance, WATER_Y, groundHeight, landscapeFloor, solidHeightAt, constrainMove, canOccupy, staticVolumeAt, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
+import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, shoreDistance, WATER_Y, groundHeight, landscapeFloor, solidHeightAt, constrainMove, canOccupy, staticVolumeAt, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, springLevel, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
 import { POUNDING, POUNDING_CREW } from './festival.js';
 import { prepareVillageRoutes, animalRadius, openGround, walkCircuit } from './village-paths.js';
@@ -89,6 +91,7 @@ function makeWorld() {
   const retiredVillageSites=[];
   function placeSpring(site) {
     const pool=object('onsen',site.x,site.z,site.yaw,site.regional ? 'onsen-'+site.id : undefined);
+    pool.y=springLevel(site)-.52;
     pool.retreat=site; pool.rank=site.rank; pool.region=site.region;
   }
   function npc(type, role, x, z, phase, side = 1) {
@@ -137,7 +140,7 @@ function makeWorld() {
   });
   npc('turtle', 'wander', -14, 54, 0);
   object('onsen',SNOW_SPRING.x,SNOW_SPRING.z);
-  Object.assign(objects.at(-1),{grand:true,rank:SNOW_SPRING.rank,region:SNOW_SPRING.region});
+  Object.assign(objects.at(-1),{grand:true,site:SNOW_SPRING,y:SNOW_SPRING.level-.61,rank:SNOW_SPRING.rank,region:SNOW_SPRING.region});
   object('tsukimi',TSUKIMI.x,TSUKIMI.z,TSUKIMI.yaw);
   for (const visitor of procession()) {
     const {type,role,x,z,phase} = visitor;
@@ -297,17 +300,20 @@ export function createGame(snapshot = null) {
   let bufferedJump = 0;
   let ledgeGrace = 0;
   let lastBath = null;
-  let berth = null;
+  let lastPlace=null,berth=null;
+  function waterDatum(target){
+    return target.retreat?springLevel(target.retreat):target.grand?SNOW_SPRING.level:waterSurfaceAt(target.x,target.z);
+  }
   Object.defineProperty(player, 'bathPose', {get() {
     if(player.activity!=='bath' || !lastBath)return;
-    berth ??= floatBerth(player,lastBath,springRadius);
-    return bathingPose(player,berth);
+    berth ??= floatBerth(player,lastBath,springRadius,lastPlace,waterDatum(lastBath));
+    return bathingPose(player,berth,state.time);
   }});
   // Old journals remember the bath ID. Rebuild its waterline from the site
   // so the first frame of a resumed soak uses the same level as the mesh.
   Object.defineProperty(player, 'bathWaterY', {get() {
     if(player.activity!=='bath')return;
-    if(lastBath)return waterSurfaceAt(lastBath.x,lastBath.z);
+    if(lastBath)return waterDatum(lastBath)+(lastPlace?.y??0)+tideRise(lastBath.retreat,state.time);
     return waterSurfaceAt(player.x,player.z);
   }});
   let shotId = 0;
@@ -379,11 +385,29 @@ export function createGame(snapshot = null) {
     return true;
   }
   function gap(target) { return distance(player, target); }
-  function insideBath(target, leaving = false) {
-    if (target.goemon) return gap(target) <= KETTLE.widthScale*(leaving ? 1.65 : .79);
-    if (target.retreat) return bathRadius(target.retreat, player.x, player.z) <= (leaving ? 1.07 : .92);
-    if (target.grand) return springRadius(player.x, player.z) <= (leaving ? 1 : .88);
-    return false;
+  // false means dry ground outside a station, null means ordinary open water.
+  function placeAt(target,leaving=false){
+    if(target.goemon)return gap(target)<=KETTLE.widthScale*(leaving?1.65:.79)?null:false;
+    const site=target.retreat || target.site;
+    if(!site || gap(target)>26)return false;
+    const [u,v]=bathLocal(site,player.x,player.z);
+    const station=stationAt(site,u,v,leaving?1.08:1);
+    if(station)return station;
+    const pools=bathPools(site);
+    if(pools)return poolAt(pools,u,v,leaving?1.05:.91)??false;
+    const inside=target.grand?springRadius(player.x,player.z)<=(leaving?1:.88):
+      bathRadius(site,player.x,player.z)<=(leaving?1.07:.92);
+    return inside?null:false;
+  }
+  function stillAtPlace(target,place){
+    const site=target.retreat || target.site;
+    if(!site)return placeAt(target,true)!==false;
+    const [u,v]=bathLocal(site,player.x,player.z);
+    if(place){
+      return bathPools(site)?.includes(place)?poolRadius(place,u,v)<=1.05:stationRadius(place,u,v)<=1.08;
+    }
+    if(bathPools(site))return false;
+    return target.grand?springRadius(player.x,player.z)<=1:bathRadius(site,player.x,player.z)<=1.07;
   }
   function nearest() {
     if (player.activity || !player.grounded) return null;
@@ -391,7 +415,7 @@ export function createGame(snapshot = null) {
     let best = null;
     for (const target of interactables) {
       if (!target.active && target !== turtle) continue;
-      const distance = gap(target);
+      let distance = gap(target),place=null;
       if (Math.abs(target.y-player.y)>2.2) continue;
       let label;
       let radius;
@@ -407,20 +431,25 @@ export function createGame(snapshot = null) {
         label='団子とお茶をいただく'; radius=1.85;
       } else if (target.type === 'turtle') {
         label = 'カメに乗る'; radius = 2.8;
-      } else if (PICKUP_ACTION[target.type] && target !== lastBath) {
+      } else if (PICKUP_ACTION[target.type]) {
         label = PICKUP_ACTION[target.type].label;
         radius = 2.2;
         if (target.type === 'onsen') {
-          if (!insideBath(target)) continue;
+          place=placeAt(target);
+          if(place===false || (target===lastBath && place===lastPlace))continue;
+          if(place){
+            const [u,v]=bathLocal(target.retreat||target.site,player.x,player.z);
+            distance=Math.hypot(u-place.u,v-place.v);
+          }
           radius = Infinity;
           if (target.goemon) label = '五右衛門風呂につかる';
-          if (target.rank) label = (target.rank==='main'?'主湯':'脇湯')+'・'+(target.retreat || SNOW_SPRING).name+'につかる';
+          if (target.rank) label = (target.rank==='main'?'主湯':'脇湯')+'・'+(target.retreat || SNOW_SPRING).name+(place?'・'+place.label:'につかる');
         }
       } else {
         continue;
       }
       if (distance <= radius && (!best || distance < best.distance)) {
-        best = { target, label, action: player.mount ? 'dismount' : 'interact', distance };
+        best = { target, place, label, action: player.mount ? 'dismount' : 'interact', distance };
       }
     }
     return best;
@@ -430,9 +459,9 @@ export function createGame(snapshot = null) {
     player.activityTime = duration;
     if (activity !== 'fall') player.vx = player.vz = player.speed = 0;
   }
-  function collect(target, facing) {
+  function collect(target,facing,place=null) {
     if (target.type === 'onsen') {
-      lastBath = target;
+      lastBath=target;lastPlace=place;
       berth=null;
       if(Number.isFinite(facing))player.heading=Math.atan2(Math.sin(facing),Math.cos(facing));
       if (target.goemon) {
@@ -440,7 +469,7 @@ export function createGame(snapshot = null) {
       }
       player.h = player.vy = 0;
       player.grounded = true;
-      sound('bath');
+      if(place?.action!=='rinse' && place?.action!=='steam')sound('bath');
     } else {
       target.active = false;
       target.cooldown = 65;
@@ -451,9 +480,9 @@ export function createGame(snapshot = null) {
       player.buffs.wrap = BUFF_TIME.wrap;
       message('腹巻きでぽかぽか。体力とモッチポイントを守る！');
     } else {
-      beginActivity(pickup.activity, pickup.duration);
+      beginActivity(pickup.activity,place?.duration??pickup.duration);
       const lines = { tea: '香ばしいお茶を、両手でひと口。', mitarashi: '炙った団子に、とろりと甘いみたらしのたれ。', tsukimi: '満月を眺めながら、月見団子をひとくち。', bath: 'ほかほかの湯に、ひと休み。', read: '夢中で漫画を読んでいる。', drink: '日本酒をごくごく。', eat: '背脂ラーメンをもぐもぐ。' };
-      message(target.goemon ? target.goemon.name+'の五右衛門風呂に身を沈めた。' : target.retreat ? target.retreat.name+'に身を沈めた。' : lines[pickup.activity]);
+      message(place?.message ?? (target.goemon ? target.goemon.name+'の五右衛門風呂に身を沈めた。' : target.retreat ? target.retreat.name+'に身を沈めた。' : lines[pickup.activity]));
     }
   }
   function finishActivity() {
@@ -462,6 +491,10 @@ export function createGame(snapshot = null) {
     player.activityTime = 0;
     switch (activity) {
       case 'bath':
+        if(lastPlace?.action==='rinse'){
+          message('肩から湯を流し、洗い場を立った。');
+          break;
+        }
         player.hp = player.mp = MAX_VITAL;
         player.buffs.warm = BUFF_TIME.warm;
         message('湯上がりほかほか。体力・モッチポイント全回復！');
@@ -595,7 +628,7 @@ export function createGame(snapshot = null) {
       player.mount = 'bike';
       message('電動自転車で出発。次のポートで返せる。');
     } else {
-      collect(target,facing);
+      collect(target,facing,found.place);
       return true;
     }
     changeMode('normal');
@@ -1090,7 +1123,7 @@ export function createGame(snapshot = null) {
     }
   }
   function checkContact() {
-    if (lastBath && !insideBath(lastBath, true)) lastBath = null;
+    if (!player.activity && lastBath && !stillAtPlace(lastBath,lastPlace)){lastBath=null;lastPlace=null;}
     if (player.activity || player.mode === 'kusa') return;
     if (!player.mount && player.grounded) {
       for (const o of objects) {
@@ -1124,7 +1157,7 @@ export function createGame(snapshot = null) {
     state.regionId = region.id;
     state.onLake = lakeRadius(player.x,player.z)<1.29;
     player.night = Math.max(seasonAt(player.x,player.z,climate).moon,kyoNight(state.time,player)*kyoInfluence(player.x,player.z)) > .48;
-    player.inWater = player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z) > .14 && player.y < waterSurfaceAt(player.x,player.z) - .08;
+    player.inWater = player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z,state.time) > .14 && player.y < waterSurfaceAt(player.x,player.z,state.time) - .08;
     if (region.id === 'ryugu' && (offshore || player.y > terrainHeight(region.x,region.z) + 3)) return;
     if (!collectStamp || state.visited.includes(region.id) || distance(player,region)>STAMP_RADIUS || player.h>3) return;
     state.visited.push(region.id);
@@ -1147,7 +1180,7 @@ export function createGame(snapshot = null) {
     if (!destination) return false;
     Object.assign(player, destination, {y:groundHeight(destination.x,destination.z), h:0, vx:0, vz:0, vy:0,
       speed:0, grounded:true, diveDepth:0, airStretch:0, stretch:0, impact:0, landing:0, invulnerable:.8});
-    lastBath = null;
+    lastBath=null;lastPlace=null;berth=null;
     bufferedJump = ledgeGrace = 0;
     flapRemaining = 0;
     refreshCrowd();
@@ -1185,7 +1218,7 @@ export function createGame(snapshot = null) {
     if (player.activity) {
       player.activityTime -= dt;
       if (player.activity === 'sleep') player.hp = Math.min(MAX_VITAL, player.hp + dt * 20);
-      if (player.activity === 'bath') {
+      if (player.activity === 'bath' && lastPlace?.action!=='rinse') {
         player.hp = Math.min(MAX_VITAL, player.hp + dt * 26);
         player.mp = Math.min(MAX_VITAL, player.mp + dt * 26);
       }
@@ -1219,7 +1252,7 @@ export function createGame(snapshot = null) {
       items: inventory.map(o => o?.cooldown ?? 0),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
       turtle: { x:turtle.x, z:turtle.z, homeX:turtle.homeX, homeZ:turtle.homeZ, pause:turtlePause, leg:turtleLeg },
-      lastBath: lastBath?.id ?? null
+      lastBath: lastBath?.id ?? null, lastBathPlace:lastPlace?.id??null
     };
   }
   function restore(data) {
@@ -1360,7 +1393,29 @@ export function createGame(snapshot = null) {
     Object.assign(turtle, {x:t.x,z:t.z,homeX:t.homeX,homeZ:t.homeZ,y:groundHeight(t.x,t.z),mounted:p.mount==='turtle'});
     turtlePause=t.pause; turtleLeg=t.leg; recoverRider=turtle.mounted;
     lastBath=objects.find(o=>o.type==='onsen' && o.id===data.lastBath)??null;
-    if(lastBath && !insideBath(lastBath,true))lastBath=null;
+    lastPlace=null;berth=null;
+    if(lastBath){
+      const site=lastBath.retreat||lastBath.site;
+      const at=placeAt(lastBath);
+      if(site && data.lastBathPlace){
+        const [u,v]=bathLocal(site,player.x,player.z);
+        const station=bathStations(site).find(q=>q.id===data.lastBathPlace && stationRadius(q,u,v)<=1.08);
+        const pool=bathPools(site)?.find(q=>q.id===data.lastBathPlace && poolRadius(q,u,v)<=1.05);
+        lastPlace=station??pool??null;
+        if(!lastPlace)lastBath=null;
+      }else if(data.lastBathPlace===null && stillAtPlace(lastBath,null)){
+        lastPlace=null;
+      }else if(at!==false){
+        lastPlace=at;
+      }else if(site && player.activity==='bath' && bathPools(site) && bathRadius(site,player.x,player.z)<1.08){
+        // A v12 bather may have been floating where there is now a dry aisle.
+        const [u,v]=bathLocal(site,player.x,player.z);
+        const choices=[...bathPools(site),...bathStations(site)].filter(q=>q.action!=='rinse');
+        lastPlace=choices.reduce((a,b)=>Math.hypot(a.u-u,a.v-v)<Math.hypot(b.u-u,b.v-v)?a:b);
+        [player.x,player.z]=sitePoint(site,lastPlace.u,lastPlace.v);
+        player.y=groundHeight(player.x,player.z);
+      }else lastBath=null;
+    }
     if(player.activity==='bath' && !lastBath) {
       player.activity=null;
       player.activityTime=0;

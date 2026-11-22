@@ -1,6 +1,7 @@
 import { groundPrintGLSL } from './ground-print.js';
 import { mountainFires } from './mountain-fires.js';
 import { HIGASHIYAMA, KITAYAMA, eastRidgeHeight, northRidgeHeight, fukuFirebeds, daiFirebeds, inFireMeadow, FIRE_TRAILS, fireTrailDistance } from './higashiyama.js';
+import { createSuzuriRinsing } from './suzuri-bathing-art.js';
 import { createRashomon } from './rashomon.js';
 import { districtPoint } from './geography.js';
 import * as THREE from './vendor/three.module.min.js';
@@ -414,14 +415,14 @@ export function createKyo(scene,painter){
   hearthApproaches(p);hillsideInk(p,false,dai);hillsideInk(p,true,fuku);shopFronts(p,light,windowPaper);
   for(const stand of KYO_FOOD)foodCounter(p,stand,light);
   streetLamps(p,light);
-  const crowd=createStreetCrowd(scene);
+  const crowd=createStreetCrowd(scene),rinse=createSuzuriRinsing(scene);
   const streetWatch=createStreetWatch(scene,p);
   const north=mountainFires(scene,dai,KITAYAMA.x,KITAYAMA.z);
   const east=mountainFires(scene,fuku,HIGASHIYAMA.x,HIGASHIYAMA.z,true);
   return (time,player,camera)=>{
     const night=kyoNight(time,player);
     light.emissiveIntensity=.04+night*1.48;
-    streetWatch(time,player);
+    streetWatch(time,player);rinse(time,player);
     gateHouse(time,player);crowd(time,player,camera);north(time,night,player);east(time,night,player);
   };
 }

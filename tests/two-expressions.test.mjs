@@ -60,7 +60,7 @@ test('the moon makes a strolling mochi drowsy and a rolling dango smiles at ever
 test('E tips the bather back before the dough spreads, and a saved soak resumes in the same pose',()=>{
   const game=createGame(),p=game.state.player;
   const pool=game.state.objects.find(o=>o.grand);
-  Object.assign(p,{x:pool.x,z:pool.z,y:pool.y,h:0,grounded:true,inWater:true,mode:'kusa'});
+  Object.assign(p,{x:pool.x+5.2,z:pool.z,y:pool.y,h:0,grounded:true,inWater:true,mode:'kusa'});
   assert.equal(getExpression(p),'bath');assert.equal(p.bathPose,undefined);
   assert.ok(game.act('interact',Math.PI*7+.3));
   assert.ok(Math.abs(p.heading)<=Math.PI);

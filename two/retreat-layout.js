@@ -1,5 +1,8 @@
 // Positive local Z faces the road. Roofs, steps, pool lips and their
 // collision volumes share the same survey as the signposts on the map.
+import { bathPools, poolRadius, hasOwnInlet } from './bath-places.js';
+import { addVillageBathSolids } from './village-bath-courses.js';
+import { addPilgrimBathSolids } from './pilgrim-bathing-plan.js';
 import { DISTRICTS, districtPoint } from './geography.js';
 import { REGIONAL_SPRINGS, regionalSpringLip, regionalRimStones } from './regional-springs.js';
 import { bathEnclosureGround, bathEnclosureReserved, addBathEnclosureSolids, waysideBankRocks } from './bath-enclosures.js';
@@ -110,8 +113,25 @@ export function bathTerrain(s,x,z,native,level) {
   const radialMetres=Math.hypot(x-s.x,z-s.z);
   const edge=r>0 ? radialMetres*(1-1/r) : -s.rz;
   const shore=level-.52+.65*ease((edge+1.08)/2.38);
-  const ground=shore+(native-shore)*ease((edge-1.22)/2.72);
+  let ground=shore+(native-shore)*ease((edge-1.22)/2.72);
   const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
+  const pools=bathPools(s);
+  if(pools){
+    const u=dx*c-dz*k,v=dx*k+dz*c;
+    const yard=level+(s.kind==='earthen'?-.22:s.kind==='sakai'?-.015:.065);
+    ground=yard+(native-yard)*ease((edge-1.22)/2.72);
+    let closest=Infinity;
+    for(const pool of pools){
+      const radius=poolRadius(pool,u,v);
+      if(radius>=closest || radius>1.27)continue;
+      closest=radius;
+      const bed=level+pool.y-pool.depth;
+      // Keep the raised water behind its own wall. The shore climbs only at
+      // the toe, leaving both the open tread and the aisle between pools dry.
+      const lip=level+pool.y-.08;
+      ground=bed+(lip-bed)*ease((radius-.71)/.33)+(yard-lip)*ease((radius-1.04)/.23);
+    }
+  }
   const apron=bathEnclosureGround(s,dx*c-dz*k,dx*k+dz*c);
   const finished=ground+(level+.026-ground)*apron*ease((r-.85)/.23);
   return s.rank==='main' && r>1 ? tableauGround(s,dx*c-dz*k,dx*k+dz*c,finished,level) : finished;
@@ -129,7 +149,7 @@ export function retreatStones(s) {
   }).filter(q=>q.v<s.rz*.73 || Math.abs(q.u)>1.84);
 }
 
-export function civicAndBathSolids(height,put) {
+export function civicAndBathSolids(height,put,levelOf) {
   const base=height(cx,cz);
   function solid(x,z,w,d,top,kind,support=false) {
     return put(cx+x,cz+z,w/2,d/2,0,base+top,kind,support);
@@ -164,13 +184,15 @@ export function civicAndBathSolids(height,put) {
   put(cx,cz+COURT_GATE_Z,6.46,2.4,0,base+4.44,'roof',true,1.91).form='hip';
 
   for(const s of RETREATS) {
-    const level=height(s.x,s.z)+.52;
+    const level=levelOf(s);
     const add=(u,v,w,d,y,kind,support=false,angle=0)=>{
       const [x,z]=sitePoint(s,u,v);
       return put(x,z,w/2,d/2,s.yaw+angle,level+y,kind,support);
     };
     if(s.rank==='main'){
-      addMainRimSolids(s,add);
+      if(!bathPools(s))addMainRimSolids(s,add);
+      addVillageBathSolids(s,add);
+      addPilgrimBathSolids(s,add,level);
       const t=bathTableau(s);
       add(t.u,t.v,2.3*t.scale,1.17*t.scale,.17+1.40*t.scale,'oval',false,t.yaw);
     }
@@ -181,8 +203,10 @@ export function civicAndBathSolids(height,put) {
     }
     if(s.regional){
       const {inlet,sign}=regionalBathFittings(s,springLip);
-      add(inlet.u,inlet.v-.20,inlet.w,1.34,.72,'oval',true);
-      add(inlet.u,inlet.v+.04,1.18,1.92,inlet.h,'box',true).bottom=level+.62;
+      if(!hasOwnInlet(s)){
+        add(inlet.u,inlet.v-.20,inlet.w,1.34,.72,'oval',true);
+        add(inlet.u,inlet.v+.04,1.18,1.92,inlet.h,'box',true).bottom=level+.62;
+      }
       if(s.shape!=='suzuri'){
         add(sign.u,sign.v-.07,.13,.13,1.33,'wall');
         add(sign.u,sign.v,sign.w,sign.d,sign.h,'wall').bottom=level+.89;

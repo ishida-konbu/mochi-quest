@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.min.js';
+import { poolLip } from './bath-places.js';
 import { rimPoint } from './main-bath-rims.js';
 
 const tau=2*Math.PI;
@@ -10,14 +11,15 @@ const drift={
 let finish;
 // Petals gather in small rafts along the bank. Each leaf's veins and folded
 // margins share a phase, so they travel together as the surface moves.
-export function addBathLeaves(parent,s,level,clock){
+export function addBathLeaves(parent,s,level,clock,pool){
   if(s.rank!=='main'||!drift[s.kind])return;
   const [dark,light,n]=drift[s.kind],positions=[],colors=[],phases=[],faces=[];
   const low=new T.Color(dark),high=new T.Color(light),c=new T.Color();
-  for(let i=0;i<n;i++){
+  for(let i=0;i<(pool?Math.max(2,Math.round(n*pool.rx/s.rx)):n);i++){
     const cluster=i%3,angle=.18+cluster*1.91+(i%5-2)*.067+.065*Math.sin(i*2.64);
     const r=.62+.23*(.5+.5*Math.cos(i*3.12+cluster*.9));
-    const [x,z]=rimPoint(s,angle),turn=2.4*i+s.index,ct=Math.cos(turn),st=Math.sin(turn);
+    const lip=pool?poolLip(pool,angle):1;
+    const [x,z]=pool?[pool.rx*lip*Math.cos(angle),pool.rz*lip*Math.sin(angle)]:rimPoint(s,angle),turn=2.4*i+s.index,ct=Math.cos(turn),st=Math.sin(turn);
     const size=(.73+.30*(1+Math.sin(i*7.83)))*(s.kind==='temple'?.235:s.kind==='bamboo'?.26:s.kind==='maple'?.115:.102);
     const phase=i*1.672+s.index;
     const point=(u,v,h,t)=>{
@@ -64,5 +66,5 @@ export function addBathLeaves(parent,s,level,clock){
           transformed+=vec3(.053*cos(t),.004*sin(1.7*t),.064*sin(t));`);
     };
   }
-  const mesh=new T.Mesh(g,finish);mesh.position.y=level+.018;mesh.receiveShadow=true;parent.add(mesh);
+  const mesh=new T.Mesh(g,finish);mesh.position.set(pool?.u??0,level+.018,pool?.v??0);mesh.receiveShadow=true;parent.add(mesh);
 }

@@ -62,6 +62,9 @@ export function addMainRimSolids(s,add){
 // View the tableau across the water on the right shoulder, clear of the
 // inlet and front threshold. The city screen remains visible just behind it.
 function surveyTableau(s){
+  // The little potter's frog watches the three full-size bathing jars from
+  // a dry recess beyond the iron-glaze flue, clear of its removable steps.
+  if(s.kind==='earthen')return {u:5.48,v:-3.13,yaw:-.73,scale:.90};
   if(s.kind==='snow')return {u:-9.8,v:-7.45,yaw:.64,scale:1.55};
   const angle=(s.kind==='inari'?-.025:-.21)*Math.PI,[x,z]=rimPoint(s,angle);
   const length=Math.hypot(x,z);

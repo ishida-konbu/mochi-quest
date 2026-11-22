@@ -1,3 +1,5 @@
+import { dressVillageBath } from './village-bath-treatments.js';
+import { bathPools,hasOwnInlet,poolRadius } from './bath-places.js';
 import * as T from './vendor/three.module.min.js';
 import { basinMaterial,buildBasinVessel } from './main-bath-vessels.js';
 import { bathTableau } from './main-bath-rims.js';
@@ -305,16 +307,18 @@ function marker(p,f,s,spot,c) {
   f.put('plane',spot.u,spot.h-.25,spot.v+.083,1.41,.454,1,'#fff',
     inscriptionMaterial(s.name,{ground:'#695e49',ink:'#f0e2bf'}));
 }
-function prepareShapes(p,c,kind) {
+function prepareShapes(p,c,kind,site) {
   const inlet='regionalInlet-'+kind,plant='regionalPlant-'+kind;
-  p.shapes[inlet]??=inletForm(c);p.shapes[plant]??=bankPlant(c);
-  if(!p.shapes.regionalFall){
+  const fitted=!hasOwnInlet(site);
+  if(fitted)p.shapes[inlet]??=inletForm(c);
+  p.shapes[plant]??=bankPlant(c);
+  if(fitted && !p.shapes.regionalFall){
     p.shapes.regionalFall=patch(20,10,(u,v)=>{
       const w=.11-.042*sin(PI*v)+.051*v*v,flute=.014*sin(u*PI*4+.93*v);
       return [w*(.5-u)*2,.919*(1-v*v)-.004,.936+(inletImpactV-.936)*v+flute];
     });
   }
-  if(c.rim!=='cobble'){
+  if(site.rank!=='main' && c.rim!=='cobble'){
     const key='regionalRim-'+c.rim;
     p.shapes[key]??=rimCut(c.rim);
   }
@@ -356,24 +360,27 @@ export function regionalSpringBank(site,level) {
 export function dressRegionalBath(p,f,s,level) {
   const writingDesk=s.shape==='suzuri', key=writingDesk?'suzuri':s.kind;
   const c=writingDesk?suzuriCraft:bathCraft[s.kind],fixtures=regionalBathFittings(s,springLip);
-  prepareShapes(p,c,key);
-  const bank='springBank-'+s.id;
-  p.shapes[bank]??=regionalSpringBank(s,level);
-  p.part(bank,s.x,level,s.z,1,1,1,'#fff',s.yaw,0,0,p.springGravel,false,true);
-  // A half-submerged fringe of stream gravel marks the opening without
-  // making a raised sill across the path down into the water.
-  for(let j=0;j<21;j++){
-    const across=(j%7-3)*.276+.09*sin(j*2.84+s.index);
-    const a=PI*.5+across,lip=springLip(s.index,a);
-    const offset=.08+.21*Math.floor(j/7)+.11*cos(j*3.27);
-    const u=(s.rx*lip+offset)*cos(a),v=(s.rz*lip+offset)*sin(a);
-    const levelAt=terrainMeshHeight(...sitePoint(s,u,v))-level;
-    const size=.066+.039*(1+sin(j*2.67+s.index));
-    f.put('springCrag'+(j%3),u,Math.max(.028,levelAt),v,size*1.24,size*.42,size,
-      j%3?'#a09278':'#827962',p.stone,j*1.82);
+  prepareShapes(p,c,key,s);
+  const custom=bathPools(s)!==undefined;
+  if(!custom){
+    const bank='springBank-'+s.id;
+    p.shapes[bank]??=regionalSpringBank(s,level);
+    p.part(bank,s.x,level,s.z,1,1,1,'#fff',s.yaw,0,0,p.springGravel,false,true);
+    // A half-submerged fringe of stream gravel marks the opening without
+    // making a raised sill across the path down into the water.
+    for(let j=0;j<21;j++){
+      const across=(j%7-3)*.276+.09*sin(j*2.84+s.index);
+      const a=PI*.5+across,lip=springLip(s.index,a);
+      const offset=.08+.21*Math.floor(j/7)+.11*cos(j*3.27);
+      const u=(s.rx*lip+offset)*cos(a),v=(s.rz*lip+offset)*sin(a);
+      const levelAt=terrainMeshHeight(...sitePoint(s,u,v))-level;
+      const size=.066+.039*(1+sin(j*2.67+s.index));
+      f.put('springCrag'+(j%3),u,Math.max(.028,levelAt),v,size*1.24,size*.42,size,
+        j%3?'#a09278':'#827962',p.stone,j*1.82);
+    }
   }
   const tableau=s.rank==='main'?bathTableau(s):null;
-  if(tableau){
+  if(tableau && !custom){
     const vessel='basin-'+s.id;
     p.shapes[vessel]??=buildBasinVessel(s);
     f.put(vessel,0,0,0,1,1,1,'#fff',basinMaterial(p,s));
@@ -390,16 +397,20 @@ export function dressRegionalBath(p,f,s,level) {
     }
   }
   const {inlet,sign}=fixtures;
-  f.put('regionalInlet-'+key,inlet.u,0,inlet.v,1,1,1,'#fff',p.stems);
-  f.put('regionalFall',inlet.u,0,inlet.v,1,1,1,'#bcd4c3',p.springFlow);
+  if(!hasOwnInlet(s)){
+    f.put('regionalInlet-'+key,inlet.u,0,inlet.v,1,1,1,'#fff',p.stems);
+    f.put('regionalFall',inlet.u,0,inlet.v,1,1,1,'#bcd4c3',p.springFlow);
+  }
   for(let i=0;i<foliageCluster.length;i++){
     const [nx,nz,size]=foliageCluster[i],a=Math.atan2(nz,nx);
     const lip=springLip(s.index,a);
     const u=nx*(s.rx+.72)*lip,v=nz*(s.rz+.68)*lip;
+    if(['earthen','paddy','sulfur'].includes(s.kind)&&bathPools(s)?.some(b=>poolRadius(b,u,v)<1.42))continue;
     if(Math.hypot(u-inlet.u,v-inlet.v)<1.30 || tableau && Math.hypot(u-tableau.u,v-tableau.v)<2)continue;
     const [x,z]=sitePoint(s,u,v),ground=terrainHeight(x,z)-level;
     const h=size*(s.kind==='susuki'?1.28:1);
     f.put('regionalPlant-'+key,u,ground-.028,v,h,h,h,'#fff',p.stems,i*2.40+s.index*.39);
   }
+  dressVillageBath(p,f,s);
   if(!writingDesk)marker(p,f,s,sign,c);
 }

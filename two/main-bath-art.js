@@ -3,6 +3,7 @@ import { RETREATS } from './retreat-layout.js';
 import { SNOW_SPRING,terrainHeight,terrainMeshHeight,wrapDelta } from './terrain.js';
 import { scrollPigment } from './kyo-scrollwork.js';
 import { sculpture } from './pilgrimage-pigment.js';
+import { updateVillageTreatment } from './village-treatment-water.js';
 import { createVillageWorkshops } from './village-bath-workshops.js';
 import { createPilgrimBathhouses } from './pilgrim-bathhouses.js';
 import { villageBathArt } from './main-bath-village-art.js';
@@ -82,8 +83,8 @@ export function createBathTableaux(scene){
   const sites=[...RETREATS.filter(s=>s.rank==='main'),SNOW_SPRING];
   const exhibits=sites.map(s=>({...tableauFooting(s,terrainHeight),kind:s.kind,name:s.name,mesh:null}));
   const updateVillages=createVillageWorkshops(scene),updatePilgrimage=createPilgrimBathhouses(scene);
-  return player=>{
-    updateVillages(player);updatePilgrimage(player);
+  return (player,time=0)=>{
+    updateVillageTreatment(player);updateVillages(player);updatePilgrimage(player,time);
     for(const e of exhibits){
       const dx=wrapDelta(e.x-player.x),dz=wrapDelta(e.z-player.z);
       if(dx*dx+dz*dz>110**2){if(e.mesh)e.mesh.visible=false;continue;}

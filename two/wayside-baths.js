@@ -1,6 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 import { RETREATS, retreatStones, sitePoint } from './retreat-layout.js';
-import { waterSurfaceAt,terrainHeight } from './terrain.js';
+import { springLevel,terrainHeight } from './terrain.js';
 import { workshopFrame, inscriptionMaterial } from './civic-art.js';
 import { roundedStone } from './pigments.js';
 import { sculpture, brushStroke } from './pilgrimage-pigment.js';
@@ -71,7 +71,7 @@ function plants(p,f,s) {
     for(let i=0;i<22;i++) {
       const a=PI+.108*i,w=1+.23*sin(i*1.8),u=(s.rx+1.5+.7*cos(i*2.2))*cos(a),v=(s.rz+1.55)*sin(a);
       if(Math.abs(u-r.u)<r.w/2+.6 && Math.abs(v-r.v)<r.d/2+.85)continue;
-      const [x,z]=sitePoint(s,u,v),y=terrainHeight(x,z)-waterSurfaceAt(s.x,s.z);
+      const [x,z]=sitePoint(s,u,v),y=terrainHeight(x,z)-springLevel(s);
       f.put('waysidePampas',u,y,v,w,w,w,'#fff',p.stems,i*2.4);
     }
   }
@@ -112,7 +112,7 @@ export function dressWaysideBaths(p,gravel) {
   };
   for(let i=0;i<3;i++)p.shapes['springCrag'+i]=roundedStone(i*2.59+.42);
   for(const s of RETREATS){
-    const level=waterSurfaceAt(s.x,s.z),f=workshopFrame(p,s,level),tints=palettes[s.kind];
+    const level=springLevel(s),f=workshopFrame(p,s,level),tints=palettes[s.kind];
     dressBathEnclosure(p,f,s,level);
     if(s.regional){dressRegionalBath(p,f,s,level);continue;}
     for(const q of retreatStones(s)) {

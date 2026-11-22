@@ -1,8 +1,9 @@
+import { pilgrimPools } from '../two/pilgrim-bathing-plan.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
 import { PEACH, MOON_GATE } from '../two/pilgrimage-layout.js';
-import { nearbyRetreat } from '../two/retreat-layout.js';
+import { nearbyRetreat,sitePoint } from '../two/retreat-layout.js';
 import { CONNECTING_ROADS, groundHeight, terrainHeight, waterDepth } from '../two/terrain.js';
 
 const road=CONNECTING_ROADS.find(r=>r.destination==='桃源郷');
@@ -107,7 +108,9 @@ test('the mountain trail approaches the orchard main bath and the mountain sub b
   for(const [x,z] of trail)for(const bath of baths){
     if(bath!==inner && !bath.goemon)assert.ok(Math.hypot(bath.x-x,bath.z-z)>35,bath.id+' beside the trail');
   }
-  Object.assign(game.state.player,{x:inner.x,z:inner.z,y:groundHeight(inner.x,inner.z),mode:'dango'});
+  // The former centre is now the dry space joining two independent casks.
+  const tub=pilgrimPools(inner.retreat)[0],[x,z]=sitePoint(inner.retreat,tub.u,tub.v);
+  Object.assign(game.state.player,{x,z,y:groundHeight(x,z),mode:'dango'});
   assert.equal(game.nearest()?.target,inner);
   assert.ok(game.act('interact'));
   assert.equal(game.state.player.activity,'bath');

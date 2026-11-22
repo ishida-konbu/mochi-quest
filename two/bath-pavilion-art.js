@@ -161,7 +161,6 @@ function room(p,f,plan,s){
   const r=plan.room,{u,v,w,d,eave,rise}=r;
   const small=plan.small,wood=plan.wood??'#786952',wall=plan.wall??'reed';
   if(isVillageWorkshop(s)){
-    washBench(p,f,r,wood);
     if(s.kind==='susuki'){
       // The grassland remains in moonlight. Open wicks still light the room
       // while the city lamps follow their own clock. These share its light pool.

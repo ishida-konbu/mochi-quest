@@ -1,3 +1,4 @@
+import { bathPools,bathStations,poolLip,isDryTreatment } from '../two/bath-places.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
@@ -8,7 +9,7 @@ import { bankSculpture } from '../two/main-bath-art.js';
 import { tableauFooting } from '../two/main-bath-rims.js';
 import { KYO_SCREENS } from '../two/kyo-layout.js';
 import { WAYSIDE_HUTS } from '../two/wayside-hut-layout.js';
-import { REGIONS, SNOW_SPRING, groundHeight, regionAt, staticVolumeAt, terrainHeight, terrainMeshHeight, waterSurfaceAt } from '../two/terrain.js';
+import { REGIONS, SNOW_SPRING, groundHeight, regionAt, staticVolumeAt, terrainHeight, terrainMeshHeight, springLevel,waterSurfaceAt } from '../two/terrain.js';
 import { RETREATS, bathRadius, sitePoint, springLip } from '../two/retreat-layout.js';
 
 // The last v11 release stored these slots by index, including its eight outdoor
@@ -106,13 +107,23 @@ test('a Kyoto soak follows the inkstone into the city, while other visitors keep
 test('regional basins have distinct shorelines, continuous water and a dry approach',()=>{
   const sites=regional(),regions=new Set(),profiles=new Set();
   for(const s of sites){
-    const level=waterSurfaceAt(s.x,s.z);
+    const level=springLevel(s);
     const region=REGIONS[regionAt(s.x,s.z)].id;
     assert.equal(s.region,region,s.name+' belongs to its map district');
     regions.add(region);
     const lip=Array.from({length:24},(_,i)=>springLip(s.index,i*Math.PI/12));
     profiles.add(lip.map(r=>r.toFixed(2)).join(','));
-    for(let j=0;j<lip.length;j++){
+    const pools=bathPools(s);
+    if(pools){
+      for(const p of pools)for(let i=0;i<32;i++){
+        const a=i*Math.PI/16,r=.66*poolLip(p,a);
+        const wet=sitePoint(s,p.u+r*p.rx*Math.cos(a),p.v+r*p.rz*Math.sin(a));
+        assert.equal(waterSurfaceAt(...wet),level+p.y,p.name+' surveyed water level');
+        assert.ok(terrainHeight(...wet)<level+p.y-.15,p.name+' depth');
+        assert.ok(terrainMeshHeight(...wet)<level+p.y,p.name+' unobscured surface');
+      }
+      if(!pools.length)assert.ok(waterSurfaceAt(s.x,s.z)<terrainHeight(s.x,s.z),s.name+' dry room');
+    }else for(let j=0;j<lip.length;j++){
       const a=j*Math.PI/12, u=Math.cos(a)*s.rx*lip[j],v=Math.sin(a)*s.rz*lip[j];
       const rim=sitePoint(s,u,v), wet=sitePoint(s,u*.48,v*.48);
       assert.ok(Math.abs(bathRadius(s,...rim)-1)<1e-6,s.name+' rim');
@@ -143,7 +154,7 @@ test('each main bath has its own shoreline and a sculpted, solid scene above the
     assert.ok(art.index.count && position.count===normal.count && position.count===color.count,s.name);
     for(const a of [position,normal,color])assert.ok(a.array.every(Number.isFinite),s.name+' renderable geometry');
     const footing=tableauFooting(s,terrainHeight);
-    assert.ok(footing.ground>waterSurfaceAt(s.x,s.z),s.name+' carved scene is on the dry bank');
+    assert.ok(footing.ground>waterSurfaceAt(footing.x,footing.z),s.name+' carved scene is on the dry bank');
     assert.ok(staticVolumeAt(footing.x,footing.z,footing.ground),s.name+' carving has a physical footprint');
   }
 });
@@ -152,6 +163,20 @@ test('the visible bank meets the water at every vertex and beds into the hillsid
   for(const s of regional()){
     const level=waterSurfaceAt(s.x,s.z),pool=new Group();
     addSpringSurface(pool,s.rx,s.rz,0,s);
+    const pools=bathPools(s);
+    if(pools){
+      const water=pool.children.filter(q=>q.geometry.getAttribute('springInflow'));
+      assert.equal(water.length,pools.length,s.name+' separate water surfaces');
+      for(const [i,mesh] of water.entries()){
+        const p=pools[i],points=mesh.geometry.attributes.position;
+        assert.deepEqual(mesh.position.toArray(),[p.u,p.y,p.v]);
+        for(let k=1;k<points.count;k++){
+          const u=points.getX(k),v=points.getZ(k),a=Math.atan2(v,u);
+          assert.ok(Math.abs(Math.hypot(u,v)-poolLip(p,a))<1e-5,p.name+' rendered water meets vessel');
+        }
+      }
+      continue;
+    }
     const water=pool.children[0].geometry.attributes.position;
     const bank=regionalSpringBank(s,level).attributes.position;
     const segments=water.count-2,stride=segments+1;
@@ -183,8 +208,13 @@ test('a walker enters, bathes, resumes, leaves and bathes again at every regiona
     const entry=sitePoint(s,0,s.rz*springLip(s.index,Math.PI/2)+3.3);
     arrive(game,...entry);
     assert.notEqual(game.nearest()?.target.retreat,s,s.name+' interaction outside');
-    walk(game,[s.x,s.z],s.name+' entrance');
-    assert.ok(p.inWater,s.name+' swimming line');
+    const pools=bathPools(s),dest=pools?.[0];
+    const end=dest?sitePoint(s,dest.u,dest.v):[s.x,s.z];
+    const turn=dest?sitePoint(s,dest.u,s.rz+1):entry;
+    walk(game,turn,s.name+' approach');
+    walk(game,end,s.name+' entrance');
+    for(let i=0;i<18;i++)game.step(1/60);
+    assert.equal(p.inWater,pools?.length!==0,s.name+' wet or steam');
     assert.equal(game.nearest()?.target.retreat,s,s.name+' marked pool');
     const id=game.nearest().target.id;
     p.hp=17;p.mp=26;
@@ -194,20 +224,24 @@ test('a walker enters, bathes, resumes, leaves and bathes again at every regiona
     const snapshot=game.save(),back=createGame(snapshot);
     assert.ok(back.restored,s.name+' journal');
     assert.equal(snapshot.lastBath,id);
-    assert.equal(p.bathWaterY,waterSurfaceAt(s.x,s.z));
+    assert.equal(p.bathWaterY,pools?.length===0?springLevel(s):waterSurfaceAt(...end,game.state.time));
     assert.equal(back.state.player.bathWaterY,p.bathWaterY);
     assert.ok(!Object.hasOwn(snapshot.player,'bathWaterY'));
     assert.equal(back.state.player.activity,'bath');
     assert.equal(back.save().lastBath,id);
-    for(let i=0;i<38;i++)back.step(.1);
+    const remaining=back.state.player.activityTime;
+    for(let i=0;i<=Math.ceil(remaining*10);i++)back.step(.1);
     assert.equal(back.state.player.activity,null);
     assert.equal(back.state.player.bathWaterY,undefined);
     assert.equal(back.state.player.hp,100);assert.equal(back.state.player.mp,100);
     assert.ok(back.state.player.buffs.warm>0);
     assert.notEqual(back.nearest()?.target.id,id,s.name+' no repeated bath while still seated');
+    walk(back,turn,s.name+' exit aisle');
     walk(back,entry,s.name+' exit');
     assert.equal(back.save().lastBath,null);
-    walk(back,[s.x,s.z],s.name+' return');
+    walk(back,turn,s.name+' return aisle');
+    walk(back,end,s.name+' return');
+    for(let i=0;i<18;i++)back.step(1/60);
     assert.equal(back.nearest()?.target.id,id);
     assert.ok(back.act('interact'));assert.equal(back.state.player.activity,'bath');
   }
@@ -216,7 +250,9 @@ test('a walker enters, bathes, resumes, leaves and bathes again at every regiona
 test('running through any bath only offers the named action; legacy village soaks resume on dry ground',()=>{
   const g=createGame(),p=g.state.player;
   for(const o of g.state.objects.filter(o=>o.type==='onsen')){
-    Object.assign(p,{x:o.x,z:o.z,y:groundHeight(o.x,o.z),activity:null,invulnerable:2,grounded:true,h:0});
+    const pool=o.retreat && bathPools(o.retreat)?.[0];
+    const [x,z]=pool?sitePoint(o.retreat,pool.u,pool.v):[o.x,o.z];
+    Object.assign(p,{x,z,y:groundHeight(x,z),activity:null,invulnerable:2,grounded:true,h:0});
     g.step(1/60);
     assert.equal(p.activity,null,o.id+' waits for E');
     const choice=g.nearest();
@@ -259,4 +295,59 @@ test('an original v11 inventory and an in-progress Goemon bath retain their mean
   assert.equal(again.lastBath,'onsen-71');
   assert.equal(again.player.activity,'bath');
   assert.equal(createGame(again).save().lastBath,'onsen-71');
+});
+
+test('each treatment remembers the chosen vessel or seat and applies the appropriate recovery',()=>{
+  const game=createGame(),empty=game.save(),p=game.state.player;
+  for(const site of [...regional().filter(s=>s.rank==='main'),SNOW_SPRING]){
+    for(const q of [...(bathPools(site)||[]),...bathStations(site)]){
+      const [x,z]=sitePoint(site,q.u,q.v);
+      arrive(game,x,z);p.hp=21;p.mp=12;p.buffs.warm=0;
+      assert.equal(game.nearest()?.place,q,q.id+' selection');
+      assert.equal(p.inWater,!isDryTreatment(q),q.id+' walking in water');
+      assert.ok(game.act('interact'),q.id);
+      game.step(.1);
+      const saved=game.save(),back=createGame(saved);
+      assert.equal(saved.lastBathPlace,q.id);
+      assert.equal(back.state.player.bathPose.id,q.id);
+      for(let i=0;i<16;i++)back.step(.1);
+      const pose=back.state.player.bathPose;
+      assert.equal(pose.action,q.action);
+      assert.equal(pose.wet,!isDryTreatment(q));
+      assert.ok([pose.x,pose.z,back.state.player.bathWaterY].every(Number.isFinite));
+      if(['rinse','steam','deep','jar','seat','cascade','bamboo'].includes(q.action)){
+        assert.equal(pose.recline,0);assert.ok(Number.isFinite(pose.seatY));
+      }
+      for(let i=0;i<26;i++){back.step(.1);game.step(.1);}
+      for(let i=0;i<14;i++)game.step(.1);
+      assert.equal(back.state.player.activity,null,q.id);
+      assert.equal(back.state.player.hp,q.action==='rinse'?21:100,q.id+' recovery');
+      assert.equal(back.state.player.buffs.warm>0,q.action!=='rinse');
+      assert.ok(Math.hypot(x-back.state.player.x,z-back.state.player.z)<.01,q.id+' returns to original footing');
+    }
+  }
+  const peach=regional().find(s=>s.kind==='peach' && s.rank==='main');
+  const x=peach.x,z=peach.z,y=groundHeight(x,z);
+  arrive(game,x,z);
+  assert.equal(game.nearest()?.target.retreat,undefined,'between casks is dry');
+  empty.lastBath='onsen-'+peach.id;Object.assign(empty.player,{x,y,z,activity:'bath',activityTime:1.45});
+  const restored=createGame(empty);
+  assert.ok(restored.state.player.bathPose.id.startsWith('orchard-'));
+  assert.equal(restored.state.player.activityTime,1.45);
+});
+
+test('the harbor lock raises the bathing water and carries the floating body with the tide',()=>{
+  const s=regional().find(q=>q.kind==='tsuruga' && q.rank==='main');
+  const q=bathStations(s)[0],[x,z]=sitePoint(s,q.u,q.v);
+  const game=createGame(),p=game.state.player;
+  arrive(game,x,z);assert.ok(game.act('interact'));
+  for(let i=0;i<18;i++)game.step(.1);
+  game.state.time=0;
+  const ebb=p.bathPose,low=waterSurfaceAt(x,z,0);
+  game.state.time=Math.PI/.36;
+  const flood=p.bathPose,high=waterSurfaceAt(x,z,game.state.time);
+  assert.ok(high-low>.09 && high-low<.10);
+  assert.equal(p.bathWaterY,high);
+  assert.ok(Math.hypot(flood.x-ebb.x,flood.z-ebb.z)>.34);
+  assert.deepEqual([p.x,p.z],[x,z]);
 });

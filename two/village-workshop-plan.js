@@ -19,6 +19,8 @@ export const villageFrames={
 export function addVillageWorkshopSolids(site,room,add){
   if(!isVillageWorkshop(site))return;
   const back=-room.d/2;
+  if(['sakura','earthen','shore'].includes(site.kind))
+    add(room.u,room.v+.67,.64,.46,.409,'floor',true);
   const furniture={
     sakura:[[.60,back+.63,2.98,.72,.89,'oval'],[-1.65,back+.15,1.10,.27,1.93,'box']],
     bamboo:[[-1.73,back+.55,.66,.67,.67,'oval'],[-1.17,back+.82,.41,.42,.51,'oval'],[1.92,back+.52,.63,.63,.66,'oval']],

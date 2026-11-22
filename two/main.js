@@ -4,6 +4,7 @@ import { createWake } from './wake.js';
 import { prepareWorld } from './world.js';
 import { finishInSlices, uploadSceneTextures } from './preparation.js';
 import { setRiverStones } from './scanned-stone.js';
+import { bathPosture,seatedFeet } from './bath-gestures.js';
 import { createBathReflection } from './spring-water.js';
 import { scrollCoverage } from './scroll-paper.js';
 import { createInkPass } from './ink.js';
@@ -265,9 +266,10 @@ function togglePhoto() {
     photoMode = true;
     state.photo = true;
     photoTime = state.time;
-    const reclining=p.bathPose?.recline || 0;
-    yaw = actors.hero.rotation.y-.77*reclining;
-    pitch = .105+.68*reclining;
+    const bath=p.bathPose,reclining=bath?.recline || 0;
+    const seated=bathPosture(bath?.action);
+    yaw=actors.hero.rotation.y+(bath?.action==='rinse' ? 1.34 : seated ? .48 : -.77*reclining);
+    pitch=seated?seated.camera:.105+.68*reclining;
     const portrait=camera.aspect<.83;
     const floatingDistance=portrait ? Math.max(5.63,3.18/camera.aspect) : 3.99;
     distance = THREE.MathUtils.lerp(portrait?3.48:2.95,floatingDistance,reclining)*(1+.64*p.airStretch);
@@ -472,15 +474,28 @@ function updateCamera(dt, snap = false) {
   const resting = photoMode ? restingEyeHeightOffset[p.activity] || 0 : 0;
   const bath=p.bathPose, settle=bath?.settle || 0;
   const standingEye=p.y + ride + .9*full + p.airStretch*full*(photoMode ? .72 : .51) - rise - resting;
-  heroAt.set(bath?.x ?? p.x,bath ? THREE.MathUtils.lerp(standingEye,p.bathWaterY+.32*full,settle) : standingEye,bath?.z ?? p.z);
+  const seated=bathPosture(bath?.action);
+  const bathEye=seated?seatedFeet(p,bath)+seated.eye*full:(p.bathWaterY??p.y)+.32*full;
+  heroAt.set(bath?.x ?? p.x,bath ? THREE.MathUtils.lerp(standingEye,bathEye,settle) : standingEye,bath?.z ?? p.z);
   if (snap || Math.abs(heroAt.x - focus.x) > BOUND || Math.abs(heroAt.z - focus.z) > BOUND) focus.copy(heroAt);
   else focus.lerp(heroAt, 1 - Math.exp(-dt * 13));
-  const sx = Math.sin(yaw),
-    sz = Math.cos(yaw),
+  let cameraYaw=yaw;
+  const indoor=bath?.action==='rinse'||bath?.action==='steam';
+  if(indoor && !photoMode && Number.isFinite(bath.heading)){
+    // From the aisle see both face and ladle. A head-on view would put
+    // the camera inside the wall behind the tap in the little machiya.
+    const rel=Math.atan2(Math.sin(yaw-bath.heading),Math.cos(yaw-bath.heading));
+    const threeQuarter=(rel<0?-1:1)*(bath.action==='rinse'?1.64:.94);
+    cameraYaw+=(threeQuarter-rel)*.84*settle;
+  }
+  const sx = Math.sin(cameraYaw),
+    sz = Math.cos(cameraYaw),
     scenery = photoMode ? 0 : scrollCoverage(p.x,p.z)*(1-settle),
     d = distance * (full > 1 && photoMode ? 1.18 : 1) * (1+.14*scenery) * (photoMode ? 1 : 1-.12*settle);
   // At the horizon, hold the eye above ground and tilt up to follow an animal overhead.
-  const orbitPitch = photoMode ? pitch : Math.max(0,pitch)+Math.max(0,.73-Math.max(0,pitch))*settle;
+  const freePitch=Math.max(0,pitch);
+  const treatmentPitch=seated?(indoor?seated.camera:Math.max(freePitch,seated.camera)):Math.max(.73,freePitch);
+  const orbitPitch=photoMode?pitch:THREE.MathUtils.lerp(freePitch,treatmentPitch,settle);
   const shoulder=scenery*Math.min(1,camera.aspect)*Math.min(1,d/5);
   const dx = sx * Math.cos(orbitPitch) * d + sz*1.58*shoulder,
     dz = sz * Math.cos(orbitPitch) * d - sx*1.58*shoulder;

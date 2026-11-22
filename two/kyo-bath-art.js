@@ -6,6 +6,7 @@ import { sitePoint } from './retreat-layout.js';
 import { terrainMeshHeight } from './terrain.js';
 import { SUZURI_COURT,SUZURI_WALLS,RINSING_HALL,RINSING_SEATS } from './kyo-bath-layout.js';
 import { dressSuzuriMaple } from './suzuri-courtyard-maple.js';
+import { suzuriSeatStone } from './suzuri-bathing-art.js';
 import { wallCoping,karahafu,washHallRoof } from './kyo-bath-roofs.js';
 
 const {PI,sin,cos}=Math,TAU=2*PI;
@@ -270,10 +271,8 @@ function washingHall(p,f){
   p.shapes.suzuriWashRipple=new T.TorusGeometry(.073,.004,5,22);
   for(const [j,u] of RINSING_SEATS.entries()){
     f.put('suzuriWashSet',u,0,-3.35,1,1,1,'#fff',p.stems);
-    if(j<3){
-      f.put('suzuriWashTrickle',u,0,-3.35,1,1,1,'#c8ded3',p.springFlow);
-      f.put('suzuriWashRipple',u+.006,.957,-3.20,1.02,.73,1,'#d4dccc',p.springFlow,0,PI/2);
-    }
+    f.put('suzuriWashTrickle',u,0,-3.35,1,1,1,'#c8ded3',p.springFlow);
+    f.put('suzuriWashRipple',u+.006,.957,-3.20,1.02,.73,1,'#d4dccc',p.springFlow,0,PI/2);
     f.put('suzuriStool',u,.19,-1.92,1,.85,1,'#fff',p.stems,j%2?.07:-.08);
   }
   // A wet gutter with removable cedar slats runs along the row of stools.
@@ -331,6 +330,8 @@ function paving(p,f,s,level){
 }
 
 export function dressSuzuriCourt(p,f,s,level){
+  p.shapes.suzuriBathSeat=suzuriSeatStone();
+  f.put('suzuriBathSeat',0,0,0,1,1,1,'#fff',p.stems);
   paving(p,f,s,level);
   for(const wall of SUZURI_WALLS)plasterWall(p,f,wall);
   const {back}=SUZURI_COURT;

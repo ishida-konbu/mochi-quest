@@ -1,3 +1,4 @@
+import { steamVaultHeight } from './pilgrim-bathing-plan.js';
 // The long axis is parallel to the bank. +z is the open face looking onto
 // the water. Furniture stands against the back wall or at the closed ends.
 const kinds=new Set(['dawn','peach','temple','inari','tsuruga','sakai','snow']);
@@ -71,6 +72,10 @@ export function pilgrimRoofContact(s,a,b,pad) {
   const w=s.rx,d=s.pilgrimDepth,kind=s.pilgrimKind;
   if(abs(a)>w+pad)return -Infinity;
   const u=Math.max(-1,Math.min(1,a/w)),end=abs(u);
+  if(kind==='steamVault'){
+    if(abs(b)>d+pad)return -Infinity;
+    return s.top+steamVaultHeight(u,.5+.5*Math.max(-1,Math.min(1,b/d)))-2.47;
+  }
   const sign=b<0?-1:1;
   let depth=d;
   if(kind==='tsuruga')depth*=1-.78*end**5;

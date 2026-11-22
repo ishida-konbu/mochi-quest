@@ -1,12 +1,13 @@
 import * as T from './vendor/three.module.min.js';
 import { RETREATS, sitePoint } from './retreat-layout.js';
 import { bathEnclosure } from './bath-enclosures.js';
-import { waterSurfaceAt,wrapDelta } from './terrain.js';
+import { springLevel,wrapDelta } from './terrain.js';
 import { roofProfile } from './architecture.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { scrollPigment } from './kyo-scrollwork.js';
 import { surface,rod,dab } from './village-bath-figures.js';
 import { villageBathPainting } from './village-bath-paintings.js';
+import { addVillageWash,createVillageRinse } from './village-wash-furniture.js';
 import { addVillageYard } from './village-bath-yards.js';
 import { addVillageTrade } from './village-workshop-crafts.js';
 import { isVillageWorkshop,villageFrames } from './village-workshop-plan.js';
@@ -306,7 +307,7 @@ export function villageWorkshopGeometry(site,distant=false){
   }
   plankDeck(s,r,k);
   sideSlats(s,r,k);rearWall(s,r,k);timberFrame(s,r,k);
-  roof(s,r,plan,k);addVillageTrade(s,k,r);paintingMount(s,r,k);
+  roof(s,r,plan,k);addVillageTrade(s,k,r);addVillageWash(s,r,k);paintingMount(s,r,k);
   addVillageYard(s,site,plan);
   return s.finish();
 }
@@ -314,7 +315,7 @@ export function createVillageWorkshops(scene){
   const sites=RETREATS.filter(isVillageWorkshop).map(site=>{
     const room=bathEnclosure(site).room;
     const [x,z]=sitePoint(site,room.u,room.v);
-    return {site,room,x,z,y:waterSurfaceAt(site.x,site.z),group:null};
+    return {site,room,x,z,y:springLevel(site),group:null};
   });
   return player=>{
     for(const court of sites){
@@ -335,10 +336,11 @@ export function createVillageWorkshops(scene){
         const frame=villageFrames[site.kind];
         const painting=new T.Mesh(new T.PlaneGeometry(frame.w,frame.w/1.78),villageBathPainting(site.kind));
         painting.position.set(frame.x,frame.y,-room.d/2+.210);
-        court.details.add(painting);court.group.add(court.details);
+        court.details.add(painting);court.rinse=createVillageRinse(court.details,site,room);court.group.add(court.details);
       }
       court.skyline.visible=!close;
       if(court.details)court.details.visible=close;
+      if(close && court.rinse)court.rinse(player);
       court.group.position.set(player.x+dx,court.y,player.z+dz);
       court.group.visible=true;
     }

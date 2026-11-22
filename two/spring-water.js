@@ -1,3 +1,5 @@
+import { bathPools,poolLip } from './bath-places.js';
+import { SUZURI_LEDGE } from './kyo-bath-layout.js';
 import { addBathLeaves } from './bath-leaves.js';
 import { springLip } from './retreat-layout.js';
 import { bathCraft,regionalBathFittings,inletImpactV } from './regional-bath-fittings.js';
@@ -21,11 +23,15 @@ const mineralWash={
 };
 // The inlet and shallow mineral fringe travel with their particular basin.
 // The hero's reflection and its displacement continue to use world space.
-function regionalFinish(site) {
-  const craft=bathCraft[site.kind],main=site.rank==='main',key=main?site.id:craft;
+function regionalFinish(site,pool) {
+  const craft=bathCraft[site.kind],main=site.rank==='main',key=pool??(main?site.id:craft);
   if(regionalWater.has(key))return regionalWater.get(key);
-  const m=poolMaterial.clone();m.color.set(main?mineralWash[site.kind]:craft.water);
+  const m=poolMaterial.clone();m.color.set(pool?.tint??(main?mineralWash[site.kind]:craft.water));
   m.roughness=craft.rim==='sinter'?.43:.36;
+  // In these shallow baths the actual stone backs, shell ribs and bamboo
+  // gratings remain visible beneath a thin moving film of spring water.
+  const shallow=main && ['dawn','shore','susuki','bamboo'].includes(site.kind);
+  if(shallow){m.transparent=true;m.opacity=.54;}
   m.specularIntensity=.43;
   m.clearcoat=.14;
   m.clearcoatRoughness=.40;
@@ -34,8 +40,10 @@ function regionalFinish(site) {
     shader.vertexShader='attribute vec3 springInflow; varying vec3 source;\n'+
       shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nsource=springInflow;');
     shader.uniforms.inkPool={value:site.shape==='suzuri'?1:0};
+    const seat=SUZURI_LEDGE,inlet=regionalBathFittings(site,springLip).inlet;
+    shader.uniforms.suzuriSeat={value:new T.Vector4(seat.u-inlet.u,seat.v-inlet.v-inletImpactV,seat.w/2,seat.d/2)};
     shader.uniforms.chalkPool={value:site.kind==='sulfur'?1:0};
-    shader.fragmentShader='varying vec3 source; uniform float inkPool, chalkPool;\n'+shader.fragmentShader.replace('vec2 bed=poolPoint.xz*5.+wave;',`
+    shader.fragmentShader='varying vec3 source; uniform float inkPool, chalkPool; uniform vec4 suzuriSeat;\n'+shader.fragmentShader.replace('vec2 bed=poolPoint.xz*5.+wave;',`
       float range=length(source.xy), phase=range*19.-poolTime*3.4;
       float fan=exp(-2.15*range);
       float broken=.63+.37*sin(source.x*7.4+source.y*4.1+sin(poolTime*.51));
@@ -52,6 +60,19 @@ function regionalFinish(site) {
         float curl=radius*3.7+1.55*sin(angle+.65*radius)-poolTime*.20;
         float trace=pow(.5+.5*cos(curl*3.0),15.)*(1.-smoothstep(.3,4.2,radius));
         diffuseColor.rgb*=1.-.31*trace;
+        // Refracted granite treads underneath the shallows. Their outlines
+        // follow the same dimensions as the bench that supports the body.
+        vec2 slab=source.xy-suzuriSeat.xy+wave*.30;
+        vec2 margin=abs(slab)-(suzuriSeat.zw-vec2(.24));
+        float cut=length(max(margin,vec2(0.)))+min(max(margin.x,margin.y),0.)-.24;
+        vec2 small=abs(slab-vec2(suzuriSeat.z+.19,0.))-vec2(.14,suzuriSeat.w-.18);
+        float toe=length(max(small,vec2(0.)))+min(max(small.x,small.y),0.)-.068;
+        float bench=1.-smoothstep(-.018,.042,cut);
+        float tread=1.-smoothstep(-.018,.048,toe);
+        float polish=.45+.55*pebble(slab*9.+wave*1.1);
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.18,.26,.25)*polish,tread*.43);
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.25,.34,.30)*polish,bench*.58);
+        diffuseColor.rgb+=vec3(.040,.059,.047)*exp(-40.*abs(cut+.048));
       }
       if(chalkPool>.5){
         float cloud=pebble(source.xy*.53+wave*.35+vec2(poolTime*.022,0.));
@@ -144,11 +165,17 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null
         );
     };
   }
+  const pools=site?bathPools(site):undefined;
+  if(pools){
+    for(const pool of pools)placeWater(parent,pool.rx,pool.rz,level+pool.y,site,null,pool);
+  }else placeWater(parent,rx,rz,level,site,waterWash);
+}
+function placeWater(parent,rx,rz,level,site,waterWash,pool){
   let shape=disc,material=poolMaterial;
   if(site) {
     shape=disc.clone();
     const points=shape.attributes.position;
-    const lip=site.lip || (a=>springLip(site.index,a));
+    const lip=pool?(a=>poolLip(pool,a)):site.lip || (a=>springLip(site.index,a));
     for(let i=1;i<points.count;i++){
       const x=points.getX(i),z=points.getZ(i),r=lip(Math.atan2(z,x));
       points.setXYZ(i,x*r,0,z*r);
@@ -159,10 +186,10 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null
       // One attribute on the existing fan suffices: interpolating the offset
       // reproduces exact distances, while the last channel follows the shore.
       for(let i=0;i<points.count;i++){
-        flow.push(points.getX(i)*rx-inlet.u,points.getZ(i)*rz-inlet.v-inletImpactV,i===0?0:1);
+        flow.push(points.getX(i)*rx-(pool?0:inlet.u),points.getZ(i)*rz-(pool?-pool.rz*.85:inlet.v+inletImpactV),i===0?0:1);
       }
       shape.setAttribute('springInflow',new T.Float32BufferAttribute(flow,3));
-      material=regionalFinish(site);
+      material=regionalFinish(site,pool);
     }
   }
   if(waterWash){
@@ -178,10 +205,10 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=.189, site=null
   }
   const surface = new T.Mesh(shape, material);
   surface.scale.set(rx, 1, rz);
-  surface.position.y = level;
+  surface.position.set(pool?.u??0,level,pool?.v??0);
   surface.receiveShadow = true;
   parent.add(surface);
-  if(site)addBathLeaves(parent,site,level,uniforms.poolTime);
+  if(site)addBathLeaves(parent,site,level,uniforms.poolTime,pool);
 }
 
 // Only the bather needs a second view. Trees and dawn light already reach the
@@ -200,7 +227,7 @@ export function createBathReflection(renderer, scene, hero) {
   });
   return (player, time, camera) => {
     uniforms.poolTime.value = time;
-    uniforms.occupied.value = player.activity === 'bath' ? 1 : 0;
+    uniforms.occupied.value = player.bathPose?.wet ? 1 : 0;
     if (!uniforms.occupied.value) return;
     if (!target) {
       target = new T.WebGLRenderTarget(384, 256, { minFilter: T.LinearFilter, magFilter: T.LinearFilter });
