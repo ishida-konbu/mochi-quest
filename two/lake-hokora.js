@@ -260,7 +260,7 @@ function lowPine(wood,earth){
         const x=(u-1)*w*.5,fold=u===1?.102*w:0,up=k-.5;
         positions.push(cx+cos(a)*x+nx*(fold+up*h*.28),cy+up*h+(u===1?.068:-.014)*h,cz+sin(a)*x+nz*(fold+up*h*.28));
         normals.push(nx*.21,.977,nz*.21);uv.push(u*.5,k);
-        tint.set(j%3?'#d5dcc3':'#b9c6b2').multiplyScalar(.84+.14*k);colors.push(tint.r,tint.g,tint.b);
+        tint.set(j%3?'#e1e6d4':'#cfdbc8').multiplyScalar(.88+.12*k);colors.push(tint.r,tint.g,tint.b);
       }
       for(const n of [0,1,3,3,1,4,1,2,4,4,2,5])indices.push(start+n);
     }
@@ -277,7 +277,7 @@ function lowPine(wood,earth){
   g.setIndex(indices);g.computeBoundingSphere();
   const map=new T.TextureLoader().load(new URL('./assets/world/pine.webp',import.meta.url).href);
   map.colorSpace=T.SRGBColorSpace;map.anisotropy=4;
-  const crown=new T.Mesh(g,new T.MeshLambertMaterial({map,alphaTest:.29,side:T.DoubleSide,vertexColors:true}));
+  const crown=new T.Mesh(g,new T.MeshLambertMaterial({map,alphaTest:.29,side:T.DoubleSide,vertexColors:true,emissiveMap:map,emissive:0xe2e3cb,emissiveIntensity:.28}));
   crown.name='島松の葉叢';crown.castShadow=crown.receiveShadow=true;return crown;
 }
 function shoreStones(stone){
@@ -328,7 +328,7 @@ function grainMaterial(texture,streak=1){
         vec3 n=abs(normalize(localInkNormal));
         vec2 p=n.y>.68?localInkPoint.xz:n.x>n.z?localInkPoint.zy:localInkPoint.xy;
         float grain=dot(texture2D(hokoraGrain,p*vec2(${streak.toFixed(2)},1.04)).rgb, vec3(.23,.58,.19));
-        diffuseColor.rgb*=.88+.36*sqrt(max(0.,grain));`);
+        diffuseColor.rgb*=.81+.59*sqrt(max(0.,grain));`);
   };
   material.customProgramCacheKey=()=>`lake-hokora-grain-${streak}`;return material;
 }
