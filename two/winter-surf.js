@@ -1,11 +1,13 @@
 import { SNOW_TOWN } from './snow-country.js';
 import { WINTER_REEFS } from './winter-reefs.js';
+import { winterCloudGLSL } from './winter-clouds.js';
 
 const gl = value => value.toFixed(4);
 
 // Each rock parts the swell twice: a dark wet collar and a broken, outward
 // travelling line. They use the same bearing as the solid rock on the seabed.
 export const winterSurfGLSL = `
+  ${winterCloudGLSL}
   float winterReefWash(vec2 q,float t,vec2 centre,vec2 radii,vec2 axes) {
     vec2 d=q-centre;
     vec2 local=vec2(dot(d,vec2(axes.x,-axes.y)),dot(d,axes.yx));
@@ -15,7 +17,7 @@ export const winterSurfGLSL = `
     float stroke=1.-smoothstep(.09,.26+min(.42,fwidth(rim)),abs(ripple));
     return stroke*smoothstep(-.79,.57,winding+.31*sin(local.y*1.4-local.x*.7));
   }
-  vec3 winterWater(vec3 color,vec2 p,float shore,float depth,float glint,float fresnel,float t){
+  vec3 winterWater(vec3 color,vec2 p,float shore,float depth,float glint,float fresnel,float t,vec3 reflection,float snow){
     vec2 q=p-vec2(${gl(SNOW_TOWN.x)},${gl(SNOW_TOWN.z)});
     if(abs(q.x)>315. || abs(q.y)>315.)return color;
     float reach=(1.-smoothstep(.62,1.,length(q/vec2(302.,294.))))*(1.-smoothstep(.2,4.6,shore));
@@ -33,7 +35,11 @@ export const winterSurfGLSL = `
     vec3 shoal=mix(vec3(.168,.305,.315),vec3(.095,.196,.235),swell);
     vec3 offshore=mix(vec3(.026,.073,.111),vec3(.050,.132,.184),swell);
     vec3 pigment=mix(shoal,offshore,depth);
-    pigment=mix(pigment,vec3(.30,.425,.49),.47*fresnel);
+    vec3 reflectedSky=vec3(.30,.425,.49);
+    #ifdef USE_FOG
+      if(snow>.001)reflectedSky=mix(reflectedSky,winterOvercast(reflection,t,fogColor),snow);
+    #endif
+    pigment=mix(pigment,reflectedSky,.47*fresnel);
     float surf=0.;
     ${WINTER_REEFS.map(r => `surf=max(surf,winterReefWash(q,t,vec2(${gl(r.x-SNOW_TOWN.x)},${gl(r.z-SNOW_TOWN.z)}),vec2(${gl(r.rx)},${gl(r.rz)}),vec2(${gl(Math.cos(r.yaw))},${gl(Math.sin(r.yaw))})));`).join('\n')}
     float runup=abs(shore+1.+.63*sin(q.x*.38+t*.91)+.19*sin(q.x*1.18-t*1.2));

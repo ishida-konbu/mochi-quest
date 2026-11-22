@@ -1,6 +1,6 @@
 // Plan the whole trip before an animal sets out. A traveller can be streamed
 // out or restored at any point on the circuit without jumping across a trunk.
-import { SNOW_SPRING, BUILDINGS, BRIDGES, GATES, MARKET_STALLS, REGIONS, TREES, SHRINE_BAMBOO, gateFooting, regionAt, solidHeightAt, terrainHeight, waterDepth, groundHeight, nearRoad } from './terrain.js';
+import { SNOW_SPRING, BUILDINGS, BRIDGES, GATES, MARKET_STALLS, REGIONS, TREES, SHRINE_BAMBOO, gateFooting, regionAt, solidHeightAt, terrainHeight, treeGround, waterDepth, groundHeight, nearRoad } from './terrain.js';
 import { buildingCraft, roomPlan } from './architecture.js';
 import { KADOMATSU, POUNDING } from './festival.js';
 import { predatorRange, patrolAt } from './predator-trails.js';
@@ -26,7 +26,7 @@ for(const tree of TREES) {
     : bamboo?h*.14:h*(form%4===1 || form%4===3 ? .124 : .087);
   indexDisc(fixtures,x,z,trunk);
   const crown=(kind==='cedar'?.36:bamboo?.37:.56)*h;
-  indexDisc(crowns,x,z,crown,terrainHeight(x,z)+h);
+  indexDisc(crowns,x,z,crown,treeGround(tree)+h);
 }
 for(const t of SHRINE_BAMBOO) {
   indexDisc(crowns,t.x+t.sx,t.z+t.sz,1.5,terrainHeight(t.x,t.z)+t.height);

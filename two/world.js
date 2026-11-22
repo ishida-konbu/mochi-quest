@@ -321,7 +321,7 @@ function buildRoads(scene, art) {
     mesh.receiveShadow=true;mesh.renderOrder=road.paved?2:1;scene.add(mesh);
   }
 }
-function makeWater(scene, art, panorama) {
+function makeWater(scene, art, panorama, winterWash) {
   const mat = new THREE.ShaderMaterial({
     fog: true, transparent: true, depthWrite: true,
     side: THREE.DoubleSide,
@@ -456,7 +456,7 @@ function makeWater(scene, art, panorama) {
         col=mix(col,foam,.25*(1.-smoothstep(.012,.059,abs(margin-.086+.013*slow)))*(.52+.41*sidle));
         float under=(1.-smoothstep(3.5,5.1,abs(p.x+.4*sidle)))*smoothstep(-.4,2.,inside);
         col*=1.-under*.19;
-        col=winterWater(col,p,shoreDist,depth,glint,fresnel,t);
+        col=winterWater(col,p,shoreDist,depth,glint,fresnel,t,reflection,climate.x);
         vec3 nightWater=mix(vec3(.015,.035,.075),vec3(.080,.12,.19),fresnel+glint*.17);
         col=mix(col,nightWater,climate.z);
         vec3 dawnWater=mix(vec3(.075,.183,.221),vec3(.52,.355,.32),fresnel*1.18);
@@ -515,6 +515,7 @@ function makeWater(scene, art, panorama) {
   });
   // Keep the live asynchronously loaded sources in the merged fog/water uniforms.
   mat.uniforms.clock = scene.userData.waterClock ??= {value:0};
+  mat.uniforms.winterWash = {value:winterWash};
   mat.uniforms.pebble.value = art.gravel;
   mat.uniforms.horizon.value = panorama || art.gravel;
   // Concentrate vertices at water level around the traveller. The outskirts
@@ -1980,7 +1981,7 @@ export function* prepareWorld(scene) {
   scene.add(landGroup);
   yield* landscape(landGroup, art);
   buildRoads(landGroup, art);
-  const water = makeWater(scene, art, atmosphere.panorama);
+  const water = makeWater(scene, art, atmosphere.panorama, atmosphere.winterWash);
   const painter = new Painter(landGroup, paper, art);
   painter.lamps=createLampCollection(painter);
   yield;
@@ -2042,7 +2043,7 @@ export function* prepareWorld(scene) {
   water.uniforms.climate=atmosphere.climate;
   const leaves = driftingLeaves(scene);
   return {
-    textures: [...Object.values(art), atmosphere.panorama],
+    textures: [...Object.values(art), atmosphere.panorama, atmosphere.winterWash],
     update(time, player, camera, voyageTime=time, bellStrike=null, inariWeather=null) {
       water.update(time,player);
       painter.sway.value = time;

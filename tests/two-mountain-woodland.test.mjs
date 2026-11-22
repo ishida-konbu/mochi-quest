@@ -5,7 +5,7 @@ import {inMountainStreamClearing} from '../two/mountain-streams.js';
 import {CLIFF_PINES,PEACH_TREES} from '../two/pilgrimage-layout.js';
 import {TREE_FAMILIES,TREE_FORMS_PER_FAMILY} from '../two/forest-forms.js';
 import {DISTRICTS} from '../two/geography.js';
-import {terrainHeight,terrainMeshHeight,TREES} from '../two/terrain.js';
+import {terrainHeight,terrainMeshHeight,treeGround,TREES} from '../two/terrain.js';
 import {inFireMeadow,eastRidgeHeight,northRidgeHeight,westRidgeHeight} from '../two/higashiyama.js';
 import {reservedScenery} from '../two/retreat-layout.js';
 import {inHutYard} from '../two/wayside-hut-layout.js';
@@ -48,6 +48,14 @@ test('new stems follow their local species, visible footing, stream clearings an
     assert.ok(!inMountainStreamClearing(t.x,t.z) && !inFireMeadow(t.x,t.z));
     assert.ok(!reservedScenery(t.x,t.z) && !inHutYard(t.x,t.z));
     assert.ok(Math.abs(terrainMeshHeight(t.x,t.z)-terrainHeight(t.x,t.z))<=.14);
+  }
+});
+
+test('both older stands and new growth root on the rendered triangles of all three Kyoto slopes',()=>{
+  for(const relief of [eastRidgeHeight,northRidgeHeight,westRidgeHeight]){
+    const stand=TREES.filter(t=>t.form!==undefined && relief(t.x,t.z)>.5);
+    assert.ok(stand.some(t=>Math.abs(terrainMeshHeight(t.x,t.z)-terrainHeight(t.x,t.z))>.04));
+    for(const tree of stand)assert.equal(treeGround(tree),terrainMeshHeight(tree.x,tree.z));
   }
 });
 

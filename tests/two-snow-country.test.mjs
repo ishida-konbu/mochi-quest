@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { HemisphereLight, DirectionalLight } from '../two/vendor/three.module.min.js';
+import { applyClimateLights } from '../two/atmosphere.js';
 import { createGame } from '../two/game.js';
 import { HOKORA_BASE } from '../two/lake-hokora-layout.js';
 import { FOREST_LAKE, LAKE_ISLET, LAKE_HOKORA, isletPoint, lakePoint, lakeRadius } from '../two/snow-country.js';
@@ -7,6 +9,18 @@ import {
   BUILDINGS, CONNECTING_ROADS, GATES, REGIONS, ROADS, SNOW_SPRING, TREES, WATER_Y,
   seasonAt, shoreDistance, terrainHeight, terrainMeshHeight, waterDepth,
 } from '../two/terrain.js';
+
+test('crossing the pass softens direct winter sun and restores clear daylight on returning to Kyoto',()=>{
+  const sky=new HemisphereLight(),sun=new DirectionalLight(),bounce=new DirectionalLight();
+  function daylight(x,z){
+    applyClimateLights(sky,sun,bounce,{x,y:terrainHeight(x,z),z},24);
+    return [sun.intensity,sun.shadow.intensity,sky.intensity];
+  }
+  const clear=daylight(240,-848),pass=daylight(591,-1065),town=daylight(713,-1123);
+  assert.ok(town[0]<town[2] && town[1]<.5);
+  for(const i of [0,1])assert.ok(clear[i]>pass[i] && pass[i]>town[i]);
+  assert.deepEqual(daylight(240,-848),clear);
+});
 
 test('the snowy pagoda overlooks open winter water across a pass from Kyoto',()=>{
   const city=REGIONS.find(r=>r.id==='kyo'), snow=REGIONS.find(r=>r.id==='snow');

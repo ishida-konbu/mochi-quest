@@ -1,6 +1,7 @@
 import { HIGASHIYAMA, KITAYAMA, NISHIYAMA } from './higashiyama.js';
 import { DISTRICTS } from './geography.js';
 import { peachHazeWeight } from './peach-haze.js';
+import { winterCloudGLSL, winterCloudTexture } from './winter-clouds.js';
 import * as THREE from './vendor/three.module.min.js';
 import { HDRLoader } from './vendor/HDRLoader.js';
 import { kyoNight, kyoInfluence } from './kyo-layout.js';
@@ -14,6 +15,8 @@ const palette = {
   earth: color(0x9a8675),
   fill: color(0xe6efff),
   ice: color('#cedefa'),
+  cloudLight: color('#d4dfe6'),
+  snowBounce: color('#bfccd3'),
   snow: color('#ecf4ff'),
   ember: color('#ffba7e'),
   blue: color('#9fb8e8'),
@@ -21,7 +24,7 @@ const palette = {
   twilight: color('#ffdbb6'),
   fog: color('#d7d4bf'),
   peachFog: color('#d9d7cb'),
-  winterFog: color('#c3d5e4'),
+  winterFog: color('#b4bfc5'),
   fallFog: color('#d9bc99'),
   nightFog: color('#273b56'),
   dawnFog: color('#f5c3a3'),
@@ -39,26 +42,32 @@ export function applyClimateLights(hemisphere, sun, bounce, player,time=0) {
     .lerp(palette.snow, snow)
     .lerp(palette.ember, 0.47 * autumn + dawn)
     .lerp(palette.blue, moon);
-  sun.intensity = 2.35 - 0.65 * snow - 0.22 * autumn - 1.5 * moon - 0.35 * dawn;
+  // A bank of snow cloud supplies mostly diffuse light. The weak remnant
+  // of the key still shapes the roofs, with a broad, shallow cast shadow.
+  sun.intensity = 2.35 - 1.78 * snow - 0.22 * autumn - 1.5 * moon - 0.35 * dawn;
+  sun.shadow.intensity = 1 - .67 * snow;
+  sun.shadow.radius = 1 + 2.4 * snow;
   sun.position.set(player.x + 35 + 30 * dawn - 20 * moon, player.y + 38 - 19 * dawn, player.z - 51 + 29 * dawn);
-  hemisphere.color.copy(palette.sky).lerp(palette.ice, snow).lerp(palette.twilight, dawn).lerp(palette.blue, moon);
+  hemisphere.color.copy(palette.sky).lerp(palette.cloudLight, snow).lerp(palette.twilight, dawn).lerp(palette.blue, moon);
   hemisphere.groundColor
     .copy(palette.earth)
-    .lerp(palette.snow, 0.35 * snow)
+    .lerp(palette.snowBounce, snow)
     .lerp(palette.darkEarth, moon);
-  hemisphere.intensity = 1.02 + 0.14 * snow - 0.5 * moon;
+  hemisphere.intensity = 1.02 + 0.45 * snow - 0.5 * moon;
   bounce.color
     .copy(palette.fill)
+    .lerp(palette.snowBounce, snow)
     .lerp(palette.ice, moon)
     .lerp(palette.ember, 0.28 * dawn);
-  bounce.intensity = 0.65 - 0.34 * moon;
+  bounce.intensity = 0.65 - 0.34 * moon - .38 * snow;
 }
 
 // The sky is painted in directions rather than positions so its horizon is
 // continuous across the ocean seam. The real mountains below supply parallax.
-function mountainSky(scene, panorama) {
+function mountainSky(scene, panorama, winterWash) {
   const uniforms = {
     ridges: { value: panorama },
+    winterWash: { value: winterWash },
     climate: { value: new THREE.Vector4() },
     clock: { value: 0 },
     horizonInk: { value: 1 },
@@ -77,6 +86,7 @@ function mountainSky(scene, panorama) {
       }`,
     fragmentShader: `
       varying vec3 direction; uniform sampler2D ridges; uniform vec4 climate; uniform float clock,horizonInk,valleyHaze; uniform vec3 valleyMist;
+      ${winterCloudGLSL}
       float hash(vec2 p) {
         vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);
         return fract((p3.x+p3.y)*p3.z);
@@ -129,20 +139,17 @@ function mountainSky(scene, panorama) {
         float relief=smoothstep(.46,.70,maria);
         vec3 lunarColor=mix(vec3(1.30,1.20,.9),vec3(.83,.79,.66),relief*.77);
         sky=mix(sky,lunarColor,(1.-smoothstep(radius-.001,radius+.001,moonDist))*night);
-        vec3 dayDisk=mix(vec3(1.12,.60,.30),vec3(1.18,1.15,1.025),snow);
-        sky=mix(sky,mix(dayDisk,vec3(1.48,1.15,.69),dawn),
-                    (1.-smoothstep(.028,.030,sunDist))*(1.-night));
+        sky=mix(sky,mix(vec3(1.12,.60,.30),vec3(1.48,1.15,.69),dawn),
+                    (1.-smoothstep(.028,.030,sunDist))*(1.-night)*(1.-snow));
         // A low bank of cold cloud meets the horizon out beyond the northern bay.
         float winterOpening=snow*smoothstep(.08,.69,dot(ray.xz,vec2(.16,-.987)));
         float seaOpening=max(winterOpening,dawn*smoothstep(.18,.83,ray.x));
         float v=.20+elevation*(3.30+seaOpening*13.);
         float u=angle/3.14159265+.095;
-        // Long, low cloud banks run offshore. A nearly level underside and
-        // torn upper edge give them the uneven dry brush of a distant wash.
-        vec2 wind=vec2(ray.x*4.2+ray.z*1.9+clock*.0018,elevation*26.);
-        float stratus=.55*noise2(wind)+.32*noise2(wind*vec2(2.7,1.9))+.13*noise2(wind*5.2);
-        float band=smoothstep(.036,.089,elevation)*(1.-smoothstep(.125,.251,elevation));
-        sky=mix(sky,vec3(.48,.596,.68),winterOpening*band*smoothstep(.35,.75,stratus)*.29);
+        if(snow>.001) {
+          sky=mix(sky,winterOvercast(ray,clock,valleyMist),snow);
+          low=mix(low,valleyMist,snow);
+        }
         vec3 scan=texture2D(ridges,vec2(u,clamp(v,.006,.995))).rgb;
         float value=dot(scan,vec3(.28,.56,.16));
         float ridge=smoothstep(.08,.87,1.-value/.61)*(1.-smoothstep(.87,1.02,v));
@@ -174,7 +181,8 @@ export function createAtmosphere(scene) {
   panorama.anisotropy = 4;
   scene.background = new THREE.Color('#eadfc6');
   scene.fog = new THREE.FogExp2(palette.fog, 0.0057);
-  const dome = mountainSky(scene, panorama);
+  const winterWash = winterCloudTexture();
+  const dome = mountainSky(scene, panorama, winterWash);
   const region = {};
   new HDRLoader().load(asset('spruit-dawn.hdr'), (light) => {
     light.mapping = THREE.EquirectangularReflectionMapping;
@@ -182,7 +190,7 @@ export function createAtmosphere(scene) {
     scene.environmentRotation.y = 0.62;
   });
   return {
-    panorama,
+    panorama, winterWash,
     climate: dome.material.uniforms.climate,
     update(time, player, camera) {
       const s = climateAtTime(player,time,region);
@@ -228,7 +236,7 @@ export function createAtmosphere(scene) {
       // Clear salt air leaves the fishing sail and ink-coloured reefs legible
       // from the pagoda. Snow is still visible on the inland approach.
       scene.fog.density = THREE.MathUtils.lerp(THREE.MathUtils.lerp(openAir,valleyAir,peachAir),.0048,s.snow) - .0008*s.dawn;
-      scene.environmentIntensity = 0.67 - 0.51 * s.moon;
+      scene.environmentIntensity = 0.67 - 0.51 * s.moon - .33 * s.snow;
       return valleyView;
     },
   };

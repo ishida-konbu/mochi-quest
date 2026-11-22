@@ -23,8 +23,11 @@ export async function bakeForest() {
   const sun = new THREE.DirectionalLight(0xfff4e4,1.45);
   sun.position.set(-2,3,2);
   scene.add(sun);
-  for (let i=0; i<TREE_FORM_COUNT; i++) {
-    const geometry=forestGeometry(i), tree=new THREE.Mesh(geometry,material);
+  // The spare last four cells carry the same moso fans with their culms
+  // omitted. They sit over the real jointed stalks on the western slopes.
+  for (let i=0; i<TREE_FORM_COUNT+4; i++) {
+    const crownOnly=i>=TREE_FORM_COUNT, form=crownOnly?i-4:i;
+    const geometry=forestGeometry(form,false,crownOnly), tree=new THREE.Mesh(geometry,material);
     scene.add(tree);
     for (let view=0; view<2; view++) {
       const angle=view*Math.PI/2;
