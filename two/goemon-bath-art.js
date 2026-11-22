@@ -22,6 +22,9 @@ function bathMaterials(){
   }
   return [ironWash,ink];
 }
+export function goemonWaterWash(){
+  return bathMaterials()[0].map;
+}
 function vessel(s,p,seed){
   const skin=(a,r,y)=>{
     // The small departures from round are a cast edge, continuous through

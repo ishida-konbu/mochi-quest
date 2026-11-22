@@ -12,7 +12,7 @@ const bike=[[-.15,0,.14,.91,0,1.05],[.47,0,.14,.91,0,1.05]];
 export function createPickupContacts(objects) {
   const cells=new Map(),key=(x,z)=>Math.floor(x/16)+','+Math.floor(z/16);
   for(const o of objects) {
-    if(o.grand || o.retreat || o.type==='kyoTea' || o.type==='mitarashi')continue;
+    if(o.grand || o.retreat || o.goemon || o.type==='kyoTea' || o.type==='mitarashi')continue;
     const shapes=o.type==='port'?port:o.type==='onsen'?bath:o.type==='tsukimi'?moonTable:table;
     const fixture={o,shapes,c:Math.cos(o.heading),s:Math.sin(o.heading)};
     for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){

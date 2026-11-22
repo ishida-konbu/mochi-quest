@@ -10,8 +10,8 @@ const uniforms = {
   poolCenter: { value: new T.Vector2(10000, 10000) },
   occupied: { value: 0 },
 };
-let poolMaterial, disc;
-export function addSpringSurface(parent, rx=1.96, rz=1.56, level=poolLevel, site=null) {
+let poolMaterial, disc, paintedPool;
+export function addSpringSurface(parent, rx=1.96, rz=1.56, level=poolLevel, site=null, waterWash=null) {
   if (!poolMaterial) {
     disc = new T.CircleGeometry(1, 80);
     disc.rotateX(-Math.PI / 2);
@@ -100,7 +100,19 @@ export function addSpringSurface(parent, rx=1.96, rz=1.56, level=poolLevel, site
     }
     shape.computeBoundingSphere();
   }
-  const surface = new T.Mesh(shape, poolMaterial);
+  let material=poolMaterial;
+  if(waterWash){
+    if(!paintedPool){
+      const paintedDisc=disc.clone(), uv=paintedDisc.attributes.uv;
+      for(let i=0;i<uv.count;i++)uv.setXY(i,.51+.48*uv.getX(i),.01+.48*uv.getY(i));
+      const finish=poolMaterial.clone();
+      finish.map=waterWash;finish.color.setHex(0x839785);
+      finish.onBeforeCompile=poolMaterial.onBeforeCompile;
+      paintedPool={shape:paintedDisc,material:finish};
+    }
+    shape=paintedPool.shape;material=paintedPool.material;
+  }
+  const surface = new T.Mesh(shape, material);
   surface.scale.set(rx, 1, rz);
   surface.position.y = level;
   surface.receiveShadow = true;

@@ -4,6 +4,7 @@ import { DISTRICTS } from './geography.js';
 import { terrainHeight, roadSurfaceHeight, groundHeight, wrapDelta } from './terrain.js';
 import { CARRIAGES, OX_HITCH, HORSE_SCALE, carriagePose, merchantPose, horsePose } from './traveller-positions.js';
 import { OX_SCALE } from './scroll-fauna.js';
+import { MERCHANT_ROUTES, ROAD_MERCHANTS, roadMerchantPose } from './road-merchant-routes.js';
 import { QUAY_MERCHANTS } from './seaport-layout.js';
 import { COURT } from './retreat-layout.js';
 import { kyoNight, kyoClock } from './kyo-layout.js';
@@ -25,6 +26,13 @@ const boat=[[0,0,.71,1.89,-.13,.57],[0,2.17,.39,.68,.04,.65],[0,-2.17,.39,.68,.0
 const horse=[[0,-.14,.36,.89,.74,1.78],[0,.77,.24,.39,1.31,2.11],
   ...[-1,1].flatMap(s=>[-.69,.44].map(z=>[s*.24,z,.081,.13,0,.89]))];
 const figure=[[0,0,.34,.28,0,1.86]];
+const traderBody=[[0,0,.27,.23,0,.59],[0,0,.44,.33,.39,1.07],[0,-.01,.475,.34,1.04,1.55],
+  ...[-1,1].map(s=>[s*.48,.17,.115,.15,.60,.91])];
+const traderShapes=[
+  [...traderBody,[0,-.01,.48,.39,1.53,1.69],[.24,.47,.27,.25,.565,.821]], // hat and market basket
+  [...traderBody,[0,-.02,.34,.27,1.50,1.62],[.05,-.51,.266,.177,.52,1.16]], // hood and knotted bundle
+  [...traderBody,[0,-.095,.27,.21,1.50,1.78],[0,-.442,.215,.124,.602,1.09],[0,-.49,.11,.043,1.08,1.27]], // cap, medicine drawers and herbs
+];
 
 function penetration(q,shapes,x,z,feet,height,radius,scale=1) {
   const dx=wrapDelta(x-q.x),dz=wrapDelta(z-q.z);
@@ -47,6 +55,9 @@ function penetration(q,shapes,x,z,feet,height,radius,scale=1) {
 export function createAmbientContacts(){
   let sampledTravel, sampledCity, cityOffset, vehicles=[], citizens=[], walkers;
   const courtBase=terrainHeight(COURT.x,COURT.z);
+  const tradingRoads=MERCHANT_ROUTES.map(route=>({
+    route,traders:ROAD_MERCHANTS.filter(t=>t.route===route),lastTime:NaN,poses:[],
+  }));
   return (x,z,feet,height,radius,time,player,measureDepth=false)=>{
     let depth=0;
     function check(q,shapes,size){
@@ -60,6 +71,24 @@ export function createAmbientContacts(){
       for(let i=0;i<3;i++)vehicles.push([merchantPose(i,time),boat,1]);
     }
     for(const [q,shapes,scale] of vehicles)if(check(q,shapes,scale))return true;
+    // Outside a road's bounds even its outermost load is out of reach.
+    // Reuse its poses across all the mount, body and sweep probes in a step.
+    const wx=wrapDelta(x),wz=wrapDelta(z);
+    for(const road of tradingRoads){
+      const {west,east,north,south}=road.route.bounds,pad=road.route.lane+radius+1;
+      if(wx<west-pad||wx>east+pad||wz<north-pad||wz>south+pad)continue;
+      if(time!==road.lastTime){
+        road.lastTime=time;
+        for(const [i,m] of road.traders.entries()){
+          const q=roadMerchantPose(m,time);
+          q.floor=groundHeight; // includes the bridge deck and Rashomon's stone steps
+          road.poses[i]=q;
+        }
+      }
+      for(const [i,m] of road.traders.entries()){
+        if(check(road.poses[i],traderShapes[m.costume-2],m.size))return true;
+      }
+    }
     for(const q of QUAY_MERCHANTS)if(check(q,figure,q.size))return true;
     const inCity=Math.abs(wrapDelta(x-DISTRICTS.kyo.x))<200 && Math.abs(wrapDelta(z-DISTRICTS.kyo.z))<185;
     if(inCity){

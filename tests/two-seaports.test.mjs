@@ -218,3 +218,21 @@ test('passengers saved on the previous offshore circuit resume aboard the same v
     assert.ok(Math.hypot(again.state.player.x-p.x,again.state.player.z-p.z)<1e-6);
   }
 });
+
+test('a tenth-edition cabin-roof passenger resumes above the same moving hold and keel',()=>{
+  // A roof save from the former far-ocean loop, after shaped hull contacts
+  // shipped and before the first two-port circuit.
+  const saved=createGame().save();
+  saved.version=10;saved.time=665;
+  Object.assign(saved.player,{x:61.322149697277,z:1052.307607266744,y:6.990553421984855,
+    h:0,heading:-1.854899483507206,grounded:true});
+  const game=createGame(saved);assert.ok(game.restored);
+  for(let i=0;i<60;i++)game.step(1/60);
+  const pose=game.voyage.poses[6],player=game.state.player;
+  const [u,v]=localPoint(pose,player.x,player.z);
+  assert.ok(Math.hypot(u,v+11.27)<1e-5);
+  assert.ok(Math.abs(player.y-pose.y-(DECK_Y+3.37))<1e-5);
+  const [x,z]=portPoint(pose,0,0);
+  assert.equal(game.voyage.sample(x,z,pose.y-4,0,.7),null);
+  assert.equal(game.voyage.sample(x,z,pose.y-2,0,1.66).solid,HOLD_Y+pose.y);
+});

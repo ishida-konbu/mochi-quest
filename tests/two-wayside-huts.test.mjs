@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
 import { WAYSIDE_HUTS,KETTLE } from '../two/wayside-hut-layout.js';
 import { sitePoint } from '../two/retreat-layout.js';
-import { TREES, REGIONS, shoreDistance, nearRoad, terrainHeight, groundHeight, waterSurfaceAt } from '../two/terrain.js';
+import { createPickupContacts } from '../two/pickup-contacts.js';
+import { TREES, REGIONS, shoreDistance, nearRoad, terrainHeight, groundHeight, waterSurfaceAt, staticVolumeAt } from '../two/terrain.js';
 
 function walk(game,[x,z]){
   const p=game.state.player;
@@ -59,4 +60,20 @@ test('a journal with the original 64-item inventory keeps its progress when the 
   const resumed=createGame(save);assert.ok(resumed.restored);
   assert.equal(resumed.state.score,420);
   assert.ok(resumed.state.objects.filter(o=>o.goemon).every(o=>o.active));
+});
+
+test('the cauldron has a solid lip around an open well and no freestanding spring furniture',()=>{
+  const {objects}=createGame().state;
+  for(const o of objects.filter(o=>o.goemon)){
+    const {bath}=o.goemon,base=terrainHeight(o.goemon.x,o.goemon.z);
+    assert.ok(staticVolumeAt(...sitePoint(bath,KETTLE.radius*KETTLE.widthScale,0),base+KETTLE.board+.02,.04,.18));
+    assert.equal(staticVolumeAt(bath.x,bath.z,base+KETTLE.board+.02,.24,1.66),false);
+    const contacts=createPickupContacts([o]);
+    for(const [u,v] of [[-1.98,-1.1],[-.93,-1.1],[1.64,-.60]]){
+      assert.equal(contacts(...sitePoint(bath,u,v),o.y+.02,1.66,.24),0,o.goemon.name);
+    }
+  }
+  const spring=objects.find(o=>o.type==='onsen' && !o.goemon && !o.retreat && !o.grand);
+  const post=sitePoint({x:spring.x,z:spring.z,yaw:spring.heading},-1.98,-1.1);
+  assert.ok(createPickupContacts([spring])(...post,spring.y+.02,1.66,.24)>0);
 });

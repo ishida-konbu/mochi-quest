@@ -1,3 +1,4 @@
+import { goemonWaterWash } from './goemon-bath-art.js';
 import { KETTLE } from './wayside-hut-layout.js';
 import { addFlumes } from './snow-bath.js';
 import { porcelain, makeMoonCakes } from './craftwork.js';
@@ -1635,7 +1636,7 @@ function makeObject(o, parent) {
   if(o.goemon) {
     mesh=new THREE.Group();
     const line=KETTLE.water-KETTLE.board;
-    addSpringSurface(mesh,KETTLE.widthScale,KETTLE.widthScale,line);
+    addSpringSurface(mesh,KETTLE.widthScale,KETTLE.widthScale,line,null,goemonWaterWash());
     steam=particles('steam',14);
     steam.position.y=line;mesh.add(steam);
   } else if(o.retreat) {

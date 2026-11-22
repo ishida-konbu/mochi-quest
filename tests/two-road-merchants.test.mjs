@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MERCHANT_ROUTES, ROAD_MERCHANTS, roadMerchantPose } from '../two/road-merchants.js';
+import { MERCHANT_ROUTES, ROAD_MERCHANTS, roadMerchantPose } from '../two/road-merchant-routes.js';
+import { createAmbientContacts } from '../two/ambient-contacts.js';
 import { cartPosition } from '../two/trade-routes.js';
 import { bridgeAt, bridgeHeight, groundHeight, roadSurfaceHeight, solidHeightAt, waterDepth } from '../two/terrain.js';
 
@@ -54,4 +55,38 @@ test('the entire trading circuit keeps the loads clear of water, scenery and bri
     }
   }
   assert.ok(crossings>100);
+});
+
+test('the contact solver follows all 51 traders and the goods they actually carry',()=>{
+  const hit=createAmbientContacts(),player={x:0,z:0,h:0,kyoClockOffset:0};
+  for(const time of [1.2,73,201.5])for(const trader of ROAD_MERCHANTS){
+    const q=roadMerchantPose(trader,time),y=groundHeight(q.x,q.z);
+    assert.ok(hit(q.x,q.z,y+.3,1,.16,time,player,true)>0);
+    assert.equal(hit(q.x,q.z,y+7,.3,.16,time,player,true),0);
+  }
+  // Sample each trade halfway up the remote peach pass, clear of the other
+  // actors. The projecting basket, bag or chest has open air beneath it.
+  const pass=MERCHANT_ROUTES.find(route=>route.destination==='桃源郷');
+  for(const [kind,u,v] of [[2,.24,.675],[3,.05,-.651],[4,.07,-.532]]){
+    const trader=ROAD_MERCHANTS.find(m=>m.route===pass && m.costume===kind);
+    const leg=pass.length/trader.speed+7,time=(.43*pass.length/trader.speed-trader.offset+2*leg)%(2*leg);
+    const q=roadMerchantPose(trader,time),y=groundHeight(q.x,q.z),c=Math.cos(q.yaw),s=Math.sin(q.yaw);
+    const x=q.x+(u*c+v*s)*trader.size,z=q.z+(v*c-u*s)*trader.size;
+    assert.ok(hit(x,z,y+.74*trader.size,.065,.014,time,player,true)>0,kind);
+    assert.equal(hit(x,z,y+.18*trader.size,.085,.014,time,player,true),0,kind);
+  }
+});
+
+test('merchant contacts on a bridge stay above the water passage beneath the deck',()=>{
+  const hit=createAmbientContacts(),trader=ROAD_MERCHANTS[0],player={x:0,z:0,h:0,kyoClockOffset:0};
+  let samples=0;
+  for(let t=0;t<2*(trader.route.length/trader.speed+7);t+=2){
+    const q=roadMerchantPose(trader,t),bridge=bridgeAt(q.x,q.z);
+    if(!bridge||waterDepth(q.x,q.z)<1)continue;
+    const floor=bridgeHeight(bridge,q.z);
+    assert.ok(hit(q.x,q.z,floor+.13,.8,.12,t,player));
+    assert.equal(hit(q.x,q.z,floor-.9,.3,.12,t,player),false);
+    samples++;
+  }
+  assert.ok(samples>=10);
 });

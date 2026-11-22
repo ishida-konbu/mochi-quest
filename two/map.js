@@ -20,7 +20,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=rashomon-stone', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=roadside-1', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -196,7 +196,7 @@ export function paintMapPaper() {
     g.lineTo(u+r.rx*.77*adj,v+.4);g.closePath();g.fillStyle='#657677';g.fill();
   }
   g.setLineDash([3.5,6]);g.lineWidth=1;g.strokeStyle='#4e798880';
-  // The coastal crossing and offshore circuit both return to their first berth or buoy.
+  // Each dotted circuit follows the same pair of harbour approaches as the fleet.
   for(const lane of SEAWAYS){
     g.beginPath();
     lane.points.forEach(([x,z],i)=>{if(i%4===0){if(i)g.lineTo(toX(x),toX(z));else g.moveTo(toX(x),toX(z));}});
