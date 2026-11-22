@@ -2,7 +2,7 @@
 // relative to its landmark, including when a journey moves to a larger map.
 import { TREES, REGIONS, BUILDINGS, regionAt, terrainHeight, treeGround, groundHeight, solidHeightAt, nearRoad, WATER_Y } from './terrain.js';
 import { DAIBUTSU } from './pilgrimage-layout.js';
-import { RYUGU } from './ryugu-layout.js';
+import { RYUGU, PALACE_BED, PALACE_LEVELS, PALACE_POOL, boardingHeightAt, palacePoint } from './ryugu-layout.js';
 import { animalRadius, openGround, canopyHeight, walkCircuit } from './village-paths.js';
 import { walkingScore } from './animal-motion.js';
 import { forestGeometry } from './forest-mesh.js';
@@ -134,7 +134,10 @@ function findGround(n,residents) {
   }
   throw new Error('Missing habitat for '+n.id);
 }
-const courtSeats=[[11,-11],[7,7],[-2,-9],[8,3],[-4,8],[5,-11],[-2,10.5]];
+const outerCourtSeats=[[11,-11],[7,7],[-2,-9],[8,3]];
+// The usher wades up the central landing. The two officials patrol the
+// galleries beside the stairwells, leaving the bath and its aisle clear.
+const innerCourtWalks=[[2,-19.8],[-4,-25],[6,-25]];
 export function makeScrollFauna() {
   if(!plan) {
     plan=[];
@@ -145,8 +148,15 @@ export function makeScrollFauna() {
         n.route=hawkRoute(i);n.cycle=n.route.reduce((sum,leg)=>sum+leg.rest+leg.flight,0);
         n.homeX=n.route[0].a.x;n.homeZ=n.route[0].a.z;
       }else if(type==='fishfolk'){
-        const [x,z]=courtSeats[i];
-        n.homeX=RYUGU.x+x;n.homeZ=RYUGU.z+z;
+        n.courtier=i>=outerCourtSeats.length;
+        if(n.courtier){
+          n.storey=i-outerCourtSeats.length;
+          const home=palacePoint(...innerCourtWalks[n.storey]);
+          n.homeX=home.x;n.homeZ=home.z;
+        }else{
+          const [x,z]=outerCourtSeats[i];
+          n.homeX=RYUGU.x+x;n.homeZ=RYUGU.z+z;
+        }
       }else{
         n.radius=type==='chicken'?.79: type==='elephant'?1.42:2.3;
         n.cruise=(type==='chicken'?.48:type==='baku'?.66:.50)/n.radius;
@@ -192,6 +202,21 @@ export function moveScrollFauna(n,time) {
     n.altitude=n.y-terrainHeight(n.x,n.z);
     n.bank=sin(time*6.2+n.phase)*(.42+.30*sin(time*.77+n.phase));
     n.habitat=REGIONS[regionAt(n.x,n.z)].id;
+  }else if(n.courtier){
+    const a=n.phase+time*.19,reach=n.storey===0?6:3.1;
+    n.x=n.homeX+reach*cos(a);n.z=n.homeZ+.67*sin(a);
+    n.heading=Math.atan2(-reach*sin(a),.67*cos(a));
+    n.speed=.19*hypot(reach*sin(a),.67*cos(a));
+    n.gesture=(.5+.5*cos(2*a))**4;
+    const deck=PALACE_BED+PALACE_LEVELS[n.storey].h;
+    n.y=deck;
+    if(n.storey===0 && n.x>RYUGU.x+PALACE_POOL.v-PALACE_POOL.d/2){
+      // The crossing fin rests on the next tread while the trailing fin
+      // clears the previous one. Beyond the last tread it is swimming.
+      const tread=boardingHeightAt(Math.max(RYUGU.x-20,n.x-.55),n.z);
+      n.y=Math.max(PALACE_BED+PALACE_POOL.h-.66+.06*sin(3*a),tread);
+    }
+    n.onBoards=n.y>=deck;
   }else if(n.type==='fishfolk'){
     const a=n.phase+time*.37;
     n.x=n.homeX+.33*sin(a);n.z=n.homeZ+.28*cos(a);

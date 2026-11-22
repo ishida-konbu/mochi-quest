@@ -6,7 +6,9 @@ import { skin, profile, membrane, brush, eye } from './ryugu-sculpt.js';
 import { reefFans } from './reef-garden.js';
 import { createFishSchools } from './fish-schools.js';
 import { prepareSeaOrnaments } from './ryugu-architecture.js';
-import { RYUGU, HALLS, GATE_V, PALACE_APPROACH } from './ryugu-layout.js';
+import { RYUGU, GATE_V, PALACE_APPROACH, PALACE_POOL, PALACE_BED, palaceInteriorAt } from './ryugu-layout.js';
+import { drawSeaPalace } from './ryugu-palace.js';
+import { palacePoolSurface } from './ryugu-palace-water.js';
 
 const { sin, cos, PI } = Math;
 const vermilion='#91604d', cinnabar='#b87859', ink='#454a43', gilding='#bba374', shell='#e5dac0', jade='#687c70';
@@ -116,50 +118,7 @@ export function dressRyugu(p) {
       put('finial',previous[0],previous[1]-.03,previous[2],.22,.52,.22,gilding);
     }
   }
-  function balustrade(u,v,length,sideways,base=.84) {
-    const place=(l,h,shape,w,t,d,color)=>put(shape,u+(sideways?0:l),base+h,v+(sideways?l:0),w,t,d,color,p.lacquer,sideways?PI/2:0);
-    place(0,.68,'box',length,.12,.13,gilding);place(0,.32,'box',length,.13,.09,vermilion);
-    const posts=Math.ceil(length/1.4);
-    for(let i=0;i<=posts;i++) {
-      const pos=length*(i/posts-.5);place(pos,.39,'box',.13,.8,.13,vermilion);
-      place(pos,.85,'ball',.097,.11,.097,gilding);
-    }
-  }
-  function hall({u,v,w,d,tiers},episode) {
-    stone(u,.32,v,w+.78,.64,d+.82);put('box',u,.73,v,w+.94,.22,d+1,'#bfbba1');
-    for(let i=0;i<3;i++) stone(u,.1+i*.1,v+d/2+1.42-i*.4,w*.38,.2+i*.2,.52);
-    put('box',u,2.56,v,w*.74,3.53,d*.72,shell);
-    ornament.fusuma(u,v,w,d,episode);
-    for(const side of [-1,1]) {
-      for(let j=0;j<5;j++) {
-        const xx=u+(j/4-.5)*w*.89;
-        put('round',xx,2.62,v+side*d*.47,.195,3.65,.195,vermilion,p.lacquer);
-        put('round',xx,1,v+side*d*.47,.25,.25,.25,gilding);
-        for(let i=0;i<2;i++)put('box',xx,4.14+i*.21,v+side*d*.47,.58+i*.30,.19,.56+i*.18,i?vermilion:gilding);
-      }
-      for(let j=-4;j<=4;j++) {
-        put('box',u+j*w*.081,2.5,v+side*(d*.36+.05),.105,3.45,.11,cinnabar);
-      }
-      for(const height of [1.14,1.92,3.12,3.88])put('box',u,height,v+side*(d*.36+.07),w*.75,.09,.1,vermilion);
-      balustrade(u+side*w*.33,v+d*.5,w*.32,false);
-      balustrade(u+side*w*.5,v,d,true);
-    }
-    let eave=4.5;
-    for(let i=0;i<tiers;i++) {
-      const k=.75**i,rise=2.1*k;
-      put('box',u,eave-.14,v,w*k,.26,d*k,vermilion);
-      roof(u,eave,v,(w+3.2)*k,(d+3)*k,rise,i===tiers-1);
-      if(i<tiers-1) {
-        put('box',u,eave+rise+.16*k,v,w*.57*k,1.18*k,d*.57*k,shell);
-        for(const sign of [-1,1])for(let j=-2;j<=2;j++)put('box',u+j*w*.125*k,eave+rise+.17*k,v+sign*d*.286*k,.11,1.1*k,.1,vermilion);
-      } else {
-        put('finial',u,eave+rise-.1,v,.45,1.22,.45,gilding);
-        put('ball',u,eave+rise+1.25,v,.22,.22,.22,'#ebdec1',pearl);
-      }
-      eave+=2.75*k;
-    }
-  }
-  HALLS.forEach(hall);
+  drawSeaPalace(p,put,bar,ornament);
   // Shell gardens sit off the centre aisle, just behind the welcoming trios.
   for(const s of [-1,1]){
     ornament.pearlShell(s*8.35,0,12.75,1.36,s*.21);
@@ -180,13 +139,6 @@ export function dressRyugu(p) {
   for(const sign of [-1,1])for (let i=-6;i<=6;i++)put('box',i*.64,7.39,GATE_V+sign*1.52,.40,1.03,.1,shell);
   roof(0,8.19,GATE_V,11.4,5.7,2,true);
   put('plane',0,7.37,GATE_V+1.61,3.55,1.28,1,'#ffffff',courtPlaque());
-  // Covered galleries link the twin pavilions to the audience hall.
-  for(const sign of [-1,1]) {
-    const u=sign*10.3;
-    stone(u,.24,-11.2,7.1,.48,2.7);
-    for(const side of [-1,1])for(const dx of [-2.8,0,2.8])put('round',u+dx,1.62,-11.2+side,.14,2.9,.14,vermilion);
-    put('roof',u,3.02,-11.2,8.3,1.29,3.7,jade,p.roofs);
-  }
   for(let i=0;i<9;i++)for(const s of [-1,1]) {
     const v=-7.4+i*3.1;
     if(i%2===0){
@@ -227,7 +179,7 @@ export function dressRyugu(p) {
   const rng=seeded(74852), fanPigment=reefFans(p);
   for(let i=0;i<94;i++){
     const a=rng()*PI*2,r=21+rng()*50,u=r*cos(a),v=r*sin(a);
-    if(Math.abs(u)<4 && v>0)continue;
+    if((Math.abs(u)<4 && v>0) || (Math.abs(u)<20 && v< -6 && v> -42))continue;
     const base=terrainHeight(x+v,z-u)-bed;
     if(i%3) {
       for(let j=0;j<3;j++)put('leaf',u+rng()-.5,base,v+rng()-.5,1+rng(),1+rng()*2.7,1+rng(),'#648d77',p.stems,rng()*PI);
@@ -313,11 +265,14 @@ export function createRyuguLife(scene) {
   const fish=new THREE.InstancedMesh(silverFry(),silver,20);
   const updateFish=createFishSchools(scene,fish.geometry,silver,clock);
   fish.frustumCulled=false;fish.instanceMatrix.setUsage(THREE.DynamicDrawUsage);group.add(fish);
-  const schools=[[-4,-5,8.5,13],[8,8,7,7],[-9,2,12,17],[17,-8,5.6,8],[28,0,10.5,7],[39,5,4,8]];
+  const schools=[[5,-8,8.5,8],[8,8,7,7],[-15,29,12,8],[17,-8,5.6,8],[28,0,10.5,7],[39,5,4,8]];
   const shoal=Array.from({length:fish.count},(_,i)=>({ home:schools[i%schools.length],offset:rng()*3,
     depth:rng()*2.5,phase:rng()*PI*2,size:.34+rng()*.34 }));
   const count=95,bubbles=new Float32Array(3*count),buff=new THREE.BufferAttribute(bubbles,3).setUsage(THREE.DynamicDrawUsage);
-  const streams=Array.from({length:count},(_,i)=>({x:(i%13-6)*3.8,z:sin(i%13*7.5)*16,phase:rng(),pace:.044+rng()*.042}));
+  const streams=Array.from({length:count},(_,i)=>{
+    const x=(i%13-6)*3.8,z=x< -6?(i%2?1:-1)*(22+i%5):sin(i%13*7.5)*16;
+    return {x,z,phase:rng(),pace:.044+rng()*.042};
+  });
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',buff);
   const points=new THREE.Points(geometry,new THREE.PointsMaterial({map:bubbleTexture(),size:.19,transparent:true,opacity:.78,depthWrite:false}));
   points.frustumCulled=false;group.add(points);
@@ -338,23 +293,33 @@ export function createRyuguLife(scene) {
   });
   const shafts=new THREE.InstancedMesh(new THREE.CylinderGeometry(.50,1,1,10,1,true),lightwash,12);
   for(let i=0;i<shafts.count;i++) {
-    const xx=10*sin(i*1.53)+i*2-10,zz=cos(i*1.31)*16;
+    const xx=10*sin(i*1.53)+i*2-10,zz=xx< -5?(i%2?25:-25):cos(i*1.31)*16;
     dum.position.set(xx,14,zz);dum.rotation.set(.077,0,.16);dum.scale.set(1.3+rng()*2.2,30,.7+rng());dum.updateMatrix();shafts.setMatrixAt(i,dum.matrix);
   }
   group.add(shafts);scene.add(group);
+  const pool=palacePoolSurface(clock);scene.add(pool);
   const waterFog=new THREE.Color('#8a9e91');
   return (time,player,camera,voyageTime=time)=>{
     updateFish(time,player,camera,voyageTime);
-    const immersion=player.diveDepth>0 ? THREE.MathUtils.smoothstep(WATER_Y-camera.position.y,0,3.2):0;
+    const dx=wrapDelta(RYUGU.x-player.x),dz=wrapDelta(RYUGU.z-player.z);
+    const localX=RYUGU.x+wrapDelta(camera.position.x-RYUGU.x);
+    const localZ=RYUGU.z+wrapDelta(camera.position.z-RYUGU.z);
+    const enclosed=palaceInteriorAt(localX,localZ,camera.position.y);
+    const waterline=enclosed?PALACE_BED+PALACE_POOL.h:WATER_Y;
+    const inCourtView=dx*dx+dz*dz<110**2;
+    const immersion=player.diveDepth>0 || inCourtView
+      ? THREE.MathUtils.smoothstep(waterline-camera.position.y,0,enclosed ? .65 : 3.2):0;
+    clock.value=time;
+    pool.visible=dx*dx+dz*dz<95**2;
+    if(pool.visible)pool.position.set(player.x+dx+PALACE_POOL.v,bed+PALACE_POOL.h,player.z+dz-PALACE_POOL.u);
     if(immersion>0) {
       scene.fog.color.lerp(waterFog,immersion);
-      scene.fog.density=THREE.MathUtils.lerp(scene.fog.density,.021,immersion);
+      const courtClarity=1-THREE.MathUtils.smoothstep(Math.hypot(dx+PALACE_POOL.v,dz),48,108);
+      scene.fog.density=THREE.MathUtils.lerp(scene.fog.density,.021-.011*courtClarity,immersion);
       scene.environmentIntensity*=1-.23*immersion;
     }
-    const dx=wrapDelta(RYUGU.x-player.x),dz=wrapDelta(RYUGU.z-player.z);
-    group.visible=immersion>0 && dx*dx+dz*dz<110**2;
+    group.visible=immersion>0 && !enclosed && inCourtView;
     if(!group.visible)return;
-    clock.value=time;
     group.position.set(player.x+dx,bed,player.z+dz);
     shoal.forEach(({home,offset,depth,phase,size},i)=>{
       const [x,z,y,r]=home,a=time*.13+phase*.12+offset*.1+x*.3;

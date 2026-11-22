@@ -11,7 +11,7 @@ const {sin,cos,PI}=Math,tau=2*PI;
 const ink='#403b34',smoke='#71685a',silk='#eee4c9',horn='#e9d9b8',ochre='#b39b6b';
 const patches={paper:0,hide:1,beast:2,feather:3,bib:4,lotus:5,scales:6,wave:7,plume:8,coverts:9,mane:10,lining:11};
 const origin=[0,0,0],unit=[1,1,1];
-let material;
+let material,courtSilk;
 export function faunaPigment() {
   if(!material){
     const map=new T.TextureLoader().load(new URL('./assets/bestiary/scroll-fauna.webp',import.meta.url).href);
@@ -20,9 +20,15 @@ export function faunaPigment() {
   }
   return material;
 }
-function part(name,pivot,draw){
-  const f=new InkForm(patches,4,3);draw(f);
-  return {name,pivot,geometry:f.geometry()};
+function part(name,pivot,draw,courtier=false){
+  const f=courtier?new InkForm({paper:0,wave:1,scales:2,lotus:3,lining:4},3,2):new InkForm(patches,4,3);
+  draw(f);
+  if(courtier && !courtSilk){
+    const map=new T.TextureLoader().load(new URL('./assets/bestiary/ryugu-court-silk.webp',import.meta.url).href);
+    map.colorSpace=T.SRGBColorSpace;map.anisotropy=8;
+    courtSilk=brushWash(new T.MeshLambertMaterial({map,vertexColors:true,side:T.DoubleSide}),.25);
+  }
+  return {name,pivot,geometry:f.geometry(),material:courtier?courtSilk:undefined};
 }
 const line=(f,p,r=.012,c=ink)=>f.stroke(p,r,c,'paper',6);
 const tube=(f,p,r,c,tile='paper')=>f.stroke(p,r,c,tile,12);
@@ -165,7 +171,7 @@ function hawk(){
 }
 // The chamberlain's carp head has a high nape sloping into fleshy lips.
 // Its barbels curl forward below the gill covers, clear of the hat cord.
-function courtCarpHead(){
+function courtCarpHead(courtier){
   const f=new InkForm({paper:0,scales:1,feather:0,plume:0},3,2);
   const section=brushProfile([
     [-.335,.021,.059,.167],[-.275,.156,.203,.181],[-.155,.255,.277,.195],
@@ -194,39 +200,76 @@ function courtCarpHead(){
     blade(f,[q(-.156,1.83),[side*.30,.169,-.235],[side*.375,.205,-.305],[side*.415,.243,-.369]],
       [.038,.074,.057,.002],[0,1,0],.017*side,'feather','#c8c0a9');
   }
-  // A pinched eboshi sits high behind the eyes. The ties follow the cheek.
-  loft(f,'y',[[0,.829,-.201,.019,.023],[.021,.796,-.18,.077,.069],[.034,.703,-.132,.102,.10],
-    [.017,.574,-.09,.107,.123],[0,.493,-.057,.151,.149],[0,.401,-.037,.187,.172],
-    [0,.375,-.035,.193,.17]],'plume','#625e55',.037);
+  if(courtier){
+    // The upright koji and long, drooping ei give the court cap its profile.
+    loft(f,'y',[[0,.85,-.155,.052,.065],[0,.82,-.15,.069,.079],[0,.61,-.13,.079,.09],
+      [0,.566,-.077,.133,.161],[0,.509,-.041,.171,.185],[0,.411,-.04,.204,.19]],
+      'plume','#454443',.022);
+    blade(f,[[0,.57,-.18],[0,.685,-.35],[0,.67,-.56],[0,.50,-.71],[0,.30,-.76]],
+      [.058,.088,.104,.09,.034],[1,0,0],.021,'plume','#524d4b');
+    tube(f,[[-.16,.56,-.139],[0,.577,-.153],[.166,.57,-.14]],[.014,.014,.026],'#bea273');
+  }else{
+    loft(f,'y',[[0,.829,-.201,.019,.023],[.021,.796,-.18,.077,.069],[.034,.703,-.132,.102,.10],
+      [.017,.574,-.09,.107,.123],[0,.493,-.057,.151,.149],[0,.401,-.037,.187,.172],
+      [0,.375,-.035,.193,.17]],'plume','#625e55',.037);
+  }
   for(const side of [-1,1])line(f,[[side*.164,.406,-.023],[side*.237,.324,-.046],
     [side*.271,.234,-.073],[side*.256,.112,-.083]],[.013,.011,.008,.004],'#4d4c43');
   return {name:'head',pivot:[0,1.53,.006],geometry:f.geometry(),material:seaPigment()};
 }
-function fishfolk(){
-  const parts=[part('body',origin,f=>{
+function fishfolk(courtier=false){
+  const silkColor=courtier?'#fff9fa':'#f5efdd';
+  const piece=(name,pivot,draw)=>part(name,pivot,draw,courtier);
+  const parts=[piece('body',origin,f=>{
     // Underskirt and kosode leave a stepped hem and an open wrap at the ankle.
     loft(f,'y',[[0,.387,-.016,.25,.157],[0,.32,-.018,.274,.175],[0,.289,-.019,.288,.192],[0,.249,-.025,.32,.23],
-      [0,.18,-.026,.342,.242]],'lining','#fff7dd',.065);
+      [0,.18,-.026,.342,.242]],'lining',courtier?'#c08061':'#fff7dd',.065);
     loft(f,'y',[[0,1.49,-.015,.186,.139],[0,1.409,-.024,.34,.214],[0,1.27,-.025,.362,.241],
       [0,.996,.003,.284,.201],[0,.91,-.015,.283,.213],[0,.67,-.020,.318,.249],[0,.295,-.046,.36,.264]],
-      'wave','#f5efdd',.083);
+      courtier?'lotus':'wave',silkColor,.083);
+    if(courtier){
+      // Pale underrobes and a pleated train emerge beneath the violet ho.
+      blade(f,[[0,.94,-.223],[0,.73,-.29],[0,.42,-.32],[0,.16,-.40],[0,.07,-.66]],
+        [.16,.20,.21,.23,.24],[1,0,0],.022,'wave','#eadbb8');
+      for(const s of [-1,1])line(f,[[s*.12,.87,-.26],[s*.17,.53,-.315],[s*.19,.19,-.393],
+        [s*.21,.072,-.65]],.008,'#b69169');
+    }
     for(const s of [-1,1]){
       const collar=[[s*.145,1.48,.036],[s*.129,1.391,.168],[s*.059,1.286,.222],
         [-s*.013,1.216,.230],[-s*.129,1.095,.194]];
       if(s<0)collar.splice(3,2,[-.005,1.233,.215]); // the underlap disappears beneath the upper panel
       blade(f,collar,collar.map(()=>.041),[1,0,0],.003,'paper',silk,false);
       line(f,collar.map(([x,y,z])=>[x+s*.036,y,z+.004]),.005,'#596355');
-      blade(f,[[s*.196,.23,.10],[s*.223,.138,.12],[s*.228,.086,.21],[s*.227,.055,.302]],
+      if(!courtier)blade(f,[[s*.196,.23,.10],[s*.223,.138,.12],[s*.228,.086,.21],[s*.227,.055,.302]],
         [.063,.076,.089,.014],[1,0,0],.016,'scales');
     }
     loft(f,'y',[[0,1.063,-.006,.311,.239],[0,1.039,-.006,.326,.251],[0,.934,-.006,.323,.247],[0,.908,-.006,.309,.235]],'lotus');
+    if(courtier){
+      for(let i=-3;i<=3;i++){
+        const a=i*.39,x=.327*sin(a),z=.252*cos(a)-.005;
+        f.oval([x,.99,z],[.035,.046,.013],'#665944',[0,a,0]);
+        f.oval([x*1.04,.99,z*1.04],[.027,.036,.012],'#e1d2a4',[0,a,0]);
+      }
+    }
     f.oval([-.014,.985,-.238],[.165,.084,.07],'#c3a574',[0,0,-.12]);
     for(const s of [-1,1])blade(f,[[s*.036,.97,-.258],[s*.079,.84,-.281],[s*.081,.73,-.261]],
       [.043,.058,.028],[1,0,0],.019,'lotus');
-  }),courtCarpHead()];
-  for(const s of [-1,1])parts.push(part('sleeve'+s,[s*.28,1.346,-.011],f=>{
-    loft(f,'y',[[0,.052,0,.084,.11],[s*.082,.008,.009,.133,.142],[s*.137,-.081,.04,.136,.159],
-      [s*.164,-.209,.068,.15,.17],[s*.154,-.354,.084,.143,.182],[s*.131,-.426,.111,.141,.171]],'wave','#eee9d5',.055);
+  }),courtCarpHead(courtier)];
+  if(courtier)for(const s of [-1,1])parts.push(piece('finFoot'+s,[s*.195,.228,.09],f=>{
+    blade(f,[[0,.025,0],[s*.02,-.09,.028],[s*.031,-.16,.11],[s*.03,-.21,.222]],
+      [.063,.076,.09,.015],[1,0,0],.018,'scales');
+  }));
+  for(const s of [-1,1])parts.push(piece('sleeve'+s,[s*.28,1.346,-.011],f=>{
+    if(courtier){
+      loft(f,'y',[[0,.07,0,.10,.13],[s*.09,.016,-.002,.151,.17],[s*.163,-.12,-.018,.195,.23],
+        [s*.19,-.29,-.032,.217,.275],[s*.17,-.43,-.058,.211,.29],[s*.18,-.476,-.08,.203,.293]],
+        'lotus',silkColor,.061);
+      loft(f,'y',[[s*.18,-.48,-.082,.201,.285],[s*.18,-.505,-.082,.19,.274],
+        [s*.18,-.529,-.082,.187,.27]],'lining','#e8c69a',.05);
+    }else{
+      loft(f,'y',[[0,.052,0,.084,.11],[s*.082,.008,.009,.133,.142],[s*.137,-.081,.04,.136,.159],
+        [s*.164,-.209,.068,.15,.17],[s*.154,-.354,.084,.143,.182],[s*.131,-.426,.111,.141,.171]],'wave','#eee9d5',.055);
+    }
     f.oval([s*.13,-.425,.124],[.134,.026,.157],'#575b4e');
     blade(f,[[s*.122,-.392,.156],[s*.15,-.458,.22],[s*.16,-.478,.311],[s*.142,-.438,.363]],
       [.049,.071,.069,.012],[1,0,0],.02,'scales');
@@ -239,10 +282,11 @@ function fishfolk(){
   }));
   return parts;
 }
-export const faunaForms=['elephant','baku','hawk','ox','chicken','hen','fishfolk'];
-export function faunaForm(n){return n.type==='chicken' && n.variant%4!==0?'hen':n.type;}
+export const faunaForms=['elephant','baku','hawk','ox','chicken','hen','fishfolk','courtier'];
+export function faunaForm(n){return n.courtier?'courtier':n.type==='chicken' && n.variant%4!==0?'hen':n.type;}
 export function buildFaunaParts(kind) {
   if(kind==='elephant'||kind==='baku'||kind==='ox')return otsuParts(kind);
+  if(kind==='courtier')return fishfolk(true);
   return kind==='chicken'||kind==='hen'?courtFowl(kind==='hen'):{hawk,fishfolk}[kind]();
 }
 const fowlLateral=new T.Vector3(1,0,0);
@@ -281,7 +325,7 @@ export function poseFaunaPart(part,n,t,out) {
     out.rotation.y=.12*sin(t*.77+n.phase)+.16*ack;
     out.rotation.z=.035*cos(t*1.2+n.phase);
     if(n.type==='hawk')out.rotation.y=n.perched?.68*sin(t*.73+n.phase):.06*cos(q);
-    else if(n.type==='fishfolk')out.rotation.x=.13*sin(t*1.1+n.phase)+.22*ack;
+    else if(n.type==='fishfolk')out.rotation.x=n.courtier?.035*sin(q)+.26*bow+.28*ack:.13*sin(t*1.1+n.phase)+.22*ack;
     else out.rotation.x=.19*bow+.034*sin(q)*walk;
   }else if(key.startsWith('wing')){
     const spread=n.spread,flap=sin(t*6.2+n.phase)*(.42+.30*sin(t*.77+n.phase));
@@ -290,6 +334,10 @@ export function poseFaunaPart(part,n,t,out) {
     out.rotation.z=s*(flap*spread-.33*(1-spread));
     const opening=Math.min(1,spread*1.86);
     out.scale.set((.53+.47*spread)*opening,(.83+.17*spread)*opening,(.65+.35*spread)*opening);
+  }else if(key.startsWith('finFoot')){
+    out.rotation.x=s*.44*sin(q)*walk;
+    out.position.y+=.044*Math.max(0,s*cos(q))*walk;
+    out.position.z+=s*.074*cos(q)*walk;
   }else if(key.startsWith('claw'))out.rotation.x=1.28*n.spread;
   else if(key==='trunk'){
     out.rotation.x=.089*sin(t*.89+n.phase)-.35*bow;

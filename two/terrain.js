@@ -10,7 +10,8 @@ import { SOURCE_STONES, mountainStreamTerrain, mountainStreamWaterAt, inMountain
 import { MAPLE_BRIDGE, mapleDeckHeight, mapleApproachHeight, mapleBridgeFootings } from './maple-crossing.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
 import { plantMountainWoods, growNishiyamaBamboo, isNishiyamaTree } from './mountain-woodland.js';
-import { RYUGU, palaceSolid } from './ryugu-layout.js';
+import { RYUGU, PALACE_BED, PALACE_SHELL, palacePoint, palaceSolid, palaceWaterlineAt, boardingHeightAt } from './ryugu-layout.js';
+import { addSazaeBathSolids, SAZAE_SPRING, SAZAE_POOLS } from './ryugu-shell-bath.js';
 import { KIYOMIZU_APPROACH, kiyomizuTerrain, kiyomizuSolids, kiyomizuClearing, kiyomizuViewTree } from './kiyomizu-layout.js';
 import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, earlierFireRidgeHeight, earlierWestRidgeHeight, kyoRidgeHeight, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow, createFireTreeCeiling, fireTrailDistance } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
@@ -207,7 +208,7 @@ function outerHeight(x,z,base) {
     // holds the palace and its gate at the bottom of the western bay.
     ground-=7*smooth(1,37,-shore);
     const palace=hypot(x-DISTRICTS.ryugu.x,z-DISTRICTS.ryugu.z);
-    ground+=(-28-ground)*(1-smooth(35,99,palace));
+    ground+=(PALACE_BED-ground)*(1-smooth(56,160,palace));
     // The two sides of every ocean seam meet on a common deep shelf.
     const edge=BOUND-max(abs(x),abs(z));
     ground=-8.8+(ground+8.8)*smooth(0,18,edge);
@@ -337,6 +338,7 @@ function groundBeforeBath(x,z) {
 // its front approach keeps the entrance from projecting above the meadow.
 const springLevels=new WeakMap();
 export function springLevel(site) {
+  if(Number.isFinite(site.level))return site.level;
   if(!springLevels.has(site)){
     const front=sitePoint(site,0,site.rz+1.7);
     const base=groundBeforeBath(site.x,site.z);
@@ -375,7 +377,13 @@ export function roadSurfaceHeight(x,z) {
   const step=gateStoneRise(x-RASHOMON.x,z-RASHOMON.z);
   return step>0 ? terrainHeight(RASHOMON.x,RASHOMON.z)+step : terrainHeight(x,z);
 }
-export function waterSurfaceAt(x,z,time=0) {
+export function waterSurfaceAt(x,z,time=0,feet=Infinity) {
+  const shell=SAZAE_SPRING;
+  if(feet>=shell.level-.05 && feet<shell.level+2.4 && Math.abs(x-shell.x)<1.5 &&
+      Math.abs(z-shell.z)<1.5 && poolAt(SAZAE_POOLS,...bathLocal(shell,x,z)))
+    return shell.level+SAZAE_POOLS[0].y;
+  const pocket=palaceWaterlineAt(x,z,feet);
+  if(pocket!==undefined)return pocket;
   const hut=nearbyHut(x,z);
   if(hut?.bath && (x-hut.bath.x)**2+(z-hut.bath.z)**2<KETTLE.widthScale**2) return terrainHeight(hut.x,hut.z)+KETTLE.water;
   const site=nearbyRetreat(x,z);
@@ -1296,6 +1304,10 @@ function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0, bottom = 
     }
   return item;
 }
+for(const part of PALACE_SHELL) {
+  const {x,z}=palacePoint(part.u,part.v);
+  putSolid(x,z,part.d/2,part.w/2,0,PALACE_BED+part.top,part.kind,part.kind!=='wall',0,PALACE_BED+part.bottom);
+}
 for(const [u,v,y,scale] of COURT_CANDLES){
   const base=terrainHeight(COURT.x,COURT.z);
   putSolid(COURT.x+u,COURT.z+v,.18*scale,.18*scale,0,base+y+scale,'oval',false,0,base+y);
@@ -1405,6 +1417,7 @@ gateSolids(terrainHeight,putSolid);
 pilgrimageSolids(terrainHeight,putSolid);
 kiyomizuSolids(terrainHeight,putSolid);
 civicAndBathSolids(terrainHeight,putSolid,springLevel);
+addSazaeBathSolids(putSolid);
 hutSolids(terrainHeight,putSolid);
 portSolids(putSolid);
 lakeHokoraSolids(putSolid);
@@ -1572,17 +1585,25 @@ function highest(x, z, pad, feet, supportOnly, body = 1.42) {
 }
 export const solidHeightAt = (x, z, clearance = 0, y = Infinity) => highest(x, z, clearance, y, false);
 // The swimming line is part of locomotion even when grass mochi passes through scenery.
-export function landscapeFloor(x, z) {
-  return max(max(WATER_Y,mountainStreamWaterAt(x,z))-.57,terrainHeight(x,z));
+export function swimSurfaceAt(x,z,feet) {
+  return palaceWaterlineAt(x,z,feet) ?? max(WATER_Y,mountainStreamWaterAt(x,z));
+}
+export function canDiveAt(x,z,feet) {
+  const line=swimSurfaceAt(x,z,feet);
+  return feet<=line+.01 && line-max(terrainHeight(x,z),boardingHeightAt(x,z))>.74 &&
+    waterSurfaceAt(x,z,0,feet)===line;
+}
+export function landscapeFloor(x, z, feet=Infinity) {
+  return max(swimSurfaceAt(x,z,feet)-.57,terrainHeight(x,z));
 }
 export function groundHeight(x, z, feet = -Infinity) {
   const b = bridgeAt(x, z);
   const deck = b ? bridgeHeight(b, z) : -Infinity;
   const onBridge = b && (feet === -Infinity || feet >= deck - .36);
-  return max(onBridge ? deck : -Infinity, landscapeFloor(x, z), highest(x, z, 0, feet, true));
+  return max(onBridge ? deck : -Infinity, landscapeFloor(x, z, feet), highest(x, z, 0, feet, true));
 }
-export function waterDepth(x,z,time=0) {
-  return max(0, waterSurfaceAt(x,z,time) - terrainHeight(x, z));
+export function waterDepth(x,z,time=0,feet=Infinity) {
+  return max(0, waterSurfaceAt(x,z,time,feet) - terrainHeight(x, z));
 }
 function lowerFace(item,top) {
   if (item.kind === 'roof' || item.kind === 'pagodaEave') return top - (item.thickness ?? Math.max(.10,item.form==='hip'?.09*item.roofRise:0));

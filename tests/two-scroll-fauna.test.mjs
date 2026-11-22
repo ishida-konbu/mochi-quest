@@ -4,7 +4,7 @@ import { createGame } from '../two/game.js';
 import { SCROLL_FAUNA, moveScrollFauna } from '../two/scroll-fauna.js';
 import { recipientContact } from '../two/bestiary.js';
 import { BUILDINGS, REGIONS, TREES, WATER_Y, groundHeight, terrainHeight, treeGround, solidHeightAt, regionAt } from '../two/terrain.js';
-import { RYUGU, palaceSolid } from '../two/ryugu-layout.js';
+import { RYUGU, PALACE_BED, PALACE_LEVELS, palaceSolid, palaceInteriorAt } from '../two/ryugu-layout.js';
 import { updateRyuguResident } from '../two/ryugu-residents.js';
 import { DAIBUTSU } from '../two/pilgrimage-layout.js';
 import { animalRadius, openGround } from '../two/village-paths.js';
@@ -16,11 +16,19 @@ test('all new recipients remain inside their own habitats throughout a circuit',
   assert.deepEqual(Object.fromEntries(Object.entries(Object.groupBy(newcomers,n=>n.type)).map(([type,ns])=>[type,ns.length])),
     {elephant:2,baku:10,hawk:10,ox:10,chicken:40,fishfolk:7});
   const musicians=state.npcs.filter(n=>n.seaResident);
+  const walkedOn=new Set(),wadedIn=new Set();
   for(const n of newcomers)for(let t=0;t<85;t+=1.7){
     moveScrollFauna(n,t);
     if(n.type==='hawk')continue;
     if(n.type==='fishfolk'){
-      assert.ok(Math.hypot(n.x-RYUGU.x,n.z-RYUGU.z)<20 && n.y+2.5*n.stature<WATER_Y,n.id);
+      assert.ok(n.y+2.5*n.stature<WATER_Y,n.id);
+      if(n.courtier){
+        assert.ok(palaceInteriorAt(n.x,n.z,n.y),n.id);
+        if(n.onBoards){
+          assert.equal(n.y,PALACE_BED+PALACE_LEVELS[n.storey].h);
+          walkedOn.add(n.storey);
+        }else wadedIn.add(n.storey);
+      }else assert.ok(Math.hypot(n.x-RYUGU.x,n.z-RYUGU.z)<20 && !palaceInteriorAt(n.x,n.z,n.y),n.id);
       for(const o of musicians){
         updateRyuguResident(o,t);
         assert.ok(Math.hypot(o.x-n.x,o.y-n.y,o.z-n.z)>2.1,n.id+' / '+o.id);
@@ -36,6 +44,8 @@ test('all new recipients remain inside their own habitats throughout a circuit',
       }
     }
   }
+  assert.deepEqual([...walkedOn].sort(),[0,1,2]);
+  assert.deepEqual([...wadedIn],[0]);
 });
 
 function fullBoughClearance(form,toe) {

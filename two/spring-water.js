@@ -203,6 +203,12 @@ function placeWater(parent,rx,rz,level,site,waterWash,pool){
     }
     shape=paintedPool.shape;material=paintedPool.material;
   }
+  if(site?.kind==='sazae'){
+    material=poolMaterial.clone();
+    material.onBeforeCompile=poolMaterial.onBeforeCompile;
+    material.color.set('#83b6a9');material.roughness=.23;
+    material.transparent=true;material.opacity=.77;
+  }
   const surface = new T.Mesh(shape, material);
   surface.scale.set(rx, 1, rz);
   surface.position.set(pool?.u??0,level,pool?.v??0);

@@ -108,11 +108,5 @@ export function prepareSeaOrnaments(p,put,bar) {
     put('box',u,h+.045,v,w*.69,.14*scale,d*.08,'#59574b',p.roofs);
     for(let i=-2;i<=2;i++)put('box',u+i*w*.108,h+.112*scale,v,.044*scale,.042*scale,d*.081,'#ccbb8c',p.fine);
   }
-  const screens=[0,1,2].map(paintedScreen);
-  function fusuma(u,v,w,d,episode) {
-    const ink=screens[episode];
-    put('plane',u,2.53,v+d*.36+.018,w*.71,2.18,1,'#fff9ea',ink);
-    for(const side of [-1,1])put('plane',u+side*(w*.37+.014),2.53,v,d*.66,2.14,1,'#fff9ea',screens[(episode+1)%3],side*PI/2);
-  }
-  return {pearlShell,ridge,fusuma};
+  return {pearlShell,ridge,screen:paintedScreen(1)};
 }

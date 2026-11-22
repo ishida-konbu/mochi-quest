@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { BUILDINGS, BRIDGES, GATES, bridgeHeight, canOccupy, constrainMove,
   groundHeight, overheadHeight, solidHeightAt, staticVolumeAt, terrainHeight } from '../two/terrain.js';
 import { roofProfile } from '../two/architecture.js';
-import { RYUGU, GATE_V, palaceSolid } from '../two/ryugu-layout.js';
+import { RYUGU, GATE_V, PALACE_BED, palacePoint, palaceSolid } from '../two/ryugu-layout.js';
+import { PALACE_SCREENS, PALACE_TABLES, PEARL_LAMPS, screenLeaves, tidePorchHeight } from '../two/ryugu-palace-fittings.js';
 import { DAIBUTSU } from '../two/pilgrimage-layout.js';
 
 test('a rotated shop eave stops ascent outside the room and supports descent on the same pitch',()=>{
@@ -31,7 +32,7 @@ test('the bridge rail stops a fast lateral stride and the passage under the tori
   assert.ok(staticVolumeAt(g.x,g.z,y+.93*g.h,.04,.10));
 });
 
-test('the upper Todaiji roof has its own high ridge and the underwater gallery is open below its roof',()=>{
+test('the upper Todaiji roof has its own high ridge and the submerged palace sill opens below the air pocket',()=>{
   const {x,z}=DAIBUTSU,base=terrainHeight(x,z);
   assert.ok(solidHeightAt(x,z-.7)>base+32);
   const bed=terrainHeight(RYUGU.x,RYUGU.z);
@@ -39,8 +40,26 @@ test('the upper Todaiji roof has its own high ridge and the underwater gallery i
   assert.ok(!solid(0,GATE_V,.3,1.66));
   assert.ok(solid(0,GATE_V,4.66));
   assert.ok(solid(0,GATE_V,9.99));
-  assert.ok(!solid(10.3,-11.2,1.5));
-  assert.ok(solid(10.3,-11.2,4.22));
+  assert.ok(!solid(0,-8,1.4,1.25));
+  assert.ok(solid(0,-8,3.3));
+  assert.ok(solid(10.3,-11.2,3.9));
+  assert.ok(!solid(10.3,-11.2,4.1,1.66));
+});
+
+test('the palace alcoves stop both a camera and a walker on the correct floor',()=>{
+  const screens=PALACE_SCREENS.map(screen=>{
+    const leaf=screenLeaves(screen)[2];
+    return [leaf.u,leaf.v,screen.h];
+  });
+  for(const [u,v,h] of [...PEARL_LAMPS,...PALACE_TABLES,...screens]){
+    const {x,z}=palacePoint(u,v),feet=PALACE_BED+h;
+    assert.ok(!canOccupy(x,z,feet,.26,1.66));
+    assert.ok(staticVolumeAt(x,z,feet+.40,.10,.22));
+    if(h>4)assert.ok(canOccupy(x,z,feet-5,.26,1.66));
+  }
+  const v=-4.8,{x,z}=palacePoint(0,v),roof=PALACE_BED+tidePorchHeight(0,v);
+  assert.ok(staticVolumeAt(x,z,roof-.18,.10,.12));
+  assert.ok(!staticVolumeAt(x,z,PALACE_BED+2,.20,1.25));
 });
 
 test('a stride can clear an initial corner overlap while the back wall stays solid',()=>{

@@ -1,4 +1,5 @@
 import { tideRise } from './pilgrim-bathing-plan.js';
+import { SAZAE_SPRING } from './ryugu-shell-bath.js';
 import { WAYSIDE_HUTS,KETTLE,CHAYA_SITES,CHAYA_SEAT } from './wayside-hut-layout.js';
 import { SUZURI_COURT,suzuriParcel } from './kyo-bath-layout.js';
 import { formerMatsuhamaSeat } from './village-bath-courses.js';
@@ -20,8 +21,8 @@ import { RASHOMON, GATE_STONE, GATE_WING, GATE_LEAF, KYO_FOOD, KYO_ANIMALS, KYO_
 import { makeScrollResidents, updateScrollResident } from './scroll-encounters.js';
 import { SCROLL_FAUNA, makeScrollFauna, moveScrollFauna } from './scroll-fauna.js';
 import { SEA_SPECIES, retiredSeaIds, makeRyuguResidents, updateRyuguResident } from './ryugu-residents.js';
-import { RYUGU } from './ryugu-layout.js';
-import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, shoreDistance, WATER_Y, groundHeight, landscapeFloor, solidHeightAt, constrainMove, canOccupy, staticVolumeAt, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, springLevel, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
+import { RYUGU, PALACE_BED, palacePoint, palaceInteriorAt, boardingHeightAt } from './ryugu-layout.js';
+import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, swimSurfaceAt, canDiveAt, groundHeight, landscapeFloor, solidHeightAt, constrainMove, canOccupy, staticVolumeAt, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, springLevel, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
 import { POUNDING, POUNDING_CREW } from './festival.js';
 import { prepareVillageRoutes, animalRadius, openGround, walkCircuit } from './village-paths.js';
@@ -195,6 +196,8 @@ function makeWorld() {
     }
   }
   for(const site of RETREATS)if(site.regional)placeSpring(site);
+  const shell=object('onsen',SAZAE_SPRING.x,SAZAE_SPRING.z,SAZAE_SPRING.yaw,'onsen-'+SAZAE_SPRING.id);
+  Object.assign(shell,{y:SAZAE_SPRING.level,retreat:SAZAE_SPRING,rank:SAZAE_SPRING.rank,region:SAZAE_SPRING.region});
   prepareVillageRoutes(npcs,objects);
   npcs.push(...makeScrollResidents(), ...makeRyuguResidents(), ...makeScrollFauna());
   return { objects, npcs, inventory };
@@ -658,6 +661,15 @@ export function createGame(snapshot = null) {
     say('三条通知！'); sound('throw');
     return true;
   }
+  function grassFloor(x,z,feet) {
+    // The floating galleries are the shore of this air pocket. Grass mochi
+    // can still pass through its furnishings and walk into the palace bath.
+    if(!palaceInteriorAt(x,z,feet))return landscapeFloor(x,z,feet);
+    const floor=groundHeight(x,z,feet);
+    // An airborne grass mochi can pass through a ceiling. Only a walking
+    // stride may step up to a support that is still above its feet.
+    return !player.grounded && floor>feet+.001?groundHeight(x,z,feet-.35):floor;
+  }
   function changeMode(mode) {
     const leavingGrass = player.mode === 'kusa';
     player.mode = mode;
@@ -669,7 +681,7 @@ export function createGame(snapshot = null) {
       if (leavingGrass) {
         while (staticVolumeAt(player.x,player.z,player.y,bodyRadius(),1.25) && player.diveDepth > 0) {
           player.diveDepth=Math.max(0,player.diveDepth-.15);
-          player.y=WATER_Y-.57-player.diveDepth;
+          player.y=swimSurfaceAt(player.x,player.z,player.y)-.57-player.diveDepth;
         }
         player.grounded=player.diveDepth===0;
       }
@@ -697,7 +709,7 @@ export function createGame(snapshot = null) {
         }
       }
     }
-    const floor = mode === 'kusa' ? landscapeFloor(player.x,player.z) : groundHeight(player.x,player.z,player.y);
+    const floor = mode === 'kusa' ? grassFloor(player.x,player.z,player.y) : groundHeight(player.x,player.z,player.y);
     player.y = Math.max(floor,player.y);
     player.h = player.y-floor;
     player.grounded = player.h <= .001 && player.vy <= 0;
@@ -1026,28 +1038,42 @@ export function createGame(snapshot = null) {
       : crowdMove(player.x,player.z,player.vx*dt,player.vz*dt,player.diveDepth?1.25:tall,radius);
     // In the sea, the waterline is the resting swimming height. A diver holds
     // the chosen depth until the next stroke or a rising seabed lifts them.
-    const swimStroke = player.diveDepth > 0 || (input.dive && player.grounded && player.inWater);
-    if (swimStroke && !player.mount && !player.activity && shoreDistance(player.x,player.z) < 0) {
-      const line = WATER_Y - .57, rate = (input.jump ? -1 : input.dive ? 1 : 0) * 5.4;
-      const free = (xx,zz,yy) => phasing || !staticVolumeAt(xx,zz,yy,radius,1.25) &&
-        shipFits(xx,zz,yy,radius,1.25);
-      let nx = wrapCoord(x), nz = wrapCoord(z);
-      if (!free(nx,nz,player.y)) {
-        if (free(nx,player.z,player.y)) nz = player.z;
-        else if (free(player.x,nz,player.y)) nx = player.x;
-        else { nx=player.x; nz=player.z; }
+    const wasDiving=player.diveDepth>0;
+    const startDive=input.dive && player.grounded && player.inWater && canDiveAt(player.x,player.z,player.y);
+    // A diver crosses the sealed sill at a fixed world altitude. Depth is
+    // measured against the water surface on the side they have just entered.
+    const wasInside=phasing && palaceInteriorAt(player.x,player.z,player.y);
+    const throughWall=wasInside && !palaceInteriorAt(x,z,player.y);
+    const enteringAir=phasing && wasDiving && palaceInteriorAt(x,z,player.y) && player.y>swimSurfaceAt(x,z,player.y);
+    if (!enteringAir && (wasDiving || startDive || throughWall) && !player.mount && !player.activity) {
+      const free=(xx,zz,yy)=>phasing || !staticVolumeAt(xx,zz,yy,radius,1.25) && shipFits(xx,zz,yy,radius,1.25);
+      // Use the front of the swimmer's footprint on the submerged treads,
+      // so each riser lifts the feet just before the torso reaches its face.
+      const bottom=(xx,zz)=>Math.max(terrainHeight(xx,zz)+.16,boardingHeightAt(xx-radius,zz)+.001);
+      const fits=(xx,zz)=>free(xx,zz,Math.max(player.y,bottom(xx,zz)));
+      const strideX=wrapDelta(x-player.x),strideZ=wrapDelta(z-player.z);
+      const steps=Math.max(1,Math.ceil(Math.hypot(strideX,strideZ)/.35));
+      let nx=player.x,nz=player.z;
+      for(let i=0;i<steps;i++){
+        const tx=wrapCoord(nx+strideX/steps),tz=wrapCoord(nz+strideZ/steps);
+        if(fits(tx,tz)){nx=tx;nz=tz;}
+        else if(fits(tx,nz))nx=tx;
+        else if(fits(nx,tz))nz=tz;
+        else break;
       }
-      const limit = Math.max(0,line - terrainHeight(nx,nz) - .16);
-      const stroke=phasing?-rate*dt:crowdLift(nx,nz,player.y,-rate*dt,1.25,radius);
-      let depth = clamp(player.diveDepth - stroke, 0, limit);
-      if (!free(nx,nz,line-depth)) depth = Math.min(limit,player.diveDepth);
-      if (depth > 0 || player.diveDepth > 0) {
-        player.vx=wrapDelta(nx-player.x)/dt; player.vz=wrapDelta(nz-player.z)/dt;
-        player.x=nx; player.z=nz; player.y=Math.max(line-depth,terrainHeight(nx,nz));
-        player.diveDepth=depth; player.inWater=true; player.speed=Math.hypot(player.vx,player.vz);
-        player.grounded=depth===0; player.airStretch=player.h=player.vy=0;
-        return;
-      }
+      const line=swimSurfaceAt(nx,nz,player.y)-.57,bed=bottom(nx,nz);
+      const rate=line-bed>30?7:5.4;
+      const stroke=(input.dive?-1:input.jump?1:0)*rate*dt;
+      const lift=phasing?stroke:crowdLift(nx,nz,player.y,stroke,1.25,radius);
+      const limit=Math.max(0,line-bed);
+      let depth=clamp(line-(player.y+lift),0,limit);
+      if(!free(nx,nz,line-depth))depth=clamp(line-player.y,0,limit);
+      player.vx=wrapDelta(nx-player.x)/dt;player.vz=wrapDelta(nz-player.z)/dt;
+      player.x=nx;player.z=nz;
+      player.diveDepth=depth;player.y=Math.max(bed,line-depth);
+      player.inWater=true;player.speed=Math.hypot(player.vx,player.vz);
+      player.grounded=depth===0;player.airStretch=player.h=player.vy=0;
+      return;
     }
     player.diveDepth=0;
     let land;
@@ -1084,7 +1110,7 @@ export function createGame(snapshot = null) {
     player.speed = Math.hypot(player.vx,player.vz);
     player.x = at.x; player.z = at.z;
     const ship = phasing ? null : voyage.sample(at.x,at.z,player.y);
-    const floor = phasing ? landscapeFloor(at.x,at.z) : Math.max(groundHeight(at.x,at.z,player.y),ship?.floor ?? -Infinity);
+    const floor = phasing ? grassFloor(at.x,at.z,player.y) : Math.max(groundHeight(at.x,at.z,player.y),ship?.floor ?? -Infinity);
     const ceiling = phasing ? Infinity : Math.min(overheadHeight(at.x,at.z,player.y,radius),ship?.ceiling ?? Infinity);
     const wasGrounded = player.grounded;
     if (player.grounded && floor >= player.y-.32 && player.vy<=0) player.y = floor;
@@ -1100,6 +1126,13 @@ export function createGame(snapshot = null) {
     const dy=player.vy*dt;
     const lift=phasing || player.grounded && dy<0 ? dy : crowdLift(at.x,at.z,player.y,dy,tall,radius);
     player.y+=lift;
+    // Grass can leave through the ceiling as well as the side panels. Start
+    // swimming at the same height when the jump reaches the exterior water.
+    if(wasInside && !palaceInteriorAt(at.x,at.z,player.y)){
+      player.diveDepth=Math.max(0,swimSurfaceAt(at.x,at.z,player.y)-.57-player.y);
+      player.grounded=false;player.airStretch=player.h=player.vy=0;
+      return;
+    }
     if(lift!==dy)player.vy=0;
     const headroom = Math.max(floor, ceiling - tall);
     if (player.y > headroom && player.vy > 0) {
@@ -1153,14 +1186,15 @@ export function createGame(snapshot = null) {
   function updateRegion(collectStamp) {
     const otowa=onMountOtowa(player.x,player.z);
     const region = otowa ? capital : REGIONS[regionAt(player.x,player.z)];
-    const offshore = region.id === 'ryugu' && (player.diveDepth < 1 || player.y > terrainHeight(region.x,region.z) + 8);
+    const inPalace=palaceInteriorAt(player.x,player.z,player.y);
+    const offshore = region.id === 'ryugu' && !inPalace && (player.diveDepth < 1 || player.y > terrainHeight(region.x,region.z) + 8);
     state.region = offshore ? '竜宮沖' : otowa && kiyomizuClearing(player.x,player.z) ? KIYOMIZU.name : region.name;
     state.regionId = region.id;
     state.onLake = lakeRadius(player.x,player.z)<1.29;
     player.night = Math.max(seasonAt(player.x,player.z,climate).moon,kyoNight(state.time,player)*kyoInfluence(player.x,player.z)) > .48;
-    player.inWater = player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z,state.time) > .14 && player.y < waterSurfaceAt(player.x,player.z,state.time) - .08;
-    if (region.id === 'ryugu' && (offshore || player.y > terrainHeight(region.x,region.z) + 3)) return;
-    if (!collectStamp || state.visited.includes(region.id) || distance(player,region)>STAMP_RADIUS || player.h>3) return;
+    player.inWater = player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z,state.time,player.y) > .14 && player.y < waterSurfaceAt(player.x,player.z,state.time,player.y) - .08;
+    if (region.id === 'ryugu' && !inPalace && (offshore || player.y > terrainHeight(region.x,region.z) + 3)) return;
+    if (!collectStamp || state.visited.includes(region.id) || !inPalace && distance(player,region)>STAMP_RADIUS || player.h>3) return;
     state.visited.push(region.id);
     const text = state.visited.length === REGIONS.length ? '十七景踏破！ 旅の印がすべて揃った。' : region.name+'の旅の印をもらった。';
     emit('stamp',{ id:region.id, text }); message(text); sound('pickup');
@@ -1235,7 +1269,7 @@ export function createGame(snapshot = null) {
   }
   function step(elapsed, input = {}) {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return;
-    if (input.jump && !heldJump) jump();
+    if (input.jump && !input.dive && !heldJump) jump();
     heldJump = !!input.jump;
     // Bounded substeps preserve contacts, landings and projectiles on a slow frame.
     let remaining = Math.min(.1, elapsed);
@@ -1334,7 +1368,7 @@ export function createGame(snapshot = null) {
     for (const key of Object.keys(BUFF_TIME)) player.buffs[key]=p.buffs[key];
     voyage.update(data.time);
     if (player.mode === 'kusa') {
-      const floor = landscapeFloor(player.x,player.z);
+      const floor = grassFloor(player.x,player.z,player.y);
       // Older saves can start on a roof. Resume from the saved altitude and fall through it.
       player.h = clamp(p.y-floor,0,CEILING);
       player.y = floor+player.h;
@@ -1366,11 +1400,24 @@ export function createGame(snapshot = null) {
       const ship=voyage.sample(player.x,player.z,feet);
       player.y=Math.max(groundHeight(player.x,player.z,feet),ship?.floor ?? -Infinity)+player.h;
     }
-    if (data.version >= 5 && finite(p.diveDepth, .000001, 100) && !p.mount && shoreDistance(p.x,p.z) < 0) {
-      const line=WATER_Y-.57;
-      player.diveDepth=clamp(p.diveDepth,0,Math.max(0,line-terrainHeight(p.x,p.z)-.16));
-      player.y=line-player.diveDepth; player.grounded=player.diveDepth===0;
-      player.vy=player.h=player.airStretch=0;
+    if (data.version >= 5 && finite(p.diveDepth,.000001,100) && !p.mount) {
+      let line=swimSurfaceAt(p.x,p.z,p.y)-.57;
+      // Older journals store an ocean-relative depth even where the new
+      // palace now encloses dry air. Resume these swimmers at its open door.
+      const legacyPocket=palaceInteriorAt(p.x,p.z,p.y) && Math.abs(line-p.diveDepth-p.y)>.05;
+      if(legacyPocket || Math.abs(p.x-RYUGU.x)<44 && Math.abs(p.z-RYUGU.z)<24 &&
+          p.mode!=='kusa' && staticVolumeAt(p.x,p.z,p.y,bodyRadius(),1.25)){
+        Object.assign(player,palacePoint(0,-6.5));
+        line=swimSurfaceAt(player.x,player.z,PALACE_BED+1)-.57;
+        player.diveDepth=line-(PALACE_BED+1);
+      }else{
+        const floor=Math.max(terrainHeight(p.x,p.z)+.16,boardingHeightAt(p.x-bodyRadius(),p.z)+.001);
+        player.diveDepth=clamp(p.diveDepth,0,Math.max(0,line-floor));
+      }
+      if(player.diveDepth>0){
+        player.y=line-player.diveDepth;player.grounded=false;
+        player.vy=player.h=player.airStretch=0;
+      }
     }
     // Older journals recorded points without identifying recipients. The score survives.
     const ids=new Set(npcs.map(n=>n.id));
