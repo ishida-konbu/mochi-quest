@@ -1,6 +1,7 @@
 import * as T from './vendor/three.module.min.js';
 import { COURT, COURT_BRAZIERS } from './retreat-layout.js';
 import { watchPose } from './court-patrol.js';
+import { kyoClock } from './kyo-layout.js';
 import { terrainHeight,groundHeight,wrapDelta } from './terrain.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { sculptHead,brushWash } from './scroll-sculpt.js';
@@ -212,8 +213,9 @@ export function dressCourtWatch(scene,p,f){
     const dx=wrapDelta(COURT.x-player.x),dz=wrapDelta(COURT.z-player.z);
     root.visible=dx*dx+dz*dz<107**2;if(!root.visible)return;
     root.position.set(player.x+dx,base,player.z+dz);
+    const watchTime=kyoClock(time,player);
     for(const [i,g] of guards.entries()){
-      const q=watchPose(time,i,poses[i]),stride=sin(time*5.23+i)*q.walk;
+      const q=watchPose(watchTime,i,poses[i]),stride=sin(time*5.23+i)*q.walk;
       const floor=groundHeight(COURT.x+q.x,COURT.z+q.z,base+1.09)-base;
       g.root.position.set(q.x,floor,q.z);g.root.rotation.y=q.yaw;
       g.torso.position.y=.018*Math.abs(stride)+.006*cos(time*2.3+i);

@@ -91,7 +91,7 @@ export function createStreetCrowd(scene) {
     if(!crowd.visible){distance.end();return;}
     counts.fill(0);footwear.count=0;
     crowd.position.set(player.x+dx-DISTRICTS.kyo.x,0,player.z+dz-DISTRICTS.kyo.z);
-    const night=kyoNight(time);
+    const night=kyoNight(time,player);
     for(const w of walkers){
       if(night>w.curfew)continue;
       const t=THREE.MathUtils.euclideanModulo(w.phase+w.direction*time*w.pace/w.length,1);
