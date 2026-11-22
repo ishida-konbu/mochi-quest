@@ -30,7 +30,7 @@ import { roofShell, atticWalls, timberLining } from './roof-shell.js';
 import { wetStone } from './stone-water.js';
 import { prepareForest } from './forest.js';
 import { furnishRoom } from './interiors.js';
-import { FOREST_LAKE, SNOW_PASS, lakeRadius, lakeRadiusGLSL } from './snow-country.js';
+import { FOREST_LAKE, LAKE_ISLET, SNOW_PASS, lakeRadius, lakeRadiusGLSL, isletRadius, isletRadiusGLSL } from './snow-country.js';
 import * as THREE from './vendor/three.module.min.js';
 import { dressSeasonalPlaces, seasonalWeather } from './seasons.js';
 import { winterSurfGLSL } from './winter-surf.js';
@@ -215,7 +215,8 @@ function* landscape(scene, art) {
         const radius=tree.h*.67+2.3;
         canopy=max(canopy,1-((x-tree.x)**2+(z-tree.z)**2)/(radius*radius));
       }
-      const lakeBank=max(0,1-abs(lakeRadius(x,z)-1)*FOREST_LAKE.rz/4.8);
+      const lakeBank=max(0,1-abs(lakeRadius(x,z)-1)*FOREST_LAKE.rz/4.8,
+        1-abs(isletRadius(x,z)-1)*LAKE_ISLET.rz/2.1);
       surface.push(canopy,max(lakeBank,max(0,1-abs(river-.2)/7.3),max(0,min(1,(7.6-coast)/8.2))));
       scroll.push(scrollCoverage(x,z));
       seasonAt(x,z,season);
@@ -354,6 +355,7 @@ function makeWater(scene, art, panorama) {
       varying vec3 vWorld;
       ${hullWaterGLSL}
       ${lakeRadiusGLSL}
+      ${isletRadiusGLSL}
       #include <fog_pars_fragment>
       float hash(vec2 v){return fract(sin(dot(v,vec2(41.23,73.11)))*21314.5);}
       float curl(vec2 at,float phase){
@@ -393,7 +395,9 @@ function makeWater(scene, art, panorama) {
         float lake=2.;
         if(all(lessThan(abs(p-vec2(${FOREST_LAKE.x}.,${FOREST_LAKE.z}.)),vec2(${FOREST_LAKE.rx*2}.,${FOREST_LAKE.rz*2}.)))){
           lake=lakeRadius(p);
-          inside=max(inside,(1.-lake)*${FOREST_LAKE.rz}.);
+          float lakeDepth=(1.-lake)*${FOREST_LAKE.rz}.;
+          if(lake<.62)lakeDepth=min(lakeDepth,(isletRadius(p)-1.)*${LAKE_ISLET.rz}.);
+          inside=max(inside,lakeDepth);
         }
         float depth=smoothstep(-1.8,6.8,inside);
         vec2 along=normalize(vec2(1.,(9./51.)*cos(p.x/51.)+(3.3/25.)*cos(p.x/25.)));
@@ -2016,7 +2020,7 @@ export function* prepareWorld(scene) {
   dressRyugu(painter);
   yield;
   const updateWaterfalls=createMountainWaterfalls(scene);
-  const updateLake=createLakeShore(scene);
+  const updateLake=createLakeShore(scene,art);
   const updateShrines=pilgrimageLife(scene), updatePalace=createRyuguLife(scene);
   const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene), updateHuts=createWaysideHuts(scene);
   const updateBathTableaux=createBathTableaux(scene);
@@ -2071,7 +2075,7 @@ export function* prepareWorld(scene) {
           }
           if(data.foliageCount) b.mesh.count=squared>(105+b.radius)**2?Math.ceil(data.foliageCount*.40):data.foliageCount;
         }
-        powder(time,player,atmosphere.climate.value.x);
+        powder(time,camera,atmosphere.climate.value.x);
       }
       festival.root.visible=(player.x-POUNDING.x)**2+(player.z-POUNDING.z)**2<105**2;
       if (festival.root.visible) festival.update(time);

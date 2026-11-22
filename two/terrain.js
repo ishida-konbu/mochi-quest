@@ -1,5 +1,6 @@
-import { SNOW_TOWN, FOREST_LAKE, SNOW_PASS, snowPoint, lakeRadius, lakePoint } from './snow-country.js';
+import { SNOW_TOWN, FOREST_LAKE, SNOW_PASS, LAKE_ISLET, isletRadius, snowPoint, lakeRadius, lakePoint } from './snow-country.js';
 import { LAKE_WILLOWS, LAKE_ANIMALS } from './lake-grove-layout.js';
+import { lakeHokoraSolids } from './lake-hokora-layout.js';
 import { WINTER_REEFS } from './winter-reefs.js';
 import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
 import { SOURCE_STONES, mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
@@ -302,6 +303,19 @@ export function springRadius(x,z) {
   const u=(x-SNOW_SPRING.x)/SNOW_SPRING.rx,v=(z-SNOW_SPRING.z)/SNOW_SPRING.rz,r=hypot(u,v);
   return r>2?r:r/snowBathLip(Math.atan2(v,u));
 }
+function isletTerrain(x,z,bed) {
+  const r=isletRadius(x,z);
+  if(r>=1.86)return bed;
+  // A level crown carries the shrine stones. The sandy rim continues under
+  // water at the same grade, so a swimmer can walk ashore from any side.
+  const crown=.55, rise=LAKE_ISLET.top-WATER_Y;
+  if(r<=1){
+    const t=sat((r-crown)/(1-crown));
+    return LAKE_ISLET.top-rise*t*t*(2-t);
+  }
+  const ledge=WATER_Y-rise*(r-1)/(1-crown);
+  return ledge+(bed-ledge)*smooth(1,1.86,r);
+}
 function groundBeforeBath(x,z) {
   // The littoral shelf makes a walkable, continuous transition from the
   // hills through the reed beds into deep swimming water at sea level.
@@ -309,6 +323,7 @@ function groundBeforeBath(x,z) {
     const r=lakeRadius(x,z);
     if(r<1.4){
       const shelf=WATER_Y-7.2*(1-smooth(.17,1,r)) + max(0,r-1)*12;
+      if(r<.62)return isletTerrain(x,z,shelf);
       return shelf+(landHeight(x,z)-shelf)*smooth(1.06,1.40,r);
     }
   }
@@ -345,7 +360,7 @@ export function terrainHeight(x,z) {
 // Root a plant on the actual painted triangle. Across the crease of a rocky
 // spur the analytic surface can differ visibly from its sampled vertices.
 const groundSpacing=2*BOUND/(TERRAIN_TILES*TERRAIN_SUBDIVISIONS);
-export const springGround=springGroundSurvey([...RETREATS.filter(s=>s.rank==='main'),SNOW_SPRING],
+export const springGround=springGroundSurvey([...RETREATS.filter(s=>s.rank==='main'),SNOW_SPRING,LAKE_ISLET],
   BOUND,groundSpacing,TERRAIN_SUBDIVISIONS);
 export function terrainMeshHeight(x,z,heightAt=terrainHeight) {
   return springGround.height(x,z,heightAt);
@@ -1369,6 +1384,7 @@ kiyomizuSolids(terrainHeight,putSolid);
 civicAndBathSolids(terrainHeight,putSolid);
 hutSolids(terrainHeight,putSolid);
 portSolids(putSolid);
+lakeHokoraSolids(putSolid);
 for(const {x,z,rx,rz,yaw,top,rise} of SOURCE_STONES){
   putSolid(x,z,rx,rz,yaw,top,'springRock',true).roundHeight=rise;
 }

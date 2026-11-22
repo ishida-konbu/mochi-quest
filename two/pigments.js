@@ -2,6 +2,7 @@ import { KYO_HILL_SHEET } from './higashiyama.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { PEACH_BOUT } from './scroll-encounters.js';
 import { groundPrintGLSL } from './ground-print.js';
+import { LAKE_HOKORA, LAKE_ISLET } from './snow-country.js';
 import { groundImpressions } from './scroll-paper.js';
 import * as THREE from './vendor/three.module.min.js';
 
@@ -26,6 +27,7 @@ export function loadPigments() {
     trail: read('trail'),
     bark: read('pine-bark'),
     rock: read('granite'),
+    escarpment: read('pass-escarpment',false),
     cedar: read('cedar'),
     tile: read('kawara'),
     herbs: read('wayside-herbs', false),
@@ -43,11 +45,12 @@ export function meadowMaterial(art) {
     shader.uniforms.hillPainting = { value:art.hillPainting };
     shader.uniforms.woodFloor = { value: art.forest };
     shader.uniforms.bankStones = { value: art.gravel };
+    shader.uniforms.escarpmentInk = { value: art.escarpment };
     shader.vertexShader =
       'attribute float ridgeRelief; varying float vRidge; attribute float scrollAmount; varying float vScroll; varying vec3 inkPoint; attribute vec2 terrainMix; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
       shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRidge=ridgeRelief; vScroll=scrollAmount; inkPoint=position; vTerrainMix = terrainMix; vSeasons = seasons; incline=1.-abs(normal.y);');
     shader.fragmentShader =
-      groundPrintGLSL + 'uniform sampler2D fieldInk, woodFloor, bankStones, impressions, hillPainting; varying float vRidge; varying float vScroll; varying vec3 inkPoint; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
+      groundPrintGLSL + 'uniform sampler2D fieldInk, woodFloor, bankStones, impressions, hillPainting, escarpmentInk; varying float vRidge; varying float vScroll; varying vec3 inkPoint; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
       shader.fragmentShader.replace(
         '#include <map_fragment>',
         `
@@ -148,6 +151,44 @@ export function meadowMaterial(art) {
         float ledge=smoothstep(.14,.55,incline);
         snow*=1.-ledge*(.13+.29*mark.g)-.044*mark.r;
         ground=mix(ground,snow,snowCover*(1.-.39*ledge));
+        vec2 islet=field-vec2(${LAKE_ISLET.x}.,${LAKE_ISLET.z}.);
+        if(all(lessThan(abs(islet),vec2(17.,13.))) && inkPoint.y>-.5){
+          // Dull celadon moss follows the dry crown. The landing and the
+          // worn way up to the stone treads retain the paper of the sand.
+          vec2 court=field-vec2(${LAKE_HOKORA.x},${LAKE_HOKORA.z});
+          vec2 front=vec2(${Math.sin(LAKE_HOKORA.yaw).toFixed(5)},${Math.cos(LAKE_HOKORA.yaw).toFixed(5)});
+          float across=dot(court,vec2(front.y,-front.x)), along=dot(court,front);
+          float mossPool=groundWash(field*.36+.28*groundWash(field*.89));
+          float worn=(1.-smoothstep(.68,1.65,abs(across+.35*sin(along*.7))))*smoothstep(.7,2.4,along);
+          float moss=smoothstep(.46,1.48,inkPoint.y+.51*mossPool)*(1.-worn);
+          vec3 patina=mix(vec3(.265,.322,.179),vec3(.42,.466,.278),mossPool);
+          ground=mix(ground,patina*(.77+.31*luma)*(1.-.43*mark.r),moss*(.65+.27*mossPool));
+          float dampGravel=1.-smoothstep(.37,1.0,inkPoint.y+.16*mossPool);
+          ground=mix(ground,vec3(.39,.385,.30)*(.75+.68*luma),dampGravel*.48);
+        }
+        // Both exposures belong to one continuous survey: the east–west
+        // escarpment above the lake turns south at the head of the maple valley.
+        // Project onto elevation so upright slate joints retain their length.
+        if(field.x>0. && field.x<314. && field.y>=-308. && field.y< -189.){
+          float longFace=(1.-smoothstep(1.1,3.8,abs(field.y+303.75)))*(1.-smoothstep(309.,312.,field.x));
+          float returnFace=(1.-smoothstep(1.1,3.8,abs(field.x-308.75)))*smoothstep(-307.,-304.,field.y);
+          float station=field.x+max(0.,field.y+305.);
+          vec3 face=cross(dFdx(inkPoint),dFdy(inkPoint));
+          float grade=1.-abs(face.y)*inversesqrt(max(dot(face,face),1.e-12));
+          float exposure=max(longFace,returnFace)*smoothstep(.13,.54,grade)*smoothstep(1.,10.,station);
+          if(exposure>.001){
+            vec2 wall=vec2((station+8.)/448.,(inkPoint.y+2.)/48.);
+            vec3 slate=texture2D(escarpmentInk,wall).rgb;
+            // Up close pale mineral grains interrupt the dry tip of a stroke.
+            // At walking distance the baked mip chain preserves the larger folds.
+            float close=1.-smoothstep(3.,25.,distance(cameraPosition,inkPoint));
+            if(close>.01){
+              float grain=groundWash(vec2(station,inkPoint.y)*9.4);
+              slate*=1.+.14*close*(grain-.5);
+            }
+            ground=mix(ground,slate*vec3(1.13,1.24,1.36)+vec3(.023,.028,.034),exposure);
+          }
+        }
         diffuseColor.rgb *= ground;
       `,
       );

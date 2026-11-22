@@ -1,6 +1,7 @@
+import { buildLakeHokora } from './lake-hokora.js';
 import * as T from './vendor/three.module.min.js';
 import { animateNPC, makeNPC } from './actors.js';
-import { FOREST_LAKE, lakePoint, lakeRadiusGLSL } from './snow-country.js';
+import { FOREST_LAKE, LAKE_ISLET, isletPoint, isletRadiusGLSL, lakePoint, lakeRadiusGLSL } from './snow-country.js';
 import { LAKE_ANIMALS, LAKE_WILLOWS } from './lake-grove-layout.js';
 import { seeded, terrainMeshHeight, wrapDelta } from './terrain.js';
 import { waterWave } from './shoreline.js';
@@ -120,11 +121,11 @@ function willow(tree,brush){
     }
   }
 }
-function reedBed(brush,angle,patchRadius,rng){
-  const [cx,cz]=lakePoint(angle,.975);
+function reedBed(brush,angle,patchRadius,rng,shorePoint=lakePoint,stems=48){
+  const [cx,cz]=shorePoint(angle,.975);
   const sienna=['#a08d62','#c3ad7c','#cbbf93','#907b55'];
   const greens=['#748354','#99a16d','#85956a','#a6ac7d'];
-  for(let i=0;i<48;i++){
+  for(let i=0;i<stems;i++){
     const a=rng()*tau,rad=Math.sqrt(rng())*patchRadius;
     const x=cx+cos(a)*rad,z=cz+sin(a)*rad*.66;
     const y=terrainMeshHeight(x,z)-.09;
@@ -194,7 +195,7 @@ function reflectionMaterial(clock){
   const mat=new T.ShaderMaterial({
     uniforms:T.UniformsUtils.merge([T.UniformsLib.fog,{time:{value:0}}]),
     transparent:true,side:T.DoubleSide,depthWrite:false,fog:true,vertexColors:true,
-    vertexShader:`attribute float flex;uniform float time;varying vec2 marking;varying vec3 tint;
+    vertexShader:`attribute float flex;uniform float time;varying vec2 marking;varying vec3 tint,reflectionSource;
       #include <fog_pars_vertex>
       void main(){
         vec3 p=position;${breeze}
@@ -203,17 +204,31 @@ function reflectionMaterial(clock){
         // Project the reflected vertices onto the real water, so shoreline
         // and rock depth still occlude the image without a second scene pass.
         vec3 foot=mix(cameraPosition,wp,h/(h+max(.02,wp.y-${level})));
-        marking=foot.xz;tint=color;
+        marking=foot.xz;tint=color;reflectionSource=wp;
         foot.x+=.075*sin(foot.z*1.14+time*.68)+.028*sin(foot.z*3.3-time*.81);
         foot.y=${level}+.024+.014*sin(foot.x*.54+foot.z*.31-time*1.23);
         vec4 mvPosition=viewMatrix*vec4(foot,1.);gl_Position=projectionMatrix*mvPosition;
         #include <fog_vertex>
       }`,
-    fragmentShader:`uniform float time;varying vec2 marking;varying vec3 tint;
+    fragmentShader:`uniform float time;varying vec2 marking;varying vec3 tint,reflectionSource;
       ${lakeRadiusGLSL}
+      ${isletRadiusGLSL}
       #include <fog_pars_fragment>
       void main(){
-        if(cameraPosition.y<=${level} || lakeRadius(marking)>1.)discard;
+        if(cameraPosition.y<=${level} || lakeRadius(marking)>1. || isletRadius(marking)<1.)discard;
+        // The raised island shore masks the lower reflection of its shrine.
+        // Check the reflected ray before letting ink reach the shallow gravel.
+        if(abs(reflectionSource.x - ${LAKE_ISLET.x.toFixed(1)})<8. && abs(reflectionSource.z - ${LAKE_ISLET.z.toFixed(1)})<7.){
+          for(int j=1;j<=6;j++){
+            float t=float(j)/7.;
+            float r=isletRadius(mix(marking,reflectionSource.xz,t));
+            if(r<1.){
+              float u=clamp((r-.55)/.45,0.,1.);
+              float bank=${LAKE_ISLET.top.toFixed(2)}-${(LAKE_ISLET.top-level).toFixed(2)}*u*u*(2.-u);
+              if(bank>mix(${level},reflectionSource.y,t)+.02)discard;
+            }
+          }
+        }
         float ripple=sin(marking.y*4.2+.6*sin(marking.x*.45)+time*.62);
         float brush=smoothstep(-.85,.7,ripple);
         gl_FragColor=vec4(mix(vec3(.025,.07,.065),tint,.16),.098+.15*brush);
@@ -222,7 +237,7 @@ function reflectionMaterial(clock){
         #include <colorspace_fragment>
       }`
   });
-  mat.uniforms.time=clock;return mat;
+  mat.uniforms.time=clock;mat.defaultAttributeValues.flex=[0];return mat;
 }
 
 function rippleArc(){
@@ -315,16 +330,34 @@ function stoneSkipping(group){
   };
 }
 
-export function createLakeShore(scene){
+export function createLakeShore(scene,art){
   const shore=new T.Group(),actors=new T.Group(),clock={value:0};
   shore.name='湖岸の柳と葦';actors.name='水切りをする蛙と兎';
   scene.add(shore);shore.add(actors);shore.visible=false;
   const mat=leavesMaterial(clock),mirror=reflectionMaterial(clock);
+  shore.add(buildLakeHokora(art,mirror));
   const bank=new Brush(),pads=new Brush(),rng=seeded(0x3fbe22);
   for(const [a,r] of [[.14,5.5],[.32,3.8],[.65,2.4],[1.04,2.2],[1.33,3.2],[1.85,5.8],[2.04,4.5],
     [2.77,3],[3.5,6.2],[3.88,4.1],[4.04,3.2],[4.66,4.5],[5.42,6.2],[5.61,4.2]])
     reedBed(bank,a,r,rng);
   for(const a of [.23,.64,1.03,1.32,1.50,2.68,3.42,4.44,5.51])lilyRaft(pads,a,rng);
+  // Keep the walk from the southern shoal to the steps clear. Two small
+  // tufts frame the outward face, rather than forming a fence around it.
+  for(const angle of [3.05,5.37])reedBed(bank,angle,1.28,rng,isletPoint,12);
+  // Broken swathes of sedge settle into the island slopes, keeping the sandy
+  // southern landing and the walk to the porch open.
+  const grass=['#889069','#939873','#a1a47b','#788460'];
+  for(const angle of [-.78,-1.21,-2.22,-2.73,2.63,.23]){
+    for(let j=0;j<21;j++){
+      const [x,z]=isletPoint(angle+(rng()-.5)*.31,.62+rng()*.26);
+      const foot=v(x,terrainMeshHeight(x,z)-.021,z),h=.13+.20*rng();
+      for(let k=0;k<5;k++){
+        const a=rng()*tau;
+        bank.leaf(foot,v(h*(.36+cos(a)*.72),h*(.53+rng()*.51),h*sin(a)*.7),
+          .012+.013*rng(),.063,grass[(j+k)%4],.27);
+      }
+    }
+  }
   const reedMesh=new T.Mesh(bank.geometry(),mat);
   reedMesh.receiveShadow=true;shore.add(reedMesh);
   const padMesh=new T.Mesh(pads.geometry(),mat);padMesh.receiveShadow=true;shore.add(padMesh);

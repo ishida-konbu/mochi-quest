@@ -1,5 +1,5 @@
 import { MOUNTAIN_STREAMS } from './mountain-streams.js';
-import { FOREST_LAKE, lakePoint, lakeRadius } from './snow-country.js';
+import { FOREST_LAKE, LAKE_HOKORA, isletPoint, lakePoint, lakeRadius } from './snow-country.js';
 import { isNishiyamaTree } from './mountain-woodland.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { DAIBUTSU, INARI_SANCTUARY, PEACH_TREES } from './pilgrimage-layout.js';
@@ -26,7 +26,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=winter-coast', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=islet-winter-coast', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -117,6 +117,27 @@ function paintLake(g) {
     g.quadraticCurveTo(u-.34*w,v+.6,u+w,v-.2);
     g.strokeStyle=i%3?'#dde0c980':'#53797b75';g.lineWidth=.8;g.stroke();
   }
+  // The paper-water is printed first; reserve a small, ochre-edged mark for
+  // the actual dry island. The two brushstrokes at its crown are the roof.
+  g.beginPath();
+  for(let i=0;i<=60;i++){
+    const [x,z]=isletPoint(Math.PI*i/30);
+    if(i)g.lineTo(toX(x),toX(z));else g.moveTo(toX(x),toX(z));
+  }
+  g.closePath();
+  g.fillStyle='#bec09b';g.fill();
+  g.lineWidth=.7;g.strokeStyle='#7a886e';g.stroke();
+  g.beginPath();
+  for(let i=0;i<=24;i++){
+    const [x,z]=isletPoint(.1+i*.073,1.13);
+    if(i)g.lineTo(toX(x),toX(z));else g.moveTo(toX(x),toX(z));
+  }
+  g.strokeStyle='#dcdcc0';g.lineWidth=.65;g.stroke();
+  g.translate(toX(LAKE_HOKORA.x),toX(LAKE_HOKORA.z));g.rotate(-LAKE_HOKORA.yaw);
+  g.fillStyle='#665446';
+  g.beginPath();g.moveTo(-1.8,.5);g.lineTo(-1.12,-1.04);
+  g.lineTo(1.10,-.96);g.lineTo(1.82,.52);g.lineTo(.17,.76);g.closePath();g.fill();
+  g.fillStyle='#e1c098';g.fillRect(-.75,-.72,1.45,.39);
   g.restore();
 }
 

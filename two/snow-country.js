@@ -27,6 +27,29 @@ export const lakeRadiusGLSL = `float lakeRadius(vec2 p){
   return length(uv)/(1.+.095*cos(3.*a+.48)+.066*sin(2.*a-.73)+.039*sin(5.*a+.28));
 }`;
 
+// A silt spit faces the southern approach. A short rocky point on the
+// opposite shore keeps the little island asymmetric in the reflection.
+export const LAKE_ISLET = { x:FOREST_LAKE.x, z:FOREST_LAKE.z, rx:12.2, rz:9, top:2.42 };
+export const LAKE_HOKORA = { x:LAKE_ISLET.x-1.2, z:LAKE_ISLET.z-2.3, y:LAKE_ISLET.top, yaw:.38 };
+function isletShore(a) {
+  return 1+.11*Math.cos(3*a+.72)+.07*Math.sin(2*a-.42)-.043*Math.cos(4*a-.68);
+}
+export function isletRadius(x,z) {
+  const u=(x-LAKE_ISLET.x)/LAKE_ISLET.rx, v=(z-LAKE_ISLET.z)/LAKE_ISLET.rz;
+  if(Math.abs(u)>2.3 || Math.abs(v)>2.3)return Infinity;
+  return Math.hypot(u,v)/isletShore(Math.atan2(v,u));
+}
+export function isletPoint(a,r=1) {
+  const radius=r*isletShore(a);
+  return [LAKE_ISLET.x+LAKE_ISLET.rx*radius*Math.cos(a), LAKE_ISLET.z+LAKE_ISLET.rz*radius*Math.sin(a)];
+}
+export const isletRadiusGLSL = `float isletRadius(vec2 p){
+  vec2 uv=(p-vec2(${LAKE_ISLET.x}.,${LAKE_ISLET.z}.))/vec2(${LAKE_ISLET.rx.toFixed(1)},${LAKE_ISLET.rz.toFixed(1)});
+  if(dot(uv,uv)<1.e-12)return 0.;
+  float a=atan(uv.y,uv.x);
+  return length(uv)/(1.+.11*cos(3.*a+.72)+.07*sin(2.*a-.42)-.043*cos(4.*a-.68));
+}`;
+
 // The cart road climbs from the sea, crosses the divide, and descends to Kyoto.
 // On the seaward face a long hairpin traverses the spur before turning inland.
 export const SNOW_PASS = [

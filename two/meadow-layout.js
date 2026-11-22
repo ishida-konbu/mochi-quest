@@ -8,6 +8,8 @@ import { HERBS, HERB_FORMS } from './meadow-herbs.js';
 import { KIYOMIZU, kiyomizuClearing } from './kiyomizu-layout.js';
 import { RASHOMON, GATE_STONE, GATE_WING, gateStoneRise } from './kyo-layout.js';
 import { STREET_BEATS } from './street-watch-layout.js';
+import { TERRAIN_TILES, TERRAIN_SUBDIVISIONS } from './geography.js';
+import { LAKE_ISLET, isletRadius } from './snow-country.js';
 import { COURT, RETREATS, reservedScenery } from './retreat-layout.js';
 import { scrollCoverage } from './scroll-paper.js';
 import { SNOW_SPRING, springRadius, BOUND, BUILDINGS, BRIDGES, GATES, gateFooting, MARKET_STALLS, ROCKS, REGIONS, TREES, WATER_Y,
@@ -70,6 +72,8 @@ export function meadowExclusions(objects,residents=[]) {
     const u=x-RASHOMON.x,v=z-RASHOMON.z;
     return gateStoneRise(u,v)>0 || (abs(abs(u)-GATE_WING.x)<GATE_WING.w/2 && abs(v-GATE_WING.z)<GATE_WING.d/2+.12);
   });
+  // The shrine steps and strand have their own low lakeside planting.
+  add(LAKE_ISLET.x,LAKE_ISLET.z,LAKE_ISLET.rx*1.3,(x,z)=>isletRadius(x,z)<1.03);
   add(COURT.x,COURT.z+11.5,29,reservedScenery);
   add(KIYOMIZU.x,KIYOMIZU.z-16,36,kiyomizuClearing);
   for(const s of RETREATS)add(s.x,s.z,15,reservedScenery);
@@ -100,6 +104,19 @@ export function meadowExclusions(objects,residents=[]) {
     add(x,z,9,(u,v)=>abs(x-u)<6.8 && abs(z-v)<5.4);
   }
   return clearings;
+}
+
+// The long lake escarpment turns south at the maple valley. Test the actual
+// triangle supporting the root, so grass up on the lip can still meet bare
+// slate one step down, and the fan at the foot keeps its meadow.
+const groundStep=2*BOUND/(TERRAIN_TILES*TERRAIN_SUBDIVISIONS);
+function onSlateFace(x,z,heightAt) {
+  if(x<=0 || x>=314 || z< -308 || z>= -189 ||
+     (abs(z+303.75)>3.8 && abs(x-308.75)>3.8))return false;
+  const west=floor(x/groundStep)*groundStep,north=floor(z/groundStep)*groundStep;
+  const east=heightAt(west+groundStep,north),south=heightAt(west,north+groundStep);
+  const top=x-west+z-north<=groundStep ? heightAt(west,north) : heightAt(west+groundStep,north+groundStep);
+  return (east-top)**2+(south-top)**2>(1.55*groundStep)**2;
 }
 
 // Each plant is emitted once, independent of camera, travel direction and budgets.
@@ -156,8 +173,12 @@ export function visitMeadowTile(i,j,clearings,visit) {
     // Leave a single-file tread. Ferns along the bank can lean over its edge.
     const pathDistance=fireTrailDistance(x,z);
     if(pathDistance<.54+width*.25 || inFireMeadow(x,z,width*.25))continue;
-    visit(x,y-.022,z,width,height,angle,family*HERB_FORMS+form,shade,hue);
-    count++;
+    // Prune after drawing the seed. Adjacent ledges and the opposite bank
+    // retain exactly the same plants, including the younger daughter shoots.
+    if(!onSlateFace(x,z,heightAt)){
+      visit(x,y-.022,z,width,height,angle,family*HERB_FORMS+form,shade,hue);
+      count++;
+    }
     // Rhizomes and stolons send up younger shoots a handspan from the parent.
     // These give the dense beds knots of stems and open paper between them.
     if(!spreading.has(family) || rng()>.10+centre*.32)continue;
@@ -171,8 +192,11 @@ export function visitMeadowTile(i,j,clearings,visit) {
     const young=.45+rng()*.30;
     if(pathDistance<2 && fireTrailDistance(sx,sz)<.54+width*young*.25 ||
        inFireMeadow(sx,sz,width*young*.25))continue;
-    visit(sx,sy-.022,sz,width*young*.91,height*young,bearing,family*HERB_FORMS+floor(rng()*2),shade*.98,hue);
-    count++;
+    const seedlingForm=family*HERB_FORMS+floor(rng()*2);
+    if(!onSlateFace(sx,sz,heightAt)){
+      visit(sx,sy-.022,sz,width*young*.91,height*young,bearing,seedlingForm,shade*.98,hue);
+      count++;
+    }
   }
   return count;
 }

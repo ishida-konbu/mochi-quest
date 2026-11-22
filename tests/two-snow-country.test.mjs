@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FOREST_LAKE, lakePoint, lakeRadius } from '../two/snow-country.js';
+import { createGame } from '../two/game.js';
+import { HOKORA_BASE } from '../two/lake-hokora-layout.js';
+import { FOREST_LAKE, LAKE_ISLET, LAKE_HOKORA, isletPoint, lakePoint, lakeRadius } from '../two/snow-country.js';
 import {
   BUILDINGS, CONNECTING_ROADS, GATES, REGIONS, ROADS, SNOW_SPRING, TREES, WATER_Y,
   seasonAt, shoreDistance, terrainHeight, terrainMeshHeight, waterDepth,
@@ -31,7 +33,7 @@ test('the snowy pagoda overlooks open winter water across a pass from Kyoto',()=
 });
 
 test('the old town is an enclosed, swimmable basin with a continuous unlabelled shore',()=>{
-  assert.ok(waterDepth(FOREST_LAKE.x,FOREST_LAKE.z)>6);
+  assert.equal(waterDepth(FOREST_LAKE.x,FOREST_LAKE.z),0);
   assert.equal(seasonAt(FOREST_LAKE.x,FOREST_LAKE.z).snow,0);
   for(let i=0;i<72;i++){
     const angle=i*Math.PI/36,wet=lakePoint(angle,.85),bank=lakePoint(angle,1.10);
@@ -42,4 +44,42 @@ test('the old town is an enclosed, swimmable basin with a continuous unlabelled 
   for(const thing of [...REGIONS,...BUILDINGS,...GATES,SNOW_SPRING,...TREES])
     assert.ok(lakeRadius(thing.x,thing.z)>1);
   for(const r of ROADS)for(const [x,z] of r.points)assert.ok(lakeRadius(x,z)>1.03);
+});
+
+test('the island has a firm shrine parcel, a walkable strand and deep water on every side',()=>{
+  const {x,z,y,yaw}=LAKE_HOKORA;
+  for(const u of [-2.05,0,2.05])for(const v of [-1.55,0,1.55]){
+    const p=[x+u*Math.cos(yaw)+v*Math.sin(yaw),z-u*Math.sin(yaw)+v*Math.cos(yaw)];
+    assert.equal(terrainHeight(...p),y);
+    assert.ok(Math.abs(terrainMeshHeight(...p)-y)<.01);
+  }
+  for(let i=0;i<72;i++){
+    const a=i*Math.PI/36;
+    assert.ok(Math.abs(terrainMeshHeight(...isletPoint(a))-WATER_Y)<.04);
+    assert.ok(waterDepth(...isletPoint(a,2))>5.9);
+    let previous=LAKE_ISLET.top;
+    for(let step=1;step<=28;step++){
+      const h=terrainHeight(...isletPoint(a,step/20));
+      assert.ok(h<=previous+1e-9,'no lip blocking the shore');
+      previous=h;
+    }
+  }
+});
+
+test('a swimmer can leave the water and climb the shrine steps to the open porch',()=>{
+  const {x,z,yaw, y:top}=LAKE_HOKORA,dx=Math.sin(yaw),dz=Math.cos(yaw);
+  const journal=createGame().save();
+  Object.assign(journal.player,{x:x+24*dx,z:z+24*dz,y:WATER_Y-.57,h:0,grounded:true});
+  const game=createGame(journal),p=game.state.player;
+  assert.ok(game.restored && p.inWater);
+  const target=[x+.90*dx,z+.90*dz];
+  for(let i=0;i<600;i++){
+    const u=target[0]-p.x,v=target[1]-p.z,d=Math.hypot(u,v);
+    if(d<.08)break;
+    game.step(1/60,{x:.58*u/d,z:.58*v/d});
+  }
+  assert.ok(Math.hypot(p.x-target[0],p.z-target[1])<.08);
+  assert.ok(!p.inWater && p.grounded && Math.abs(p.y-top-HOKORA_BASE.top)<.02);
+  assert.ok(game.state.onLake);
+  assert.deepEqual(game.state.visited,journal.visited);
 });

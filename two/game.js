@@ -6,7 +6,8 @@ import { KIYOMIZU, onMountOtowa, kiyomizuClearing } from './kiyomizu-layout.js';
 import { createPickupContacts } from './pickup-contacts.js';
 import { createAmbientContacts } from './ambient-contacts.js';
 import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
-import { lakeRadius, snowPoint } from './snow-country.js';
+import { fromHokora } from './lake-hokora-layout.js';
+import { lakeRadius, isletRadius, snowPoint } from './snow-country.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
 import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
 import { SEAPORTS,relocateOldQuay } from './seaport-layout.js';
@@ -1304,7 +1305,19 @@ export function createGame(snapshot = null) {
       player.y = floor+player.h;
       player.grounded = player.h <= .001 && player.vy <= 0;
     } else {
-      const feet=p.y-p.h, ship=voyage.sample(player.x,player.z,feet);
+      let feet=p.y-p.h;
+      // V12 journals may remember open water underneath the new island.
+      // Retain that spot on the stone steps or the strand, moving a former
+      // swimmer onto the forecourt only if the new timber or lantern blocks it.
+      if(data.version===12 && isletRadius(p.x,p.z)<1 && feet<terrainHeight(p.x,p.z)-.01){
+        feet=groundHeight(p.x,p.z,terrainHeight(p.x,p.z));
+        if(!canOccupy(p.x,p.z,feet+p.h,bodyRadius(),bodyHeight())){
+          [player.x,player.z]=fromHokora(0,3.9);
+          feet=groundHeight(player.x,player.z);
+          if(p.mount==='turtle')t={...t,x:player.x,z:player.z,homeX:player.x,homeZ:player.z};
+        }
+      }
+      const ship=voyage.sample(player.x,player.z,feet);
       player.y=Math.max(groundHeight(player.x,player.z,feet),ship?.floor ?? -Infinity)+player.h;
     }
     if (data.version >= 5 && finite(p.diveDepth, .000001, 100) && !p.mount && shoreDistance(p.x,p.z) < 0) {

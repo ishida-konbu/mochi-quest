@@ -439,7 +439,7 @@ export function seasonalWeather(scene) {
     rng = seeded(837);
   const pos = [],
     phase = [];
-  for (let i = 0; i < 1170; i++) {
+  for (let i = 0; i < 3510; i++) {
     pos.push(rng() * 32, rng() * 17, rng() * 32);
     phase.push(rng());
   }
@@ -455,17 +455,29 @@ export function seasonalWeather(scene) {
       clock: { value: 0 },
       center: { value: point(0, 0, 0) },
       amount: { value: 0 },
+      viewport: { value: new THREE.Vector2() },
       frames: { value: frames },
       eaves: { value: eaves },
     },
-    vertexShader: `uniform float clock,amount; uniform vec3 center; attribute float seed; varying float opacity;
+    vertexShader: `uniform float clock,amount; uniform vec2 viewport; uniform vec3 center;
+    attribute float seed; varying float opacity,turn,tint;
     uniform vec4 frames[${roofs.length}]; uniform vec3 eaves[${roofs.length}];
     void main(){vec3 span=vec3(32.,17.,32.);
-      vec3 falling=position+vec3(clock*.38+sin(clock+seed*50.)*.36,-clock*(.62+.65*seed),.23*cos(.7*clock+seed*24.));
+      float gust=clock*.57+position.z*.12, flutter=clock*(.8+seed*.5)+seed*50.;
+      vec3 falling=position+vec3(clock*.35+.64*sin(gust)+.25*sin(flutter),
+        -clock*(.68+.74*seed),.33*cos(gust*.81)+.22*cos(flutter));
       vec3 local=mod(falling-center+span*.5,span)-span*.5;
       vec4 eye=viewMatrix*vec4(center+local,1.);gl_Position=projectionMatrix*eye;
-      gl_PointSize=clamp((11.+9.*seed)/max(1.,-eye.z),1.2,5.);
-      opacity=amount*(.39+.51*seed)*(1.-smoothstep(11.,16.,length(local.xz)))*smoothstep(0.,1.5,-eye.z);
+      // Physical size in metres, projected into the actual drawing buffer
+      // so powder stays legible on the sea horizon and on high-density screens.
+      float pixels=viewport.y*.5*projectionMatrix[1][1];
+      float size=mix(.027,.072,seed*seed);
+      float scale=clamp(viewport.y/770.,.72,2.5);
+      gl_PointSize=clamp(pixels*size/max(1.,-eye.z),2.05*scale,9.*scale);
+      opacity=amount*(.66+.31*seed)*(1.-smoothstep(11.,16.,length(local.xz)))*
+        (1.-smoothstep(7.0,8.5,abs(local.y)))*smoothstep(.3,1.55,-eye.z);
+      turn=flutter*.6;
+      tint=.5+.5*cos(flutter*.77+position.y);
       vec3 world=center+local;
       for(int i=0;i<${roofs.length};i++){
         vec2 d=world.xz-frames[i].xy, axes=frames[i].zw;
@@ -473,19 +485,32 @@ export function seasonalWeather(scene) {
         if(all(lessThan(floorPlan,eaves[i].xy)) && world.y<eaves[i].z) opacity=0.;
       }
     }`,
-    fragmentShader: `varying float opacity;void main(){float d=length(gl_PointCoord-.5);
-      gl_FragColor=vec4(.90,.95,1.,(1.-smoothstep(.18,.50,d))*opacity);
+    fragmentShader: `varying float opacity,turn,tint;
+    void main(){
+      vec2 p=gl_PointCoord*2.-1.;
+      vec2 grain=vec2(p.x*cos(turn)-p.y*sin(turn),p.x*sin(turn)+p.y*cos(turn));
+      float d=length(grain*vec2(1.,1.09+.27*tint));
+      float cover=1.-smoothstep(.53,1.,d);
+      // A cool turned edge and a warm paper-white face read against both
+      // the dark pines and the almost-white sky without outlining every flake.
+      float face=smoothstep(-.56,.58,grain.x*.77-grain.y*.55+.59*tint);
+      vec3 snow=mix(vec3(.39,.50,.58),vec3(1.,.98,.91),face);
+      gl_FragColor=vec4(snow,cover*opacity);
       #include <colorspace_fragment>
     }`,
   });
   const points = new THREE.Points(geo, mat);
+  points.onBeforeRender = renderer => renderer.getDrawingBufferSize(mat.uniforms.viewport.value);
   points.frustumCulled = false;
   points.renderOrder = 3;
   scene.add(points);
-  return (time, p, amount) => {
+  return (time, camera, amount) => {
     points.visible = amount > 0.015;
+    if (!points.visible) return;
     mat.uniforms.amount.value = amount;
     mat.uniforms.clock.value = time;
-    mat.uniforms.center.value.set(p.x, p.y + 4.7, p.z);
+    // Spend the middle distance on the view ahead. Individual trajectories
+    // stay in world space as the player turns or climbs the pagoda.
+    camera.getWorldDirection(mat.uniforms.center.value).multiplyScalar(5).add(camera.position);
   };
 }

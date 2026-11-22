@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createGame } from '../two/game.js';
-import { BUILDINGS, REGIONS, SNOW_SPRING, groundHeight, terrainHeight } from '../two/terrain.js';
-import { FOREST_LAKE, snowPoint } from '../two/snow-country.js';
+import { canOccupy, BUILDINGS, REGIONS, SNOW_SPRING, groundHeight, terrainHeight } from '../two/terrain.js';
+import { fromHokora, HOKORA_LANTERN, HOKORA_ROOM } from '../two/lake-hokora-layout.js';
+import { FOREST_LAKE, isletPoint, snowPoint } from '../two/snow-country.js';
 import { COURT } from '../two/retreat-layout.js';
 import { PAGES_ORIGIN, WORKER_ORIGIN, SAVE_KEY, SETTINGS_KEY, decodeTransfer, storeTransfer, transferURL } from '../two/journey-transfer.js';
 
@@ -101,7 +102,7 @@ test('a v11 traveller on the snow pagoda resumes on the same roof facing the win
   assert.deepEqual(createGame(game.save()).save().player,game.save().player);
 });
 
-test('the old snow bath carries its bather, while a new journey at the lake stays in the water',()=>{
+test('a v11 snow bather travels with the bath; v12 lake swimmers resume on the same water or reclaimed ground',()=>{
   const journal=createGame().save();
   journal.version=11;
   journal.lastBath='onsen-48';
@@ -111,11 +112,28 @@ test('the old snow bath carries its bather, while a new journey at the lake stay
   assert.deepEqual([moved.state.player.x,moved.state.player.z],[SNOW_SPRING.x,SNOW_SPRING.z]);
   assert.equal(moved.state.player.activity,'bath');
 
-  const lakeJournal=createGame().save(),{x,z}=FOREST_LAKE;
-  Object.assign(lakeJournal.player,{x,z,h:0,y:groundHeight(x,z),grounded:true});
-  const lake=createGame(lakeJournal);
-  assert.equal(lake.state.onLake,true);
-  assert.equal(lake.state.player.inWater,true);
-  assert.deepEqual([lake.state.player.x,lake.state.player.z],[x,z]);
-  assert.deepEqual(lake.state.visited,lakeJournal.visited);
+  const lakeJournal=createGame().save();
+  lakeJournal.version=12;
+  for(const [x,z,inWater] of [[...isletPoint(.81,2),true],[FOREST_LAKE.x,FOREST_LAKE.z,false]]){
+    // Before the island was raised either position was a surface swim.
+    Object.assign(lakeJournal.player,{x,z,h:0,y:-.19,grounded:true});
+    const lake=createGame(lakeJournal),p=lake.state.player;
+    assert.ok(lake.restored && lake.state.onLake);
+    assert.equal(p.inWater,inWater);
+    assert.deepEqual([p.x,p.z],[x,z]);
+    assert.equal(p.y,groundHeight(x,z,p.y));
+    assert.deepEqual(lake.state.visited,lakeJournal.visited);
+  }
+});
+
+test('a lake swimmer saved beneath the future shrine or lantern returns on the clear forecourt',()=>{
+  for(const site of [HOKORA_ROOM,HOKORA_LANTERN]){
+    const [x,z]=fromHokora(site.x,site.z),journal=createGame().save();
+    journal.version=12;
+    Object.assign(journal.player,{x,z,y:-.19,h:0,grounded:true});
+    const game=createGame(journal),p=game.state.player;
+    assert.ok(game.restored && game.state.onLake && !p.inWater);
+    assert.ok(Math.hypot(p.x-x,p.z-z)<6 && canOccupy(p.x,p.z,p.y,.26,1.66));
+    assert.deepEqual(createGame(game.save()).save().player,game.save().player);
+  }
 });
