@@ -7,7 +7,8 @@ import { COURT, COURT_GATE_Z } from './retreat-layout.js';
 import { roomPlan,pagodaPlan } from './architecture.js';
 import { updateHareRider } from './scroll-riders.js';
 import { WEDDING_ROLES, weddingWalkerPose } from './pilgrimage-layout.js';
-import { SPECIES } from './bestiary.js';
+import { SPECIES,moveWildlife } from './bestiary.js';
+import { createTravellerTalk } from './mystery-travellers.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { SCROLL_FAUNA } from './scroll-fauna.js';
 
@@ -66,6 +67,10 @@ function survey(location, bound) {
     const tower = BUILDINGS.find(building => building.kind === 'pagoda' && building.x === cx && building.z === cz);
     if (!tower) throw new Error('東塔の回廊が見つかりません');
     floor = tower.y + pagodaPlan(tower).storeys[f.storey].y;
+    // The enlarged eave overlaps the old rail. The inner north-east bay is
+    // connected to the stair landing and stays at the fifth storey's height.
+    x = tower.x + 2.25*tower.cos - 2.14*tower.sin;
+    z = tower.z - 2.25*tower.sin - 2.14*tower.cos;
   }
   const feet = (px,pz,dy=0) => submerged ? {x:px,z:pz,y:terrainHeight(px,pz)+.16+dy} : terrainPoint(px,pz,floor);
   const anchor = feet(x,z);
@@ -97,6 +102,7 @@ function survey(location, bound) {
 }
 
 export function createMysteryWorld(gameState, mystery) {
+  const travellerTalk = createTravellerTalk();
   const actorsById = new Map(gameState.npcs.map(entity=>[entity.id,entity]));
   const namedIds = new Set(cast.map(person=>person.sourceBinding.legacyId).filter(Boolean));
   const occupants = new Map();
@@ -109,6 +115,10 @@ export function createMysteryWorld(gameState, mystery) {
   const stationById = new Map(stations.map(station=>[station.id,station]));
   const locate = id=>stationById.get(id);
   const homeOf = person=>{
+    if (mystery.state.activeTrial) {
+      if (person.id==='NPC_NAOKI') return 'LOC_KYO_JUDGE';
+      if (person.id==='NPC_FUDEM') return 'LOC_KYO_WITNESS';
+    }
     let home = person.homeLocationId;
     for (const next of person.locationOverrides) if (mystery.meets(next.condition)) home = next.locationId;
     return home;
@@ -119,6 +129,12 @@ export function createMysteryWorld(gameState, mystery) {
     const locationId=homeOf(person), station=locate(locationId);
     const actor=actorsById.get(person.sourceBinding.legacyId);
     let pose=actor || station;
+    if (mystery.state.activeTrial) {
+      // The clerk sits beside the magistrate; the claimant faces the witness.
+      if (person.id==='NPC_NAOKI') pose=terrainPoint(station.x+2.45,station.z+.8,station.y);
+      if (person.id==='NPC_FUDEM' && mystery.state.activeTrial!=='TR_C07')
+        pose=terrainPoint(station.x+4.7,station.z-.1,station.y);
+    }
     if (person.id==='NPC_KUZUHA') {
       const q=weddingWalkerPose(1,WEDDING_ROLES.indexOf('bride'),gameState.time);
       pose={...terrainPoint(q.x,q.z),heading:q.yaw};
@@ -142,6 +158,8 @@ export function createMysteryWorld(gameState, mystery) {
       updateHareRider(rider,gameState.time);
     } else {
       Object.assign(deer,formerRoute);
+      moveWildlife(deer,gameState.time);
+      updateHareRider(rider,gameState.time);
       Object.assign(rider,{homeX:deer.homeX,homeZ:deer.homeZ});
       formerRoute=null;
     }
@@ -173,6 +191,7 @@ export function createMysteryWorld(gameState, mystery) {
       add({entity:n, legacyId:n.id,locationId:null,label:speciesNames[n.type] || '里の住人',
         species:n.type,x:n.x,y:n.y,z:n.z},2.75,submerged);
     }
+    for(const traveller of travellerTalk(gameState)) add({...traveller,locationId:null},2.75,false);
     return result.sort((a,b)=>a.distance-b.distance || (a.npcId||a.legacyId||a.locationId).localeCompare(b.npcId||b.legacyId||b.locationId));
   }
   update();

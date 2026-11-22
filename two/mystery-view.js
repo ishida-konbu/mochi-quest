@@ -89,8 +89,12 @@ function printed(lines) {
     c.fillStyle='#ead8ac';c.fillRect(0,0,448,224);
     c.strokeStyle='#896e4a';c.lineWidth=8;c.strokeRect(8,8,432,208);
     c.fillStyle='#503c31';c.textAlign='center';c.textBaseline='middle';
-    c.font='bold 53px "Hiragino Mincho ProN","Yu Mincho",serif';
-    lines.forEach((line,i)=>c.fillText(line,224,38+(i+.5)*148/lines.length,401));
+    c.font='bold '+(lines.length===1?84:59)+'px "Hiragino Mincho ProN","Yu Mincho",serif';
+    lines.forEach((line,i)=>{
+      const y=38+(i+.5)*148/lines.length;
+      if(line.trim())c.fillText(line,224,y,401);
+      else c.fillRect(64,y+19,320,2);
+    });
     const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;
     placardMaterials.set(key,new THREE.MeshLambertMaterial({map,side:THREE.DoubleSide}));
   }
@@ -121,12 +125,14 @@ function closingScene(root,id) {
       b.box(0,.88,.043,.68,.10,.024,rice);
     });
     placard(part,'番付',['次の取組','　　　　　'],0,.987,.037,.90,.45);
+    placard(part,'番付裏',['次の取組','　　　　　'],0,.987,-.037,.90,.45).rotation.y=Math.PI;
   }else if(id==='LOC_MARKET_DEALER') {
     part.name='米代と手間賃を分けた値札';
     for(const [i,word] of ['米代','手間賃'].entries()){
       const x=-.31+i*.62;
-      paint(part,b=>{b.box(x,.84,-.255,.043,.45,.045,cedar);b.box(x,1.02,-.25,.55,.29,.035,dark);});
+      paint(part,b=>{b.box(x,.76,-.255,.043,.27,.045,cedar);b.box(x,1.02,-.25,.55,.29,.035,dark);});
       placard(part,word,[word],x,1.02,-.228,.52,.26);
+      placard(part,word+'裏',[word],x,1.02,-.272,.52,.26).rotation.y=Math.PI;
     }
   }
 }

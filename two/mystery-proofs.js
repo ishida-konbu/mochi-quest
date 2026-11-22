@@ -2,7 +2,7 @@ import { cases, evidence, npcs } from './mystery-data.js';
 import { element, button, section, disclosure, shuffled } from './mystery-paper.js';
 import { exhibitPlate } from './mystery-exhibits.js';
 
-export function createProofs({mystery, page, save, close, book, dialogue, seed}) {
+export function createProofs({mystery, page, save, close, book, dialogue, stageCourt, seed}) {
   const state = mystery.state;
   function report(parent, text) {
     parent.textContent = text;
@@ -105,7 +105,9 @@ export function createProofs({mystery, page, save, close, book, dialogue, seed})
     const result = mystery.startTrial(trial.id);
     if (!result.ok) return book(c.id);
     save();
+    stageCourt();
     const body = page('京の評定所', c.titleJa);
+    body.classList.add('mq-court-opening');
     element(body,'p',trial.openingJa,'mq-lead');
     const round = state.hearings[trial.id].round;
     button(body,round ? '休廷したところから再開' : '証言を聞く',()=>testimony(trial),'mq-primary');

@@ -86,7 +86,7 @@ async function startJourney() {
 }
 paintGlyphs();
 const { game, settings: savedSettings, status: transferStatus } = await startJourney();
-let hasJourney = game.restored;
+let hasJourney = game.restored, saveFailureShown = false;
 const state = game.state,
   p = state.player;
 const audio = createAudio(createSoundscape);
@@ -158,6 +158,19 @@ let frames = 0,
 const storyUI = createMysteryUI({
   game, title:$('dialog-title'), content:$('dialog-content'), save,
   close:() => dialog.close(), speciesName:type=>speciesNames[type],
+  stageCourt() {
+    if (!mysteryView || !bathReflection || contextLost) return;
+    const seat=game.mysteryWorld.locate('LOC_KYO_COURT');
+    const oldEye=camera.position.clone(), oldAngle=camera.quaternion.clone();
+    mysteryView.update(state.time,p);
+    camera.position.set(seat.x-1.7,seat.y+2.35,seat.z+4.5);
+    camera.lookAt(seat.x-2.1,seat.y+1.1,seat.z-4.6);
+    camera.updateMatrixWorld();
+    try { drawScene(); }
+    finally {
+      camera.position.copy(oldEye); camera.quaternion.copy(oldAngle); camera.updateMatrixWorld();
+    }
+  },
   guide:locationId=>{
     storyGoal=locationId; goal=null; trackedAnimal=trackedHabitat=null;
     lastFocus=canvas; persistSettings(); dialog.close(); updateHUD();
@@ -175,7 +188,11 @@ function persistSettings() {
 }
 function save() {
   if (active) {
-    if (store(saveKey, game.save())) hasJourney = true;
+    if (store(saveKey, game.save())) { hasJourney = true; saveFailureShown = false; }
+    else if (!saveFailureShown) {
+      saveFailureShown = true;
+      message('旅の記録を書き込めません。ブラウザの空き容量と保存設定を確認してください。',8);
+    }
     persistSettings();
   }
 }

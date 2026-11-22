@@ -26,7 +26,9 @@ export function decodeTransfer(origin, hash, createGame, regions) {
     // item/port layouts. It also strips fields that aren't part of the save.
     const game = createGame(data.journey);
     if (!game.restored) return null;
-    return { game, settings: { sound: settings.sound, yaw: settings.yaw, goal: settings.goal } };
+    const normalized = { sound: settings.sound, yaw: settings.yaw, goal: settings.goal };
+    if (game.mysteryWorld?.locate(settings.storyGoal)) normalized.storyGoal = settings.storyGoal;
+    return { game, settings: normalized };
   } catch {
     return null;
   }

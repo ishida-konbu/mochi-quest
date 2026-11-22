@@ -1,13 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createGame} from '../two/game.js';
-import {createMystery} from '../two/mystery-state.js';
-import {createMysteryWorld} from '../two/mystery-world.js';
 import {npcs,locations} from '../two/mystery-data.js';
 import {pagodaPlan} from '../two/architecture.js';
 import {BUILDINGS,groundHeight,terrainHeight,staticVolumeAt,constrainMove,REGIONS,regionAt,WATER_Y} from '../two/terrain.js';
 
-const game=createGame(), mystery=createMystery(), world=createMysteryWorld(game.state,mystery);
+const game=createGame(), mystery=game.mystery, world=game.mysteryWorld;
 const p=game.state.player;
 function visit(s, stand=s.stand) {
   Object.assign(p,stand,{grounded:!s.submerged,diveDepth:s.submerged?WATER_Y-.57-stand.y:0,
@@ -66,6 +64,23 @@ test('a surface swimmer cannot inspect the palace and a player below the gallery
   assert.ok(Math.abs(tower.y-fifth)<.16);
   assert.ok(tower.y>p.y+25);
   assert.ok(!world.nearby().some(c=>c.locationId===tower.id));
+});
+test('the top landing connects to the observation document on foot',()=>{
+  const tower=world.locate('LOC_KYO_LOOKOUT');
+  const b=BUILDINGS.find(b=>b.kind==='pagoda' && Math.abs(b.x-tower.x)<5 && Math.abs(b.z-tower.z)<5);
+  const fifth=b.y+pagodaPlan(b).storeys[4].y;
+  const at=(u,v)=>({x:b.x+b.cos*u+b.sin*v,z:b.z-b.sin*u+b.cos*v});
+  visit(tower,{...at(.85,2.23),y:fifth});
+  for(const target of [at(2.24,2.23),tower.stand]){
+    for(let i=0;i<165;i++){
+      const dx=target.x-p.x,dz=target.z-p.z,d=Math.hypot(dx,dz);
+      if(d<.075)break;
+      p.invulnerable=2;game.step(1/60,{x:.62*dx/d,z:.62*dz/d});
+    }
+    assert.ok(Math.hypot(target.x-p.x,target.z-p.z)<.075,'the upper gallery passage is blocked');
+    assert.ok(Math.abs(p.y-fifth)<.06,'the passage left the fifth floor');
+  }
+  assert.ok(world.nearby().some(entry=>entry.locationId===tower.id));
 });
 test('all named residents keep their identities, overlapping encounters and their delivery roster',()=>{
   const count=game.state.recipientTotal,people=world.people();

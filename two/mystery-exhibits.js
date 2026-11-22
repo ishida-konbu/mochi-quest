@@ -168,7 +168,7 @@ function folioMatch(caseId, note, other) {
 // Plot the actual current mountain hearths from three incident viewpoints, all
 // looking in the same northward direction. Reframe uniformly, preserving angles.
 function fireSketch(station) {
-  const [x, z] = districtPoint('kyo', ...[[120,-424],[164,-467],[155,-482.1]][station]);
+  const [x, z] = districtPoint('kyo', ...[[120,-424],[164,-467],[157.25,-481.14]][station]);
   let eye = terrainHeight(x,z) + 1.9;
   if (station === 2) {
     const [px, pz] = districtPoint('kyo',155,-479);

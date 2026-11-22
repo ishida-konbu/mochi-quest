@@ -184,3 +184,24 @@ test('an inconsistent solved flag can recover through the ordinary investigation
   assert.deepEqual(m.state.hearings, {});
   assert.equal(m.requesterDialogue('C01'),'D_C01_REPEAT');
 });
+
+test('a full notebook and the complete delivery scroll fit the shared journey link together', async () => {
+  const { createGame } = await import('../two/game.js');
+  const { REGIONS } = await import('../two/terrain.js');
+  const { transferURL, decodeTransfer, PAGES_ORIGIN, WORKER_ORIGIN } = await import('../two/journey-transfer.js');
+  const game = createGame(), snapshot = game.save();
+  snapshot.delivered = game.state.npcs.map(npc => npc.id);
+  snapshot.mystery = {
+    schemaVersion: 1,
+    status: Object.fromEntries(cases.map(c => [c.id, 'resolved'])),
+    evidence: evidence.map(e => e.id),
+    inferences: inferences.map(i => i.id),
+    hearings: Object.fromEntries(trials.map(t => [t.id, { completed:t.rounds.map(r => r.id), won:true }])),
+  };
+  const share = transferURL(PAGES_ORIGIN, snapshot, { sound:false, yaw:1, goal:'kyo' });
+  assert.ok(share);
+  const incoming = decodeTransfer(WORKER_ORIGIN, new URL(share).hash, createGame, REGIONS);
+  assert.ok(incoming.game.state.kagamiUnlocked);
+  assert.deepEqual(incoming.game.save().delivered, snapshot.delivered);
+  assert.deepEqual(incoming.game.mystery.save(), snapshot.mystery);
+});

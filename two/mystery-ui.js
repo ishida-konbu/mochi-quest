@@ -41,7 +41,7 @@ function objectName(e) {
   return fieldNames[Number(c)-1]?.[Number(n)-1] || e.nameJa;
 }
 
-export function createMysteryUI({game, title, content, close, save, guide, useLegacy, speciesName}) {
+export function createMysteryUI({game, title, content, close, save, guide, useLegacy, speciesName, stageCourt}) {
   const mystery = game.mystery, state = mystery.state;
   const owned = id => state.evidence.includes(id);
   const conversations = new Map();
@@ -58,7 +58,7 @@ export function createMysteryUI({game, title, content, close, save, guide, useLe
     title.focus({preventScroll:true});
     return body;
   }
-  const proofs = createProofs({mystery, page, save, close, book, dialogue, seed:game.state.flightSeed});
+  const proofs = createProofs({mystery, page, save, close, book, dialogue, stageCourt, seed:game.state.flightSeed});
   function addDestination(parent, locId, label) {
     const location = place.get(locId);
     const b = button(parent,label || regionName(location.regionId)+'　'+location.nameJa,()=>guide(locId),'mq-route');

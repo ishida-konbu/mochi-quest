@@ -59,3 +59,18 @@ dialog:has(.mq-page) .sheet h2 { font-size:clamp(1.22rem,3.2vw,1.7rem); }
 .mq-comparison article { background:#fffae7a8; border:1px solid #b6a68b; padding:.7em; }
 .mq-comparison article h4 { margin:0 0 .6em; }
 .mq-page .mq-lead { white-space:pre-line; }
+/* Keep the witness and their surroundings in view while a line is spoken. */
+dialog:has([data-node],.mq-court-opening) {
+  margin:auto auto max(2.5dvh,env(safe-area-inset-bottom));
+  max-height:62dvh; width:min(720px,94vw);
+}
+dialog:has([data-node],.mq-court-opening)::backdrop {
+  backdrop-filter:none;
+  background:linear-gradient(to bottom,transparent 35%,#28291d55);
+}
+body:has(dialog[open] :is([data-node],.mq-court-opening)) #stage :is(.hud-player,.mode-dock,.keyline,.touch,#context,#mini-button,#toast,#target) {
+  visibility:hidden;
+}
+@media (max-height:530px) {
+  dialog:has([data-node],.mq-court-opening) { max-height:86dvh; }
+}
