@@ -1,5 +1,6 @@
 import { HIGASHIYAMA, KITAYAMA, NISHIYAMA } from './higashiyama.js';
 import { DISTRICTS } from './geography.js';
+import { peachHazeWeight } from './peach-haze.js';
 import * as THREE from './vendor/three.module.min.js';
 import { HDRLoader } from './vendor/HDRLoader.js';
 import { kyoNight, kyoInfluence } from './kyo-layout.js';
@@ -19,6 +20,7 @@ const palette = {
   darkEarth: color('#4a566c'),
   twilight: color('#ffdbb6'),
   fog: color('#d7d4bf'),
+  peachFog: color('#dfced8'),
   winterFog: color('#c3d5e4'),
   fallFog: color('#d9bc99'),
   nightFog: color('#273b56'),
@@ -185,7 +187,8 @@ export function createAtmosphere(scene) {
       // Keep a distinct near slope, middle spur and pale far divide above
       // the valley mist. Fade the painted horizon behind the real mountains.
       const peachDistance=Math.hypot((player.x-DISTRICTS.peach.x-24)/318,(player.z-DISTRICTS.peach.z+23)/210);
-      const peachAir=1-THREE.MathUtils.smoothstep(peachDistance,.66,1.20);
+      const peachAir=peachHazeWeight(player.x,player.z);
+      scene.fog.color.lerp(palette.peachFog,peachAir*.86*(1-s.moon));
       const mountainDistance=Math.min(peachDistance,
         Math.hypot((player.x-DISTRICTS.inari.x+88)/292,(player.z-DISTRICTS.inari.z-99)/206));
       const mountain=1-THREE.MathUtils.smoothstep(mountainDistance,.6,1.35);
@@ -206,9 +209,12 @@ export function createAtmosphere(scene) {
       const valleyView=THREE.MathUtils.smoothstep(player.y,13,55)*(1-THREE.MathUtils.smoothstep(r,480,660))*
         THREE.MathUtils.smoothstep(cityFacing,.25,.80);
       hillView=Math.max(hillView,.86*valleyView);
-      dome.material.uniforms.valleyHaze.value=valleyView;dome.material.uniforms.valleyMist.value.copy(scene.fog.color);
+      dome.material.uniforms.valleyHaze.value=Math.max(valleyView,peachAir);
+      dome.material.uniforms.valleyMist.value.copy(scene.fog.color);
       dome.material.uniforms.horizonInk.value=1-Math.max(.70*peachAir,.42*clearAir,.42*hillView);
-      scene.fog.density = 0.0057 - Math.max(.0033*peachAir,.0025*clearAir,.00415*hillView) + 0.003 * s.snow - 0.0008 * s.dawn;
+      const openAir=.0057-Math.max(.0025*clearAir,.00415*hillView);
+      const valleyAir=.0070-.0018*THREE.MathUtils.smoothstep(player.y,28,90);
+      scene.fog.density = THREE.MathUtils.lerp(openAir,valleyAir,peachAir) + .003*s.snow - .0008*s.dawn;
       scene.environmentIntensity = 0.67 - 0.51 * s.moon;
       return valleyView;
     },

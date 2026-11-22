@@ -2,9 +2,6 @@ import * as T from '../two/vendor/three.module.min.js';
 import {peachModel,CROWN_SPAN,CROWN_MID,CROWN_ELEVATIONS} from '../two/flowering-peaches.js';
 export async function bakePeaches(){
   const meshes=Array.from({length:5},(_,i)=>peachModel(i));
-  await Promise.all(meshes[0].slice(1).map(([,m])=>m.map.image?.decode() || new Promise((resolve,reject)=>{
-    const timer=setInterval(()=>{const im=m.map.image;if(im){clearInterval(timer);im.decode().then(resolve,reject);}},20);
-  })));
   const renderer=new T.WebGLRenderer({alpha:true,antialias:true,premultipliedAlpha:false,preserveDrawingBuffer:true});
   renderer.clippingPlanes=[new T.Plane(new T.Vector3(0,1,0),.03)];
   renderer.setClearColor(0,0);const cell=256;renderer.setSize(cell,cell,false);

@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
+import { peachHazeShader, peachHazeUniforms, updatePeachHaze } from './peach-haze.js';
 
 // Work in linear light until the last pass, so a little reflected sun on the
 // wet dough can be brighter than flour without turning the whole face white.
@@ -16,6 +17,7 @@ export function createInkPass(renderer, camera) {
     depthTest: false,
     depthWrite: false,
     uniforms: {
+      ...peachHazeUniforms(),
       painted: { value: target.texture },
       depthMap: { value: target.depthTexture },
       pixel: { value: new THREE.Vector2() },
@@ -32,6 +34,7 @@ export function createInkPass(renderer, camera) {
       uniform sampler2D painted,depthMap;
       uniform vec2 pixel,lens,clip;
       uniform float focus,scroll;
+      ${peachHazeShader}
       float meters(vec2 uv) {
         float d = texture2D(depthMap,uv).r;
         return clip.x*clip.y / (clip.y-d*(clip.y-clip.x));
@@ -69,7 +72,10 @@ export function createInkPass(renderer, camera) {
         float a=meters(uv+vec2(pixel.x,0.)), b=meters(uv-vec2(pixel.x,0.));
         float d=meters(uv+vec2(0.,pixel.y)), e=meters(uv-vec2(0.,pixel.y));
         float ridge=smoothstep(.012,.085,max(a+b-2.*z,d+e-2.*z)/max(z,1.2));
-        c*=1.-.28*ridge*(1.-smoothstep(66.,190.,z));
+        // The outline is applied after scene fog. Fade the ink along with
+        // its tree so distant crowns do not draw dark wires over the haze.
+        float inkVisibility=1.-peachHaze*smoothstep(22.,114.,z);
+        c*=1.-.28*ridge*(1.-smoothstep(66.,190.,z))*inkVisibility;
         if (z<48.) {
           float portrait = focus>0. ? 1.-smoothstep(2.8,4.2,z) : 0.;
           vec2 stepUV=clamp(mix(.16,.064,portrait)/(z*lens),pixel*2.,pixel*32.);
@@ -90,7 +96,7 @@ export function createInkPass(renderer, camera) {
           vec3 lampblack=mix(vec3(l)*vec3(1.025,1.,.958),c,.68+.27*smoothstep(.05,.43,chroma));
           vec3 lifted=lampblack+vec3(.076,.066,.049)*lit*(1.-smoothstep(.55,.95,l));
           float line=max(ridge*.91,brush*.66)*(1.-smoothstep(36.,168.,z));
-          c=mix(c,lifted*(1.-.64*line),scroll);
+          c=mix(c,lifted*(1.-.64*line*inkVisibility),scroll);
         }
         // The light portrait blur leaves small, distant ink silhouettes legible.
         if (focus>0. && z>focus+1.) {
@@ -105,6 +111,7 @@ export function createInkPass(renderer, camera) {
           }
           c=sum/count;
         }
+        c=valleyMist(c,viewPoint(uv,1.),z);
         // A gentle photographic shoulder preserves warm highlights in bright silk
         // and water, while leaving ordinary paper and ink at their original values.
         const float knee=.70;
@@ -145,7 +152,9 @@ export function createInkPass(renderer, camera) {
       const halfFov = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
       material.uniforms.lens.value.set(camera.aspect * halfFov, halfFov);
     },
-    draw(scene, focusDistance = 0, scroll = 0) {
+    draw(scene, focusDistance = 0, scroll = 0, time = 0) {
+      camera.updateWorldMatrix(true,false);
+      updatePeachHaze(material.uniforms,camera,scene.fog,time);
       material.uniforms.scroll.value = scroll;
       material.uniforms.focus.value = focusDistance;
       renderer.setRenderTarget(target);

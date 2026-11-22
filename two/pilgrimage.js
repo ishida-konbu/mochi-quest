@@ -1,4 +1,5 @@
-import { blossomGeometry, peachMaterials, createPeachOrchard } from './flowering-peaches.js';
+import { peachPetals, createPeachOrchard } from './flowering-peaches.js';
+import { peachSprig } from './peach-blossom.js';
 import { DISTRICTS } from './geography.js';
 import { summitJoinery, orchardCarving } from './pilgrimage-carving.js';
 import { sculpture } from './pilgrimage-pigment.js';
@@ -8,7 +9,7 @@ import { foxParties } from './pilgrimage-foxes.js';
 import { brushWash, surfaceGrain } from './scroll-sculpt.js';
 import * as T from './vendor/three.module.min.js';
 import { terrainHeight, terrainMeshHeight, seeded, wrapDelta } from './terrain.js';
-import { DAIBUTSU, PEACH, PEACH_TREES, nearbyPeaches, WEDDING_SITES, weddingPoint, MOON_GATE, INARI_GATES, INARI_SANCTUARY, TEMPLE_COLUMNS } from './pilgrimage-layout.js';
+import { DAIBUTSU, PEACH_TREES, nearbyPeaches, WEDDING_SITES, weddingPoint, MOON_GATE, INARI_GATES, INARI_SANCTUARY, TEMPLE_COLUMNS } from './pilgrimage-layout.js';
 
 const { sin,cos,PI,abs,hypot,min,max } = Math, TAU=PI*2;
 const vec=(...v)=>new T.Vector3(...v);
@@ -165,14 +166,13 @@ function* inari(p) {
   weddingPaths(p);
 }
 
-// An individual spray carries dry-brushed wood, five-petalled blossoms and buds.
-// Transparent gaps between the flowers let the drawing of the branches read against the sky.
 function washTexture(file){
   const map=new T.TextureLoader().load(new URL('./assets/world/'+file+'.webp',import.meta.url).href);
   map.colorSpace=T.SRGBColorSpace; map.anisotropy=4;return map;
 }
-function oldPeach(p,art,bloom){
-  const {x,z}=MOON_GATE, f=frame(p,x,z,PI/2), tree=sculpture();
+function gateBlossoms(scene){
+  const {x,z}=MOON_GATE,root=new T.Group(),tree=sculpture();
+  root.name='月門の老桃';root.rotation.y=PI/2;root.position.set(x,terrainHeight(x,z),z);scene.add(root);
   // An old spreading tree takes root beside the moon gate. Its hollowed trunk
   // turns the corner of the roof and the high boughs enclose a patch of sky.
   const timber=[
@@ -205,19 +205,31 @@ function oldPeach(p,art,bloom){
     tree.stroke('#6e5b4d',[[5.65,.32,-.76],[5.68+.67*cos(a),-.02,-.77+.56*sin(a)],
       [5.70+1.63*cos(a),-.36,-.82+1.28*sin(a)]],[.28,.25,.041],7);
   }
-  p.shapes.gatePeach=tree.finish();
-  f.part('gatePeach',0,0,0,1,1,1,'#fff',brushWash(new T.MeshLambertMaterial({vertexColors:true}),.37));
-  for(const [i,[tip,yaw]] of buds.entries()){
-    for(let j=0;j<4;j++){
-      const a=yaw+(j-1.5)*.87,w=2.16+.65*cos(i+j);
-      f.part('peachSprig',...tip,w*1.13,w*.77,1,'#fff7ed',j===1?art:bloom,a,.49-.26*j,-.18+.12*j,false);
+  const trunk=new T.Mesh(tree.finish(),brushWash(new T.MeshLambertMaterial({vertexColors:true}),.37));
+  trunk.castShadow=trunk.receiveShadow=true;root.add(trunk);
+  // The little flowering shoots fork around the timber in depth, including
+  // underneath the old overhang seen when the player walks through the gate.
+  const levels=new T.LOD();levels.position.set(2.2,5.8,-.4);root.add(levels);
+  for(const detailed of [true,false]){
+    const canopy=new T.Group(),local=new T.Object3D();
+    for(let kind=0;kind<3;kind++){
+      const mesh=new T.InstancedMesh(peachSprig([0,3,1][kind],kind,detailed),peachPetals,buds.length);
+      for(const [i,[tip,yaw]] of buds.entries()){
+        const j=(kind-i%3+3)%3,w=2.16+.55*cos(i+j);
+        local.position.set(...tip).sub(levels.position);local.scale.set(w,w*.92,w);
+        local.rotation.set(.42-.38*j,yaw+(j-1)*.99,-.16+.14*j,'YXZ');
+        local.updateMatrix();mesh.setMatrixAt(i,local.matrix);
+      }
+      mesh.receiveShadow=true;canopy.add(mesh);
     }
+    levels.addLevel(canopy,detailed?0:10,.12);
   }
-}
-function gateBlossoms(p) {
-  p.shapes.peachSprig=blossomGeometry();
-  const {ink,flowers}=peachMaterials();
-  oldPeach(p,ink,flowers);
+  return camera=>{
+    if(!camera)return;
+    const dx=wrapDelta(x-camera.position.x),dz=wrapDelta(z-camera.position.z);
+    root.visible=dx*dx+dz*dz<166**2;
+    if(root.visible)root.position.set(camera.position.x+dx,root.position.y,camera.position.z+dz);
+  };
 }
 function groveShrine(p){
   const f=frame(p,MOON_GATE.x,MOON_GATE.z,PI/2);
@@ -316,7 +328,6 @@ export function* dressPilgrimage(painter) {
   yield* inari(painter);
   yield;
   yield* paintPeachCliffs(painter,washTexture('peach-valley-rock'));
-  gateBlossoms(painter);
   fallenBlossoms(painter);
   groveShrine(painter);
   yield;
@@ -427,7 +438,7 @@ function fallingPetals(scene) {
 }
 export function pilgrimageLife(scene){
   const map=mistTexture(), rng=seeded(90210);
-  const clouds=[], valley=[];
+  const clouds=[];
   // Low banks gather just below the ridge. From the ridge top the sanctuary
   // stands clear, with strips of mist still visible in the valley below.
   for(let i=0;i<90;i++) {
@@ -435,22 +446,13 @@ export function pilgrimageLife(scene){
     if(terrainHeight(x,z)>y+1.6) continue;
     clouds.push({x,z,y,w:32+rng()*59,h:6+rng()*10});
   }
-  // A handful of veils sit in separate hollows. Preserve a clear view
-  // across the orchard and past the first flowering shoulder at each turn.
-  for(const [u,v,width] of [[-29,-23,22],[-57,12,26],[-36,30,20],[4,-31,20],
-    [34,21,25],[46,-7,18],[77,31,21],[110,18,22],[119,-15,18],
-    [147,-39,23],[172,4,19],[201,28,22]]){
-    const x=PEACH.x+u,z=PEACH.z+v;
-    valley.push({x,z,y:terrainMeshHeight(x,z)+2.6+rng()*2.2,w:width,h:4+rng()*4});
-  }
-  const cloud=banks(scene,map,clouds,'#f0ece3',.64), mist=banks(scene,map,valley,'#eddfd4',.24);
-  const orchard=createPeachOrchard(scene);
+  const cloud=banks(scene,map,clouds,'#f0ece3',.64);
+  const orchard=createPeachOrchard(scene),gate=gateBlossoms(scene);
   const foxes=foxParties(scene), rain=sunshower(scene), petals=fallingPetals(scene);
   return (time,player,camera)=>{
-    orchard(camera);
+    orchard(camera);gate(camera);
     const nearInari=abs(wrapDelta(player.x-DISTRICTS.inari.x+60))<260 && abs(wrapDelta(player.z-DISTRICTS.inari.z-82))<217;
-    const nearPeach=hypot(wrapDelta(player.x-PEACH.x),wrapDelta(player.z-PEACH.z))<347;
-    cloud(time,player,nearInari);mist(time,player,nearPeach);foxes(time,player,nearInari,camera);
+    cloud(time,player,nearInari);foxes(time,player,nearInari,camera);
     rain(time,player,nearInari);petals(time,player);
   };
 }

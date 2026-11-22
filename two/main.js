@@ -877,7 +877,7 @@ function settingsForLighting() {
 function drawScene() {
   bathReflection(p, photoMode ? photoTime : state.time, camera);
   const focusDistance = photoMode ? Math.max(0.3, camera.position.distanceTo(aim) - 0.55) : 0;
-  ink.draw(scene, focusDistance, scrollCoverage(p.x,p.z));
+  ink.draw(scene, focusDistance, scrollCoverage(p.x,p.z), photoMode ? photoTime : state.time);
 }
 function frame(now) {
   requestAnimationFrame(frame);

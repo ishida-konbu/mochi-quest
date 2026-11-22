@@ -25,7 +25,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=nishiyama-bamboo-1', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=peach-kasumi-1', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
