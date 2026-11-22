@@ -1,6 +1,3 @@
-import { createMysteryUI } from './mystery-ui.js';
-import { createMysteryView } from './mystery-view.js';
-import { cases as mysteryCases } from './mystery-data.js';
 import * as THREE from './vendor/three.module.min.js';
 import { applyClimateLights } from './atmosphere.js';
 import { createWake } from './wake.js';
@@ -86,7 +83,7 @@ async function startJourney() {
 }
 paintGlyphs();
 const { game, settings: savedSettings, status: transferStatus } = await startJourney();
-let hasJourney = game.restored, saveFailureShown = false;
+let hasJourney = game.restored;
 const state = game.state,
   p = state.player;
 const audio = createAudio(createSoundscape);
@@ -97,7 +94,6 @@ let pitch = 0.23,
   priorCamera = null,
   photoMode = false;
 let goal = REGIONS.some((r) => r.id === savedSettings.goal) ? savedSettings.goal : null;
-let storyGoal = game.mysteryWorld.locate(savedSettings.storyGoal) ? savedSettings.storyGoal : null;
 let trackedAnimal = null, trackedHabitat = null, jumpPin = null;
 const speciesNames = { frog:'蛙', rabbit:'兎', turtle:'ミツユビハコガメ',
   ...Object.fromEntries(Object.entries({...SPECIES,...SEA_SPECIES,...SCROLL_FAUNA}).map(([type,spec])=>[type,type==='bird'?'丹頂鶴':spec.label])) };
@@ -125,7 +121,6 @@ let nextFrame = 0,
   world,
   meadow,
   actors,
-  mysteryView,
   bathReflection,
   wake,
   ink,
@@ -155,44 +150,15 @@ let ratio = nativeRatio;
 let frames = 0,
   workTime = 0,
   qualitySince = 0;
-const storyUI = createMysteryUI({
-  game, title:$('dialog-title'), content:$('dialog-content'), save,
-  close:() => dialog.close(), speciesName:type=>speciesNames[type],
-  stageCourt() {
-    if (!mysteryView || !bathReflection || contextLost) return;
-    const seat=game.mysteryWorld.locate('LOC_KYO_COURT');
-    const oldEye=camera.position.clone(), oldAngle=camera.quaternion.clone();
-    mysteryView.update(state.time,p);
-    camera.position.set(seat.x-1.7,seat.y+2.35,seat.z+4.5);
-    camera.lookAt(seat.x-2.1,seat.y+1.1,seat.z-4.6);
-    camera.updateMatrixWorld();
-    try { drawScene(); }
-    finally {
-      camera.position.copy(oldEye); camera.quaternion.copy(oldAngle); camera.updateMatrixWorld();
-    }
-  },
-  guide:locationId=>{
-    storyGoal=locationId; goal=null; trackedAnimal=trackedHabitat=null;
-    lastFocus=canvas; persistSettings(); dialog.close(); updateHUD();
-  },
-  useLegacy:()=>{ dialog.close(); game.act('interact'); dispatchEvents(); updateHUD(); save(); },
-});
-function storyDestination() {
-  return storyGoal ? game.mysteryWorld.locate(storyGoal) : null;
-}
 function journeySettings() {
-  return { sound: audible, yaw: photoMode ? priorCamera.yaw : yaw, goal, storyGoal };
+  return { sound: audible, yaw: photoMode ? priorCamera.yaw : yaw, goal };
 }
 function persistSettings() {
   store(settingsKey, journeySettings());
 }
 function save() {
   if (active) {
-    if (store(saveKey, game.save())) { hasJourney = true; saveFailureShown = false; }
-    else if (!saveFailureShown) {
-      saveFailureShown = true;
-      message('旅の記録を書き込めません。ブラウザの空き容量と保存設定を確認してください。',8);
-    }
+    if (store(saveKey, game.save())) hasJourney = true;
     persistSettings();
   }
 }
@@ -215,7 +181,6 @@ function message(text, seconds = 2.7) {
 function dispatchEvents() {
   for (const e of state.events.splice(0)) {
     audio.handle(e);
-    if (e.type === 'mystery' && !dialog.open) { openDialog('story'); storyUI.interact(e.target); }
     if (e.type === 'say') {
       $('speech').hidden = false;
       $('speech').textContent = e.text;
@@ -232,12 +197,6 @@ function dispatchEvents() {
 function action(name) {
   if (dialog.open || photoMode) return;
   unlock();
-  if (name === 'interact' || name === 'story') {
-    const entries = game.interactionChoices();
-    if (entries.some(entry=>entry.action==='story')) {
-      openDialog('story'); storyUI.contacts(entries); return;
-    }
-  }
   game.act(name, name === 'throw' ? actors?.hero.rotation.y : undefined);
   dispatchEvents();
   updateHUD();
@@ -417,7 +376,7 @@ $('send').onpointerdown = (e) => {
   e.preventDefault();
   action('throw');
 };
-$('context').onclick = () => action('interact');
+$('context').onclick = () => action(game.nearest()?.action || 'interact');
 const bindings = new Set([
   'ArrowLeft',
   'ArrowRight',
@@ -431,7 +390,6 @@ const bindings = new Set([
   'KeyR',
   'KeyC',
   'KeyE',
-  'KeyJ',
   'KeyZ',
   'KeyM',
   'KeyH',
@@ -448,12 +406,9 @@ const bindings = new Set([
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || !bindings.has(e.code)) return;
   if (dialog.open) {
-    if (dialogKind==='story' && e.code==='KeyE' && !e.repeat) {
-      e.preventDefault(); $('dialog-content').querySelector('[data-advance]')?.click(); return;
-    }
     if (
       !e.repeat &&
-      ((dialogKind === 'map' && e.code === 'KeyM') || (dialogKind==='story' && e.code==='KeyJ') ||
+      ((dialogKind === 'map' && e.code === 'KeyM') ||
         (dialogKind === 'guide' && ['KeyH', 'KeyP'].includes(e.code)))
     ) {
       e.preventDefault();
@@ -474,7 +429,6 @@ document.addEventListener('keydown', (e) => {
     togglePhoto();
     return;
   }
-  if (e.code === 'KeyJ' && !photoMode) { openDialog('story'); storyUI.book(); return; }
   if (e.code === 'KeyM') {
     openDialog('map');
     return;
@@ -630,10 +584,9 @@ function updateHUD() {
     $('effects').textContent = effectsText;
     lastEffects = effectsText;
   }
-  const candidates = game.interactionChoices();
-  const near = candidates[0];
+  const near = game.nearest();
   $('context').hidden = !near || dialog.open || photoMode;
-  if (near) $('context').querySelector('span').textContent = near.label + (candidates.length > 1 ? '　ほか'+(candidates.length-1)+'件' : '');
+  if (near) $('context').querySelector('span').textContent = near.label;
   const deg = -THREE.MathUtils.radToDeg(yaw),
     base = Math.round(deg / 15),
     directions = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
@@ -644,8 +597,7 @@ function updateHUD() {
     el.classList.toggle('major', n % 3 === 0);
     el.firstElementChild.textContent = n % 3 === 0 ? directions[(((n / 3) % 8) + 8) % 8] : '';
   });
-  const station = storyDestination();
-  const dest = station || trackedAnimal || REGIONS.find(r => r.id === goal);
+  const dest = trackedAnimal || REGIONS.find(r => r.id === goal);
   $('target').hidden = !dest;
   if (dest) {
     const dx = wrapDelta(dest.x - p.x),
@@ -654,12 +606,12 @@ function updateHUD() {
     const pointer = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][
       ((Math.round(heading / (Math.PI / 4)) % 8) + 8) % 8
     ];
-    const name = station ? station.label : trackedAnimal ? speciesNames[dest.type] : dest.name;
-    const height = station ? station.y-p.y : trackedAnimal ? trackedAnimal.y - p.y : dest.id === 'ryugu' ? Math.min(0,terrainHeight(dest.x,dest.z)+1-p.y) : 0;
+    const name = trackedAnimal ? speciesNames[dest.type] : dest.name;
+    const height = trackedAnimal ? trackedAnimal.y - p.y : dest.id === 'ryugu' ? Math.min(0,terrainHeight(dest.x,dest.z)+1-p.y) : 0;
     const elevation = Math.abs(height) > 2 ? '　' + (height > 0 ? '上 ' : '下 ') + Math.round(Math.abs(height)) + ' m' : '';
     $('target').textContent = pointer + '　' + name + '　' + Math.round(Math.hypot(dx, dz)) + ' m' + elevation;
   }
-  if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, station || trackedAnimal);
+  if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, trackedAnimal);
 }
 function openDialog(kind) {
   if (!renderer || dialog.open) return;
@@ -669,7 +621,6 @@ function openDialog(kind) {
   dialogKind = kind;
   $('dialog-title').textContent = kind === 'map' ? '十七景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
   dialog.showModal();
-  if (kind === 'story') return;
   if (kind === 'map') {
     selectedPlace = goal || state.regionId;
     jumpPin = null;
@@ -720,13 +671,7 @@ function mapDialog() {
   bookLink.className='choice'; bookLink.textContent='配達帳を開く';
   bookLink.onclick=()=>{dialogKind='journal';$('dialog-title').textContent='三条通知の配達帳';journalDialog();};
   body.querySelector('.actions').append(bookLink);
-  for (const c of mysteryCases.filter(c=>game.mystery.state.status[c.id]==='unaccepted' && game.mystery.meets(c.prerequisites))) {
-    const b=document.createElement('button'); b.className='choice'; b.textContent='頼み事　'+c.titleJa;
-    b.onclick=()=>{dialogKind='story';storyUI.book(c.id);};
-    body.querySelector('.actions').append(b);
-  }
   $('set-goal').onclick = () => {
-    storyGoal=null;
     trackedAnimal = trackedHabitat = null;
     goal = selectedPlace;
     lastFocus = canvas;
@@ -735,9 +680,8 @@ function mapDialog() {
     updateHUD();
   };
   $('local-animal').onclick=()=>trackDelivery(nearestUndelivered(undefined,selectedPlace),selectedPlace);
-  $('clear-goal').hidden = !goal && !trackedAnimal && !storyGoal;
+  $('clear-goal').hidden = !goal && !trackedAnimal;
   $('clear-goal').onclick = () => {
-    storyGoal=null;
     trackedAnimal = trackedHabitat = null;
     goal = null;
     lastFocus = canvas;
@@ -749,7 +693,7 @@ function mapDialog() {
 }
 function trackDelivery(animal, habitat=null) {
   if(!animal) return;
-  storyGoal=null; trackedAnimal=animal; trackedHabitat=habitat; goal=null;
+  trackedAnimal=animal; trackedHabitat=habitat; goal=null;
   persistSettings();lastFocus=canvas;dialog.close();updateHUD();
 }
 function journalDialog() {
@@ -801,11 +745,10 @@ function journalDialog() {
 }
 function redrawAtlas() {
   const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
-  const station = storyDestination();
-  const name = station ? station.label : trackedAnimal ? speciesNames[trackedAnimal.type] : '';
+  const name = trackedAnimal ? speciesNames[trackedAnimal.type] : '';
   const atlas = $('atlas');
   atlas.setAttribute('aria-label', '十七の名所、各地の野湯、お餅の現在地と選んだ名所の自転車ポート' + (name ? '、配達先の' + name + 'の現在地' : ''));
-  drawMap(atlas,state,yaw,selectedPlace,true,point,station || trackedAnimal,name);
+  drawMap(atlas,state,yaw,selectedPlace,true,point,trackedAnimal,name);
 }
 function directions(from,to,originLabel) {
   const dx=wrapDelta(to.x-from.x),dz=wrapDelta(to.z-from.z);
@@ -875,7 +818,7 @@ function helpDialog(tab) {
     transfer.onclick = () => {
       const url = transferURL(location.origin, read(saveKey), journeySettings());
       if (url) location.assign(url);
-      else transfer.textContent = '旅の記録が大きく、リンクで引き継げません';
+      else transfer.textContent = '旅の記録を読み取れませんでした';
     };
     body.querySelector('.actions').append(transfer);
   } else if (location.origin === WORKER_ORIGIN && !hasJourney) {
@@ -889,7 +832,6 @@ function helpDialog(tab) {
 $('map').onclick = $('mini-button').onclick = () => openDialog('map');
 $('journal').onclick = () => openDialog('journal');
 $('guide').onclick = () => openDialog('guide');
-$('mystery-book').onclick = () => { unlock(); openDialog('story'); storyUI.book(); };
 $('dismiss').onclick = () => dialog.close();
 dialog.addEventListener('click', (e) => {
   if (e.target === dialog) dialog.close();
@@ -897,7 +839,6 @@ dialog.addEventListener('click', (e) => {
 dialog.addEventListener('close', () => {
   if (dialog.open) return;
   previous = 0;
-  if (dialogKind==='story') { storyUI.onClose(); save(); }
   dialogKind = '';
   (lastFocus?.tagName === 'BUTTON' ? lastFocus : canvas).focus({ preventScroll: true });
 });
@@ -983,7 +924,6 @@ function frame(now) {
   const sceneTime = photoMode ? photoTime : state.time;
   audio.updateWorld(state, sceneTime, yaw, photoMode);
   world.update(sceneTime, p, camera, state.time, state.bellStrike);
-  mysteryView.update(sceneTime, p);
   meadow(sceneTime, p, camera);
   // Keep the photographic pose alive while the travel clock is paused.
   if (photoMode) {
@@ -1057,8 +997,6 @@ async function boot() {
     sun.target.position.set(p.x,p.y,p.z);
     applyClimateLights(hemisphere, sun, bounce, p, state.time);
     wake(p, state.time);
-    mysteryView = createMysteryView(scene, game.mysteryWorld);
-    mysteryView.update(state.time,p);
     actors = createActors(scene, renderer);
     await actors.prepare(state);
     bathReflection = createBathReflection(renderer, scene, actors.hero);
@@ -1073,7 +1011,6 @@ async function boot() {
     updateHUD();
     $('loading').hidden = true;
     if (transferStatus) message(transferStatus,6);
-    else if (!game.restored) message('初日の出の浦で、杵吉が祝い杵を捜している。',7);
     if (location.origin === PAGES_ORIGIN && location.hash === '#guide') {
       history.replaceState(history.state, '', location.pathname + location.search);
       openDialog('guide');
