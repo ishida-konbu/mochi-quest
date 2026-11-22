@@ -1,5 +1,5 @@
 import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
-import { mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
+import { SOURCE_STONES, mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
 import { MAPLE_BRIDGE, mapleDeckHeight, mapleApproachHeight, mapleBridgeFootings } from './maple-crossing.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
 import { plantMountainWoods, growNishiyamaBamboo } from './mountain-woodland.js';
@@ -205,6 +205,10 @@ function ungradedHeight(x, z) {
 }
 // A building has a level earthen lot, feathered out into the hillside.
 const lotGrid = new Map();
+function lotWeight(x,z,b) {
+  const dx=x-b.x,dz=z-b.z,u=dx*b.cos-dz*b.sin,v=dx*b.sin+dz*b.cos;
+  return 1-smooth(0,3.8,max(abs(u)-b.w/2-.9,abs(v-.5)-b.d/2-1.5));
+}
 function landHeight(x, z, expanded = true) {
   x = wrapCoord(x); z = wrapCoord(z);
   const native = ungradedHeight(x,z);
@@ -213,9 +217,7 @@ function landHeight(x, z, expanded = true) {
   if (!nearby) return base;
   let weight = 0, graded = base;
   for (const b of nearby) {
-    const dx = x-b.x, dz = z-b.z, u = dx*b.cos - dz*b.sin, v = dx*b.sin + dz*b.cos;
-    const edge = max(abs(u) - b.w/2 - .9, abs(v-.5) - b.d/2 - 1.5);
-    const blend = 1 - smooth(0, 3.8, edge);
+    const blend = lotWeight(x,z,b);
     if (blend > weight) { weight = blend; graded = base + (b.y-base)*blend; }
   }
   return graded;
@@ -437,9 +439,14 @@ export function nearRoad(x, z, extra = 0) {
 }
 
 const structures = [];
+// Preserve the planting survey's empty clearing at the former dye shop.
+// Its footprint only affects seed draws; today's slopes carry no foundation.
+const formerDyeLot={x:274,z:-127,w:8.6,d:6.6,cos:cos(.29),sin:sin(.29),y:landHeight(274,-127)};
+const plantingLots = [formerDyeLot];
 function house(x, z, w, d, wall, roof, yaw = 0, kind = 'cottage', craft) {
   const b = { x, z, w, d, wall, roof, yaw, kind, craft, y: outerHeight(x,z,ungradedHeight(x,z)), cos: cos(yaw), sin: sin(yaw), snow: seasonAt(x,z).snow > .55 };
   structures.push(b);
+  plantingLots.push(b);
   const extent = hypot(w/2+5,d/2+6);
   for (let i = Math.floor((x-extent)/24); i <= Math.floor((x+extent)/24); i++)
     for (let j = Math.floor((z-extent)/24); j <= Math.floor((z+extent)/24); j++) {
@@ -478,7 +485,6 @@ house(-59,-277,9,7.6,3.5,3.3,-.28,'shop', 'dye');
 house(-96,-264,7.6,7,3.2,3.2,.27, 'cottage', 'rice');
 house(-69,-258,8.8,7.5,3.4,3.3,-.24,'shop', 'tea');
 house(-114,-303,8.8,7.5,3.4,3.1,.1, 'cottage', 'ink');
-house(274,-127,8.6,6.6,3.3,2.8,.29,'shop', 'dye');
 house(-69,282,7.8,6.6,3.2,2.6,-.34,'temple');
 house(288,160,8.6,6.6,3.3,2.7,.3,'inn');
 export const BUILDINGS = structures;
@@ -577,7 +583,7 @@ for (let n = 0; n < 1600; n++) {
     safe(x, z, 4.3) ||
     landHeight(x,z,false) < 1.8 ||
     rz < riverHalfWidth(x) + 3 ||
-    BUILDINGS.some((b) => abs(x - b.x) < b.w * 0.65 + 3 && abs(z - b.z) < b.d * 0.65 + 3)
+    plantingLots.some((b) => abs(x - b.x) < b.w * 0.65 + 3 && abs(z - b.z) < b.d * 0.65 + 3)
   )
     continue;
   if (trees.some((t) => (x - t.x) ** 2 + (z - t.z) ** 2 < 21)) continue;
@@ -604,7 +610,7 @@ const outerRandom = seeded(532151);
 for (let i=0; i<980; i++) {
   const x = outerRandom()*738-369, z = outerRandom()*748-374;
   if (abs(x)<225 && abs(z)<224 || landHeight(x,z,false)<2.2 || nearRoad(x,z,2.65)) continue;
-  if (safe(x,z,6) || BUILDINGS.some(b => hypot(x-b.x,z-b.z) < max(b.w,b.d)*.76+3)) continue;
+  if (safe(x,z,6) || plantingLots.some(b => hypot(x-b.x,z-b.z) < max(b.w,b.d)*.76+3)) continue;
   const {snow,autumn,moon,dawn} = originalSeasonAt(x,z);
   if (moon>.4 && z<302 && x> -77 || dawn>.5 && x>298 || snow>.45 && abs(x+78)<19 && z < -260) continue;
   const density = .14 + .44*autumn+.19*snow+.015*moon+.12*dawn;
@@ -619,7 +625,7 @@ const fallRng = seeded(35444);
 for (let i=0;i<120;i++) {
   const x=284+(fallRng()-.5)*121, z=-116+(fallRng()-.5)*108;
   if (landHeight(x,z,false)<2.1 || nearRoad(x,z,2.65) || safe(x,z,4.2) || hypot(x-285,z+115)<8 ||
-      BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<max(b.w,b.d)*.8+3) ||
+      plantingLots.some(b=>hypot(b.x-x,b.z-z)<max(b.w,b.d)*.8+3) ||
       trees.some(t=>(x-t.x)**2+(z-t.z)**2<32)) continue;
   trees.push({x,z,h:6.4+fallRng()*4.1,kind:'maple',seed:Math.floor(fallRng()*1e6),autumn:1});
 }
@@ -643,7 +649,7 @@ function populateForest() {
     if (originalShore(x,z)<9 || riverBank<10.5 || nearRoad(x,z,2.7)) continue;
     const region=originalRegionAt(x,z), place=REGIONS[region];
     if (hypot(x-place.x,z-place.z)<20 || safe(x,z,5.8)) continue;
-    if (BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4)) continue;
+    if (plantingLots.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4)) continue;
     if (BRIDGES.some(b=>abs(x-b.x)<b.halfWidth+4 && abs(z-b.z)<b.length/2+4)) continue;
     if (GATES.some(g=>hypot(x-g.x,z-g.z)<g.w*.75)) continue;
     // Rice plots, bathing pool, the moon-viewing meadow and sunrise festival.
@@ -737,7 +743,7 @@ function transplant(x,z,family) {
   if(nearPeachTrunk(x,z,5))return false;
   if (shoreDistance(x,z)<10 || landHeight(x,z)<2 || nearRoad(x,z,3.1) ||
       abs(z-riverZ(x))-riverHalfWidth(x)<11 || safe(x,z,6) ||
-      BUILDINGS.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4.5) ||
+      plantingLots.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4.5) ||
       TREES.some(t=>(t.x-x)**2+(t.z-z)**2<24)) return false;
   TREES.push({x,z,kind:TREE_FAMILIES[family][0], form:family*TREE_FORMS_PER_FAMILY+Math.floor(saplings()*4),
     h:5.6+saplings()*6,seed:Math.floor(saplings()*1e6)});
@@ -927,9 +933,18 @@ function hidesValley(tree){
   }
   return false;
 }
+// The original mountain census consumed a variable number of random samples
+// at the head of the ravine. Survey the old ground there, then clear the water
+// in one pass so opening a spring cannot move distant stands or wildlife.
+const springParcel=(x,z)=>x>258 && x<299 && z> -145 && z< -114;
+function mountainPlantingHeight(x,z){
+  if(!springParcel(x,z))return terrainHeight(x,z);
+  const soil=landHeight(x,z);
+  return mapleApproachHeight(x,z,soil+(formerDyeLot.y-soil)*lotWeight(x,z,formerDyeLot));
+}
 for(let i=TREES.length-1;i>=0;i--){
   const {x,z}=TREES[i],hut=nearbyHut(x,z);
-  const streamBank=inMountainStreamClearing(x,z);
+  const streamBank=!springParcel(x,z) && inMountainStreamClearing(x,z);
   // Two long-established bamboo clumps frame the lower stream on dry banks.
   // Keep their trunks if the channel's water never reaches their roots.
   if(hut && (hypot(x-hut.x,z-hut.z)<=8 || inHutYard(x,z)) ||
@@ -945,19 +960,25 @@ for(const [i,[x,z,h]] of [[479,-701,9.7],[485.5,-695,11.6],[500,-694.6,10.7],
 // Append the mountain understory after surveying the earlier rocks, perches and
 // garden trees. All new trunks enter the same contacts and canopy as those trees.
 function mountainGlade(x,z,ground){
-  if(inMountainStreamClearing(x,z) || nearRoad(x,z,3.8) || reservedScenery(x,z))return false;
+  const parcel=springParcel(x,z);
+  if(parcel && hypot(x-formerDyeLot.x,z-formerDyeLot.z)<=hypot(formerDyeLot.w,formerDyeLot.d)*.52+5)return false;
+  if((!parcel && inMountainStreamClearing(x,z)) || nearRoad(x,z,3.8) || reservedScenery(x,z))return false;
   const orchardApron=hypot((x-DISTRICTS.peach.x)/133,(z-DISTRICTS.peach.z)/112);
   if(orchardApron<.58 || (orchardApron>=1.02 && protectedDistrict(x,z)))return false;
   const hut=nearbyHut(x,z);
   if(hut && (hypot(x-hut.x,z-hut.z)<=9 || inHutYard(x,z)))return false;
   if(abs(z-riverZ(x))<riverHalfWidth(x)+11 || shoreDistance(x,z)<10 || safe(x,z,6))return false;
   if(springRadius(x,z)<1.5 || (x>275 && abs(z-mapleStreamZ(x))<8))return false;
-  if(Math.abs(terrainMeshHeight(x,z)-ground)>.14)return false;
+  if(Math.abs(terrainMeshHeight(x,z,parcel?mountainPlantingHeight:terrainHeight)-ground)>.14)return false;
   const lots=lotGrid.get(Math.floor(x/24)*128+Math.floor(z/24));
   return !lots || lots.every(b=>hypot(b.x-x,b.z-z)>hypot(b.w,b.d)*.52+5);
 }
-plantMountainWoods(TREES,ROCKS,PEACH_TREES,CLIFF_PINES,terrainHeight,
+plantMountainWoods(TREES,ROCKS,PEACH_TREES,CLIFF_PINES,mountainPlantingHeight,
   (x,z,ground)=>!earlierFireSurvey(x,z) && mountainGlade(x,z,ground),seeded);
+for(let i=TREES.length-1;i>=0;i--){
+  const {x,z}=TREES[i];
+  if(springParcel(x,z) && inMountainStreamClearing(x,z))TREES.splice(i,1);
+}
 
 const fireCeiling=createFireTreeCeiling(terrainHeight);
 function trailBranchReach(h,form){
@@ -1192,6 +1213,9 @@ kiyomizuSolids(terrainHeight,putSolid);
 civicAndBathSolids(terrainHeight,putSolid);
 hutSolids(terrainHeight,putSolid);
 portSolids(putSolid);
+for(const {x,z,rx,rz,yaw,top,rise} of SOURCE_STONES){
+  putSolid(x,z,rx,rz,yaw,top,'springRock',true).roundHeight=rise;
+}
 for(const stone of SPRING_STONES) {
   putSolid(SNOW_SPRING.x+stone.x,SNOW_SPRING.z+stone.z,stone.w*.84,stone.d*.84,stone.yaw,
     SNOW_SPRING.level+.18+stone.h,'oval',true);

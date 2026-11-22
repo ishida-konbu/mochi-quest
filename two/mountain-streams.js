@@ -1,6 +1,24 @@
 // Survey in world metres. Each cross-section records the surface height, half
 // width and thalweg depth. The last section meets an existing river or the sea.
+// Overlapping stone noses shelter the fissure at the head of Kaede Shimizu.
+// Their rounded upper profiles also support a traveller standing at the well.
+export const SOURCE_STONES = [
+  [270.12,-128.55,1.67,1.13,-.46,21.18,1.47],
+  [271.49,-129.65,1.29,.78,-.34,20.77,1.23],
+  [270.98,-126.38,1.03,.72,.28,20.16,.96],
+  [272.94,-129.68,.86,.56,.32,19.94,.69],
+  [274.89,-124.45,1.13,.71,-.62,19.70,.58],
+].map(([x,z,rx,rz,yaw,top,rise])=>({x,z,rx,rz,yaw,top,rise}));
+export const KAEDE_SEEP = { x:271.32, z:-128.04, y:19.92, landX:272.52, landZ:-127.60, landY:19.24 };
+
 const surveys=[
+  {id:'kaede-spring',name:'楓清水の滝',lip:5,water:[
+    [270.6,-128.2,19.46,.52,.32],[271.9,-127.7,19.26,1.54,.71],
+    [274.0,-127.0,19.18,2.42,1.06],[276.2,-127.3,19.08,1.69,.74],
+    [278.1,-128.9,18.67,1.33,.54],[280.0,-130.0,18.10,1.88,.49],
+    [283.8,-130.85,.65,2.03,1.64],[284.55,-130.97,.56,2.19,1.59],
+    [285.45,-131.28,.45,1.30,1.24],[286.65,-131.40,.27,.30,1.18],
+  ]},
   {id:'maple',name:'楓渓の滝',lip:4,water:[
     [341.5,-146.0,26.92,.40,.19],[338.4,-146.1,26.64,1.50,.56],
     [333.8,-144.7,25.88,1.45,.56],[328.8,-143.2,23.58,1.48,.54],

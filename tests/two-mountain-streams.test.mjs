@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MOUNTAIN_STREAMS,inMountainStreamClearing,mountainStreamWaterAt } from '../two/mountain-streams.js';
 import { WATER_Y,ROADS,riverZ,shoreDistance,terrainHeight,terrainMeshHeight,groundHeight,waterSurfaceAt } from '../two/terrain.js';
+import { MAPLE_BRIDGE } from '../two/maple-crossing.js';
 import { createGame } from '../two/game.js';
 
-test('three mountain watercourses descend along submerged painted beds to a river or the sea',()=>{
+test('mountain watercourses descend along submerged painted beds to a river or the sea',()=>{
   for(const stream of MOUNTAIN_STREAMS){
     const {stations,lipIndex,toeIndex}=stream;
     assert.equal(toeIndex,lipIndex+1);
@@ -25,6 +26,27 @@ test('three mountain watercourses descend along submerged painted beds to a rive
     if(stream.id==='peach')assert.ok(shoreDistance(mouth.x,mouth.z)<0);
   }
   for(const road of ROADS)for(const [x,z] of road.points)assert.equal(inMountainStreamClearing(x,z),false);
+});
+
+test('Kaede Shimizu fills the former shop site and reaches the channel under the red bridge',()=>{
+  const spring=MOUNTAIN_STREAMS.find(s=>s.id==='kaede-spring');
+  assert.ok(spring && spring.fall.lip.x<MAPLE_BRIDGE.x);
+  assert.ok(waterSurfaceAt(274,-127)-terrainMeshHeight(274,-127)>.7);
+  const east=MOUNTAIN_STREAMS.find(s=>s.id==='maple');
+  assert.ok(east.fall.lip.x>MAPLE_BRIDGE.x);
+  for(let i=2;i<spring.stations.length-1;i++){
+    if(i===spring.lipIndex)continue;
+    const a=spring.stations[i],b=spring.stations[i+1];
+    for(const t of [0,.25,.5,.75])for(const side of [-.5,0,.5]){
+      const r=side*(a.width+(b.width-a.width)*t);
+      const x=a.x+t*(b.x-a.x)+r*a.nx,z=a.z+t*(b.z-a.z)+r*a.nz;
+      assert.ok(waterSurfaceAt(x,z)>Math.max(terrainHeight(x,z),terrainMeshHeight(x,z)));
+    }
+  }
+  for(let x=spring.stations.at(-1).x;x<=MAPLE_BRIDGE.x;x+=.25){
+    const z=-130+3.3*Math.sin((x-MAPLE_BRIDGE.x)/15);
+    assert.ok(terrainMeshHeight(x,z)<WATER_Y);
+  }
 });
 
 test('the lip opens onto air and a mochi can fall into each real plunge pool and resume swimming',()=>{

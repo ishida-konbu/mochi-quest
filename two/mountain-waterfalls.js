@@ -1,13 +1,15 @@
 import * as T from './vendor/three.module.min.js';
-import { MOUNTAIN_STREAMS, mountainStreamWaterAt } from './mountain-streams.js';
+import { KAEDE_SEEP, MOUNTAIN_STREAMS, mountainStreamWaterAt } from './mountain-streams.js';
 import { terrainMeshHeight, terrainHeight, seeded, wrapDelta } from './terrain.js';
-import { currentPigment, cragPigment, sprayPigment } from './cascade-pigments.js';
+import { currentPigment, cragPigment, kaedeCragPigment, sprayPigment } from './cascade-pigments.js';
+import { carveKaedeRock } from './kaede-bedrock.js';
 
 const {sin,cos,PI,hypot}=Math;
 const mix=(a,b,t)=>a+(b-a)*t;
 const unit=t=>Math.min(1,Math.max(0,t));
 const smooth=t=>(t=unit(t))*t*(3-2*t);
 const styles={
+  'kaede-spring':{splits:[-1,-.76,-.17,.56,1],notch:.039,spray:180,seed:7631,spring:true},
   maple:{splits:[-1,-.42,.37,1],notch:.116,apron:3.4,spray:145,seed:762},
   sakura:{splits:[-1,-.75,-.27,.17,.72,1],notch:.081,apron:2.3,spray:95,seed:146},
   peach:{splits:[-1,-.49,.57,1],notch:.117,apron:4.9,spray:185,seed:914},
@@ -55,6 +57,26 @@ function surfaceGeometry(stream,style){
     }
   }
   channel(0,lipIndex);
+  if(style.spring){
+    // Two thin rills issue from one bedding plane. Their first vertices are
+    // inside the stone and their last ones submerge in the spring head.
+    const vent=KAEDE_SEEP;
+    for(const [offset,radius] of [[0,.106],[-.31,.044]]){
+      const rows=18,cols=12;
+      for(let j=0;j<=rows;j++){
+        const t=j/rows,row=xyz.length/3;
+        for(let k=0;k<=cols;k++){
+          const angle=2*PI*k/cols,r=radius*(1-.32*t)*(1+.077*cos(3*angle+t*3));
+          const tilt=Math.atan2(2*t*(vent.y-vent.landY),Math.hypot(vent.landX-vent.x,vent.landZ-vent.z));
+          const up=r*sin(angle),side=r*cos(angle);
+          point(mix(vent.x,vent.landX,t)+up*sin(tilt),mix(vent.y,vent.landY-.06,t*t)+up*cos(tilt),
+            mix(vent.z,vent.landZ,t)+offset+side+.025*sin(PI*t),k/cols,t*1.4,2,
+            1-.72*smooth((t-.85)/.15));
+        }
+        if(j<rows)quad(row,cols);
+      }
+    }
+  }
   const dx=toe.x-lip.x,dz=toe.z-lip.z,run=hypot(dx,dz),drop=lip.y-toe.y,nx=dz/run,nz=-dx/run;
   const rows=Math.ceil(drop*1.5)+9;
   // Each ribbon leaves the same rounded crest and peels away at its own seam.
@@ -72,7 +94,7 @@ function surfaceGeometry(stream,style){
         const rag=sin(3*k+.92*i)+.54*sin(1.7*i+5.4*v+k);
         const across=width*u+bow*(.11*sin(1.28*v*PI+5*u)+.027*rag);
         const reach=run*v+bow*(.46+.12*sin(9*u+2.7*v)+.054*cos(21*u+v*3.4));
-        const h=lip.y-drop*v**1.77+.027+.055*bow*sin(u*13+.32*j);
+        const h=lip.y-drop*v**(style.spring?2:1.77)+.027+.055*bow*sin(u*13+.32*j);
         point(lip.x+across*xNormal+dx/run*reach,h,lip.z+across*zNormal+dz/run*reach,
           u,mix(0,lengths[toeIndex]-lengths[lipIndex],v),.23+.77*Math.min(1,v*8),1);
       }
@@ -114,8 +136,9 @@ function escarpment(stream,style){
   }
   // Trace the actual broken terrain triangles. A torn outer edge dies away
   // into the original mountain; the darker rock continues under the veil.
+  if(style.spring)carveKaedeRock(stream,stonePoint,indices,random);
   const cols=42,rows=Math.ceil((run+7)*3);
-  for(let j=0;j<=rows;j++)for(let i=0;i<=cols;i++){
+  if(!style.spring)for(let j=0;j<=rows;j++)for(let i=0;i<=cols;i++){
     const t=j/rows,u=i/cols*2-1;
     const shoulder=.53+.47*sin(PI*t),flank=u<0?1:1.13;
     const width=lip.width+.7+style.apron*shoulder*flank+.32*sin(t*9+u*.7);
@@ -138,7 +161,9 @@ function escarpment(stream,style){
   // The world grid is coarse enough to cut a chord across a curved bank.
   // These local strips follow its actual walking surface into the water and
   // die into the painted terrain on the outside, including at the pool.
-  for(const [from,until] of [[1,stream.lipIndex],[stream.toeIndex,stations.length-2]]){
+  const banks=[[stream.toeIndex,stations.length-2]];
+  if(!style.spring)banks.unshift([1,stream.lipIndex]);
+  for(const [from,until] of banks){
     for(const side of [-1,1]){
       const strips=8,first=xyz.length/3;
       for(let j=from;j<=until;j++){
@@ -188,7 +213,7 @@ function escarpment(stream,style){
     const center=stonePoint(x,terrainMeshHeight(x,z)+1.03*rise,z,cap);
     for(let i=0;i<sides;i++)indices.push(base+3*sides+(i+1)%sides,center,base+3*sides+i);
   }
-  for(const side of [-1,1]){
+  if(!style.spring)for(const side of [-1,1]){
     for(let i=0;i<12;i++){
       const t=(i+.5*random())/12,along=mix(-2.9,run+3.4,t);
       const across=side*lip.width*(.83+random()*1.23);
@@ -197,7 +222,7 @@ function escarpment(stream,style){
         Math.atan2(fz,fx)+.62+random()*.68,Math.abs(across)<lip.width*1.5);
     }
   }
-  for(let i=2;i<stations.length-2;i+=3+Math.floor(random()*3)){
+  if(!style.spring)for(let i=2;i<stations.length-2;i+=3+Math.floor(random()*3)){
     const a=stations[i],bank=(random()<.5?-1:1)*a.width*(.84+.25*random());
     ledge(a.x+bank*a.nx,a.z+bank*a.nz,.32+random()*.62,.23+random()*.38,
       .10+random()*.21,random()*PI,true);
@@ -228,6 +253,25 @@ function sprayGeometry(stream,style){
     }
     const k=i*4;indices.push(k,k+1,k+2,k+2,k+1,k+3);
   }
+  if(style.spring){
+    const drop=lip.y-toe.y,run=hypot(lip.x-toe.x,lip.z-toe.z);
+    const fx=(toe.x-lip.x)/run,fz=(toe.z-lip.z)/run,flight=Math.sqrt(drop/4.9);
+    // Eddies entering the crest shed small packets of water as they fall.
+    // Their axes follow their velocity and the jet inherits the sheet speed.
+    for(let i=0;i<168;i++){
+      const v=.27+.63*random(),side=random()<.5?-1:1;
+      const u=side*(.58+.48*random()),across=lip.width*u;
+      const x=fx*(run*v+.46*sin(PI*v))+fz*across,z=fz*(run*v+.46*sin(PI*v))-fx*across;
+      const spread=side*(.31+1.33*random());
+      const vx=fx*run/flight+fz*spread,vz=fz*run/flight-fx*spread;
+      const life=(1-v)*flight*(.36+.55*random()),width=.012+random()*.036;
+      const phase=random(),elongation=width*(1.8+2.7*random()),k=xyz.length/3;
+      for(const [s,t] of [[0,0],[1,0],[0,1],[1,1]]){
+        xyz.push(x,-drop*v*v,z);uv.push(s,t);jets.push(vx,-9.8*flight*v,vz,life);nibs.push(width,elongation,phase);
+      }
+      indices.push(k,k+1,k+2,k+2,k+1,k+3);
+    }
+  }
   const g=new T.BufferGeometry();
   for(const [name,data,size] of [['position',xyz,3],['uv',uv,2],['jet',jets,4],['nib',nibs,3]]){
     g.setAttribute(name,new T.Float32BufferAttribute(data,size));
@@ -241,7 +285,7 @@ export function createMountainWaterfalls(scene){
     const style=styles[stream.id],{lip}=stream.fall,root=new T.Group();
     root.name=stream.name;root.userData.waterfallId=stream.id;root.position.set(lip.x,lip.y,lip.z);
     for(const [name,part,geo,material] of [
-      ['濡れた岩棚と苔の節理','stone',escarpment(stream,style),cragPigment()],
+      ['濡れた岩棚と苔の節理','stone',escarpment(stream,style),style.spring?kaedeCragPigment():cragPigment()],
       ['岩間を割る落水と渓流','water',surfaceGeometry(stream,style),currentPigment(stream,clock,submerged)],
       ['滝壺の飛沫','spray',sprayGeometry(stream,style),spray],
     ]){

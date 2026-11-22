@@ -145,6 +145,12 @@ function makeWorld() {
     npc(type,role,x,z,phase);
     Object.assign(npcs.at(-1),visitor);
   }
+  // Move the reading table after casting the historic village and wildlife surveys.
+  // Its inventory slot and the creatures drawn around the old shop stay stable.
+  const readingTable=objects.find(o=>o.id==='manga-39');
+  readingTable.x=299.5;
+  readingTable.z=-112;
+  readingTable.y=groundHeight(readingTable.x,readingTable.z);
   // New entries follow both historical inventories so imported item and recipient IDs stay stable.
   for (const r of REGIONS.slice(ORIGINAL_REGIONS.length,15)) {
     if (r.id !== 'ryugu') {

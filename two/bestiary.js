@@ -34,6 +34,9 @@ export function wildlifeHomes(fixed) {
         const a=random()*2*Math.PI, r=17+random()*37;
         x=region.x+Math.sin(a)*r; z=region.z+Math.cos(a)*r;
         if (isFlying(type)) break;
+        // Ground animals ranged outside the dye shop and its yard. Keep that
+        // opening at the spring so the historical habitat draw stays stable.
+        if((x-274)**2+(z+127)**2<10**2)continue;
         const h=groundHeight(x,z);
         if(waterDepth(x,z)>.04 || solidHeightAt(x,z,2)>h+.18 ||
            Math.abs(groundHeight(x+1,z-1)-h)>.42 || Math.abs(groundHeight(x-1,z+1)-h)>.42 ||

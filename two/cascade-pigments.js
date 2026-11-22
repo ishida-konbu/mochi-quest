@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.min.js';
+import { KAEDE_SEEP } from './mountain-streams.js';
 
 const paperNoise=`
   float hash21(vec2 p){
@@ -29,6 +30,7 @@ function fallingInk(){
 export function currentPigment(stream,clock,submerged){
   const {toe,lip}=stream.fall,plate=fallingInk();
   const water=new T.MeshLambertMaterial({color:0xffffff,side:T.DoubleSide,transparent:true,depthWrite:true});
+  if(stream.id==='kaede-spring')water.defines={KAEDE_SHIMIZU:1};
   water.forceSinglePass=true;
   water.onBeforeCompile=shader=>{
     shader.uniforms.streamClock=clock;
@@ -37,24 +39,38 @@ export function currentPigment(stream,clock,submerged){
     shader.uniforms.dropHeight={value:lip.y-toe.y};
     shader.uniforms.impact={value:new T.Vector4(toe.x-lip.x,toe.z-lip.z,toe.nx,toe.nz)};
     shader.uniforms.impactWidth={value:lip.width};
+    if(water.defines?.KAEDE_SHIMIZU)shader.uniforms.seep={value:new T.Vector2(KAEDE_SEEP.landX-lip.x,KAEDE_SEEP.landZ-lip.z)};
     shader.vertexShader=`
       attribute vec4 current;
       varying vec4 inkFlow;
       varying vec3 waterPoint;
       uniform float streamClock;
+      #ifdef KAEDE_SHIMIZU
+      uniform vec4 impact;
+      uniform float dropHeight;
+      #endif
     `+shader.vertexShader.replace('#include <begin_vertex>',`
       #include <begin_vertex>
       inkFlow=current;
       float flutter=sin(current.y*2.2-current.z*3.+streamClock*2.9+.7*sin(current.x*12.));
       transformed.y+=.023*flutter*(1.-current.z);
+      #ifdef KAEDE_SHIMIZU
+        float down=clamp(-position.y/dropHeight,0.,1.);
+        float loose=smoothstep(.01,.32,down)*current.z;
+        float travel=sqrt(down+.006)*9.-streamClock*4.2;
+        transformed.xz+=impact.zw*loose*(.041*sin(travel*2.4+current.x*13.)+.028*sin(travel*4.3+current.x*23.));
+      #endif
       waterPoint=transformed;`);
     shader.fragmentShader=`
       varying vec4 inkFlow; varying vec3 waterPoint;
       uniform float streamClock,impactWidth,dropHeight,submerged; uniform sampler2D brushPlate; uniform vec4 impact;
+      #ifdef KAEDE_SHIMIZU
+      uniform vec2 seep;
+      #endif
       ${paperNoise}
     `+shader.fragmentShader.replace('#include <color_fragment>',`
       #include <color_fragment>
-      float u=inkFlow.x,s=inkFlow.y,fall=inkFlow.z,fade=inkFlow.w,t=streamClock;
+      float u=inkFlow.x,s=inkFlow.y,fall=min(1.,inkFlow.z),fade=inkFlow.w,t=streamClock;
       if(fade<.015 || (!gl_FrontFacing && fall<.32 && submerged<.5))discard;
       vec2 p=waterPoint.xz;
       // Broad surface washes travel downstream. Fine marks collect where the
@@ -99,8 +115,43 @@ export function currentPigment(stream,clock,submerged){
       float veilAlpha=clamp(.94-.70*holes*(.57+.43*down),.24,.93);
       float loose=wash(vec2(braid*28.+1.78*clump,s*.93-t*3.28));
       veilAlpha*=mix(1.,smoothstep(.06,.66,loose),.81*down);
+      #ifdef KAEDE_SHIMIZU
+        // Time of flight is proportional to sqrt(drop). The same parcel
+        // lengthens from a wrinkle at the crest into a broken white streak.
+        float travel=sqrt(down+.006)*6.4-t*1.74;
+        float tow=wash(vec2(braid*29.+.62*sin(travel*3.+braid*9.),travel*1.8));
+        float strand=wash(vec2(braid*52.+1.4*tow,travel*2.7+.3*tow));
+        float lace=smoothstep(.34,.86,.42*tow+.37*strand+.21*mark);
+        vec3 clearWater=mix(vec3(.048,.17,.17),vec3(.24,.40,.38),tow);
+        float air=smoothstep(.32,.84,.33*light+.49*lace+.13*scratch+.12*down);
+        vec3 whiteWater=mix(clearWater,vec3(.83,.89,.83),air);
+        col=mix(col,whiteWater,fall);
+        veilAlpha=mix(.29,.90,air)*mix(1.,.66+.34*strand,down);
+        float sprayBreak=smoothstep(.59,.99,down)*smoothstep(.21,.93,abs(u))*.33+
+                         smoothstep(.86,1.,down)*.35;
+        veilAlpha*=smoothstep(sprayBreak-.08,sprayBreak+.23,.59*tow+.41*strand);
+        // Successive pulses on the headpool break on the gravel margins.
+        vec2 well=p-seep;
+        float radius=length(well*vec2(.85,1.03));
+        float pool=1.-smoothstep(1.1,5.2,radius);
+        float ring=stroke(radius*2.61-t*.94+.29*ripple+.08*sin(t*1.83+well.y*4.1),.035)
+          *exp(-radius*1.26)*(.36+.64*broken);
+        float eye=exp(-radius*radius*11.)*(.44+.29*sin(t*3.8));
+        col=mix(col,vec3(.14,.32,.29),pool*.42*(1.-fall));
+        col+=vec3(.29,.35,.33)*pool*(ring*.39+eye*.67)*(1.-fall);
+        if(inkFlow.z>1.5){
+          float rim=stroke(u+.022*sin(s*11.-t*4.1),.052);
+          float glint=.63*rim+.36*pow(strand,4.);
+          col=mix(vec3(.076,.22,.21),vec3(.83,.90,.81),glint);
+          veilAlpha=.43+.43*glint;
+        }
+      #endif
       diffuseColor.rgb=col;
       diffuseColor.a=fade*mix(.79-.35*edge,veilAlpha,fall);
+      #ifdef KAEDE_SHIMIZU
+        diffuseColor.a*=1.-.44*pool*(1.-fall);
+        if(diffuseColor.a<.055)discard;
+      #endif
     `).replace('#include <opaque_fragment>',`
       // A little bounced skylight travels inside the spray and partly fills
       // the hard bands of shadow from the folds.
@@ -109,6 +160,36 @@ export function currentPigment(stream,clock,submerged){
   };
   water.customProgramCacheKey=()=> 'mountain-stream-wash-1';
   return water;
+}
+
+// Project granite onto all three planes so mineral grains keep their scale
+// on both the upright face and the horizontal gravel bed.
+export function kaedeCragPigment(){
+  const grain=new T.TextureLoader().load(new URL('./assets/world/granite.webp',import.meta.url).href);
+  grain.wrapS=grain.wrapT=T.RepeatWrapping;grain.colorSpace=T.SRGBColorSpace;grain.anisotropy=4;
+  const mat=new T.MeshLambertMaterial({map:grain,side:T.DoubleSide,vertexColors:true,transparent:true,
+    depthWrite:true,alphaTest:.055,forceSinglePass:true,polygonOffset:true,polygonOffsetFactor:-1});
+  mat.onBeforeCompile=shader=>{
+    shader.vertexShader='varying vec3 rockMetres;\n'+shader.vertexShader.replace('#include <begin_vertex>',
+      '#include <begin_vertex>\nrockMetres=position;');
+    shader.fragmentShader='varying vec3 rockMetres;\n'+paperNoise+shader.fragmentShader.replace('#include <map_fragment>',`
+      vec3 p=rockMetres,n=abs(normalize(cross(dFdx(p),dFdy(p))+vec3(.0000001)));
+      vec3 w=pow(n,vec3(4.));w/=max(.001,w.x+w.y+w.z);
+      vec3 grain=texture2D(map,p.zy*.48).rgb*w.x+texture2D(map,p.xz*.48).rgb*w.y+
+                 texture2D(map,p.xy*.48).rgb*w.z;
+      float value=dot(grain,vec3(.25,.60,.15));
+      vec2 face=vec2(.38*p.x+p.z,p.y);
+      float mineral=wash(face*2.7)+.34*wash(face*6.3);
+      float seam=face.y+.23*face.x+.36*sin(face.x*1.14)+.31*mineral;
+      float split=stroke(seam*.56,.027)*smoothstep(.21,.72,mineral);
+      float flake=stroke(seam*2.3+.5*mineral,.018)*smoothstep(.42,.91,mineral);
+      diffuseColor.rgb*=mix(vec3(.31,.40,.41),vec3(1.52,1.45,1.24),smoothstep(.08,.57,value));
+      diffuseColor.rgb*=1.-.36*split;
+      diffuseColor.rgb+=vec3(.034,.040,.037)*flake;
+    `);
+  };
+  mat.customProgramCacheKey=()=> 'kaede-schist';
+  return mat;
 }
 
 let rocks;

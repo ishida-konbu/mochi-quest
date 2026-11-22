@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createGame} from '../two/game.js';
 import {MAPLE_ROCK_GROUPS} from '../two/seasons.js';
-import {GATES, TREES, gateFooting, groundHeight, nearRoad, staticVolumeAt, terrainMeshHeight} from '../two/terrain.js';
+import {SOURCE_STONES} from '../two/mountain-streams.js';
+import {BUILDINGS, GATES, TREES, gateFooting, groundHeight, nearRoad, staticVolumeAt, terrainMeshHeight, waterSurfaceAt} from '../two/terrain.js';
 
 test('the maple torii straddles the road with its sockets and both lanterns seated on the hillside',()=>{
   const gate=GATES.find(g=>g.x>200);
@@ -63,5 +64,37 @@ test('the bicycle port in the maple valley has unobstructed access to both parke
     assert.equal(resumed.state.objects.find(o=>o.id===port.id).bikes,1);
     assert.ok(game.act('interact'));
     assert.equal(port.bikes,2);
+  }
+});
+
+test('the reading table is accessible from the bridge and a save from the former dye shop resumes at the spring',()=>{
+  const game=createGame(),p=game.state.player;
+  const table=game.state.objects.find(o=>o.id==='manga-39');
+  assert.ok(!BUILDINGS.some(b=>b.x===274 && b.z===-127));
+  assert.ok(Math.hypot(table.x-297,table.z+110)<4);
+  for(const dx of [-.48,.48])for(const dz of [-.32,.32])
+    assert.ok(Math.abs(terrainMeshHeight(table.x+dx,table.z+dz)-table.y)<.015);
+  Object.assign(p,{x:table.x,z:table.z+.9,y:table.y,h:0,grounded:true});
+  assert.equal(game.nearest()?.target,table);
+  assert.ok(game.act('interact'));
+  assert.equal(p.activity,'read');
+
+  const old=game.save();
+  old.version=11;
+  Object.assign(old.player,{x:274,z:-127,y:25.2,h:0,grounded:true,activity:null,activityTime:0});
+  old.delivered=['rabbit-336']; // The scribe who previously worked at the dye shop.
+  const resumed=createGame(old),visitor=resumed.state.player;
+  assert.ok(resumed.restored && visitor.inWater);
+  assert.ok(Math.abs(visitor.y-waterSurfaceAt(274,-127)+.57)<.001);
+  assert.equal(resumed.state.objects.find(o=>o.id===table.id).cooldown,table.cooldown);
+  assert.ok(resumed.state.delivered.has('rabbit-336'));
+  assert.ok(resumed.state.npcs.some(n=>n.id==='rabbit-336' && n.role==='scribe'));
+});
+
+test('the stone seams at the head of the spring support a traveller at their visible summits',()=>{
+  for(const {x,z,top} of SOURCE_STONES){
+    assert.equal(groundHeight(x,z,top),top);
+    assert.ok(staticVolumeAt(x,z,top-.025,0,.12));
+    assert.equal(staticVolumeAt(x,z,top+.005,0,.12),false);
   }
 });
