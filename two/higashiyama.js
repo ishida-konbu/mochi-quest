@@ -62,7 +62,7 @@ function watershed(a,b,north) {
 export const eastRidgeHeight=(x,z)=>watershed(x-HIGASHIYAMA.x,z-HIGASHIYAMA.z,false);
 export const northRidgeHeight=(x,z)=>watershed(KITAYAMA.z-z,x-KITAYAMA.x,true);
 
-// A lower, overlapping pair of cedar ridges above the road to Sakai. Their
+// A lower, overlapping pair of wooded ridges above the road to Sakai. Their
 // southern toes die out on the town side of the pass; the shore stays open.
 export function westRidgeHeight(x,z) {
   const u=x-NISHIYAMA.x,v=z-NISHIYAMA.z;

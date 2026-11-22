@@ -1,4 +1,5 @@
 import { MOUNTAIN_STREAMS } from './mountain-streams.js';
+import { isNishiyamaTree } from './mountain-woodland.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { DAIBUTSU, INARI_SANCTUARY, PEACH_TREES } from './pilgrimage-layout.js';
 import { PALACE_APPROACH, RYUGU, HALLS, GATE_V } from './ryugu-layout.js';
@@ -24,12 +25,8 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=okuribi-forest-1', import.meta.url).href;
-    paperRequest = image.decode().then(() => {
-      const c=document.createElement('canvas');c.width=c.height=SIZE;
-      const g=c.getContext('2d');g.drawImage(image,0,0,SIZE,SIZE);
-      stampOtowa(g);paper=c;
-    }, () => { paper = paintMapPaper(); });
+    image.src = new URL('./assets/world/journey-map.webp?v=nishiyama-bamboo-1', import.meta.url).href;
+    paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
 }
@@ -132,9 +129,21 @@ export function paintMapPaper() {
   g.lineWidth=.9;g.strokeStyle='#726d5275';g.stroke(contours);
   // Tiny tapering ink strokes pick out real stands of trees at atlas scale.
   // The ground survey supplies the facing of the dry-brush marks on rock.
+  const culms=new Path2D('M-.14,0 Q-.10,-.50 -.21,-.96 M.13,0 Q.15,-.48 .32,-1.10');
+  const leaves=new Path2D('M-.16,-.62 Q-.45,-.67 -.57,-.93 Q-.25,-.85 -.16,-.62 Z '+
+    'M-.17,-.76 Q-.08,-1.00 .10,-1.02 Q.02,-.81 -.17,-.76 Z '+
+    'M.20,-.58 Q.43,-.80 .64,-.76 Q.49,-.60 .20,-.58 Z '+
+    'M.26,-.86 Q.29,-1.12 .48,-1.24 Q.46,-1.00 .26,-.86 Z');
   for(const t of TREES){
     if(t.seed%6!==0) continue;
     const u=toX(t.x),v=toX(t.z),h=t.h*adj*.64;
+    if(t.kind==='moso' && isNishiyamaTree(t)){
+      const size=Math.max(3.1,h);
+      g.save();g.translate(u,v);g.scale(t.seed%12 ? size : -size,size);
+      g.strokeStyle='#4d6754a8';g.lineWidth=.14;g.stroke(culms);
+      g.fillStyle='#496648b3';g.fill(leaves);g.restore();
+      continue;
+    }
     const broad=t.kind==='oak'||t.kind==='zelkova';
     g.fillStyle=broad?'#59674b66':'#435a4d65';g.beginPath();
     if(broad)g.ellipse(u,v-h*.37,h*.41,h*.56,-.22,0,2*Math.PI);
@@ -164,6 +173,7 @@ export function paintMapPaper() {
     g.quadraticCurveTo(u-dx*w*.45+dz*.7,v-dz*w*.45,u-dx*w,v-dz*w);g.stroke();
   }
   for (const road of ROADS) {
+    if(road===KIYOMIZU_ROAD)continue; // Drawn with the roofs in stampOtowa.
     g.beginPath();
     road.points.forEach(([x, z], i) => (i ? g.lineTo(toX(x), toX(z)) : g.moveTo(toX(x), toX(z))));
     g.strokeStyle = '#aa9371';

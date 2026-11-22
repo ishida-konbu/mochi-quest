@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MOUNTAIN_WOODS,woodlandAt} from '../two/mountain-woodland.js';
+import {MOUNTAIN_WOODS,woodlandAt,isNishiyamaTree} from '../two/mountain-woodland.js';
 import {inMountainStreamClearing} from '../two/mountain-streams.js';
 import {CLIFF_PINES,PEACH_TREES} from '../two/pilgrimage-layout.js';
-import {TREE_FAMILIES} from '../two/forest-forms.js';
+import {TREE_FAMILIES,TREE_FORMS_PER_FAMILY} from '../two/forest-forms.js';
 import {DISTRICTS} from '../two/geography.js';
 import {terrainHeight,terrainMeshHeight,TREES} from '../two/terrain.js';
 import {inFireMeadow,fireTrailDistance,eastRidgeHeight,northRidgeHeight,westRidgeHeight} from '../two/higashiyama.js';
@@ -44,10 +44,29 @@ test('new stems follow their local species, visible footing, stream clearings an
     const s=t.kyotoRidge ? MOUNTAIN_WOODS.find(r=>r.id===t.kyotoRidge) : woodlandAt(t.x,t.z);
     const family=Math.floor(t.form/4);
     assert.equal(s.id,t.woodland || t.kyotoRidge);assert.equal(TREE_FAMILIES[family][0],t.kind);
-    assert.ok(s.lower.includes(family)||s.upper.includes(family)||t.kyotoRidge && s.coppice.includes(family));
+    if(t.kind==='moso')assert.equal(s.id,'nishi');
+    else assert.ok(s.lower.includes(family)||s.upper.includes(family)||t.kyotoRidge && s.coppice.includes(family));
     assert.ok(!inMountainStreamClearing(t.x,t.z) && !inFireMeadow(t.x,t.z));
     assert.ok(!reservedScenery(t.x,t.z) && !inHutYard(t.x,t.z));
     assert.ok(Math.abs(terrainMeshHeight(t.x,t.z)-terrainHeight(t.x,t.z))<=.14);
+  }
+});
+
+test('four fifths of Nishiyama planting sites carry moso bamboo from foot to crest',()=>{
+  const west=TREES.filter(isNishiyamaTree),bamboo=west.filter(t=>t.kind==='moso');
+  assert.equal(bamboo.length,Math.round(.8*west.length));
+  assert.equal(new Set(bamboo.map(t=>t.form)).size,TREE_FORMS_PER_FAMILY);
+  for(const t of bamboo){
+    assert.equal(TREE_FAMILIES[Math.floor(t.form/TREE_FORMS_PER_FAMILY)][0],'moso');
+    assert.ok(!t.kyotoRidge || t.kyotoRidge==='nishi');
+  }
+  for(const [low,high] of [[0,10],[10,65],[65,Infinity]]){
+    const band=TREES.filter(t=>{
+      const rise=westRidgeHeight(t.x,t.z);
+      return rise>Math.max(.5,low) && rise<=high;
+    });
+    const share=band.filter(t=>t.kind==='moso').length/band.length;
+    assert.ok(share>.70 && share<.90,'western slope '+low+'–'+high+': '+share);
   }
 });
 
