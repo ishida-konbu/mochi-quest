@@ -64,7 +64,7 @@ test('the court approach joins two unobstructed paved avenues across the capital
       for(const side of [-1,0,1]){
         // The south gate has an open central bay and two side bays set between pillars.
         const offset=!alongX && a>city.z+84?2.5:width/2-.63;
-        const verge=axis+side*offset,x=alongX?a:verge,z=alongX?verge:a,y=terrainHeight(x,z);
+        const verge=axis+side*offset,x=alongX?a:verge,z=alongX?verge:a,y=groundHeight(x,z);
         assert.ok(solidHeightAt(x,z,.25,y)<y+.30, 'clear street at '+[x,z]);
       }
     }

@@ -200,11 +200,53 @@ export function wardFloorPlan(b) {
   return {loft,slabs};
 }
 
+// All masonry dimensions are relative to the surveyed ground at the gate.
+// The cross street passes through two narrow flights in the side faces.
+export const GATE_STONE={
+  width:26,depth:12.8,height:1.12,count:7,going:.50,stairWidth:15.6,
+  sideZ:-3,sideWidth:3.0,apronWidth:26,apronDepth:3.6,apronHeight:.10,
+};
+export const GATE_LEAF={x:5.48,z:.04,w:3.48,d:.28,y:1.32,h:2.55};
+export const GATE_WING={x:14.95,z:.25,w:7.4,d:.62,eave:2.38,roofW:7.86,roofD:1.42,roofRise:.60};
+export const GATE_FRONT_EAVE={w:18.72,back:3.56,front:5.23,high:5.13,low:4.58};
+
+const stone=GATE_STONE;
+export const GATE_STONE_STEPS=[];
+export const GATE_STONE_APRONS=[];
+for(const side of [-1,1]){
+  for(let i=0;i<stone.count;i++){
+    const run=(stone.count-i-.5)*stone.going,top=(i+1)*stone.height/stone.count;
+    GATE_STONE_STEPS.push(
+      {x:0,z:side*(stone.depth/2+run),w:stone.stairWidth,d:stone.going,top},
+      {x:side*(stone.width/2+run),z:stone.sideZ,w:stone.going,d:stone.sideWidth,top},
+    );
+  }
+  GATE_STONE_APRONS.push({x:0,z:side*(stone.depth/2+stone.count*stone.going+stone.apronDepth/2),
+    w:stone.apronWidth,d:stone.apronDepth,top:stone.apronHeight});
+}
+// A handful of rectangles covers the paved survey, including all four
+// flights. Road pigment and roadside planting yield to these stones.
+export const GATE_PAVING=[
+  {x:0,z:0,w:stone.width,d:stone.depth},
+  {x:0,z:0,w:stone.stairWidth,d:stone.depth+2*stone.count*stone.going},
+  {x:0,z:stone.sideZ,w:stone.width+2*stone.count*stone.going,d:stone.sideWidth},
+  ...GATE_STONE_APRONS,
+];
+const masonry=[{x:0,z:0,w:stone.width,d:stone.depth,top:stone.height},...GATE_STONE_STEPS,...GATE_STONE_APRONS];
+export function gateStoneRise(u,v){
+  if(Math.abs(u)>stone.width/2+stone.count*stone.going ||
+     Math.abs(v)>stone.depth/2+stone.count*stone.going+stone.apronDepth)return 0;
+  let top=0;
+  for(const b of masonry)if(Math.abs(u-b.x)<=b.w/2+1e-8 && Math.abs(v-b.z)<=b.d/2+1e-8)top=Math.max(top,b.top);
+  return top;
+}
+
 export const GATE_STEPS=Array.from({length:28},(_,i)=>({
   x:9.52,z:4.20-(i+.5)*8.25/28,w:1.92,d:8.25/28+.014,top:(i+1)*RASHOMON.base/28,
 }));
 export function gateSolids(height,put){
-  const {x,z,base}=RASHOMON,y=height(x,z);
+  const {x,z,base}=RASHOMON,ground=height(x,z),y=ground+stone.height;
+  for(const b of masonry)put(x+b.x,z+b.z,b.w/2,b.d/2,0,ground+b.top,'floor',true);
   const solid=(u,v,w,d,top,kind,support=false,low=-Infinity)=>put(x+u,z+v,w/2,d/2,0,y+top,kind,support,0,y+low);
   for(const u of [-7.3,-3.65,3.65,7.3])for(const v of [-2.18,2.18])solid(u,v,.65,.65,base,'oval');
   solid(0,0,17.6,7.7,base,'slab',true);
@@ -212,6 +254,8 @@ export function gateSolids(height,put){
   for(const q of GATE_STEPS)solid(q.x,q.z,q.w,q.d,q.top,'slab',true);
   // A side gallery wraps to the unbarred door in the north wall.
   for(const side of [-1,1]){
+    const door=GATE_LEAF;
+    solid(side*door.x,door.z,door.w,door.d,door.y+door.h/2,'wall');
     solid(side*7.33,0,.22,5.04,9.01,'wall',false,base);
     solid(side*5.62,2.52,3.63,.18,9.01,'wall',false,base);
   }
@@ -220,4 +264,16 @@ export function gateSolids(height,put){
   solid(6.60,-2.52,1.62,.21,9.01,'wall',false,base);
   solid(0,0,17.6,7.64,9.07,'ceiling');
   put(x,z,9.8,4.55,0,y+9.11,'roof',true,3.15).form='hip';
+  const wing=GATE_WING;
+  for(const side of [-1,1]){
+    solid(side*wing.x,wing.z,wing.w,wing.d,wing.eave,'wall');
+    const roof=put(x+side*wing.x,z+wing.z,wing.roofW/2,wing.roofD/2,0,y+wing.eave,'roof',true,wing.roofRise);
+    roof.form='hip';
+    roof.overhang=true;
+  }
+  const lower=GATE_FRONT_EAVE;
+  const roof=put(x,z+(lower.back+lower.front)/2,lower.w/2,(lower.front-lower.back)/2,0,
+    y+lower.low,'roof',true,lower.high-lower.low);
+  roof.form='leanTo';
+  roof.overhang=true;
 }

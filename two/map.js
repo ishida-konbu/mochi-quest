@@ -5,7 +5,7 @@ import { SEAPORTS, PORT_BUILDINGS, QUAY_CENTER, QUAY_LENGTH, portPoint } from '.
 import { SEAWAYS, FLEET, vesselPose } from './ocean-voyage.js';
 import { COURT } from './retreat-layout.js';
 import { HIGASHIYAMA, KITAYAMA } from './higashiyama.js';
-import { RASHOMON } from './kyo-layout.js';
+import { RASHOMON, GATE_STONE, GATE_STONE_APRONS, GATE_STONE_STEPS, GATE_WING } from './kyo-layout.js';
 import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
 const SIZE = 2048, SPAN = 2 * BOUND, adj = SIZE / SPAN;
 export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾', '十一', '十二', '十三', '十四', '十五', '十六', '十七'];
@@ -20,7 +20,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=kyoto-foothills', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=rashomon-stone', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -174,6 +174,15 @@ export function paintMapPaper() {
     g.fillStyle=['#cc7884b0','#d98f9fa8','#ecb9c0bc'][i%3];
     g.beginPath();g.arc(toX(tree.x),toX(tree.z),tree.size*(tree.cliff?1.88:1.53),0,2*Math.PI);g.fill();
   }
+  function gateStone(u,v,width,depth,colour){
+    g.fillStyle=colour;
+    g.fillRect(toX(RASHOMON.x+u-width/2),toX(RASHOMON.z+v-depth/2),width*adj,depth*adj);
+  }
+  for(const a of GATE_STONE_APRONS)gateStone(a.x,a.z,a.w,a.d,'#c2beaa');
+  for(const s of GATE_STONE_STEPS)gateStone(s.x,s.z,s.w,s.d,'#aea995');
+  gateStone(0,0,GATE_STONE.width,GATE_STONE.depth,'#b9b6a5');
+  for(const side of [-1,1])roof(RASHOMON.x+side*GATE_WING.x,RASHOMON.z+GATE_WING.z,
+    GATE_WING.roofW,GATE_WING.roofD,0,'#777666');
   roof(RASHOMON.x,RASHOMON.z,21,9,0,'#77594d');
   roof(COURT.x,COURT.z,46,24,0,'#645746');
   for(const lot of PORT_BUILDINGS)roof(lot.x,lot.z,lot.w,lot.d,lot.p.yaw,lot.i===0?'#665d4e':'#988066');

@@ -1,3 +1,4 @@
+import { GATE_PAVING, RASHOMON } from './kyo-layout.js';
 import { HIGASHIYAMA, KITAYAMA, eastRidgeHeight, northRidgeHeight } from './higashiyama.js';
 import { dressSeaports } from './seaports.js';
 import { createOceanShips } from './ocean-ship-art.js';
@@ -178,8 +179,29 @@ function* landscape(scene, art) {
     yield;
   }
 }
+// Both road materials pull their surface toward the camera for intersections.
+// Cut their pigment precisely at the dressed stone, even in a grazing view.
+function reserveGatePaving(original) {
+  const material=original.clone(),compile=original.onBeforeCompile,previousKey=original.customProgramCacheKey();
+  material.customProgramCacheKey=()=>previousKey+'-gate-masonry';
+  material.onBeforeCompile=function(shader,renderer){
+    compile.call(this,shader,renderer);
+    shader.uniforms.gatePaving={value:GATE_PAVING.map(b=>new THREE.Vector4(
+      RASHOMON.x+b.x,RASHOMON.z+b.z,b.w/2,b.d/2))};
+    shader.vertexShader='varying vec2 roadPosition;\n'+shader.vertexShader.replace('#include <begin_vertex>',
+      '#include <begin_vertex>\n roadPosition=position.xz;');
+    shader.fragmentShader=`varying vec2 roadPosition; uniform vec4 gatePaving[${GATE_PAVING.length}];\n`+
+      shader.fragmentShader.replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>
+        for(int k=0;k<${GATE_PAVING.length};k++){
+          vec4 box=gatePaving[k];
+          if(all(lessThanEqual(abs(roadPosition-box.xy),box.zw)))discard;
+        }`);
+  };
+  return material;
+}
 function buildRoads(scene, art) {
   const material = trailMaterial(art), paving=kyoPavingMaterial(), climate={};
+  const approach=reserveGatePaving(material),avenue=reserveGatePaving(paving);
   for (const road of ROADS) {
     const p=[], uv=[], ix=[], snow=[];
     let travel=0;
@@ -204,7 +226,8 @@ function buildRoads(scene, art) {
     }
     const geo=geometry(p,ix,uv);
     geo.setAttribute('snowAmount',new THREE.Float32BufferAttribute(snow,1));
-    const mesh=new THREE.Mesh(geo,road.paved?paving:material);
+    const atGate=road.points.some(([x,z])=>abs(x-RASHOMON.x)<25 && abs(z-RASHOMON.z)<22);
+    const mesh=new THREE.Mesh(geo,road.paved?(atGate?avenue:paving):(atGate?approach:material));
     mesh.receiveShadow=true;mesh.renderOrder=road.paved?2:1;scene.add(mesh);
   }
 }

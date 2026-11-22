@@ -1,7 +1,7 @@
 import {DISTRICTS, FIFTH_EDITION_CENTRES, relocateLegacyPosition} from '../two/geography.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
+import {BOUND, CONNECTING_ROADS, REGIONS, ORIGINAL_REGIONS, terrainHeight, roadSurfaceHeight, groundHeight, waterDepth, solidHeightAt} from '../two/terrain.js';
 import {RETREATS,sitePoint} from '../two/retreat-layout.js';
 import {INARI_GATES, INARI_ROUTE, PEACH_TREES, MOON_GATE} from '../two/pilgrimage-layout.js';
 import {PALACE_APPROACH} from '../two/ryugu-layout.js';
@@ -178,7 +178,8 @@ test('both ox teams reach each town on dry roads and all three merchants keep to
       for(const offset of [-1.6,0,3.2]){
         const x=q.x+Math.sin(q.yaw)*offset,z=q.z+Math.cos(q.yaw)*offset;
         assert.ok(waterDepth(x,z)<.15,'cart enters water at '+[x,z]);
-        const y=terrainHeight(x,z), clearance=offset>2?.47:1;
+        const y=roadSurfaceHeight(x,z), clearance=offset>2?.47:1;
+        assert.ok(Math.abs(y-groundHeight(x,z,y))<.03,'cart leaves its road surface at '+[x,z]);
         assert.ok(solidHeightAt(x,z,clearance,y)<y+.45,'cart clips scenery at '+[x,z]);
       }
     }
