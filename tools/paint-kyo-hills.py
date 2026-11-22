@@ -17,8 +17,8 @@ for(let z=box.z;z<=box.z+box.depth;z+=4)for(let x=box.x;x<=box.x+box.width;x+=4)
   rises.push(Math.round(kyoRidgeHeight(x,z)*10));
   mown.push(+inFireMeadow(x,z));
 }
-console.log(JSON.stringify({box,heights,rises,mown,trees:TREES.filter(t=>kyoRidgeHeight(t.x,t.z)>2)
-  .map(t=>[t.x,t.z,t.h])}));
+console.log(JSON.stringify({box,heights,rises,mown,trees:TREES.filter(t=>t.kyotoRidge || kyoRidgeHeight(t.x,t.z)>.5)
+  .map(t=>[t.x,t.z,t.h,t.kind])}));
 """
 data=json.loads(subprocess.check_output(['node','--input-type=module','-e',survey],cwd=ROOT))
 box=data['box']
@@ -47,7 +47,7 @@ def blurred(a,r):
 
 canopy=Image.new('L',(w,h))
 crowns=ImageDraw.Draw(canopy)
-for x,z,tall in data['trees']:
+for x,z,tall,_ in data['trees']:
     u,v=(x-box['x'])*ppm,(z-box['z'])*ppm
     r=tall*ppm*.63
     crowns.ellipse((u-r,v-r*.86,u+r,v+r*.86),fill=198)
@@ -57,7 +57,7 @@ grove=np.asarray(canopy.filter(ImageFilter.GaussianBlur(7*ppm)),dtype=np.float32
 bloom=cloud(137)*.52+cloud(52)*.33+cloud(18)*.14
 grade=scale_grid(slope)
 northface=scale_grid(np.clip(.5+dx*.45-dz*.39,0,1))
-mown=blurred(scale_grid(field('mown')),7*ppm)
+mown=blurred(scale_grid(field('mown')),2.6*ppm)
 shoulder=scale_grid(np.clip((rise-18)/67,0,1))
 rock=np.clip((grade-.47)*2.5+bloom*2.9+northface*.33,0,1)*shoulder*(1-.68*mown)
 wood=np.clip(grove*1.25+bloom*.44+grade*.10,0,1)
@@ -65,9 +65,9 @@ def wash(image,colour,density):
     return image+(np.array(colour,dtype=np.float32)-image)*np.clip(density,0,1)[:,:,None]
 paper=np.broadcast_to(np.array([215,205,170],dtype=np.float32),(h,w,3))
 paper=wash(paper,[168,173,141],.28+.32*northface+bloom)
-paper=wash(paper,[106,127,108],wood*.94)
+paper=wash(paper,[112,127,114],wood*.94)
 paper=wash(paper,[176,178,164],rock)
-paper=wash(paper,[224,206,169],mown*.59)
+paper=wash(paper,[216,201,166],mown*.59)
 paper=wash(paper,[83,98,92],np.clip((northface-.50)*.65+bloom*.54,0,.49)*(wood+.6*rock))
 paper+=(bloom*13+cloud(6)*2.6)[:,:,None]
 im=Image.fromarray(np.uint8(np.clip(paper,0,255)))
@@ -134,5 +134,24 @@ for _ in range(14200):
             lean=rng.uniform(-1.3,2.3)*ppm
             tall=rng.uniform(1.1,3.2)*ppm
             brush([(a,b),(a+.48*lean,b-.51*tall),(a+lean,b-tall)],ppm*.36,tint(x,y,(101,97,72),.45))
+
+# The dark heels of the brush follow exposed roots on a sloping forest floor.
+# At the lip of the mown bank the same gesture turns into a spray of cut stalks.
+for x,z,tall,kind in data['trees']:
+    if tall<6 or rng.random()>.17:continue
+    u,v=(x-box['x'])*ppm,(z-box['z'])*ppm
+    if not (0<=u<w and 0<=v<h):continue
+    aspect=math.atan2(-sample(dz,u,v),-sample(dx,u,v))
+    for _ in range(rng.randint(2,4)):
+        yaw=aspect+rng.uniform(-1.4,1.4)
+        reach=ppm*rng.uniform(1.9,4.8)
+        dx0,dy0=math.cos(yaw)*reach,math.sin(yaw)*reach
+        bow=rng.uniform(-.21,.21)
+        arc=[(u,v),(u+.28*dx0+bow*dy0,v+.28*dy0-bow*dx0),
+             (u+.68*dx0-bow*dy0*.4,v+.68*dy0+bow*dx0*.4),(u+dx0,v+dy0)]
+        brush(arc,ppm*(.49 if kind in ('oak','zelkova') else .33),tint(u,v,(57,58,48),.53))
+        if reach>4.8:
+            brush([arc[1],(u+.55*dx0+dy0*.24,v+.55*dy0-dx0*.24),
+                   (u+.78*dx0+dy0*.36,v+.78*dy0-dx0*.36)],ppm*.23,tint(u,v,(75,72,55),.48))
 
 im.save(ROOT/'two/assets/world/kyo-hills.webp',quality=90,method=6)

@@ -74,17 +74,95 @@ export function westRidgeHeight(x,z) {
 
 export const kyoRidgeHeight=(x,z)=>Math.max(eastRidgeHeight(x,z),northRidgeHeight(x,z),westRidgeHeight(x,z));
 
-export function inFireMeadow(x,z) {
-  function clearing(along,across,rise,minimum,width){
-    if(along<100 || along>369)return false;
-    // Allow timber on the low alluvial fans, below the sightline. The margin
-    // undulates where the cut grass meets fingers of wooded hillside.
-    const irregular=10+4.8*Math.sin(along*.082)+3.6*Math.sin(along*.049+across*.025);
-    return Math.abs(across)<along*width+irregular && rise+14>(along-47)*minimum;
+// Depth is measured out from the crossroads; side is screen-right when
+// looking at the hill. The mown strips follow the actual tips of the strokes,
+// including the uphill slant of 福 and the separate arms and legs of 大.
+const clearingBanks=[
+  [[191,-25],[191,-14],[196,-6],[200,17],[201,30],[218,34],[235,36],
+   [252,40],[269,35],[285,37],[306,38],[325,48],[331,45],[327,35],
+   [310,26],[300,16],[295,6],[295,-12],[297,-31],[284,-41],[275,-45],
+   [264,-35],[256,-34],[247,-42],[240,-38],[234,-30],[215,-26]],
+  [[167,-24],[166,-16],[177,-9],[184,-3],[183,2],[170,17],[168,25],
+   [178,27],[191,21],[202,12],[214,7],[223,15],[229,28],[236,28],
+   [239,16],[245,7],[264,7],[276,7],[277,-3],[265,-6],[252,-7],
+   [250,-16],[254,-25],[251,-31],[243,-30],[229,-18],[219,-11],
+   [213,-10],[202,-15],[190,-20],[178,-26]],
+];
+function mownBank(depth,side,pad,banks) {
+  let inside=false,nearest=Infinity;
+  for(let i=0,j=banks.length-1;i<banks.length;j=i++){
+    const [a,b]=banks[j],[c,d]=banks[i],dx=c-a,dz=d-b;
+    const u=Math.max(0,Math.min(1,((depth-a)*dx+(side-b)*dz)/(dx*dx+dz*dz)));
+    nearest=Math.min(nearest,(a+u*dx-depth)**2+(b+u*dz-side)**2);
+    if((b>side)!==(d>side) && depth<a+(side-b)*dx/dz)inside=!inside;
   }
+  const verge=1.15*Math.sin(depth*.23+side*.12)+.62*Math.sin(side*.41-depth*.072);
+  return (inside?-1:1)*Math.sqrt(nearest)<pad+verge;
+}
+export function inFireMeadow(x,z,pad=0) {
   const east=x-city.x,north=city.z-z;
-  return east>100 && east<370 && clearing(east,z-city.z,eastRidgeHeight(x,z),.128,.17) ||
-    north>100 && north<370 && clearing(north,x-city.x,northRidgeHeight(x,z),.111,.157);
+  if(east>187-pad && east<335+pad && Math.abs(north)<52+pad)
+    return mownBank(east,-north,pad,clearingBanks[0]);
+  if(north>162-pad && north<281+pad && Math.abs(east)<35+pad)
+    return mownBank(north,east,pad,clearingBanks[1]);
+  return false;
+}
+
+function fireTrail(east,knots) {
+  const samples=[];
+  // A quadratic fillet turns each hairpin on the inside of its two surveyed
+  // legs. At the next bend it meets the straight on the very same tangent.
+  let last=knots[0];
+  const point=(d,v)=>east?[city.x+d,city.z+v]:[city.x+v,city.z-d];
+  samples.push(point(...last));
+  function line(to) {
+    const [x,z]=last,n=Math.max(1,Math.ceil(Math.hypot(to[0]-x,to[1]-z)/.78));
+    for(let i=1;i<=n;i++)samples.push(point(x+(to[0]-x)*i/n,z+(to[1]-z)*i/n));
+    last=to;
+  }
+  for(let i=1;i<knots.length-1;i++){
+    const a=knots[i-1],b=knots[i],c=knots[i+1];
+    const pre=[b[0]+.23*(a[0]-b[0]),b[1]+.23*(a[1]-b[1])];
+    const post=[b[0]+.23*(c[0]-b[0]),b[1]+.23*(c[1]-b[1])];
+    line(pre);
+    const n=Math.ceil((Math.hypot(b[0]-pre[0],b[1]-pre[1])+Math.hypot(post[0]-b[0],post[1]-b[1]))/.78);
+    for(let j=1;j<=n;j++){
+      const t=j/n,q=1-t;
+      samples.push(point(q*q*pre[0]+2*q*t*b[0]+t*t*post[0],q*q*pre[1]+2*q*t*b[1]+t*t*post[1]));
+    }
+    last=post;
+  }
+  line(knots.at(-1));
+  return samples;
+}
+export const FIRE_TRAILS={
+  east:fireTrail(true,[[100,41],[109,43],[118,50],[129,63],[141,76],[149,79],
+    [154,73],[157,63],[161,48],[166,40],[170,44],[176,57],[181,66],[186,64],
+    [190,55],[194,41],[197,31],[198,21],[200,9]]),
+  north:fireTrail(false,[[81,-49],[94,-47],[104,-41],[113,-30],[119,-28],
+    [124,-34],[130,-47],[138,-58],[144,-62],[148,-57],[152,-46],[158,-34],
+    [164,-28],[168,-30],[173,-38],[177,-40],[181,-38],[183,-32],[182,-23]]),
+};
+const trailCells=new Map(),cell=(x,z)=>Math.floor(x/16)*256+Math.floor(z/16);
+for(const line of Object.values(FIRE_TRAILS))for(let i=1;i<line.length;i++){
+  const [x,z]=line[i-1],[ex,ez]=line[i],dx=ex-x,dz=ez-z;
+  const segment={x,z,dx,dz,inv:1/(dx*dx+dz*dz)};
+  for(let col=Math.floor((Math.min(x,ex)-12)/16);col<=Math.floor((Math.max(x,ex)+12)/16);col++)
+    for(let row=Math.floor((Math.min(z,ez)-12)/16);row<=Math.floor((Math.max(z,ez)+12)/16);row++){
+      const key=col*256+row;
+      if(!trailCells.has(key))trailCells.set(key,[]);
+      trailCells.get(key).push(segment);
+    }
+}
+export function fireTrailDistance(x,z) {
+  const segments=trailCells.get(cell(x,z));
+  if(!segments)return Infinity;
+  let nearest=Infinity;
+  for(const s of segments){
+    const u=Math.max(0,Math.min(1,((x-s.x)*s.dx+(z-s.z)*s.dz)*s.inv));
+    nearest=Math.min(nearest,(s.x+u*s.dx-x)**2+(s.z+u*s.dz-z)**2);
+  }
+  return Math.sqrt(nearest);
 }
 
 // Thirteen brush strokes of 福. The placements are specified on the plane
@@ -114,8 +192,8 @@ const daiStrokes=[
 // Intersect rays with the first rising slope so the figures follow both the
 // land and their intended brush proportions, including the counters of 福.
 export const FIRE_DRAWINGS={
-  east:{width:.34,foot:.166,height:.226},
-  north:{width:.31,foot:.136,height:.222},
+  east:{width:.2924,foot:.18182,height:.19436},
+  north:{width:.2666,foot:.15154,height:.19092},
 };
 function surveyFirebeds(height,east) {
   const viewY=height(city.x,city.z)+1.85,hearths=[];
@@ -146,5 +224,58 @@ function surveyFirebeds(height,east) {
   }
   return hearths;
 }
-export const fukuFirebeds=height=>surveyFirebeds(height,true);
-export const daiFirebeds=height=>surveyFirebeds(height,false);
+// Rendering and forest planting must survey precisely the same fires. Cache
+// both charts per elevation sampler so the ray/terrain intersections run once.
+const fireSurveys=[new WeakMap(),new WeakMap()];
+function firebeds(height,east){
+  const cache=fireSurveys[east?0:1];
+  if(!cache.has(height))cache.set(height,surveyFirebeds(height,east));
+  return cache.get(height);
+}
+export const fukuFirebeds=height=>firebeds(height,true);
+export const daiFirebeds=height=>firebeds(height,false);
+
+// Determine the first height at which a crown would cut across a real fire
+// stroke. Trees in front can still grow to this level. There is no height cap
+// behind the hearths, around the glyph or in gaps between its branches.
+export function createFireTreeCeiling(height) {
+  const cells=new Map();
+  for(const east of [true,false]) {
+    const hearths=east?fukuFirebeds(height):daiFirebeds(height);
+    for(const offset of [-40,-20,0,22,44,66]){
+      const ox=city.x+(east?offset:0),oz=city.z-(east?0:offset),oy=height(ox,oz)+1.85;
+      for(const [hx,hy,hz] of hearths){
+        const dx=hx-ox,dz=hz-oz,length=Math.hypot(dx,dz);
+        const ray={ox,oz,oy,ux:dx/length,uz:dz/length,length,grade:(hy-oy)/length};
+        // Index the whole sightline with a margin wider than a mature crown.
+        const steps=Math.ceil(length/10),seen=new Set();
+        for(let i=0;i<=steps;i++){
+          const x=ox+dx*i/steps,z=oz+dz*i/steps;
+          for(let col=Math.floor((x-15)/16);col<=Math.floor((x+15)/16);col++)
+            for(let row=Math.floor((z-15)/16);row<=Math.floor((z+15)/16);row++){
+              const key=col*256+row;
+              if(seen.has(key))continue;
+              seen.add(key);
+              if(!cells.has(key))cells.set(key,[]);
+              cells.get(key).push(ray);
+            }
+        }
+      }
+    }
+  }
+  return (x,z,radius=0)=>{
+    const rays=cells.get(cell(x,z));
+    if(!rays)return Infinity;
+    let limit=Infinity;
+    const reach=radius+1.35;
+    for(const r of rays){
+      const dx=x-r.ox,dz=z-r.oz,across=dx*r.uz-dz*r.ux;
+      if(Math.abs(across)>reach)continue;
+      const depth=dx*r.ux+dz*r.uz;
+      const half=Math.sqrt(Math.max(0,reach*reach-across*across));
+      if(depth+half<0 || depth-half>r.length)continue;
+      limit=Math.min(limit,r.oy+Math.max(0,depth-half)*r.grade-.32);
+    }
+    return limit;
+  };
+}

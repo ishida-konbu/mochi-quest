@@ -1,8 +1,8 @@
 import { mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
-import { plantMountainWoods } from './mountain-woodland.js';
+import { plantMountainWoods, plantKyotoWoods } from './mountain-woodland.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
-import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, FIRE_COAST, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, FIRE_COAST, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow, createFireTreeCeiling, fireTrailDistance } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
@@ -694,9 +694,21 @@ export const TREES = trees.filter(t => !portReserved(t.x,t.z) && !reservedScener
 // Fill the boundary of the maple district and line the new country roads with
 // loose stands of cedar, zelkova and red pine. Keep all gates and views open.
 const saplings = seeded(0x5c311);
+// Retain the seed sequence used for established trees and rocks across the islands.
+// The additional Kyoto planting below uses the current surveyed banks and trails.
+function earlierFireSurvey(x,z){
+  const city=DISTRICTS.kyo,east=x-city.x,north=city.z-z;
+  function clearing(along,across,rise,minimum,width){
+    if(along<100 || along>369)return false;
+    const irregular=10+4.8*sin(along*.082)+3.6*sin(along*.049+across*.025);
+    return abs(across)<along*width+irregular && rise+14>(along-47)*minimum;
+  }
+  return east>100 && east<370 && clearing(east,z-city.z,eastRidgeHeight(x,z),.128,.17) ||
+    north>100 && north<370 && clearing(north,x-city.x,northRidgeHeight(x,z),.111,.157);
+}
 function transplant(x,z,family) {
   if(abs(x-RASHOMON.x)<19 && abs(z-RASHOMON.z)<29)return false;
-  if(portReserved(x,z)||reservedScenery(x,z)||inFireMeadow(x,z))return false;
+  if(portReserved(x,z)||reservedScenery(x,z)||earlierFireSurvey(x,z))return false;
   if(nearPeachTrunk(x,z,5))return false;
   if (shoreDistance(x,z)<10 || landHeight(x,z)<2 || nearRoad(x,z,3.1) ||
       abs(z-riverZ(x))-riverHalfWidth(x)<11 || safe(x,z,6) ||
@@ -760,7 +772,7 @@ for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
     const along=(plant()-.55)*511, across=(plant()-.5)*573;
     const x=summit.x+(east?along:across),z=summit.z+(east?across:-along);
     const high=height(x,z);
-    if(high<7 || inFireMeadow(x,z) || nearRoad(x,z,4) || portReserved(x,z) || protectedDistrict(x,z))continue;
+    if(high<7 || earlierFireSurvey(x,z) || nearRoad(x,z,4) || portReserved(x,z) || protectedDistrict(x,z))continue;
     if(Math.sin(across*.044+along*.013)+Math.sin(along*.055-across*.018)>.93 && plant()<.86)continue;
     if(TREES.some(t=>(t.x-x)**2+(t.z-z)**2<68))continue;
     const family=(high>96?[0,0,1,2,3]:[0,1,2,2,3])[i%5];
@@ -804,7 +816,7 @@ for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
         const az=plant()*Math.PI*2,rad=Math.sqrt(plant());
         const u=cos(az)*length*rad,v=sin(az)*breadth*rad;
         const x=cx+u*c-v*s,z=cz+u*s+v*c;
-        if(height(x,z)<6 || occupied(x,z,gap) || inFireMeadow(x,z) ||
+        if(height(x,z)<6 || occupied(x,z,gap) || earlierFireSurvey(x,z) ||
            shoreDistance(x,z)<10 || nearRoad(x,z,4.5) || protectedDistrict(x,z) || reservedScenery(x,z))continue;
         const kind=plant()<.16?(exposed?9:12):family;
         const h=(exposed?4.8:6.3)+plant()*(exposed?4.2:5.5)+1.6*(1-rad);
@@ -827,7 +839,7 @@ const stoneSeed=seeded(0x11e41);
 for(const [cx,cz,rx,rz] of PENINSULAS) {
   for(let bed=0;bed<8;bed++){
     const ax=cx+(stoneSeed()-.5)*rx*1.85,az=cz+(stoneSeed()-.5)*rz*1.8;
-    if(originalShore(ax,az)>9 || inFireMeadow(ax,az) || protectedDistrict(ax,az) || shoreDistance(ax,az)<9) continue;
+    if(originalShore(ax,az)>9 || earlierFireSurvey(ax,az) || protectedDistrict(ax,az) || shoreDistance(ax,az)<9) continue;
     const yaw=.88*sin(az*.019)+.63, c=cos(yaw),s=sin(yaw);
     const high=terrainHeight(ax,az)>35;
     for(let n=0;n<5;n++){
@@ -835,7 +847,7 @@ for(const [cx,cz,rx,rz] of PENINSULAS) {
       const x=ax+c*along+s*side,z=az-s*along+c*side;
       const scale=(n===0?1.7:.48)+stoneSeed()*(high?2.05:1.56);
       const rx=scale*(1.04+stoneSeed()*.68),rz=scale*(.61+stoneSeed()*.34);
-      if(nearRoad(x,z,rx+2.6) || inFireMeadow(x,z) || reservedScenery(x,z) || protectedDistrict(x,z) ||
+      if(nearRoad(x,z,rx+2.6) || earlierFireSurvey(x,z) || reservedScenery(x,z) || protectedDistrict(x,z) ||
          shoreDistance(x,z)<3 || TREES.some(t=>(t.x-x)**2+(t.z-z)**2<(rx+.45)**2))continue;
       ROCKS.push({x,z,rx,rz,h:scale*(high?1.16:.78),yaw:yaw+(stoneSeed()-.5)*.32,
         stratum:(bed+n)%4,tint:high?'#b7beb9':cz>0?'#cbc2a9':'#c6cbaf'});
@@ -869,7 +881,7 @@ for(let i=TREES.length-1;i>=0;i--){
 // Append the mountain understory after surveying the earlier rocks, perches and
 // garden trees. All new trunks enter the same contacts and canopy as those trees.
 function mountainGlade(x,z,ground){
-  if(inMountainStreamClearing(x,z) || nearRoad(x,z,3.8) || reservedScenery(x,z) || inFireMeadow(x,z))return false;
+  if(inMountainStreamClearing(x,z) || nearRoad(x,z,3.8) || reservedScenery(x,z))return false;
   const orchardApron=hypot((x-DISTRICTS.peach.x)/133,(z-DISTRICTS.peach.z)/112);
   if(orchardApron<.58 || (orchardApron>=1.02 && protectedDistrict(x,z)))return false;
   const hut=nearbyHut(x,z);
@@ -877,9 +889,39 @@ function mountainGlade(x,z,ground){
   if(abs(z-riverZ(x))<riverHalfWidth(x)+11 || shoreDistance(x,z)<10 || safe(x,z,6))return false;
   if(springRadius(x,z)<1.5 || (x>275 && abs(z-mapleStreamZ(x))<8))return false;
   if(Math.abs(terrainMeshHeight(x,z)-ground)>.14)return false;
-  return BUILDINGS.every(b=>hypot(b.x-x,b.z-z)>hypot(b.w,b.d)*.52+5);
+  const lots=lotGrid.get(Math.floor(x/24)*128+Math.floor(z/24));
+  return !lots || lots.every(b=>hypot(b.x-x,b.z-z)>hypot(b.w,b.d)*.52+5);
 }
-plantMountainWoods(TREES,ROCKS,PEACH_TREES,CLIFF_PINES,terrainHeight,mountainGlade,seeded);
+plantMountainWoods(TREES,ROCKS,PEACH_TREES,CLIFF_PINES,terrainHeight,
+  (x,z,ground)=>!earlierFireSurvey(x,z) && mountainGlade(x,z,ground),seeded);
+
+const fireCeiling=createFireTreeCeiling(terrainHeight);
+function trailBranchReach(h,form){
+  const family=TREE_FAMILIES[Math.floor(form/TREE_FORMS_PER_FAMILY)];
+  if(!family)return h*.50;
+  // Low boughs need lateral room for a traveller and the trailing camera.
+  // A tall, bare trunk can stand much nearer and frame the path overhead.
+  const habit=[.065,-.025,.025,-.08][form%4];
+  const firstBough=h*(family[4]+habit-(family[1]==='spire' ? .08 : .035));
+  return h*(.10+(family[3]+.10)*(1-smooth(3.7,6.0,firstBough)));
+}
+function inFireOpening(x,z,h,crown,foot,ground){
+  if(inFireMeadow(x,z,2) || fireTrailDistance(x,z)<1.25+foot)return true;
+  const top=fireCeiling(x,z,crown);
+  return Number.isFinite(top) && (ground ?? terrainHeight(x,z))+h>top;
+}
+// Prune individual obstructions. Low cover and tall trees beyond the fires
+// remain on the same slopes as the cleared hearths.
+for(let i=TREES.length-1;i>=0;i--){
+  const t=TREES[i];
+  if(inFireOpening(t.x,t.z,t.h,t.h*.56,trailBranchReach(t.h,t.form)))TREES.splice(i,1);
+}
+for(let i=ROCKS.length-1;i>=0;i--){
+  const r=ROCKS[i],reach=Math.max(r.rx,r.rz);
+  if(inFireOpening(r.x,r.z,r.h,reach,reach))ROCKS.splice(i,1);
+}
+plantKyotoWoods(TREES,ROCKS,terrainHeight,
+  (x,z,ground,h,form)=>!inFireOpening(x,z,h,h*.56,trailBranchReach(h,form),ground) && mountainGlade(x,z,ground),seeded);
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
 // The shrine's small bamboo stands are planted individually between its
@@ -1067,7 +1109,7 @@ for (const t of TREES)
     t.form !== undefined ? t.h*.027 : t.kind === 'bamboo' ? 0.3 : 0.37,
     t.form !== undefined ? t.h*.027 : t.kind === 'bamboo' ? 0.3 : 0.37,
     0,
-    terrainHeight(t.x, t.z) + t.h * 0.68,
+    (t.ground ?? terrainHeight(t.x, t.z)) + t.h * 0.68,
     'oval',
     false,
   );

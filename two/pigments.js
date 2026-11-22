@@ -5,7 +5,8 @@ import { groundPrintGLSL } from './ground-print.js';
 import { groundImpressions } from './scroll-paper.js';
 import * as THREE from './vendor/three.module.min.js';
 
-const asset = (name) => new URL('./assets/world/' + name + '.webp', import.meta.url).href;
+const asset = (name) => new URL('./assets/world/' + name + '.webp' +
+  (name === 'kyo-hills' ? '?v=okuribi-forest-1' : ''), import.meta.url).href;
 const paint = (color) => new THREE.Color(color);
 
 export function loadPigments() {

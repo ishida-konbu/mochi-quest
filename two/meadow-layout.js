@@ -1,3 +1,4 @@
+import { fireTrailDistance, inFireMeadow } from './higashiyama.js';
 import { inMountainStreamClearing } from './mountain-streams.js';
 import { WAYSIDE_SITES,inHutYard } from './wayside-hut-layout.js';
 import { SEAPORTS,portReserved } from './seaport-layout.js';
@@ -144,6 +145,9 @@ export function visitMeadowTile(i,j,clearings,visit) {
     const [,stature,spread]=HERBS[family],height=size*stature,width=height*spread*(.84+rng()*.38);
     const shade=(shadeTree ? .74 : .80)+.23*rng(), hue=season.snow+season.autumn*.34+season.moon*.14+(coast ? .13 : 0)+scroll*.10;
     const angle=dominant ? (bed%997)*.0063+(rng()-.5)*2.20 : rng()*Math.PI*2;
+    // Leave a single-file tread. Ferns along the bank can lean over its edge.
+    const pathDistance=fireTrailDistance(x,z);
+    if(pathDistance<.54+width*.25 || inFireMeadow(x,z,width*.25))continue;
     visit(x,y-.022,z,width,height,angle,family*HERB_FORMS+form,shade,hue);
     count++;
     // Rhizomes and stolons send up younger shoots a handspan from the parent.
@@ -157,6 +161,8 @@ export function visitMeadowTile(i,j,clearings,visit) {
     const sy=terrainMeshHeight(sx,sz,heightAt);
     if(sy<WATER_Y+.13)continue;
     const young=.45+rng()*.30;
+    if(pathDistance<2 && fireTrailDistance(sx,sz)<.54+width*young*.25 ||
+       inFireMeadow(sx,sz,width*young*.25))continue;
     visit(sx,sy-.022,sz,width*young*.91,height*young,bearing,family*HERB_FORMS+floor(rng()*2),shade*.98,hue);
     count++;
   }

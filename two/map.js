@@ -7,7 +7,7 @@ import { SEAPORTS, PORT_BUILDINGS, QUAY_CENTER, QUAY_LENGTH, portPoint } from '.
 import { SEAWAYS, FLEET, vesselPose } from './ocean-voyage.js';
 import { CHAYA_SITES } from './wayside-hut-layout.js';
 import { COURT } from './retreat-layout.js';
-import { HIGASHIYAMA, KITAYAMA, westRidgeHeight } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, FIRE_TRAILS, westRidgeHeight } from './higashiyama.js';
 import { RASHOMON, GATE_STONE, GATE_STONE_APRONS, GATE_STONE_STEPS, GATE_WING } from './kyo-layout.js';
 import { REGIONS, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
 const SIZE = 2048, SPAN = 2 * BOUND, adj = SIZE / SPAN;
@@ -23,7 +23,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=kyoto-woodlands', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=okuribi-forest-1', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -125,6 +125,14 @@ export function paintMapPaper() {
       g.lineTo(u+h*.12,v-h*.26);g.lineTo(u+h*.32,v-h*.22);g.closePath();
     }
     g.fill();
+  }
+  // Paths for carrying firewood are a single fine stroke on the travel map.
+  g.lineWidth=.85;
+  g.strokeStyle='#ac9878';
+  for(const path of Object.values(FIRE_TRAILS)){
+    g.beginPath();
+    path.forEach(([x,z],i)=>i?g.lineTo(toX(x),toX(z)):g.moveTo(toX(x),toX(z)));
+    g.stroke();
   }
   const rockInk=seeded(73167);
   g.strokeStyle='#54574884';g.lineWidth=.85;

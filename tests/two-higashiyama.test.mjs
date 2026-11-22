@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DISTRICTS } from '../two/geography.js';
-import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, eastRidgeHeight, northRidgeHeight, westRidgeHeight, fukuFirebeds, daiFirebeds, FIRE_DRAWINGS } from '../two/higashiyama.js';
-import { CONNECTING_ROADS, TREES, shoreDistance, solidHeightAt, terrainHeight } from '../two/terrain.js';
+import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, eastRidgeHeight, northRidgeHeight, westRidgeHeight, fukuFirebeds, daiFirebeds, FIRE_DRAWINGS, FIRE_TRAILS, inFireMeadow, fireTrailDistance } from '../two/higashiyama.js';
+import { CONNECTING_ROADS, TREES, nearRoad, shoreDistance, solidHeightAt, terrainHeight } from '../two/terrain.js';
 import { canopyHeight } from '../two/village-paths.js';
+import { createGame } from '../two/game.js';
 
 for(const east of [true,false]){
   const name=east?'Higashiyama':'Kitayama',summit=east?HIGASHIYAMA:KITAYAMA;
@@ -62,6 +63,40 @@ test('the 福 and 大 firebeds make complete brushstrokes on terrain visible fro
             'obstructed view from '+[ex,ez]+' to '+[x,z]);
         }
       }
+    }
+  }
+});
+
+test('the mown banks hug the hearths, leaving the approach and the ridge behind them wooded',()=>{
+  const city=DISTRICTS.kyo;
+  for(const east of [true,false]){
+    const hearths=(east?fukuFirebeds:daiFirebeds)(terrainHeight);
+    for(const [x,,z] of hearths)assert.ok(inFireMeadow(x,z,-1),'unmown hearth '+[x,z]);
+    const drawing=east?FIRE_DRAWINGS.east:FIRE_DRAWINGS.north;
+    const ratio=drawing.width/(east?.34:.31);
+    assert.ok(ratio>.84 && ratio<.89);
+    assert.ok(Math.abs(drawing.height/(east?.226:.222)-ratio)<.006);
+    for(let forward=96;forward<375;forward+=4)for(let side=-88;side<=88;side+=4){
+      const x=city.x+(east?forward:side),z=city.z+(east?side:-forward);
+      if(inFireMeadow(x,z))assert.ok(hearths.some(([hx,,hz])=>Math.hypot(hx-x,hz-z)<20),
+        'mown ground too far from a firebed at '+[x,z]);
+    }
+  }
+});
+
+test('both narrow trails can be walked from an existing street to the fires in normal mochi mode',()=>{
+  for(const [direction,line] of Object.entries(FIRE_TRAILS)){
+    assert.ok(nearRoad(...line[0],.4) && inFireMeadow(...line.at(-1)));
+    const game=createGame(),p=game.state.player,[x,z]=line[0];
+    Object.assign(p,{x,z,y:terrainHeight(x,z),h:0,vx:0,vz:0,grounded:true});
+    for(const [tx,tz] of line){
+      assert.ok(fireTrailDistance(tx,tz)<1e-8);
+      for(let j=0;j<100;j++){
+        const dx=tx-p.x,dz=tz-p.z,d=Math.hypot(dx,dz);
+        if(d<.18)break;
+        game.step(1/60,{x:dx/d,z:dz/d});
+      }
+      assert.ok(Math.hypot(tx-p.x,tz-p.z)<.19,direction+' footpath blocked at '+[tx,tz]);
     }
   }
 });
