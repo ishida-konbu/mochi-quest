@@ -1,11 +1,14 @@
 // Working fixtures for the eight village springs. Each has its own plumbing:
 // the same local survey draws the vessels, their waterlines and their entry.
 import * as T from './vendor/three.module.min.js';
+import { matsuhamaWorks } from './matsuhama-saltworks.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { surface,rod,dab,turning } from './village-bath-figures.js';
 import { villagePools,villagePoolsPoint,villageCourseRim,villageTreads } from './village-bath-courses.js';
 import { sitePoint } from './retreat-layout.js';
 import { springLevel,terrainMeshHeight } from './terrain.js';
+import { finishWaterworks } from './village-waterworks.js';
+import { bathFinish } from './bath-material-study.js';
 import { isVillageWorkshop } from './village-workshop-plan.js';
 import { addBathFlowers,registerWaterMotion,treatmentFoam,thermalVapour } from './village-treatment-water.js';
 
@@ -71,7 +74,8 @@ function jarBody(s,p){
   const clay=new T.Color('#8d593f'),glaze=new T.Color(p.rim),pale=new T.Color('#ccad85'),inside=new T.Color('#675748');
   const q=(u,v)=>{
     const a=-tau*u,j=Math.round(v*(rows.length-1)),f=basinFrame(p,a),[w,h]=rows[j];
-    const gate=f.gate,y=h<0?p.y+h:p.y-.095+gate*(.095+h);
+    // A lowered but watertight sill meets the removable front steps.
+    const y=p.y+(h<0?h:h*(f.top-p.y)/.40);
     return [f.u+f.nx*w,y,f.v+f.nz*w];};
   s.add(surface(128,rows.length-1,q,(u,v)=>{
     const j=Math.round(v*(rows.length-1)),h=rows[j][1],a=-tau*u;
@@ -234,30 +238,6 @@ function bambooJets(s,flow){
   }
   for(let j=0;j<12;j++)s.box(j%2?'#8b8f68':'#a2a77c',-1.58,-.32,-1.39+j*.184,2.16,.081,.164);
 }
-function shellLoungers(s,flow){
-  const nacre=new T.Color('#e8d2bd'),pearl=new T.Color('#a79481');
-  for(const [i,x] of [-1.82,1.17].entries()){
-    // One valve is a concave reclining pan. Its paired shell is the pillow,
-    // tipped up beyond the hairline. Flatfish and abalone beds inspire the ribs.
-    const fans=(u,t,head=false)=>{
-      const a=(u-.5)*2.46,flute=.5+.5*cos(13*tau*u);
-      const r=t*(1+.025*flute);
-      return [x+(head?.70:1.15)*sin(a)*r,
-        head?-.13+.56*r*cos(a)+.063*flute*r:-.35+.17*r+.17*(1-cos(a))*r+.03*flute*r,
-        (head?-1.02:-1.14)+(head?-.42:2.43)*r*cos(a)];};
-    for(const head of [true,false]){
-      s.add(surface(77,20,(u,v)=>fans(u,v,head),(u,v)=>pearl.clone().lerp(nacre,.35+.46*(.5+.5*cos(13*tau*u))+.09*cos(4*PI*v+i))),'#fff');
-      stroke(s,'#c4aa99',u=>fans(u,1,head),.035,55);
-      if(!head)for(const side of [-1,1])stroke(s,'#cfb9a7',t=>{
-        const p=fans(side===1?1:0,t,false);
-        p[1]+=.12+.16*sin(PI*t);return p;
-      },.061,22);
-    }
-    for(const side of [-1,1])dab(s,'#b5a395',x+side*.54,-.10,-.95,.21,.12,.29,0,.23*side);
-  }
-  for(let k=0;k<5;k++)block(s,-3.04+k*.17,-.24,-2.36,.28,.50+.14*sin(k),.24,5+k,'#9e998c');
-  waterRibbon(flow,[-2.66,.37,-2.37],[-2.53,.01,-1.81],.147,.10,.04);
-}
 function neckFalls(s,flow){
   for(const x of [-2.62,2.62]){
     block(s,x,-.34,-2.67,.39,.52,.35,x,'#71786b');
@@ -290,16 +270,18 @@ function moonBed(s,flow){
   culm(s,xx,.40,zz-.27,.102,.61,.06,'#a79c76');
   waterRibbon(flow,[xx,.36,zz+.36],[xx+.06,.004,zz+.68],.058,.044,.009);
 }
-const works={sakura:flowerInlet,bamboo:bambooJets,sulfur:cliffBath,paddy:sluices,shore:shellLoungers,maple:neckFalls,susuki:moonBed};
+const works={sakura:flowerInlet,bamboo:bambooJets,sulfur:cliffBath,paddy:sluices,maple:neckFalls,susuki:moonBed};
 export function villageTreatmentGeometry(site){
   const fittings=sculpture(),flow=sculpture(),pools=villagePools(site);
   if(site.kind==='earthen'){
     for(const [i,p] of pools.entries()){jarBody(fittings,p);jarFeed(fittings,flow,p,i);}
-  }else works[site.kind](fittings,flow,pools);
+  }else if(site.kind==='shore')matsuhamaWorks(fittings,flow,pools,waterRibbon);
+  else works[site.kind](fittings,flow,pools);
   if(site.kind==='sulfur'){
     // Fine grooves running along the upper source remain dry on one bank.
     for(let i=0;i<4;i++)stroke(fittings,silver,t=>[-2.47+t*.57,.99+.075*cos(PI*t),-3.83+i*.045],.015,10);
   }
+  finishWaterworks(fittings,site.kind,pools);
   return {fittings:fittings.finish(),flow:flow.finish()};
 }
 // A kiln yard drains between the vessels. Clip the old brick's actual top
@@ -360,7 +342,8 @@ export function dressVillageBath(p,f,site){
   }
   const key='working-'+site.kind,pour=key+'-pour';
   p.shapes[key]=fittings;p.shapes[pour]=flow;
-  f.put(key,0,0,0,1,1,1,'#fff',p.stems);
+  const finish={earthen:'clay',sulfur:'slate',paddy:'cedar',sakura:'bamboo',bamboo:'bamboo',maple:'cedar',susuki:'slate'}[site.kind];
+  f.put(key,0,0,0,1,1,1,'#fff',finish?bathFinish(finish):p.stems);
   const active=registerWaterMotion(p,site);
   f.put(pour,0,0,0,1,1,1,'#d6e4d4',active.flow);
   treatmentFoam(p,f,site,active);

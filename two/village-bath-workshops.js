@@ -1,3 +1,4 @@
+import { bathFinish } from './bath-material-study.js';
 import * as T from './vendor/three.module.min.js';
 import { RETREATS, sitePoint } from './retreat-layout.js';
 import { bathEnclosure } from './bath-enclosures.js';
@@ -6,6 +7,7 @@ import { roofProfile } from './architecture.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { scrollPigment } from './kyo-scrollwork.js';
 import { surface,rod,dab } from './village-bath-figures.js';
+import { createMatsuhamaMachinery } from './matsuhama-saltworks.js';
 import { villageBathPainting } from './village-bath-paintings.js';
 import { addVillageWash,createVillageRinse } from './village-wash-furniture.js';
 import { addVillageYard } from './village-bath-yards.js';
@@ -305,11 +307,20 @@ export function villageWorkshopGeometry(site,distant=false){
     roof(s,r,plan,k,true);
     return s.finish();
   }
-  plankDeck(s,r,k);
-  sideSlats(s,r,k);rearWall(s,r,k);timberFrame(s,r,k);
-  roof(s,r,plan,k);addVillageTrade(s,k,r);addVillageWash(s,r,k);paintingMount(s,r,k);
-  addVillageYard(s,site,plan);
-  return s.finish();
+  const groups=[];
+  function finishSection(index){
+    const start=groups.length?groups.at(-1).end:0;
+    groups.push({start,end:s.indexCount,index});
+  }
+  plankDeck(s,r,k);finishSection(0);
+  sideSlats(s,r,k);rearWall(s,r,k);finishSection(1);
+  timberFrame(s,r,k);finishSection(0);
+  roof(s,r,plan,k);finishSection(2);
+  addVillageTrade(s,k,r);addVillageWash(s,r,k);paintingMount(s,r,k);
+  addVillageYard(s,site,plan);finishSection(3);
+  const g=s.finish();
+  for(const {start,end,index} of groups)g.addGroup(start,end-start,index);
+  return g;
 }
 export function createVillageWorkshops(scene){
   const sites=RETREATS.filter(isVillageWorkshop).map(site=>{
@@ -317,7 +328,7 @@ export function createVillageWorkshops(scene){
     const [x,z]=sitePoint(site,room.u,room.v);
     return {site,room,x,z,y:springLevel(site),group:null};
   });
-  return player=>{
+  return (player,time=0)=>{
     for(const court of sites){
       const {x,z,site,room}=court,dx=wrapDelta(x-player.x),dz=wrapDelta(z-player.z);
       const range=dx*dx+dz*dz;
@@ -331,15 +342,20 @@ export function createVillageWorkshops(scene){
       const close=range<=135**2;
       if(close&&!court.details){
         court.details=new T.Group();
-        const building=new T.Mesh(villageWorkshopGeometry(site),scrollPigment());
+        const k=site.kind;
+        const wall={earthen:'clay',bamboo:'bamboo',paddy:'bamboo',susuki:'clay'}[k]||'cedar';
+        const roof={earthen:'slate',bamboo:'bamboo',paddy:'bamboo',susuki:'bamboo'}[k]||'cedar';
+        const building=new T.Mesh(villageWorkshopGeometry(site),[bathFinish('cedar'),bathFinish(wall),bathFinish(roof),scrollPigment()]);
         building.receiveShadow=building.castShadow=true;court.details.add(building);
         const frame=villageFrames[site.kind];
         const painting=new T.Mesh(new T.PlaneGeometry(frame.w,frame.w/1.78),villageBathPainting(site.kind));
         painting.position.set(frame.x,frame.y,-room.d/2+.210);
+        if(site.kind==='shore')court.machinery=createMatsuhamaMachinery(court.details,room);
         court.details.add(painting);court.rinse=createVillageRinse(court.details,site,room);court.group.add(court.details);
       }
       court.skyline.visible=!close;
       if(court.details)court.details.visible=close;
+      if(close && court.machinery)court.machinery(time,player);
       if(close && court.rinse)court.rinse(player);
       court.group.position.set(player.x+dx,court.y,player.z+dz);
       court.group.visible=true;

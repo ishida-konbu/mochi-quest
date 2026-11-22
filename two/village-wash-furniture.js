@@ -25,22 +25,6 @@ function plankBasin(s,x,y,z,w,d,h,shade){
   s.box(water,x,y+h-.049,z,w-.13,.014,d-.11);
   for(const side of [-1,1])for(const end of [-1,1])dab(s,'#6f6957',x+side*(w/2-.10),y+h*.67,z+end*d/2,.021,.021,.010);
 }
-function shell(s,x,y,z,size,filled=true){
-  const nacre=new T.Color('#e2cbb8'),wash=new T.Color('#999982');
-  function point(a,r,back=false){
-    const flute=.032*cos(a*12)*r;
-    return [x+size*r*(1.14+.06*sin(2*a))*cos(a),y+size*(.34*r*r+.07*r*cos(a)+flute-(back?.046:0)),
-      z+size*.72*r*sin(a)];}
-  for(const back of [false,true]){
-    s.add(surface(43,9,(u,v)=>point(tau*u,v,back),(u,v)=>wash.clone().lerp(nacre,.37+.32*v+.19*cos(6*tau*u)*v)),'#fff');
-  }
-  line(s,'#a3a38a',u=>point(tau*u,1),size*.025,37);
-  for(let j=0;j<7;j++){
-    const a=(.10+.10*j)*PI,p=point(a,.90);
-    dab(s,'#646d61',p[0],p[1]+.001,p[2],size*.04,.012,size*.033);
-  }
-  if(filled)dab(s,water,x,y+.106*size,z,.61*size,.010,.44*size);
-}
 function benchBase(s,r,k){
   const material=k==='maple'?'#8e7661':k==='earthen'?'#706254':cedar;
   const span=r.w*.57;
@@ -95,8 +79,28 @@ export function addVillageWash(s,r,k){
     for(let j=0;j<7;j++)s.box(j%2?'#97886a':'#ab9a79',-.87+j*.14,.71,z,.086,.061,.38);
     pottery(s,.91,.56,z,.16,.18,'#907e61');
   }else if(k==='shore'){
-    shell(s,-.27,.565,z,.62);shell(s,.65,.566,z+.028,.30);
-    for(let j=0;j<5;j++)dab(s,'#aaa58d',-.27+.045*j,.598,z-.33,.082,.037,.060);
+    // The freshwater cooper keeps two straight-grained cedar pails, a plugged
+    // tap, spare folded towels and a smaller ladle on the draining board.
+    for(const [x,r,h] of [[-.30,.35,.35],[.59,.25,.29]]){
+      const base=.56;
+      const profile=[[.76,0],[.79,.04],[1,.96],[.98,1],[.89,1],[.88,.94],[.70,.12],[.01,.12]];
+      for(let j=0;j<16;j++)s.add(surface(3,profile.length-1,(u,v)=>{
+        const a=-tau*(j+.02+u*.96)/16,[rr,hp]=profile[Math.round(v*(profile.length-1))];
+        return [x+rr*r*cos(a),base+h*hp,z+rr*r*sin(a)];
+      }),j%3?'#b19a74':'#927b5b');
+      for(const y of [.17,.72])line(s,'#7b7965',t=>[x+(r*(.79+.23*y)+.01)*cos(t*tau),base+h*y,z+(r*(.79+.23*y)+.01)*sin(t*tau)],.013,28);
+      dab(s,water,x,base+h*.87,z,r*.875,.009,r*.875);
+    }
+    // A lidded freshwater churn hangs above the rinse counter. A turned
+    // stopcock and a short spout fill the nearer pail without a brine line.
+    turning(s,'#9f8864',-.78,.57,z-.26,[[.24,0],[.28,.04],[.30,.61],[.29,.65],[.01,.65]],26);
+    for(const y of [.68,1.08])turning(s,'#776f57',-.78,y,z-.26,[[.3,0],[.3,.028]],24);
+    s.box('#b59a72',-.78,1.24,z-.26,.59,.044,.53);
+    rod(s,'#807963',[-.60,1.07,z-.23],[-.39,1.05,z-.08],.034);
+    rod(s,'#6a705e',[-.53,1.06,z-.17],[-.51,1.14,z-.17],.025);
+    rod(s,'#ae926a',[-.57,1.143,z-.17],[-.45,1.143,z-.17],.018);
+    s.stroke('#bfcdb6',[[-.39,1.05,z-.08],[-.37,.993,z-.068],[-.37,.87,z-.067]],[.012,.011,.009],6);
+    for(let j=0;j<3;j++)s.box(j===1?'#6a847d':'#cec9aa',.97,.584+j*.041,z,.34,.04,.31);
   }else if(k==='maple'){
     // A carved tsukubai scooped from a broad split stone, with a chisel-cut return.
     const rim=(a)=>.53*(1+.09*sin(3*a)+.055*cos(5*a));
@@ -118,7 +122,9 @@ export function addVillageWash(s,r,k){
 function rinseImplement(k){
   const s=sculpture();
   if(k==='shore'){
-    shell(s,0,0,0,.18,false);rod(s,'#9a7f56',[0,.025,.105],[.008,.12,.51],.027,.042);
+    turning(s,'#bb9b6c',0,0,0,[[.001,0],[.105,.005],[.132,.04],[.148,.16],[.145,.171],[.123,.172],[.118,.048],[.09,.029],[.001,.029]],28);
+    turning(s,'#777565',0,.116,0,[[.142,0],[.144,.014]],27);
+    rod(s,'#9a7f56',[0,.12,.115],[.008,.17,.52],.027,.039);
   }else if(k==='earthen'){
     pottery(s,0,0,0,.195,.12,'#ac8165',false);
     for(const side of [-1,1])line(s,'#9c7655',t=>[side*(.17+.075*sin(PI*t)),.056+.04*cos(PI*t),.075*cos(PI*t)],.016,10);
@@ -139,7 +145,7 @@ export function createVillageRinse(parent,site,r){
   const fillSize=site.kind==='earthen'?.160:site.kind==='shore'?.116:.12;
   const filling=new T.Mesh(new T.CircleGeometry(fillSize,24),fluid);
   filling.rotation.x=-PI/2;
-  filling.position.y=site.kind==='shore'?.020:site.kind==='earthen'?.105:.111;
+  filling.position.y=site.kind==='shore'?.15:site.kind==='earthen'?.105:.111;
   head.add(filling);
   const stream=new T.Mesh(surface(12,12,(u,t)=>{
     const a=tau*u,width=.029-.013*t;return [width*cos(a)+.05*t,-.41*t*t-.15*t,width*sin(a)+.075*t];
@@ -153,7 +159,7 @@ export function createVillageRinse(parent,site,r){
     head.position.set(station.berthU-r.u+q.u,q.y-.09,hand+q.v);
     head.rotation.set(q.pitch,-.51,q.roll,'YXZ');
     filling.visible=q.wet>.035;
-    filling.scale.set(q.wet,site.kind==='shore'?q.wet*.66:q.wet,1);
+    filling.scale.set(q.wet,q.wet,1);
     stream.visible=q.pour>.028;
     if(!stream.visible)return;
     offset.set(.07,.11,.067).applyQuaternion(head.quaternion).add(head.position);

@@ -28,7 +28,7 @@ function regionalFinish(site,pool) {
   if(regionalWater.has(key))return regionalWater.get(key);
   const m=poolMaterial.clone();m.color.set(pool?.tint??(main?mineralWash[site.kind]:craft.water));
   m.roughness=craft.rim==='sinter'?.43:.36;
-  // In these shallow baths the actual stone backs, shell ribs and bamboo
+  // In these shallow baths the actual stone backs, woven beds and bamboo
   // gratings remain visible beneath a thin moving film of spring water.
   const shallow=main && ['dawn','shore','susuki','bamboo'].includes(site.kind);
   if(shallow){m.transparent=true;m.opacity=.54;}

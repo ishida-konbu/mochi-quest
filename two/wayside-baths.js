@@ -1,3 +1,4 @@
+import { dressTrailStone,dressTrailInlet } from './trail-bath-stonework.js';
 import * as T from './vendor/three.module.min.js';
 import { RETREATS, retreatStones, sitePoint } from './retreat-layout.js';
 import { springLevel,terrainHeight } from './terrain.js';
@@ -24,18 +25,6 @@ function curtain() {
     pos.setXYZ(i,x,y+.034*lo*lo*cos(x*8),(.028+.075*lo)*sin(x*9+.43*lo)-lo*lo*.08);
   }
   g.computeVertexNormals();return g;
-}
-function inlet(p,f,s) {
-  const u=-s.rx*.71,v=-s.rz*.51;
-  const wood=['cedar','coast','reed'].includes(s.kind);
-  f.put('rock',u,.41,v-.75,.88,1.01,.79,'#858d7c',p.stone,-.3);
-  if(wood) {
-    f.put('springGutter',u,1.04,v,.21,1.64,.21,'#ad9670',p.wood,0,PI/2-.07);
-    for(const dz of [-.38,.18])f.put('bathBand',u,1.04,v+dz,.219,.057,.219,'#736e54',p.fine,0,PI/2-.07);
-  } else {
-    f.put('rock',u,.91,v,.53,.21,.91,'#8c897a',p.stone,.08,-.08);
-  }
-  f.put('springTrickle',u,.011,v+.83,1,1,1,'#c4d9c7',p.springFlow);
 }
 function pampas() {
   const form=sculpture();
@@ -116,7 +105,8 @@ export function dressWaysideBaths(p,gravel) {
     dressBathEnclosure(p,f,s,level);
     if(s.regional){dressRegionalBath(p,f,s,level);continue;}
     for(const q of retreatStones(s)) {
-      const scale=q.scanned?.64:1;
+      if(!q.scanned){dressTrailStone(p,f,s,q);continue;}
+      const scale=.64;
       f.put('springCrag'+(q.i%3),q.u,.075,q.v,q.w*scale,q.h*scale,q.d*scale,tints[q.i%4],p.stone,q.angle,0,.13*sin(q.i));
       if(q.i%4===1){
         // Thin deposits of pale travertine cap the wet ledge at its high side.
@@ -124,7 +114,7 @@ export function dressWaysideBaths(p,gravel) {
           s.kind==='maple'||s.kind==='cedar'?'#949b7d':'#b7b5a1',p.stone,q.angle,0,.13*sin(q.i));
       }
     }
-    inlet(p,f,s);plants(p,f,s);
+    dressTrailInlet(p,f,s);plants(p,f,s);
     const u=s.rx*.74,v=s.rz*.96;
     f.put('rock',u,.07,v,.45,.21,.40,'#969680',p.stone);
     f.put('box',u,.80,v-.11,.13,1.65,.14,'#76664e');

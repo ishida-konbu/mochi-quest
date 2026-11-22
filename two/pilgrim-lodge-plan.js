@@ -19,7 +19,7 @@ export function lodgeFurniture(kind,r){
 export const snowLamp={x:7.26,z:-9.08,w:3.22,d:2.88,h:2.78};
 export function yardFixture(kind,plan){
   const r=plan.room;
-  if(kind==='sakai')return {x:plan.w-r.u-1.37,z:.03,w:2.35,d:2.42,h:2.76};
+  if(kind==='sakai')return {x:plan.w-r.u-1.37,z:.03,w:2.10,d:1.18,h:1.28};
   if(kind==='temple')return {x:-plan.w-r.u+1.17,z:.20,w:1.02,d:1.03,h:2.37};
 }
 export function addPilgrimFurnitureSolids(site,plan,add){
@@ -30,7 +30,9 @@ export function addPilgrimFurnitureSolids(site,plan,add){
   if(yard){
     const x=plan.room.u+yard.x,z=plan.room.v+yard.z;
     add(x,z,yard.w,yard.d,yard.h,'oval',true);
-    if(site.kind==='sakai')add(x+.29,z-.28,.62,.59,4.67,'oval',true);
+    if(site.kind==='sakai'){
+      const cover=add(x,z,2.38,1.50,1.96,'slab',true);cover.bottom=cover.top-.32;
+    }
   }
 }
 

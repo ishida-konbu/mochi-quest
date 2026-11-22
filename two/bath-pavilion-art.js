@@ -1,3 +1,4 @@
+import { kilnSteamBath } from './pilgrim-bathing-plan.js';
 import { hasPilgrimBathhouse } from './pilgrim-lodge-plan.js';
 import * as T from './vendor/three.module.min.js';
 import { dressSuzuriCourt } from './kyo-bath-art.js';
@@ -176,7 +177,7 @@ function room(p,f,plan,s){
   if(hasPilgrimBathhouse(s)){
     // The bank's commissioned lodge supplies the posts, windows, roof and
     // regional fittings. Retain the walkable deck and its shared wash bench.
-    washBench(p,f,r,wood);
+    if(!kilnSteamBath(s))washBench(p,f,r,wood);
     return;
   }
   if(!regionalBackWall(p,f,plan))screen(p,f,u,v-d/2,w,0,eave-.26,wall,wood);

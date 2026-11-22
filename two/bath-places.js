@@ -9,7 +9,7 @@ export function hasOwnInlet(site){
   return isVillageWorkshop(site) || pilgrimCustomInlet(site);
 }
 export function poolLip(pool,a){
-  return ['jar','terrace','mineral','shelf'].includes(pool.shape)?villagePoolLip(pool,a):pilgrimPoolLip(pool,a);
+  return ['jar','terrace','mineral','shelf','brineVat'].includes(pool.shape)?villagePoolLip(pool,a):pilgrimPoolLip(pool,a);
 }
 export function bathLocal(site,x,z){
   const dx=x-site.x,dz=z-site.z,c=Math.cos(site.yaw),s=Math.sin(site.yaw);

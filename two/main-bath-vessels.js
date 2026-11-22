@@ -1,5 +1,7 @@
 import * as T from './vendor/three.module.min.js';
 import { sculpture } from './pilgrimage-pigment.js';
+import { villageCoping,buildVillageCoping } from './village-coping.js';
+import { bathFinish } from './bath-material-study.js';
 import { carveSuzuriStone } from './suzuri-stonecut.js';
 import { basinFinishes,rimPoint,rimSection } from './main-bath-rims.js';
 
@@ -16,6 +18,7 @@ const sections={
 };
 
 export function buildBasinVessel(site){
+  if(villageCoping(site.kind))return buildVillageCoping(site);
   const [type]=basinFinishes[site.kind];
   const pigment=basinFinishes[site.kind].slice(3).map(tint=>new T.Color(tint));
   const profile=sections[type] || (type==='lashing'||type==='fan'?sections.plank:type==='bund'?sections.ledge:sections.relief);
@@ -84,6 +87,7 @@ export function buildBasinVessel(site){
 
 const materials=new WeakMap();
 export function basinMaterial(p,site){
+  if(villageCoping(site.kind))return bathFinish(({sakura:"cedar",bamboo:"bamboo"})[site.kind]||"slate");
   const type=basinFinishes[site.kind][0];
   if(!materials.has(p))materials.set(p,new Map());
   const palette=materials.get(p);

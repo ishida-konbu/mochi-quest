@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.min.js';
+import { dressFoundry,foundryFire } from './goemon-foundry.js';
 import { paintKettleScreen } from './goemon-windbreak.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { paintedPanels } from './wayside-hut-art.js';
@@ -171,19 +172,20 @@ function pail(s,p,seed){
   s.panel(timber,'#b5a07f',16,2,(u,v)=>[bowlX+.118*cos(tau*u)*v,.325+.10*v*v,bowlZ+.118*sin(tau*u)*v]);
   p.stroke('#ab9472',[[1.55,.393,.89],[1.72,.455,.91],[1.92,.55,.94],[2.10,.623,.96]],[.022,.023,.023,.021],12);
 }
-export function buildGoemonBath(variant=0,kind='charcoal',bank){
-  const seed=Math.abs(variant|0)%3;
-  const key=[seed,kind,bank].join('-');
+export function buildGoemonBath(variant=0,kind='charcoal',bank,id){
+  const seed=Math.abs(variant|0)%4;
+  const key=[id,seed,kind,bank].join('-');
   if(!kettleSets.has(key)){
-    const s=paintedPanels(),p=sculpture();
+    const s=paintedPanels(),p=sculpture(),flames=sculpture();
     vessel(s,p,seed);hearth(s,p,seed);slats(s);steps(s,p,seed);pail(s,p,seed);
+    dressFoundry(p,flames,id,kind,bank,seed);
     paintKettleScreen(p,kind,bank,seed);
-    kettleSets.set(key,[s.finish(),p.finish()]);
+    kettleSets.set(key,[s.finish(),p.finish(),flames.finish()]);
   }
-  const group=new T.Group(),mats=bathMaterials();group.name='五右衛門風呂';
+  const group=new T.Group(),mats=[...bathMaterials(),foundryFire()];group.name='五右衛門風呂';
   group.scale.set(KETTLE.widthScale,1,KETTLE.widthScale);
   for(const [i,g] of kettleSets.get(key).entries()){
-    const m=new T.Mesh(g,mats[i]);m.name=i?'羽釜の環と熾火':'鉄肌と火床';m.castShadow=m.receiveShadow=true;group.add(m);
+    const m=new T.Mesh(g,mats[i]);m.name=['鉄肌と火床','鋳物の羽釜と焚き口','薪の熾火'][i];m.castShadow=m.receiveShadow=i!==2;group.add(m);
   }
   return group;
 }

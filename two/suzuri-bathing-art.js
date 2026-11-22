@@ -5,7 +5,7 @@ import { SUZURI_LEDGE,suzuriStations } from './kyo-bath-layout.js';
 import { RETREATS } from './retreat-layout.js';
 import { waterSurfaceAt,wrapDelta } from './terrain.js';
 
-const {PI,sin,cos}=Math,tau=2*PI;
+const {PI,sin,cos,abs}=Math,tau=2*PI;
 
 // Two submerged steps are cut from the flank of the inkstone. The wall
 // behind the bench rises above water as one scalloped shoulder-rest.
@@ -40,6 +40,38 @@ export function suzuriSeatStone(){
   }
   const back=new T.BufferGeometry();back.setAttribute('position',new T.Float32BufferAttribute(xyz,3));
   back.setAttribute('color',new T.Float32BufferAttribute(col,3));back.setIndex(ix);back.computeVertexNormals();s.add(back,'#fff');
+  // The seated shoulder-rest is a solid, overturned lotus leaf. Its rolled
+  // edge and vein channels stand clear of the water, with two little elbow
+  // shelves that die back into the original submerged landing.
+  const relief=(u,v)=>{
+    const a=(u-.5)*1.50*PI,t=v,spread=.23+.73*v;
+    const dx=sin(a)*spread,z=b.v+dx;
+    const root=v**.55,curled=(.035+.035*cos(7*a))*(1-cos(t*PI));
+    return [-4.81+.196*cos(a)*v+.079*v*v+.028*cos(a*9)*v*v,
+      -.12+.52*root-.29*abs(a/PI)**1.76*v+curled,z];};
+  const leafPos=[],leafColor=[],leafIx=[],nx=54,ny=11;
+  const green=new T.Color('#697a75'),silver=new T.Color('#97a394');
+  for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){
+    const u=i/nx,v=j/ny;
+    leafPos.push(...relief(u,v));
+    const dye=green.clone().lerp(silver,.14+.56*(j/ny)**7+.11*sin(18*u)**2);
+    leafColor.push(dye.r,dye.g,dye.b);
+    const k=j*(nx+1)+i;if(i<nx && j<ny)leafIx.push(k,k+1,k+nx+1,k+1,k+nx+2,k+nx+1);
+  }
+  const leaf=new T.BufferGeometry();leaf.setAttribute('position',new T.Float32BufferAttribute(leafPos,3));
+  leaf.setAttribute('color',new T.Float32BufferAttribute(leafColor,3));leaf.setIndex(leafIx);leaf.computeVertexNormals();
+  s.add(leaf,'#fff');
+  const crest=Array.from({length:42},(_,i)=>relief(i/41,1));
+  s.stroke('#939e94',crest,crest.map((_,i)=>.012+.026*sin(PI*i/41)),45);
+  for(let j=-3;j<=3;j++){
+    const vein=Array.from({length:8},(_,i)=>{const t=.18+.77*i/7,q=relief(.5+.12*j*t**.30,t);q[0]+=.007;return q;});
+    s.stroke('#87948a',vein,[.016,.013,.011,.009,.008,.007,.005,.003],11);
+  }
+  for(const side of [-1,1]){
+    const z=b.v+side*.98;
+    s.stroke('#717f7b',[[-4.81,-.12,z],[-4.66,.024,z+.047*side],[-4.46,.105,z+.052*side],
+      [-4.25,.115,z],[-4.11,.018,z-.022*side]],[.133,.105,.096,.084,.058],20);
+  }
   return s.finish();
 }
 

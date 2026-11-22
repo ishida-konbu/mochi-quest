@@ -25,7 +25,7 @@ test('the curved roof surfaces support landings at their painted eaves and slope
   }
 });
 
-test('the new kiln and votive light have solid footings outside the walk-in beach',()=>{
+test('the firing yard fuel rack and votive light have solid footings outside the walk-in beach',()=>{
   for(const s of sites.filter(q=>['temple','sakai'].includes(q.kind))){
     const p=bathEnclosure(s),q=yardFixture(s.kind,p),level=springLevel(s);
     const [x,z]=sitePoint(s,p.room.u+q.x,p.room.v+q.z);
@@ -80,5 +80,21 @@ test('the steam-room gate and both dry benches work from the street',()=>{
     for(let i=0;i<136;i++)game.step(1/60);
     follow(game,s,0,steamRoom.seatV+.43);
     follow(game,s,0,4.5);
+  }
+});
+
+test('Sakai journals saved under the former bath name reopen in the dry steam room',()=>{
+  const s=sites.find(q=>q.kind==='sakai');
+  const g=startAt(s,-1.10,steamRoom.seatV);
+  assert.ok(g.act('interact'));
+  for(let i=0;i<71;i++)g.step(1/60);
+  const journal=g.save();
+  assert.equal(journal.lastBath,'onsen-sakai-tsuboguchi');
+  assert.equal(s.name,'堺の陶室蒸し湯');
+  for(const old of [journal,{...journal,lastBathPlace:undefined}]){
+    const resumed=createGame(old);
+    assert.equal(resumed.save().lastBath,journal.lastBath);
+    assert.equal(resumed.state.player.bathPose.action,'steam');
+    assert.equal(resumed.state.player.bathPose.wet,false);
   }
 });

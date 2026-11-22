@@ -1,5 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 import { sculpture } from './pilgrimage-pigment.js';
+import { matsuhamaNetMender } from './matsuhama-saltworks.js';
 import { inkVolume } from './scroll-sculpt.js';
 import { bather, surface, rod, turning, dab, ink, bone, reed, wood } from './village-bath-figures.js';
 
@@ -214,55 +215,6 @@ function riceWheel(s){
   }
 }
 
-function tidalShell(s){
-  // The two scallop valves hinge at the same umbo. Ribs widen outward to
-  // uneven scallops on the lip, with a dark olive exterior and nacre inside.
-  const moss=new T.Color('#858c77'),pearl=new T.Color('#e5cfb3'),inner=new T.Color('#d2b39f');
-  function shell(u,t,top,back=false){
-    const a=(u-.5)*PI*.85,ridge=.5+.5*cos(u*tau*15),l=t*(1+.034*ridge);
-    const fan=1.38*l*sin(a),long=l*(top?1.70:1.35)*cos(a);
-    const cup=.33*(1-(2*t-1)**2)*(sin(PI*u)**.5);
-    const relief=.051*ridge*t+.012*sin(t*PI*18)*t+(back?.063:0);
-    return [fan-.09,.319+(top?long:.208*long)+(top?0:-cup*.74+relief),
-      -.34+(top?-.09*long+cup*.82-relief:.89*long)];
-  }
-  for(const top of [true,false]){
-    for(const back of [true,false]){
-      const mesh=surface(90,22,(u,t)=>shell(back?1-u:u,t,top,back),(u,t)=>{
-        const ridge=.5+.5*cos(u*tau*15);
-        return back?moss.clone().lerp(inner,.31+.32*ridge):inner.clone().lerp(pearl,.27+.51*ridge+.12*cos(t*16*PI));
-      });
-      s.add(mesh,'#fff');
-    }
-    border(s,'#917e68',u=>shell(u,1,top),.023,80);
-    for(let j=0;j<16;j++){
-      border(s,j%3===0?'#c4a390':'#ddc7b1',t=>shell(j/15,.09+.89*t,top),.011,14);
-    }
-  }
-  for(const side of [-1,1])slab(s,side*.76,.02,-.16,.54,.38,.47,side*2,'#6c736b','#a7aa92');
-  // A shore crab has two opposed fingers on each claw and four jointed
-  // walking legs on each side. The front two legs tuck under its carapace.
-  const c=sculpture(),red='#aa7157',cream='#ce9c74';
-  c.ball(red,0,.19,0,.307,.138,.208);
-  for(const side of [-1,1]){
-    for(let j=0;j<4;j++){
-      const z=.084-j*.075,tip=side*(.389+.082*sin(j*.87));
-      c.stroke(red,[[side*.228,.155,z],[side*(.34+.04*cos(j)),.228,z-.030*j],
-        [tip,.115,z-.037*j],[tip+side*.056,.026,z-.05*j]],
-        [.029,.033,.022,.006],8);
-    }
-    c.stroke(red,[[side*.215,.183,.045],[side*.377,.22,.156],[side*.393,.339,.208]],
-      [.043,.059,.037],7);
-    c.ball(cream,side*.377,.369,.214,.102,.094,.067,0,0,-side*.32);
-    for(const k of [-1,1])c.stroke(cream,[[side*.377+k*.046,.383,.215],[side*.384+k*.072,.452,.22],
-      [side*.39+k*.027,.514,.23]],[.043,.032,.006],7);
-    c.stroke(red,[[side*.108,.23,.131],[side*.13,.302,.175],[side*.142,.322,.179]],
-      [.015,.020,.016],5);
-    dab(c,ink,side*.142,.324,.183,.024,.026,.022);
-  }
-  s.add(c.finish(),'#fff',.36,.318,.42,1.15,1.15,1.15,.12,-.38);
-}
-
 let mapleLeaf;
 function maple(s,x,y,z,size,roll,pitch){
   if(!mapleLeaf){
@@ -375,7 +327,7 @@ function crescentMoon(s){
 }
 
 const carvings={sakura:petalRaft,bamboo:leafCanoe,earthen:kilnJar,sulfur:sinterShelf,
-  paddy:riceWheel,shore:tidalShell,maple:mapleHart,susuki:crescentMoon};
+  paddy:riceWheel,shore:matsuhamaNetMender,maple:mapleHart,susuki:crescentMoon};
 export function villageBathArt(s,kind){
   carvings[kind]?.(s);
 }

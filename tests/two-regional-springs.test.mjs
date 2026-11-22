@@ -1,3 +1,4 @@
+import { kilnSteamBath,steamRoom } from '../two/pilgrim-bathing-plan.js';
 import { bathPools,bathStations,poolLip,isDryTreatment } from '../two/bath-places.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -149,6 +150,15 @@ test('each main bath has its own shoreline and a sculpted, solid scene above the
     }).join(',');
     assert.ok(!profiles.has(radii),s.name+' has its own basin silhouette');
     profiles.add(radii);
+    if(kilnSteamBath(s)){
+      const level=springLevel(s),back=steamRoom.v-steamRoom.d/2;
+      const hearth=sitePoint(s,0,back+.62),aisle=sitePoint(s,0,.30);
+      assert.ok(staticVolumeAt(...hearth,level+.63),s.name+' solid steam furnace');
+      assert.ok(waterSurfaceAt(...aisle)<level-.04,s.name+' dry brick floor');
+      const old=tableauFooting(s,terrainHeight);
+      assert.ok(!staticVolumeAt(old.x,old.z,level+.64),s.name+' retired outdoor jar footing is clear');
+      continue;
+    }
     const art=bankSculpture(s.kind);
     const {position,normal,color}=art.attributes;
     assert.ok(art.index.count && position.count===normal.count && position.count===color.count,s.name);

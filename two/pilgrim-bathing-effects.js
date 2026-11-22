@@ -2,6 +2,7 @@ import * as T from './vendor/three.module.min.js';
 import { scrollPigment } from './kyo-scrollwork.js';
 import { skinGeometry } from './ryugu-sculpt.js';
 import { pilgrimInstallationGeometry,lockLeaf,snowSourceRim } from './pilgrim-bathing-craft.js';
+import { harborWindlass,windlass,winterTerraces } from './pilgrim-bath-reliefs.js';
 import { brineGate,steamRoom,sluiceOpening } from './pilgrim-bathing-plan.js';
 
 const {PI,sin,cos}=Math;
@@ -91,17 +92,28 @@ function saltMarsh(parent,clock){
   const x=brineGate.u,z=-1.72;
   const blade=new T.Mesh(lockLeaf(),scrollPigment());
   blade.position.set(x,.1,z+.016);blade.castShadow=blade.receiveShadow=true;parent.add(blade);
+  const wheel=new T.Mesh(harborWindlass(),scrollPigment());
+  wheel.position.set(windlass.x,windlass.y,windlass.z);
+  wheel.castShadow=wheel.receiveShadow=true;parent.add(wheel);
+  const liftLine=new T.Mesh(new T.CylinderGeometry(.026,.026,1,7),new T.MeshStandardMaterial({color:'#b09064'}));
+  parent.add(liftLine);
   const dial=new T.Group();
   const marker=new T.Mesh(new T.SphereGeometry(.11,12,9),new T.MeshStandardMaterial({color:'#bd7955'}));
   marker.scale.set(1,.77,1);dial.position.set(x-1.08,.42,z+.38);dial.add(marker);parent.add(dial);
   wetStream(parent,clock,[[x,.59,z+.08],[x,.48,z+.22],[x,.28,z+.40],[x,.02,z+.50]],.92,'tide');
   eddies(parent,clock,x,z+1.31,0,2.05,3.56,'tide');
-  return t=>{const phase=sluiceOpening(t);blade.position.y=.10+.59*phase;dial.position.y=.34+.29*phase;};
+  return t=>{
+    const phase=sluiceOpening(t);
+    blade.position.y=.10+.59*phase;dial.position.y=.34+.29*phase;
+    wheel.rotation.z=-.59*phase/.277;
+    const top=2.67,bottom=blade.position.y+1.01;
+    liftLine.position.set(x,(top+bottom)/2,z+.107);liftLine.scale.y=top-bottom;
+  };
 }
 function potterySteam(parent,clock){
   const z=steamRoom.v-steamRoom.d/2+.67;
-  vapour(parent,clock,[[-.42,.88,z],[.04,.91,z],[.49,.85,z],[.12,.08,-.46],[-1.03,.05,.14],[.97,.05,.23]],35,1.10);
-  vapour(parent,clock,[[.03,4.53,steamRoom.v-.64]],11,1.12,true);
+  vapour(parent,clock,[[-.44,1.32,z],[-1.95,1.04,z-.16],[.44,1.16,z],[1.95,1.04,z-.16],[.12,.08,-.46],[-1.03,.05,.14],[.97,.05,.23]],35,1.10);
+  vapour(parent,clock,[[.10,4.92,steamRoom.v-.64]],11,1.12,true);
   // Low, warm light reaches the slats through the kneeling-height stove.
   const glow=new T.PointLight(0xffba7a,3.1,4.9,1.8);glow.position.set(.11,1.28,z+.55);parent.add(glow);
 }
@@ -134,10 +146,23 @@ export function pilgrimBathInstallation(site){
   }else if(site.kind==='tsuruga')move=saltMarsh(root,clock);
   else if(site.kind==='snow'){
     const {x,y,z}=snowSourceRim;
-    wetStream(root,clock,[[x,y+.16,z],[x+.14,y+.17,z+.16],[x+.27,y+.12,z+.22],[x+.45,.65,z+.26],[x+.61,.06,z+.31]],.29);
-    eddies(root,clock,x+.66,z+.34,0,2.19,1.80,'seep');vapour(root,clock,[[x,y+.14,z],[x+.46,.1,z+.32]],18,.9);
+    wetStream(root,clock,[[x,y+.16,z],[x+.14,y+.17,z+.16],[x+.27,y+.12,z+.22],[x+.38,.92,z+.20]],.18,'seep');
+    for(const [i,b] of winterTerraces.entries()){
+      const a=.34,r=1+.117*cos(3*a+b.phase)+.074*sin(5*a-b.phase)+.037*cos(9*a+1.3*b.phase);
+      const ex=b.x+b.rx*r*cos(a),ez=b.z+b.rz*r*sin(a),level=i<2?winterTerraces[i+1].y-.06:0;
+      wetStream(root,clock,[[ex-.13,b.y-.063,ez-.02],[ex,b.y-.061,ez],[ex+.07,b.y-.13,ez+.017],
+        [ex+.13,Math.max(.005,level),ez+.04]],.20+i*.056,'seep');
+      if(i===2)eddies(root,clock,ex+.15,ez+.04,0,1.43,1.21,'seep');
+    }
+    vapour(root,clock,[[x,y+.14,z],[-4.22,.69,1.03],[-3.51,.34,1.20]],19,.83);
   }else if(site.kind==='dawn'){
-    for(const x of [-2,0,2])eddies(root,clock,x,-1.40,0,.73,.88,'seep');
+    for(const x of [-2,0,2]){
+      for(const side of [-1,1]){
+        const u=x+side*.70;
+        wetStream(root,clock,[[u,.112,-1.23],[u,.095,-1.20],[u,.02,-1.16]],.068,'seep');
+      }
+      eddies(root,clock,x,-1.19,0,1.34,.63,'seep');
+    }
   }
   return {root,update(t,localU,localV){
     clock.value=t;if(move)move(t);

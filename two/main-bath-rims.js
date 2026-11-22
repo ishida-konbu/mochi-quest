@@ -9,7 +9,7 @@ export const basinFinishes={
   earthen:['rolled',.49,.57,'#613f31','#a26449','#c78d66','#684b3b'],
   sulfur: ['ledge',.71,.62,'#827762','#bdad83','#e0cfaa','#efdfbd'],
   paddy:  ['bund',.69,.41,'#5d553c','#8c7d52','#96a16d','#b0a26d'],
-  shore:  ['flute',.57,.55,'#6c7065','#c3b5a1','#e1d4bc','#ad9884'],
+  shore:  ['plank',.39,.42,'#4e5044','#877154','#b39a70','#6b614d'],
   maple:  ['leaf',.37,.45,'#654f41','#a36850','#bc8c63','#d5ad73'],
   susuki: ['bead',.41,.40,'#575756','#797879','#b4a67e','#dac181'],
   dawn:   ['fan',.40,.46,'#6b4b3d','#a96f52','#cca57b','#ead09a'],
@@ -65,6 +65,7 @@ function surveyTableau(s){
   // The little potter's frog watches the three full-size bathing jars from
   // a dry recess beyond the iron-glaze flue, clear of its removable steps.
   if(s.kind==='earthen')return {u:5.48,v:-3.13,yaw:-.73,scale:.90};
+  if(s.kind==='shore')return {u:5.96,v:-2.10,yaw:-.58,scale:1.02};
   if(s.kind==='snow')return {u:-9.8,v:-7.45,yaw:.64,scale:1.55};
   const angle=(s.kind==='inari'?-.025:-.21)*Math.PI,[x,z]=rimPoint(s,angle);
   const length=Math.hypot(x,z);

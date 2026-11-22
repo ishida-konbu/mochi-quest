@@ -20,7 +20,7 @@ export const bathCraft={
   earthen: {rim:'coping', spout:'jar',      plant:'iris',water:'#91a090',base:'#997c66',accent:'#9e654c'},
   sulfur:  {rim:'sinter', spout:'cascade',  plant:'sedge',water:'#bac6a5',base:'#b4a581',accent:'#c8bd8c'},
   paddy:   {rim:'cobble', spout:'board',    plant:'rice',water:'#909e79',base:'#919177',accent:'#b69a5d'},
-  shore:   {rim:'cobble', spout:'boat',     plant:'pine',water:'#829e96',base:'#9ba69a',accent:'#71897f'},
+  shore:   {rim:'timber', spout:'trough',   plant:'sedge',water:'#839e96',base:'#8c8b79',accent:'#786f56'},
   snow:    {rim:'slate',  spout:'cascade',  plant:'pine',water:'#97afa7',base:'#8d9b9b',accent:'#e2e6de'},
   maple:   {rim:'slate',  spout:'rock',     plant:'maple',water:'#89947f',base:'#818777',accent:'#a66345'},
   susuki:  {rim:'cobble', spout:'board',    plant:'susuki',water:'#989b7a',base:'#a09880',accent:'#ceb58b'},

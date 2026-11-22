@@ -1,6 +1,7 @@
 import { tideRise } from './pilgrim-bathing-plan.js';
 import { WAYSIDE_HUTS,KETTLE,CHAYA_SITES,CHAYA_SEAT } from './wayside-hut-layout.js';
 import { SUZURI_COURT,suzuriParcel } from './kyo-bath-layout.js';
+import { formerMatsuhamaSeat } from './village-bath-courses.js';
 import { bathPools,bathStations,bathLocal,poolAt,stationAt,poolRadius,stationRadius } from './bath-places.js';
 import { SOAK_SECONDS, floatBerth, bathingPose } from './bathing.js';
 import { planTurtleLeg } from './turtle-trail.js';
@@ -1402,6 +1403,15 @@ export function createGame(snapshot = null) {
         const station=bathStations(site).find(q=>q.id===data.lastBathPlace && stationRadius(q,u,v)<=1.08);
         const pool=bathPools(site)?.find(q=>q.id===data.lastBathPlace && poolRadius(q,u,v)<=1.05);
         lastPlace=station??pool??null;
+        // The old shore couches extended into today's divided working court.
+        // Preserve a reclining traveller's named berth when it moved inland.
+        if(!lastPlace && player.activity==='bath'){
+          lastPlace=formerMatsuhamaSeat(site,data.lastBathPlace,u,v)??null;
+          if(lastPlace){
+            [player.x,player.z]=sitePoint(site,lastPlace.u,lastPlace.v);
+            player.y=groundHeight(player.x,player.z);player.h=0;
+          }
+        }
         if(!lastPlace)lastBath=null;
       }else if(data.lastBathPlace===null && stillAtPlace(lastBath,null)){
         lastPlace=null;

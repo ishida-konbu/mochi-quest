@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { sculpture } from '../two/pilgrimage-pigment.js';
+import { dressFoundry } from '../two/goemon-foundry.js';
 import { createGame } from '../two/game.js';
 import { WAYSIDE_HUTS,KETTLE,GOEMON_SCREEN } from '../two/wayside-hut-layout.js';
 import { sitePoint } from '../two/retreat-layout.js';
@@ -97,4 +100,24 @@ test('the kettle windbreak has two solid bays and a free path to the firemouth',
     }
     assert.equal(staticVolumeAt(...sitePoint(hut.bath,-1.65*scale,.02),feet,.22,.6),false,hut.name+' hearth');
   }
+});
+
+
+test('each fitted hearth has its own casting, its fire below the arch and its cover clear of the open well',()=>{
+  const models=new Set();
+  for(const site of WAYSIDE_HUTS){
+    const art=sculpture(),fire=sculpture();
+    dressFoundry(art,fire,site.id,site.kind,site.bank,site.variant);
+    const geo=art.finish(),flame=fire.finish().getAttribute('position'),points=geo.getAttribute('position');
+    assert.ok(geo.index.count/3<19000,site.name);
+    assert.ok(geo.getAttribute('normal').array.every(Number.isFinite),site.name);
+    models.add(createHash('sha256').update(points.array).digest('hex'));
+    for(let i=0;i<flame.count;i++){
+      assert.ok(flame.getX(i)<-.69 && Math.abs(flame.getZ(i))<.47 && flame.getY(i)<.47,site.name);
+    }
+    for(let i=0;i<points.count;i++)if(points.getY(i)>1.22){
+      assert.ok(Math.hypot(points.getX(i),points.getZ(i))>.91,site.name+' covered the central bathing well');
+    }
+  }
+  assert.equal(models.size,WAYSIDE_HUTS.length);
 });

@@ -4,6 +4,7 @@ export const orchardCasks=[
   {u:-2.04,v:0,r:1.57,wood:'#ab885f',band:'#776b50'},
   {u:2.04,v:0,r:1.86,wood:'#946c50',band:'#645a4a'},
 ];
+export function kilnSteamBath(site){return site.rank==='main' && site.kind==='sakai';}
 export const steamRoom={u:0,v:-.30,w:5.64,d:4.86,door:2.24,seatV:-.48,seatU:1.65,seatTop:.39};
 export const inariFall={u:0,v:-.58,top:2.92};
 export const dawnBeds=[-2,0,2];
@@ -36,7 +37,7 @@ const stations={
     action:'tide',name:'潮差しの汐湯',label:'潮の流れに浮く',message:'水門が上がると、塩の湯が舟溜まりに満ちてきた。'}],
   sakai:[-1,1].map((side,i)=>({id:i?'steam-east':'steam-west',u:side*1.18,v:-.245,rx:1.20,rz:1.805,
     shape:'rect',berthU:side*steamRoom.seatU,berthV:steamRoom.seatV,seatY:steamRoom.seatTop,
-    heading:-side*Math.PI/2,action:'steam',name:'壺口の陶室',label:'陶室で蒸し湯',message:'簀の床から熱い霧が上がり、陶室の腰掛けでお餅がふやけた。'})),
+    heading:-side*Math.PI/2,action:'steam',name:'堺の陶室蒸し湯',label:'陶室で蒸し湯',message:'簀の床から熱い霧が上がり、陶室の腰掛けでお餅がふやけた。'})),
   snow:[{id:'snow-deep',u:-.55,v:-.28,rx:3.10,rz:2.73,depth:1.44,berthU:-.55,berthV:-.28,
     action:'deep',name:'雪割岩の深み',label:'岩の深湯に浸かる',message:'雪割岩の深みに沈むと、肩の上だけに雪風が触れた。'}],
 };
@@ -55,6 +56,12 @@ export function caskSteps(pool){
 export function caskTop(pool,a){
   const gap=Math.sin(a)>0?Math.max(0,1-Math.abs(pool.rx*Math.cos(a))/.85):0;
   return pool.y+.31-.32*gap;
+}
+export function caskCrest(pool,a){
+  const t=((a+Math.PI*2)%(Math.PI*2)/Math.PI-1.02)/.96;
+  if(t<=0 || t>=1)return caskTop(pool,a);
+  const n=pool.u<0?19:21,fan=Math.sin(t*Math.PI)**.83;
+  return pool.y+.37+fan*(pool.u<0?.94:.79)+.050*Math.cos((t*n-.5)*Math.PI*2);
 }
 export function petalTop(pool,a){
   const main=pool.id==='lotus-heart';
@@ -89,15 +96,16 @@ export function addPilgrimBathSolids(site,add,level){
     add(0,front,c.door,.32,2.82,'slab',true).bottom=level+2.48;
     const roof=add(0,c.v,c.w+.28,c.d+.24,2.47,'roof',true);
     roof.pilgrimKind='steamVault';roof.pilgrimDepth=(c.d+.24)/2;roof.thickness=.19;
-    add(0,c.v-.64,.72,.72,4.58,'oval',true).bottom=level+3.83;
-    add(0,back+.62,1.74,.88,.87,'box',true);
+    add(0,c.v-.64,.88,.88,5.035,'oval',true).bottom=level+3.83;
+    add(0,back+.62,1.74,.88,1.34,'box',true);
+    for(const side of [-1,1])add(side*(c.seatU+.51),c.seatV,.19,2.07,.95,'wall');
   }
   if(site.kind==='peach'||site.kind==='temple'){
     for(const p of pilgrimPools(site)){
       const count=80;
       for(let i=0;i<count;i++){
         const a=(i+.5)*Math.PI*2/count,lip=pilgrimPoolLip(p,a);
-        const h=site.kind==='peach'?caskTop(p,a):petalTop(p,a);
+        const h=site.kind==='peach'?caskCrest(p,a):petalTop(p,a);
         const wide=site.kind==='peach'?.18:.24,ca=Math.cos(a),sa=Math.sin(a);
         const len=Math.PI*2/count*Math.hypot(p.rx*sa,p.rz*ca)*lip;
         if(sa>0 && Math.abs(ca*p.rx)<.63 && site.kind==='temple')continue;
@@ -110,6 +118,7 @@ export function addPilgrimBathSolids(site,add,level){
   if(site.kind==='dawn'){
     for(const u of dawnBeds){
       add(u,-1.34,1.32,.41,.16,'box',true);
+      add(u,-1.87,1.76,.24,u===0?.95:.78,'box',true);
       add(u,.24,1.43,2.32,-.22,'floor',true);
     }
   }

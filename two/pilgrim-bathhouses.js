@@ -263,33 +263,53 @@ function boatLoft(s,r){
       [u,e+.54,-z*.43],[u,e+.19,-z*.72],[u,e-.16,-z]],[.10,.105,.102,.11,.10,.10,.10],20,7);
   }
 }
-function kiln(s,q){
-  const x=q.x,z=q.z,a=.353;
-  // The firing chamber has a genuinely open arch. The voussoirs wrap the
-  // aperture and darken towards the throat; three small stoking logs extend
-  // inside it. The flue carries the same oxidised clay up above the tiles.
-  const form=(u,v)=>{
-    const angle=u*tau,r=.675*(1-.52*v*v),h=.15+1.405*v;
-    return [x+r*cos(angle),h,z+r*sin(angle)];
-  };
-  for(let k=0;k<18;k++)for(let j=0;j<8;j++){
-    const off=(j%2)*.5,u0=(k+off)/18,u1=(k+1+off)/18,v0=j/8,v1=(j+1)/8;
-    const turn=(u0+u1)/2*tau,xx=.675*cos(turn),y=.15+1.405*(j+.5)/8;
-    if(sin(turn)>.62 && abs(xx)<a && y<.54+Math.sqrt(Math.max(0,a*a-xx*xx)))continue;
-    surface(s,['#97745c','#9e7b61','#a88768','#886c59'][(k*7+j*3)%4],3,4,(u,v)=>form(u0+.001+(u1-u0-.002)*u,v0+.002+(v1-v0-.004)*v));
+function fuelBay(s,q,r){
+  // A dry stack of split pine serves the single chamber's stoking passage.
+  // Logs are split polygons with eccentric annual rings on their cut ends.
+  const x=q.x,z=q.z;
+  for(const side of [-1,1])for(const end of [-1,1]){
+    const u=x+side*.99,v=z+end*.54;
+    beam(s,cedar,[u,.10,v],[u,side<0?1.90:1.68,v],.105,.113);
   }
-  turned(s,'#8c6e55',x,1.54,z,[[.335,0],[.347,.082],[.221,.15],[.209,.23],[.223,.25]],24);
-  s.box('#433d36',x,.43,z+.158,.69,.67,.072);
-  const arc=(u,rr)=>[x+rr*cos(u*PI),.48+rr*sin(u*PI),z+.582+.040*sin(u*PI)];
-  for(let j=0;j<13;j++)surface(s,j%3?'#9f785c':'#ae8b6a',3,4,(u,v)=>arc((j+.022+.955*u)/13,.351+.112*v));
-  for(const dx of [-1,1])s.box('#916c54',x+dx*.402,.316,z+.595,.104,.356,.125);
-  for(let j=0;j<3;j++){
-    const u=x-.14+.13*j;
-    beam(s,j===1?'#7a5544':'#655448',[u,.23+.038*j,z+.49],[u+.05,.24+.032*j,z+.13],.064,.064,true);
+  for(const side of [-1,1])s.box(wood,x,.29,z+side*.51,2.09,.11,.16);
+  for(let row=0;row<5;row++)for(let j=0;j<8-row%2;j++){
+    const u=x+(j-3.5+row%2*.45)*.246,y=.42+row*.169;
+    const theta=(row*1.61+j*.97),length=.92+.15*cos(row*2+j*3),v=z+length/2;
+    const cut=(a,rad,h)=>[u+rad*cos(a+theta),y+rad*.79*sin(a+theta),h];
+    const n=5;
+    for(let k=0;k<n;k++){
+      const a=k*tau/n,b=(k+1)*tau/n;
+      surface(s,k===0?'#b48e62':k===1?'#987453':'#655541',2,5,(q,t)=>interpLog(cut(a,.137,v-length*t),cut(b,.137,v-length*t),q));
+      surface(s,k%2?'#b89569':'#c4a578',2,4,(q,t)=>interpLog(cut(a,.136*t,v+.002),cut(b,.136*t,v+.002),q));
+    }
+    if(j%2===0)stroke(s,'#836c4e',range(9,t=>cut(t*PI*1.38,.066,v+.009)),.006,11);
   }
+  const roof=(u,v)=>[x+(2*u-1)*1.19,1.97-.25*u+.058*sin(PI*u),z+(2*v-1)*.75];
+  surface(s,'#897963',7,14,roof);
+  for(let j=0;j<11;j++)stroke(s,j%2?'#a6926e':'#76644c',range(8,v=>roof(j/10,v)),.034,11);
+  // Flue cleanout: a covered, gently sloping passage under the rear wall
+  // connects the external hatch directly to the steam stove.
+  const a=[2.62-r.u,.25,-2.69-r.v],b=[x-.85,.30,z+.59];
+  beam(s,'#8c6e55',a,b,.38,.28);
+  beam(s,'#a68c6c',[a[0],a[1]+.13,a[2]],[b[0],b[1]+.13,b[2]],.43,.075);
+  s.box('#81634d',b[0],.40,b[2],.53,.56,.38);
+  s.box('#63594b',b[0],.42,b[2]+.21,.375,.32,.028);
+  for(let j=-2;j<=2;j++)s.box('#9d8362',b[0]+j*.07,.42,b[2]+.23,.028,.28,.030);
 }
+function interpLog(a,b,t){return a.map((v,i)=>v+(b[i]-v)*t);}
 function potters(s,r){
   const x=r.w/2,z=r.d/2,e=r.eave;
+  // A throwing bench occupies the washstand's old footprint. The flywheel,
+  // spindle and shallow leather-hard vessels belong to the adjoining kiln.
+  for(let j=0;j<4;j++)s.box(j%2?'#957255':'#a17e5d',0,.53,-.35+j*.123,r.w*.57,.103,.116);
+  for(const side of [-1,1]){
+    s.box(cedar,side*r.w*.23,.32,-.15,.151,.40,.40);
+    beam(s,wood,[side*r.w*.23,.25,-.30],[side*r.w*.11,.49,-.30],.074,.078);
+  }
+  const ux=-.67,v=-.15;
+  turned(s,'#84745b',ux,.28,v,[[.32,0],[.33,.055],[.29,.095],[.079,.113],[.07,.31],[.33,.327],[.35,.38],[.33,.405]],27);
+  turned(s,'#bd9977',ux,.68,v,[[.09,0],[.12,.025],[.17,.15],[.20,.20],[.19,.215],[.158,.194],[.09,.048]],20);
+  for(let j=0;j<3;j++)s.ball('#bd9572',.36+j*.237,.628,-.12,.112,.044,.107);
   screenBay(s,-x,x,-z,e,'slat');
   for(const h of [.93,1.56,2.23]){
     const width=r.w*.50;
@@ -407,24 +427,7 @@ function garden(s,kind,plan){
   if(kind==='peach'){gourdTrellis(s,plan);return;}
   if(kind==='snow'){snowNiche(s);return;}
   const q=yardFixture(kind,plan);
-  if(kind==='sakai'){
-    // The firemouth faces the bath on the spare plot beside the merchant
-    // workshop. The long neck of the firing flue clears the back wall.
-    const oven=sculpture();kiln(oven,{x:0,z:0});
-    s.add(oven.finish(),'#fff',q.x,0,q.z,1.71,1.58,1.73,0,-.22);
-    const x=q.x+.29,z=q.z-.28;
-    turned(s,'#956f54',x,2.16,z,[[.38,0],[.39,.27],[.331,.34],[.301,.77],[.31,.87],[.28,1.29],[.254,1.86],[.29,1.91],[.28,2.33],
-      [.317,2.37],[.31,2.50],[.218,2.50],[.20,2.34]],28);
-    for(let j=0;j<7;j++){
-      const y=2.53+.255*j,rad=.335-.011*j;
-      turned(s,j%2?'#77614f':'#aa896a',x,y,z,[[rad,.007],[rad+.009,.019],[rad,.029]],26);
-    }
-    s.post('#4b4840',x,4.44,z,.209,.024,.209);
-    for(const side of [-1,1])for(let k=0;k<3;k++){
-      const u=q.x+side*(.89-.071*k),v=q.z+.53;
-      beam(s,k%2?wood:cedar,[u,.21+.129*k,v-.48],[u-.08,.21+.129*k,v+.27],.078,.078,true);
-    }
-  }
+  if(kind==='sakai'){fuelBay(s,q,r);return;}
   if(kind==='temple'){
     const x=q.x,z=q.z;
     turned(s,'#8d8d78',x,.03,z,[[.49,0],[.51,.08],[.46,.17],[.30,.22],[.23,.31],[.208,.55],[.17,.59],[.163,.99],

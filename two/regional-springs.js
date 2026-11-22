@@ -9,7 +9,7 @@ export const REGIONAL_SPRINGS = [
   ['market-tsuboyu', '蔵町の甕湯', 'market', 'earthen', 'kilnJar', 38,-106,-1.2764, 4.72,3.30],
   ['pass-yunohana', '湯の花の岩棚', 'spring', 'sulfur', 'sinterShelf', 170,-144,.6750, 5.20,3.65],
   ['paddy-azemichi', '畦映しの湯', 'terraces', 'paddy', 'riceField', 95.37,67.87,-.1813, 5.34,3.20],
-  ['coast-kaigara', '松浜の貝湯', 'coast', 'shore', 'scallop', -174.25,80,.2338, 5.00,3.60],
+  ['coast-kaigara', '松浜の網元汐湯', 'coast', 'shore', 'shipwrightCourt', -174.25,80,.2338, 5.00,3.60],
   ['moon-kusatsuyu', '草露の小湯', 'moon', 'susuki', 'pebble', 47,356,2.9783, 3.23,2.51,'sub'],
   ['autumn-kaedeba', '楓葉の湯', 'autumn', 'maple', 'mapleLeaf', 326.34,-56.09,-1.7547, 4.96,3.61],
   ['moon-yumihari', '弓張月の湯', 'moon', 'susuki', 'crescent', -31.57,275.90,-2.6966, 5.40,3.34],
@@ -20,7 +20,7 @@ export const REGIONAL_SPRINGS = [
   ['temple-hasu', '蓮弁の湯', 'todaiji', 'temple', 'lotusThrone', 380.62,854.25,1.9306, 5.23,3.79],
   ['inari-magari', '稲荷山の曲り湯', 'inari', 'inari', 'foxTail', 378,-592,-.0422, 4.75,3.17],
   ['tsuruga-shiomachi', '船溜りの湯', 'tsuruga', 'tsuruga', 'shipBasin', 353,-1413,-.5404, 5.12,3.27],
-  ['sakai-tsuboguchi', '堺の壺口湯', 'sakai', 'sakai', 'jarMouth', -176,-554,-1.5708, 4.80,3.05],
+  ['sakai-tsuboguchi', '堺の陶室蒸し湯', 'sakai', 'sakai', 'jarMouth', -176,-554,-1.5708, 4.80,3.05],
   // Longer journeys have intermediate stops beyond the settled centres.
   ['snow-nagoriyuki', '峠の名残雪', 'snow', 'snow', 'cleft', 646,-1105,.24, 3.18,2.51,'sub'],
   ['sakai-akane', '堺街道の茜湯', 'sakai', 'sakai', 'terrace', -49,-722,.5880, 3.28,2.57,'sub'],

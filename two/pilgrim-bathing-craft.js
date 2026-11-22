@@ -2,6 +2,7 @@
 // metres above the spring datum, shared with their water, seats and footings.
 import * as T from './vendor/three.module.min.js';
 import { beam,stroke,surface,turned,wood,cedar,ink } from './pilgrim-roofcraft.js';
+import { fittedPilgrimCraft } from './pilgrim-bath-reliefs.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { pilgrimPools,pilgrimPoolLip,caskSteps,caskTop,petalTop,dawnBeds,
   steamVaultHeight,steamRoom,inariFall,brineGate,winterRocks } from './pilgrim-bathing-plan.js';
@@ -363,12 +364,20 @@ function steamingKiln(s,cover){
     const h=steamVaultHeight(cos(a),v)-(innerSkin?.25*sin(a)**.78:0);
     return [x,h,z];
   };
-  // Thin raked joints follow the arch: every row sits directly on the row
-  // below it despite the changing outer radius.
-  for(let j=0;j<16;j++)for(let k=0;k<10;k++){
-    const lo=j/16,hi=(j+1)/16,first=k/10,last=(k+1)/10;
-    surface(cover,brick[(j*3+k*2)%5],4,6,(u,v)=>at(lo+.0006+(hi-lo-.0012)*u,first+.001+(last-first-.002)*v));
-  }
+  // A continuous mortar bed ends the pinhole pattern that separate, thin
+  // arch tiles made against the far gable. Firing tones follow real courses.
+  const joints=(u,v)=>{
+    const row=Math.min(15,Math.floor(u*16)),x=(u*16)%1,z=(v*9+.5*(row%2))%1;
+    return Math.min(x,1-x,z,1-z);
+  };
+  surface(cover,'#fff',72,128,(u,v)=>{
+    const a=u*PI,p=at(u,v),groove=.037*(1-Math.min(1,joints(u,v)*9));
+    p[0]-=groove*cos(a);p[1]-=groove*sin(a);return p;
+  },(u,v)=>{
+    const row=Math.min(15,Math.floor(u*16)),run=Math.floor(v*9+.5*(row%2));
+    const mortar=joints(u,v)<.045;
+    return [mortar?'#88715c':brick[(row*7+run*3)%5],.88+.082*sin(PI*u)+.052*cos(v*11+row)];
+  });
   surface(cover,'#a17d61',18,30,(u,v)=>at(u,v,true));
   for(const [v,z] of [[0,back-.12],[1,front+.12]]){
     surface(cover,'#a37b5e',8,32,(u,t)=>{
@@ -442,21 +451,14 @@ function steamingKiln(s,cover){
     s.box('#c4ab83',side*(half-.32),1.94,c.v-.81,.09,.44,.29);
     for(const y of [1.73,1.91,2.16])s.box(ink,side*(half-.31),y,c.v-.81,.12,.025,.32);
   }
-  // The blackened workshop kiln supplies the steam chamber through a
-  // covered flue; its exterior inspection plugs are placed on the dry side.
-  const tube=[[half*.80,.23,back+.04],[half+.02,.24,back-.11],[half+.47,.24,back-.36],[half+.72,.26,back-1.04]];
-  stroke(s,'#8f6f58',tube,[.156,.148,.15,.135],15,9);
+
 }
 function snowShelf(s){
   for(const [i,[x,z,w,d,h,yaw]] of winterRocks.entries())stone(s,x,z,w,d,h,yaw,i*4.2+.54,true);
   const r=snowSourceRim;
   turned(s,'#877d65',r.x,r.y,r.z,[[.18,0],[.33,.023],[.36,.11],[.31,.17],[.24,.18],[.21,.109]],32);
   s.post('#66756b',r.x,r.y+.121,r.z,.22,.021,.22);
-  for(let k=0;k<4;k++){
-    const run=sample(11,t=>{const a=t*PI*1.45+.12*k;return [r.x+(.32+k*.11)*cos(a),
-      r.y-.11*k+.036*cos(t*6),r.z+(.35+k*.088)*sin(a)];});
-    stroke(s,k%2?'#b0a48a':'#c3b794',run,.028,13);
-  }
+
 }
 export const snowSourceRim={x:-4.90,y:1.04,z:.65};
 
@@ -471,5 +473,6 @@ export function pilgrimInstallationGeometry(site){
     case 'tsuruga':tideLock(s);break;
     case 'snow':snowShelf(s);break;
   }
+  fittedPilgrimCraft(s,upper,site);
   return {body:s.finish(),roof:site.kind==='sakai'?upper.finish():null};
 }

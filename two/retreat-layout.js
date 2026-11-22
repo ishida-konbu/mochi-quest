@@ -2,10 +2,10 @@
 // collision volumes share the same survey as the signposts on the map.
 import { bathPools, poolRadius, hasOwnInlet } from './bath-places.js';
 import { addVillageBathSolids } from './village-bath-courses.js';
-import { addPilgrimBathSolids } from './pilgrim-bathing-plan.js';
+import { addPilgrimBathSolids,kilnSteamBath } from './pilgrim-bathing-plan.js';
 import { DISTRICTS, districtPoint } from './geography.js';
 import { REGIONAL_SPRINGS, regionalSpringLip, regionalRimStones } from './regional-springs.js';
-import { bathEnclosureGround, bathEnclosureReserved, addBathEnclosureSolids, waysideBankRocks } from './bath-enclosures.js';
+import { bathEnclosure,bathEnclosureGround, bathEnclosureReserved, addBathEnclosureSolids, waysideBankRocks } from './bath-enclosures.js';
 import { addMainRimSolids,bathTableau,tableauGround } from './main-bath-rims.js';
 import { regionalBathFittings } from './regional-bath-fittings.js';
 import { TRADE_ROADS, measureRoute, cartPosition } from './trade-routes.js';
@@ -104,6 +104,14 @@ export function courtTerrain(x,z,native,base) {
   return verge>=1 ? native : native+(base(cx,cz)-native)*(1-ease(verge));
 }
 export function bathTerrain(s,x,z,native,level) {
+  if(kilnSteamBath(s)){
+    // A firebrick room stands on a rectangular, dry working yard. Grade
+    // the full enclosure to the same datum as its hearth and entrance.
+    const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
+    const u=dx*c-dz*k,v=dx*k+dz*c,plan=bathEnclosure(s);
+    const edge=Math.max(Math.abs(u)-plan.w, v-plan.fore,plan.room.v-plan.room.d/2-v);
+    return level-.015+(native-level+.015)*ease(edge/3.25);
+  }
   const r=bathRadius(s,x,z);
   // A shallow submerged seat rises into a gravel beach at the entrance.
   // The smaller, lobed pools keep a low shelf under the bank stones. The
@@ -118,7 +126,7 @@ export function bathTerrain(s,x,z,native,level) {
   const pools=bathPools(s);
   if(pools){
     const u=dx*c-dz*k,v=dx*k+dz*c;
-    const yard=level+(s.kind==='earthen'?-.22:s.kind==='sakai'?-.015:.065);
+    const yard=level+(s.kind==='earthen'?-.22:.065);
     ground=yard+(native-yard)*ease((edge-1.22)/2.72);
     let closest=Infinity;
     for(const pool of pools){
@@ -193,8 +201,10 @@ export function civicAndBathSolids(height,put,levelOf) {
       if(!bathPools(s))addMainRimSolids(s,add);
       addVillageBathSolids(s,add);
       addPilgrimBathSolids(s,add,level);
-      const t=bathTableau(s);
-      add(t.u,t.v,2.3*t.scale,1.17*t.scale,.17+1.40*t.scale,'oval',false,t.yaw);
+      if(!kilnSteamBath(s)){
+        const t=bathTableau(s);
+        add(t.u,t.v,2.3*t.scale,1.17*t.scale,.17+1.40*t.scale,'oval',false,t.yaw);
+      }
     }
     for(const q of retreatStones(s)){
       const top=q.scanned?-.03+1.18*q.h:.075+q.h;
@@ -207,11 +217,14 @@ export function civicAndBathSolids(height,put,levelOf) {
         add(inlet.u,inlet.v-.20,inlet.w,1.34,.72,'oval',true);
         add(inlet.u,inlet.v+.04,1.18,1.92,inlet.h,'box',true).bottom=level+.62;
       }
-      if(s.shape!=='suzuri'){
+      if(s.shape!=='suzuri' && !kilnSteamBath(s)){
         add(sign.u,sign.v-.07,.13,.13,1.33,'wall');
         add(sign.u,sign.v,sign.w,sign.d,sign.h,'wall').bottom=level+.89;
       }
     }else{
+      const u=-s.rx*.71,v=-s.rz*.51;
+      add(u,v-.62,1.24,1.06,1.13,'oval',true);
+      add(u,v+.02,.53,1.62,1.25,'box',true).bottom=level+.97;
       for(const q of waysideBankRocks(s))add(q.u,q.v,2*q.w,2*q.d,1.20*q.h,'oval',true,q.yaw);
     }
     addBathEnclosureSolids(s,add);

@@ -7,6 +7,12 @@ export function villageBathPainting(kind) {
   if(!papers.has(kind)){
     const index=subjects.indexOf(kind);
     if(index<0)throw new RangeError('Unknown village bath painting: '+kind);
+    if(kind==='shore'){
+      const map=new T.TextureLoader().load(new URL('./assets/world/matsuhama-salt-scroll.webp',import.meta.url).href);
+      map.colorSpace=T.SRGBColorSpace;map.anisotropy=4;
+      papers.set(kind,new T.MeshLambertMaterial({map,side:T.DoubleSide}));
+      return papers.get(kind);
+    }
     sheet??=new T.TextureLoader().load(new URL('./assets/world/village-bath-paintings.webp',import.meta.url).href);
     // Three uploads the common image once. Only the sampling transform varies.
     const map=sheet.clone();

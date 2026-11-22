@@ -92,7 +92,7 @@ export function addBathFlowers(p,f,site,source){
 const splashHeads={
   sakura:[[-2.46,-1.93,0,.33]],bamboo:[[-2.28,-.66,0,.20],[-1.68,-.66,0,.20],[-1.08,-.66,0,.20]],
   sulfur:[[-1.55,-3.02,.56,.31],[-.87,-1.02,0,.45]],paddy:[[-2.15,-.77,0,.23],[1.77,-.77,0,.23],[-3.68,-2.97,.24,.18]],
-  shore:[[-2.53,-1.81,0,.24]],maple:[[-1.53,-1.22,0,.33],[1.54,-1.22,0,.27]],susuki:[[-3.23,-.72,0,.21]],
+  shore:[[-2.15,-1.31,0,.29],[1.53,-1.60,-.10,.19]],maple:[[-1.53,-1.22,0,.33],[1.54,-1.22,0,.27]],susuki:[[-3.23,-.72,0,.21]],
 };
 export function treatmentFoam(p,f,site,motion){
   const heads=splashHeads[site.kind]||villagePools(site).map(q=>[q.u,q.v-q.rz+.65,q.y,.20]);

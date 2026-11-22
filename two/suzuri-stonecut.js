@@ -117,4 +117,21 @@ export function carveSuzuriStone(art,sectionAt){
   };
   trim(117,422,.028,'#a6ada3',.010,.001);
   trim(139,393,.799,'#8c826e',.009,.004);
+
+  // The inner wall is cut to a waist just above its wet line. During a
+  // half bath the bather sees this silver-grey flowing-water border from
+  // the inside, while the broad carving above remains free of ornament.
+  const cord=(angle,height,proud=0)=>{
+    const r=sectionAt(angle),d=-.226*r.width-proud;
+    return [r.u+d*r.nx,height*r.bank,r.v+d*r.nz];};
+  const grooves=[[.86,2.09],[2.20,3.87],[3.99,5.26],[5.40,6.94]];
+  for(const [from,to] of grooves){
+    const n=61;
+    for(const tier of [0,1]){
+      const pts=Array.from({length:n},(_,i)=>{
+        const t=i/(n-1),angle=from+(to-from)*t,wave=Math.sin(t*Math.PI*4+.54*tier)*Math.sin(t*Math.PI)**2;
+        return cord(angle,.11+.036*tier+.033*wave,.005);});
+      art.stroke(tier?'#88948b':'#637670',pts,pts.map((_,i)=>.002+.009*Math.sin(i*Math.PI/(n-1))**.5),n);
+    }
+  }
 }

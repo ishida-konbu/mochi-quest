@@ -186,14 +186,27 @@ function fishing(s,r){
     dab(s,v?'#be9c70':'#797c71',...p,v?.071:.05,v?.045:.069,.041);
   }
   const px=1.34,z=bz+.47;
-  // A narrow-necked woven crab trap with a dark inward-facing funnel.
-  const tt=[[.17,0],[.34,.035],[.44,.24],[.38,.52],[.235,.62],[.155,.62],[.077,.41]];
-  const trap=(u,v)=>{
-    const f=v*(tt.length-1),i=Math.min(tt.length-2,Math.floor(f)),k=f-i,a=tau*u;
-    const [rr,h]=tt[i].map((q,j)=>q+(tt[i+1][j]-q)*k);
-    return [px+rr*cos(a),.19+h,z+rr*sin(a)];};
-  for(let j=0;j<20;j++)edge(s,'#8b7754',t=>trap(j/20,t),.014,10);
-  for(let i=0;i<12;i++)edge(s,i%3?'#ab9168':'#78684e',t=>trap(t,(i+1)/13),.012,23);
+  // A salt measure, its wicker carrier and an open straw salt bale occupy
+  // the selling counter. Its pale crystals catch light below the painted board.
+  const rows=[[.29,0],[.39,.09],[.43,.26],[.39,.47],[.33,.53],[.25,.52],[.22,.43]];
+  const carrier=(a,t)=>{
+    const f=t*(rows.length-1),j=Math.min(rows.length-2,Math.floor(f)),k=f-j;
+    const rr=rows[j][0]+(rows[j+1][0]-rows[j][0])*k,hh=rows[j][1]+(rows[j+1][1]-rows[j][1])*k;
+    return [px+rr*cos(a),.19+hh,z+.83*rr*sin(a)];
+  };
+  for(let j=0;j<42;j++)edge(s,j%4?'#ab9470':'#8d7859',t=>carrier(tau*j/42,t),.021,10);
+  for(const t of [.22,.59,.90])edge(s,timber,u=>carrier(u*tau,t),.024,30);
+  dab(s,'#d6cfb3',px,.66,z,.275,.105,.21);
+  for(let j=0;j<18;j++){
+    const a=j*2.399,r=.21*Math.sqrt((j+.2)/18);
+    dab(s,j%3?'#e5dbc3':'#cbbd9e',px+r*cos(a),.728+.043*cos(r*6.18),z+.81*r*sin(a),.034,.023,.038);
+  }
+  const mx=px-.68;
+  s.box('#a58c65',mx,.36,z,.48,.055,.42);
+  for(const side of [-1,1]){
+    s.box('#ab9370',mx+side*.22,.47,z,.047,.21,.42);
+    s.box('#b79d72',mx,.47,z+side*.19,.48,.21,.043);
+  }
   s.box(timber,px-.31,.97,bz+.02,1.49,.091,.21);
   for(const dx of [-.66,-.32,0])oar(s,px+dx,.20,bz+.04,.39+.10*dx,1.97+.11*dx);
 }

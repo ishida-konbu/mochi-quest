@@ -47,6 +47,7 @@ export function sculpture() {
   }
   return {
     add,
+    get indexCount(){return indices.length;},
     stroke(tint, knots, widths, steps=14){
       add(brushStroke(knots,widths,steps),tint);
     },

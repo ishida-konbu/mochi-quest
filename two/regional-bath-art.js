@@ -1,3 +1,6 @@
+import { dressTrailStone } from './trail-bath-stonework.js';
+import { kilnSteamBath,steamRoom } from './pilgrim-bathing-plan.js';
+import { mandarinDropper,celadonGlaze,suzuriPour } from './suzuri-joinery.js';
 import { dressVillageBath } from './village-bath-treatments.js';
 import { bathPools,hasOwnInlet,poolRadius } from './bath-places.js';
 import * as T from './vendor/three.module.min.js';
@@ -162,37 +165,12 @@ function foxInlet(s,c) {
   s.ball('#514e41',0,.936,.856,.066,.044,.035);
   s.add(profile([[.24,0],[.31,.17],[.34,.25],[.26,.32]],20),c.accent,0,.66,.055,1,1,1,-.30);
 }
-// A celadon bird-shaped water dropper, enlarged to the scale of the bath.
-// Its wing feathers are separately modelled; the water runs from the hollow
-// lower bill and a vent remains open on the crown of the vessel.
-function writingDropper(s){
-  const celadon='#a3b7ac',pale='#cbd0ba',iron='#575f53',blue='#687d7c';
-  s.ball(celadon,0,.68,-.11,.49,.39,.59,.16);
-  s.ball(celadon,0,.96,.27,.30,.29,.31,-.19);
-  s.add(profile([[.089,0],[.105,.022],[.101,.041],[.072,.052],[.063,.026]],26),pale,0,1.058,-.09);
-  s.ball(iron,0,1.084,-.09,.066,.008,.066);
-  for(const side of [-1,1]){
-    for(let j=0;j<6;j++)s.ball(j%2?celadon:'#8caaa2',side*(.43-.028*j),.72+.034*j,-.18-.052*j,
-      .075,.105,.37-.018*j,-.25,.27*side,-.07*side);
-    s.stroke(blue,[[side*.35,.88,.11],[side*.46,.81,-.02],[side*.48,.80,-.23],[side*.40,.83,-.42]],[.002,.019,.014,.002],12);
-    s.ball(pale,side*.233,1.015,.425,.047,.055,.059);
-    s.ball('#393f39',side*.258,1.014,.455,.019,.035,.025);
-    s.stroke(blue,[[side*.126,1.118,.475],[side*.21,1.097,.429],[side*.266,1.066,.369]],[.003,.017,.003],9);
-  }
-  for(let j=-2;j<=2;j++)s.ball(j%2?blue:celadon,j*.099,.79,-.60,.084,.098,.29,-.33,j*.17);
-  s.add(patch(16,18,(u,v)=>{
-    const a=u*PI,r=.12*(1-.21*v);
-    return [r*cos(a),.975-.058*v-.063*sin(a),.45+.50*v];
-  }),pale);
-  for(const side of [-1,1])s.stroke(blue,[[side*.13,.98,.46],[side*.13,.963,.66],[side*.105,.927,.95]],
-    [.023,.017,.011],9);
-}
 const suzuriCraft={...bathCraft.capital,spout:'dropper',base:'#535b59',accent:'#acb9a6'};
 function inletForm(c) {
   const s=sculpture(),kind=c.spout;
-  s.add(rimCut(c.rim==='coping'?'coping':'slate'),c.base,0,.24,-.205,.77,.45,.66,0,-.09);
+  if(kind!=='dropper')s.add(rimCut(c.rim==='coping'?'coping':'slate'),c.base,0,.24,-.205,.77,.45,.66,0,-.09);
   if(['rock','lotus','cascade'].includes(kind))stoneInlet(s,kind,c);
-  else if(kind==='dropper')writingDropper(s);
+  else if(kind==='dropper')mandarinDropper(s);
   else if(kind==='fox')foxInlet(s,c);
   else if(kind==='jar')jarInlet(s,c);
   else {
@@ -358,6 +336,15 @@ export function regionalSpringBank(site,level) {
   return bank;
 }
 export function dressRegionalBath(p,f,s,level) {
+  if(kilnSteamBath(s)){
+    const z=steamRoom.v+steamRoom.d/2+.177;
+    for(const [u,legend] of [[-1.91,'堺の陶室'],[1.91,'蒸し湯']]){
+      f.put('box',u,1.04,z,1.14,.46,.092,'#714f37',p.wood);
+      f.put('plane',u,1.04,z+.053,1.08,.383,1,'#fff',inscriptionMaterial(legend,{ground:'#77583d',ink:'#f2d9a3'}));
+    }
+    return;
+  }
+
   const writingDesk=s.shape==='suzuri', key=writingDesk?'suzuri':s.kind;
   const c=writingDesk?suzuriCraft:bathCraft[s.kind],fixtures=regionalBathFittings(s,springLip);
   prepareShapes(p,c,key,s);
@@ -387,7 +374,8 @@ export function dressRegionalBath(p,f,s,level) {
   }
   const stones=retreatStones(s);
   for(const q of stones){
-    const scale=q.scanned?.64:1;
+    if(!q.scanned){dressTrailStone(p,f,s,q);continue;}
+    const scale=.64;
     const col=tint(c.base,q.i%3?'#b8ae93':'#606657',.09+.13*(.5+.5*sin(q.i*2.37+s.index)));
     const shape=c.rim==='cobble'?'springCrag'+(q.i%3):'regionalRim-'+c.rim;
     f.put(shape,q.u,.075,q.v,q.w*scale,q.h*scale,q.d*scale,col,p.stone,q.angle);
@@ -398,14 +386,15 @@ export function dressRegionalBath(p,f,s,level) {
   }
   const {inlet,sign}=fixtures;
   if(!hasOwnInlet(s)){
-    f.put('regionalInlet-'+key,inlet.u,0,inlet.v,1,1,1,'#fff',p.stems);
-    f.put('regionalFall',inlet.u,0,inlet.v,1,1,1,'#bcd4c3',p.springFlow);
+    f.put('regionalInlet-'+key,inlet.u,0,inlet.v,1,1,1,'#fff',writingDesk?celadonGlaze():p.stems);
+    if(writingDesk)p.shapes.suzuriWritingWater??=suzuriPour(inletImpactV);
+    f.put(writingDesk?'suzuriWritingWater':'regionalFall',inlet.u,0,inlet.v,1,1,1,'#bcd4c3',p.springFlow);
   }
   for(let i=0;i<foliageCluster.length;i++){
     const [nx,nz,size]=foliageCluster[i],a=Math.atan2(nz,nx);
     const lip=springLip(s.index,a);
     const u=nx*(s.rx+.72)*lip,v=nz*(s.rz+.68)*lip;
-    if(['earthen','paddy','sulfur'].includes(s.kind)&&bathPools(s)?.some(b=>poolRadius(b,u,v)<1.42))continue;
+    if(['earthen','paddy','sulfur','shore'].includes(s.kind)&&bathPools(s)?.some(b=>poolRadius(b,u,v)<1.42))continue;
     if(Math.hypot(u-inlet.u,v-inlet.v)<1.30 || tableau && Math.hypot(u-tableau.u,v-tableau.v)<2)continue;
     const [x,z]=sitePoint(s,u,v),ground=terrainHeight(x,z)-level;
     const h=size*(s.kind==='susuki'?1.28:1);

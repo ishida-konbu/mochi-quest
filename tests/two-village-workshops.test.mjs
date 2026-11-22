@@ -53,7 +53,7 @@ function walkTo(game,site,point){
   }
   assert.fail(site.name+' blocked the walk to '+point);
 }
-test('all three jars and both elevations of the rock and rice baths have two-way walking access',()=>{
+test('all three jars, thermal terraces and both Matsuhama vats have two-way walking access',()=>{
   let tried=0;
   for(const s of RETREATS.filter(isVillageWorkshop)){
     for(const pool of villagePools(s)||[]){
@@ -62,6 +62,7 @@ test('all three jars and both elevations of the rock and rice baths have two-way
       Object.assign(p,{x,z,y:groundHeight(x,z),h:0,vx:0,vy:0,vz:0,speed:0,grounded:true});
       game.step(1/60);
       let route=[];
+      if(s.kind==='shore')route=[[pool.u,3.74]];
       if(s.kind==='earthen')route=[[0,2.85],[pool.u,2.85]];
       if(pool.id==='sinter-head')route=[[0,.60],[-1.72,-.13],[-1.72,-2.00]];
       if(pool.id==='upper-field')route=[[0,.86],[0,-1.41],[0,-1.92]];
@@ -81,5 +82,5 @@ test('all three jars and both elevations of the rock and rice baths have two-way
       tried++;
     }
   }
-  assert.equal(tried,7);
+  assert.equal(tried,9);
 });

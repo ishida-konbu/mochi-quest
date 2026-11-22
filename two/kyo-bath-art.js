@@ -6,6 +6,7 @@ import { sitePoint } from './retreat-layout.js';
 import { terrainMeshHeight } from './terrain.js';
 import { SUZURI_COURT,SUZURI_WALLS,RINSING_HALL,RINSING_SEATS } from './kyo-bath-layout.js';
 import { dressSuzuriMaple } from './suzuri-courtyard-maple.js';
+import { pictureEave,ranma,washPier } from './suzuri-joinery.js';
 import { suzuriSeatStone } from './suzuri-bathing-art.js';
 import { wallCoping,karahafu,washHallRoof } from './kyo-bath-roofs.js';
 
@@ -163,8 +164,7 @@ function tub(){
 }
 function washSet(){
   const art=sculpture(),basin=tub();
-  art.box('#aaa492',0,.51,.02,1.29,.39,.65);
-  art.box('#797e72',0,.70,.02,1.33,.055,.69);
+  art.add(washPier(),'#fff');
   art.box('#888e80',0,.96,-.369,1.28,.52,.091);
   art.box('#a5aa99',0,1.222,-.369,1.31,.039,.107);
   art.add(basin,'#fff',.025,.73,.04,.85,.70,.69);
@@ -263,6 +263,11 @@ function washingHall(p,f){
     const x=r.u+(j/21-.5)*(r.w+.61);
     f.put('box',x,3.136,r.v,.095,.108,r.d+1.00,cedar,p.wood);
   }
+  for(let bay=0;bay<2;bay++){
+    const name='suzuriWashRanma'+bay;
+    p.shapes[name]=ranma(r.w/2-.29,Boolean(bay));
+    f.put(name,r.u+(bay-.5)*r.w/2,2.795,face-.02,1,1,1,'#fff',p.stems);
+  }
   paintedPanels(p,f,textured('./assets/world/suzuri-rinsing-scroll.webp'),13.29,back+.128,1.99,6.12);
   p.shapes.suzuriWashSet=washSet();p.shapes.suzuriStool=bathStool();p.shapes.suzuriTub=tub();
   f.put('box',13.29,1.08,-3.92,7.36,.18,.23,'#93866a',p.wood);
@@ -336,6 +341,8 @@ export function dressSuzuriCourt(p,f,s,level){
   for(const wall of SUZURI_WALLS)plasterWall(p,f,wall);
   const {back}=SUZURI_COURT;
   paintedPanels(p,f,textured('./assets/world/suzuri-wash-scroll.webp'),-.03,back+.20,1.70,6.77);
+  p.shapes.suzuriGalleryEave=pictureEave();
+  f.put('suzuriGalleryEave',-.03,0,back+.10,1,1,1,'#fff',p.stems);
   gate(p,f);washingHall(p,f);
   p.shapes.suzuriTsukubai=brushGarden();
   f.put('suzuriTsukubai',7.45,.06,-3.69,1,1,1,'#fff',p.stems);
