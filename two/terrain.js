@@ -19,7 +19,6 @@ import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from
 import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
 import { snowBathLip } from './main-bath-outlines.js';
 import { springGroundSurvey } from './spring-ground-survey.js';
-import { tableauGround,tableauFooting } from './main-bath-rims.js';
 import { COURT, RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
 import { CEDAR_GROVES, CLIFF_PINES, PEACH_TREES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
@@ -361,8 +360,7 @@ export function terrainHeight(x,z) {
   const deep=pilgrimStations(SNOW_SPRING)[0];
   const plunge=(deep.depth-.61)*(1-smooth(.52,1.30,stationRadius(deep,x-bathX,z-bathZ)));
   const bed = SNOW_SPRING.level-.61-plunge+smooth(.70,1.03,r)*.87;
-  const ground=bed+(native-bed)*smooth(1.08,1.60,r);
-  return r>1?tableauGround(SNOW_SPRING,x-bathX,z-bathZ,ground,SNOW_SPRING.level):ground;
+  return bed+(native-bed)*smooth(1.08,1.60,r);
 }
 // Root a plant on the actual painted triangle. Across the crease of a rocky
 // spur the analytic surface can differ visibly from its sampled vertices.
@@ -1426,8 +1424,6 @@ for(const {x,z,rx,rz,yaw,top,rise} of SOURCE_STONES){
 }
 addPilgrimBathSolids(SNOW_SPRING,(u,v,w,d,y,kind,support,angle=0)=>
   putSolid(bathX+u,bathZ+v,w/2,d/2,angle,SNOW_SPRING.level+y,kind,support),SNOW_SPRING.level);
-const winterCarving=tableauFooting(SNOW_SPRING,terrainHeight);
-putSolid(winterCarving.x,winterCarving.z,1.65,.90,winterCarving.yaw,winterCarving.ground+1.77,'oval',false);
 for(const stone of SPRING_STONES) {
   putSolid(SNOW_SPRING.x+stone.x,SNOW_SPRING.z+stone.z,stone.w*.84,stone.d*.84,stone.yaw,
     SNOW_SPRING.level+.18+stone.h,'oval',true);

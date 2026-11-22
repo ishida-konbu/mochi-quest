@@ -1,6 +1,7 @@
 // Outside the firebox the same casting was installed in very different ways.
 // Local supplies determine the masonry, hearth furniture and wooden cover.
 import * as T from './vendor/three.module.min.js';
+import { BACK_BOILER,kettleLidAngle } from './wayside-hut-layout.js';
 import { sculpture } from './pilgrimage-pigment.js';
 
 const {PI,cos,sin,abs,sqrt}=Math,turn=2*PI;
@@ -149,10 +150,10 @@ function firebox(p,form,base,dark,seed){
     tube(p,'#685942',[[x-.001,y+.008,z],[x-.001,y+.051,z-.011],[x-.001,y+.083,z+.009]],.005,3);
   }
 }
-function lid(p,form,count,seed){
+function lid(p,form,count,seed,angle){
   // The second leaf of the round cedar cover rests outside the bathing well.
   // Each plank is sawn to the circle, then pinned against two cross-battens.
-  const r=.94,angle=form==='weir'?1.16:form==='stave'?.81:1.03;
+  const r=.94;
   const at=(x,z,thick=0)=>[x,.97-z*sin(angle)+thick*cos(angle),-1.055+z*cos(angle)+thick*sin(angle)];
   const tints=['#ae926b','#bda17c','#a58d6a','#bea986','#998469'];
   for(let i=0;i<count;i++){
@@ -180,7 +181,7 @@ function lid(p,form,count,seed){
 function flueAndBoiler(p,form,tool,base,seed){
   // The offset range shares the firebed and vents to the rear. The small
   // pot/pan heats wash water; the high mountain sites instead have a flue.
-  const x=-1.07,z=-1.09,height=tool==='stack'?.99:.66;
+  const {u:x,v:z}=BACK_BOILER,height=tool==='stack'?.99:.66;
   const stone=turned([[.19,0],[.434,.025],[.428,.13],[.40,.18],[.382,.56],[.407,.58],[.401,.649],[.301,.656],[.262,.56]]);
   p.add(stone,base,x,0,z,1,height/.66,1);
   const trim=(r,y,w,h,shade)=>p.add(turned([[r-w,y-h],[r+w,y-h],[r+w,y+h],[r-w,y+h]]),shade,x,0,z);
@@ -223,7 +224,7 @@ function fireTongues(p,seed){
 export function dressFoundry(art,flames,id,kind,bank,seed){
   const [form,tool,mark,boards,stone,shade]=kilns[id]??kilns[kind==='fisher'?(bank==='river'?'willow-weir':'west-beach'):'peach-hearth'];
   castSkin(art,form,mark,seed);firebox(art,form,stone,shade,seed);
-  lid(art,form,boards,seed);flueAndBoiler(art,form,tool,stone,seed);fireTongues(flames,seed);
+  lid(art,form,boards,seed,kettleLidAngle(kind,bank));flueAndBoiler(art,form,tool,stone,seed);fireTongues(flames,seed);
 }
 let fire;
 export function foundryFire(){

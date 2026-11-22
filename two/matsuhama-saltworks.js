@@ -2,7 +2,7 @@
 // chain pump lifts it to the feed channel; the lower branches are gravity fed.
 import * as T from './vendor/three.module.min.js';
 import { sculpture } from './pilgrimage-pigment.js';
-import { surface,rod,dab,turning,bather } from './village-bath-figures.js';
+import { surface,rod,dab,turning } from './village-bath-figures.js';
 import { villagePoolsPoint,villageCourseRim,MATSUHAMA_LIFT } from './village-bath-courses.js';
 import { matsuhamaPine } from './matsuhama-pine.js';
 import { scrollPigment } from './kyo-scrollwork.js';
@@ -72,6 +72,15 @@ function vessel(s,p){
         const a0=a+span*(.003+.994*u)+.014*(v-.5),r=villageCourseRim(p,a0);
         return rim(a0,-.11+.47*v,r.top+.022+.027*sin(PI*v));
       },(u,v)=>material(.74+.16*sin(j*.57)+.035*cos(19*u+.4*v))),'#fff');
+      if(f.gate>.82){
+        for(let k=0;k<3;k++){
+          const from=.06+.11*((j+k)%4),end=.72+.07*((j+k)%3);
+          stroke(s,k===1?'#a8916b':'#b19c77',t=>{
+            const u=from+(end-from)*t,aa=a+span*u,yy=villageCourseRim(p,aa).top;
+            return rim(aa,-.029+.10*k+.013*sin(PI*(2*t+j)),yy+.047+.004*(k===1));
+          },.005+.002*(k===1),6);
+        }
+      }
       if(f.gate>.97&&j%3===0)stroke(s,'#635d4e',t=>{
         const aa=a+span*(.14+.33*t);return rim(aa,.09+.13*t,villageCourseRim(p,aa).top+.052);
       },.011,4);
@@ -270,24 +279,10 @@ function seine(s){
     if(i%2===0)dab(s,'#666a60',q[0],q[1]-.132,q[2],.048,.085,.043);
   }
 }
-function workman(s){
-  // A net mender draws a shuttle through an open diamond across his knee.
-  bather(s,'hare',{x:-.49,y:.09,z:-.08,yaw:.57,scale:.96,squat:.73,nod:.23,gaze:.17,
-    reach:[[-.19,.71,.32],[.31,.76,.32]],cloth:'#506d69'});
-  const x=.47,z=.26;
-  for(const side of [-1,1])rod(s,beam,[x+side*.46,.014,z],[x+side*.46,.83,z],.042,.033);
-  for(const d of [-1,1])for(let j=-7;j<15;j++){
-    const c=j/7,lo=Math.max(0,d===1?-c:c-1),hi=Math.min(1,d===1?1-c:c);
-    if(hi<=lo+.01)continue;
-    stroke(s,hemp,t=>{const v=lo+(hi-lo)*t,u=c+d*v;return [x+(u-.5)*.92,.22+.54*v-.075*sin(PI*u),z+.055*sin(PI*u)];},.009,5);
-  }
-  rod(s,grain,[-.25,.68,.34],[.02,.78,.30],.025,.012);
-  for(let j=0;j<4;j++)stroke(s,j%2?hemp:'#a58d66',t=>[.92+(.25-.03*j)*cos(t*tau),.031+.027*j,.05+(.15-.018*j)*sin(t*tau)],.024,21);
-  for(const k of [0,1])dab(s,'#aa9169',.50+.23*k,.08,.54,.15,.083,.09,0,.23);
-}
-export function matsuhamaNetMender(s){workman(s);}
 export function matsuhamaWorks(s,flow,pools,pour){
   for(const p of pools)vessel(s,p);
+  for(const [v,h] of [[-.81,-.41],[-1.14,-.25],[-1.38,-.115],[-1.93,-.12],[-2.29,-.13],[-2.60,-.10]])
+    s.box(cedar,2.58,h-.045,v,1.33,.09,.37);
   const mat=sculpture();wovenBed(mat);s.add(mat.finish(),'#fff',0,-.10,0);
   pumpWorks(s,flow,pour);saltKiln(s,flow,pour);seine(s);
   const pine=sculpture();matsuhamaPine(pine);
@@ -364,11 +359,58 @@ export function createMatsuhamaMachinery(parent,room){
     wheel.rotation.z=-time*.63;
     // A board returns on the upper strand before dipping back into the sea.
     for(let i=0;i<40;i++){
-      const cycle=(time*.265/pumpLength+i/40)*.5,phase=(cycle*2)%1,returning=phase>=.5,t=returning?2*(1-phase):2*phase;
+      const phase=(time*.265/(2*pumpLength)+i/40)%1,returning=phase>=.5;
+      const t=returning?2*(1-phase):2*phase;
       matrix.position.lerpVectors(bottom,top,t);
       matrix.position.y+=returning?.67:.086;
       matrix.rotation.set(0,0,slope+(returning?PI:0));matrix.updateMatrix();instance.setMatrixAt(i,matrix.matrix);
     }
     instance.instanceMatrix.needsUpdate=true;
   };
+}
+// Planks carry wet feet between the two front thresholds and the fresh rinse.
+// Each board is laid on the rendered shore triangles. The yard's drying beds
+// are low, raked salt sand held between split boards, just uphill of the nets.
+export function matsuhamaApron(ground,pools){
+  const s=sculpture(),boards=['#99876b','#a99571','#92846c','#a68f6b'];
+  function path(a,b,width,count){
+    const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz),nx=-dz/len,nz=dx/len;
+    for(let j=0;j<count;j++){
+      const left=(j+.058)/count,right=(j+.927)/count;
+      const edge=(u,t,lower=0)=>{
+        const f=left+(right-left)*t,side=(u-.5)*(width+.04*cos(j*2.21));
+        const x=a[0]+dx*f+nx*side,z=a[1]+dz*f+nz*side;
+        return [x,ground(x,z)+.051+.009*sin(PI*u)-lower,z];};
+      s.add(surface(6,2,(u,v)=>edge(u,v)),boards[j%4]);
+      for(const side of [0,1])s.add(surface(6,1,(u,v)=>edge(u,side,.048*v)),'#796e58');
+      for(const side of [.085,.915]){
+        const [x,y,z]=edge(side,.46);dab(s,tar,x,y+.003,z,.020,.007,.020);
+      }
+      if(j%3===0)stroke(s,'#8e7b5e',t=>edge(.21+.52*t,.47+.17*sin(PI*t)),.005,6);
+    }
+  }
+  path([.18,5.52],[.18,4.45],1.13,5);
+  for(const p of pools)path([.18+Math.sign(p.u)*.19,4.52],[p.u,p.v+p.rz+.28],.85,11);
+  path([2.58,-2.91],[2.58,-3.97],.91,5);path([2.50,-3.99],[1.14,-4.56],.91,7);
+  const sand=new T.Color('#9e947d'),salt=new T.Color('#d4c9b0');
+  for(let bed=0;bed<2;bed++){
+    const x=-9.94-bed*.17,z=-1.44+bed*1.65,w=2.73,d=1.46;
+    // The wet sand follows the broad contour. Low berms border the rake marks.
+    const pt=(u,v)=>{const xx=x+(u-.5)*w,zz=z+(v-.5)*d;
+      return [xx,ground(xx,zz)+.076+.009*cos(v*tau*12+.61*sin(u*4))+.023*sin(PI*u),zz];};
+    s.add(surface(14,73,pt,(u,v)=>sand.clone().lerp(salt,.33+.29*cos(v*tau*12+.61*sin(u*4))+.06*sin(u*39+v*22))),'#fff');
+    for(const edge of [0,1]){
+      stroke(s,'#897c65',t=>pt(t,edge),.063,12);
+      stroke(s,'#9c8a6b',t=>pt(edge,t),.056,8);
+    }
+  }
+  // The rake has a forged socket in its crosspiece and thirteen separate tines.
+  const rakeX=-9.64,rakeZ=-.73,h=ground(rakeX,rakeZ)+.12;
+  rod(s,cedar,[rakeX-.62,h+.10,rakeZ+.23],[rakeX+.76,h+.46,rakeZ-.17],.034,.041);
+  timber(s,[rakeX-.77,h+.11,rakeZ-.14],[rakeX-.52,h+.11,rakeZ+.61],.087,.081,beam);
+  for(let j=0;j<13;j++){
+    const f=j/12,x=rakeX-.77+.25*f,z=rakeZ-.14+.75*f;
+    rod(s,grain,[x,h+.104,z],[x-.09,h-.004,z+.018],.016,.010);
+  }
+  return s.finish();
 }

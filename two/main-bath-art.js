@@ -1,17 +1,14 @@
-import { kilnSteamBath } from './pilgrim-bathing-plan.js';
 import * as T from './vendor/three.module.min.js';
 import { RETREATS } from './retreat-layout.js';
-import { SNOW_SPRING,terrainHeight,terrainMeshHeight,wrapDelta } from './terrain.js';
+import { terrainHeight,terrainMeshHeight,wrapDelta } from './terrain.js';
 import { scrollPigment } from './kyo-scrollwork.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { updateVillageTreatment } from './village-treatment-water.js';
 import { createVillageWorkshops } from './village-bath-workshops.js';
 import { createPilgrimBathhouses } from './pilgrim-bathhouses.js';
-import { villageBathArt } from './main-bath-village-art.js';
 import { pilgrimageBathArt } from './main-bath-pilgrimage-art.js';
-import { tableauFooting } from './main-bath-rims.js';
+import { bathTableau,tableauFooting } from './main-bath-rims.js';
 
-const village=new Set(['sakura','bamboo','earthen','sulfur','paddy','shore','maple','susuki']);
 // Separate foundation stones follow the load-bearing parts of each carving.
 // On the torii path each post has its own shoe, leaving the gaps between gates open.
 // Per stone: centre X/Z, half-width/depth and the bedding height in sculpture metres.
@@ -27,12 +24,6 @@ for(let j=0;j<3;j++){
 const foundationStones={
   capital:[[-.79,-.17,.48,.41,.087],[.26,.211,1.085,.51,.095]],
   inari:[...gateShoes,[.79,-.03,.69,.48,.026]],
-  sulfur:[[-.32,-.08,1.24,.63,.024],[.93,-.045,.43,.33,.027]],
-  paddy:[[-.42,.323,.41,.14,.018],[-.42,-.373,.41,.14,.021],[.85,.07,.49,.31,.024]],
-  dawn:[[-.10,-.22,.64,.246,.02],[1,.34,.41,.32,.024]],
-  peach:[[-1.21,-.37,.19,.18,.025],[.20,-.074,.36,.35,.085],[1.04,.27,.25,.22,.088]],
-  temple:[[-.263,-.075,.48,.48,.024],[1.026,.10,.405,.35,.158]],
-  sakai:[[.866,.207,.33,.25,.087]],
 };
 function bedStone(art,footing,[cx,cz,w,d,top]){
   const c=Math.cos(footing.yaw),k=Math.sin(footing.yaw),scale=footing.scale;
@@ -73,15 +64,14 @@ function bedStone(art,footing,[cx,cz,w,d,top]){
 export function bankSculpture(kind,footing){
   const art=sculpture();
   if(footing)for(const stone of foundationStones[kind]||[])bedStone(art,footing,stone);
-  if(village.has(kind)) villageBathArt(art,kind);
-  else pilgrimageBathArt(art,kind);
+  pilgrimageBathArt(art,kind);
   return art.finish();
 }
 
 // Each handscroll scene is a single coloured mesh. Build only the ones on
 // the traveller's route and reuse them on return visits and across map wraps.
 export function createBathTableaux(scene){
-  const sites=[...RETREATS.filter(s=>s.rank==='main'&&!kilnSteamBath(s)),SNOW_SPRING];
+  const sites=RETREATS.filter(bathTableau);
   const exhibits=sites.map(s=>({...tableauFooting(s,terrainHeight),kind:s.kind,name:s.name,mesh:null}));
   const updateVillages=createVillageWorkshops(scene),updatePilgrimage=createPilgrimBathhouses(scene);
   return (player,time=0)=>{

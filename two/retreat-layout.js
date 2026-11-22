@@ -201,8 +201,8 @@ export function civicAndBathSolids(height,put,levelOf) {
       if(!bathPools(s))addMainRimSolids(s,add);
       addVillageBathSolids(s,add);
       addPilgrimBathSolids(s,add,level);
-      if(!kilnSteamBath(s)){
-        const t=bathTableau(s);
+      const t=bathTableau(s);
+      if(t){
         add(t.u,t.v,2.3*t.scale,1.17*t.scale,.17+1.40*t.scale,'oval',false,t.yaw);
       }
     }

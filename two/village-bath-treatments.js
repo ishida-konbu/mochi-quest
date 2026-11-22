@@ -1,7 +1,7 @@
 // Working fixtures for the eight village springs. Each has its own plumbing:
 // the same local survey draws the vessels, their waterlines and their entry.
 import * as T from './vendor/three.module.min.js';
-import { matsuhamaWorks } from './matsuhama-saltworks.js';
+import { matsuhamaWorks,matsuhamaApron } from './matsuhama-saltworks.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { surface,rod,dab,turning } from './village-bath-figures.js';
 import { villagePools,villagePoolsPoint,villageCourseRim,villageTreads } from './village-bath-courses.js';
@@ -339,6 +339,10 @@ export function dressVillageBath(p,f,site){
   const {fittings,flow}=villageTreatmentGeometry(site);
   if(site.kind==='earthen'){
     p.shapes.jarYard=pottersCourt(site);f.put('jarYard',0,0,0,1,1,1,'#fff',p.stems);
+  }
+  if(site.kind==='shore'){
+    const level=springLevel(site),height=(u,v)=>terrainMeshHeight(...sitePoint(site,u,v))-level;
+    p.shapes.harborWalk=matsuhamaApron(height,villagePools(site));f.put('harborWalk',0,0,0,1,1,1,'#fff',p.stems);
   }
   const key='working-'+site.kind,pour=key+'-pour';
   p.shapes[key]=fittings;p.shapes[pour]=flow;

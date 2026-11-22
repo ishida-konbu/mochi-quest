@@ -1,11 +1,11 @@
 // Keep the existing island survey everywhere except in the small parcels that
 // contain an authored bath. Near the waterline a half-metre triangle can follow
-// a scallop, a crescent's notch and a narrow dry bank under an animal's feet.
+// a curved timber wall, a crescent's notch and narrow walking banks.
 export function springGroundSurvey(sites,bound,spacing,tileSize){
   const across=Math.round(2*bound/spacing);
   const cells=new Map(),tiles=new Set(),key=(x,z)=>z*across+x;
   for(const site of sites){
-    // Enclose the full rim, shoulder sculpture and the slope back to the road.
+    // Enclose the full rim, its dry banks and the slope back to the road.
     const radius=Math.max(site.rx,site.rz)*1.38+3.4;
     const rect={
       // The maple points and moon horns turn sharply between neighbouring rays.

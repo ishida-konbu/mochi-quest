@@ -1,3 +1,4 @@
+import { kilnSteamBath,steamRoom } from './pilgrim-bathing-plan.js';
 import { hasPilgrimBathhouse } from './pilgrim-lodge-plan.js';
 import * as T from './vendor/three.module.min.js';
 import { coveredGable } from './civic-art.js';
@@ -185,6 +186,16 @@ function ridgeCraft(p,f,s,plan){
 // gate. Their faces follow the actual ground triangle, including its slope.
 function steppingStones(p,f,s,plan,level){
   if(!plan.closed)return;
+  if(kilnSteamBath(s)){
+    // The firebrick sill continues through the curtain into the street.
+    const start=steamRoom.v+steamRoom.d/2+.21+7*.238;
+    for(let row=0;row<12;row++)for(let i=0;i<6;i++){
+      const v=start+row*.24,u=(i-2.5)*.365,y=terrainMeshHeight(...sitePoint(s,u,v))-level;
+      f.put('box',u,y+.011,v,.350,.045,.223,
+        ['#ab8c6e','#92745b','#b39779'][(i*7+row*5)%3],p.stone);
+    }
+    return;
+  }
   for(let i=0;i<5;i++){
     const t=i/4,u=.20*Math.sin(t*PI*1.5),v=plan.fore+1.62-i*.65;
     const [x,z]=sitePoint(s,u,v),y=terrainMeshHeight(x,z)-level;

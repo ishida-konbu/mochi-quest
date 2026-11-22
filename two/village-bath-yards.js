@@ -128,22 +128,39 @@ function paddy(s,{w,d,post}){
   }
 }
 function shore(s,{d,post}){
-  // Along the sheltered shore-side rack, flounder hang by the mouth. Each
-  // has one continuous fin fringe, an asymmetrical head and two visible eyes.
-  const net=(u,v)=>[.068*sin(PI*u)*sin(PI*v),.50+(post-.50)*v-.12*sin(PI*u),d*(u-.5)];
-  for(let i=0;i<21;i++)curve(s,cord,t=>net(i/20,t),.011,5);
-  for(let i=0;i<11;i++)curve(s,i%3?cord:peg,t=>net(t,i/10),.014,13);
-  for(const sign of [-1,1])rod(s,wood,[0,-.23,sign*d*.5],[0,post+.06,sign*d*.5],.045);
-  for(let i=0;i<9;i++){
-    const z=d*(i/8-.5)*.82,h=post-.31-.10*sin(PI*i/8),l=.39+.08*cos(i*1.73),x=.082;
-    curve(s,cord,t=>[x*t,h+(1-t)*.26,z],.010,4);
-    s.add(surface(18,19,(u,v)=>{
-      const a=tau*u,w=.026+.102*sin(PI*v)**.71,lobe=.012*sin(16*PI*v);
-      return [x+.025*cos(a)*sin(PI*v),h-v*l,z+(w+lobe)*sin(a)+.038*v*v];
-    }),i%2?'#aaa089':'#928e7d');
-    s.add(surface(6,5,(u,v)=>[x,h-l-v*.095,z+.038+(u-.5)*(.028+.15*v)]),'#857968');
-    for(const dz of [-.021,.009])dab(s,'#504c40',x+.022,h-.05,z+dz,.013,.014,.013);
+  // A hung headrope folds into bights over teak pegs. Two wood netting
+  // shuttles keep their tongue and real yarn wound inside the fork.
+  for(const sign of [-1,1])rod(s,wood,[0,-.23,sign*d*.50],[0,post+.06,sign*d*.50],.068,.059);
+  rod(s,wood,[0,post,-d*.52],[0,post,d*.52],.056,.051);
+  rod(s,peg,[0,.72,-d*.42],[0,.72,d*.44],.043);
+  for(let j=0;j<6;j++){
+    const z=d*(j/5-.5)*.83;
+    rod(s,wood,[-.02,post-.22,z],[.22,post-.14,z+.01],.032);
+    for(let n=0;n<4;n++){
+      const r=.13+.036*n,deep=.56+.075*n+.14*cos(j*1.71);
+      const line=t=>{
+        const a=t*tau;return [.124+.045*sin(a*2+j)+.018*n,post-.22-deep*(1-cos(a))/2,
+          z+r*sin(a)*(1-.23*cos(a))+.02*n];};
+      curve(s,n%2?'#958268':'#b39c72',line,.018,21);
+      if(j%2===0&&n===2){
+        const p=line(.46);dab(s,'#71766b',p[0],p[1]-.055,p[2],.037,.062,.044);
+      }
+    }
   }
+  const z=.22;
+  s.box(peg,.11,.65,z,.27,.082,1.18);
+  for(let j=0;j<2;j++){
+    const base=z-.34+j*.52,yy=.724;
+    // Unbroken tail loop, the pointed fork and the central wooden tongue.
+    for(const side of [-1,1]){
+      s.stroke(j?'#b39a6e':'#9f815a',[[.08,yy,base-.24],[.08+side*.055,yy,base-.18],[.08+side*.064,yy,base+.13],[.08+side*.010,yy,base+.27]],
+        [.017,.024,.018,.004],10);
+    }
+    rod(s,wood,[.08,yy,base-.06],[.08,yy,base+.15],.013,.006);
+    for(let n=0;n<8;n++)rod(s,'#d0ba8f',[.03,yy+.018,base-.13+n*.026],[.132,yy+.017,base-.10+n*.026],.009);
+  }
+  for(let j=0;j<5;j++)
+    curve(s,j%2?cord:'#ac9571',t=>[.04+.19*cos(t*tau),.24+j*.028,-d*.35+.32*sin(t*tau)],.023,25);
 }
 function maple(s,a){
   const {w,d}=a;deck(s,a,.36,13);

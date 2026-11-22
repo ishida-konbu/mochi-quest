@@ -46,6 +46,10 @@ export function suzuriSolids(add){
   }
   add(0,front,4.85,2.53,2.79,'ceiling');
   add(0,front,2.53,4.85,2.84,'roof',true,Math.PI/2).roofRise=1.38;
+  // The bark eave of the rear picture gallery projects above the water.
+  // Its high underside leaves the half-bath seat and bath apron open.
+  for(let j=0;j<3;j++)add(-.03,SUZURI_COURT.back+.10-.18+(j+.5)*1.014/3,
+    7.96,1.014/3,3.31-.125*j,'ceiling');
   const ledge=SUZURI_LEDGE;
   add(ledge.u,ledge.v,ledge.w,ledge.d,ledge.top,'floor',true);
   add(ledge.u+ledge.w/2+.19,ledge.v,.40,ledge.d-.18,ledge.tread,'floor',true);

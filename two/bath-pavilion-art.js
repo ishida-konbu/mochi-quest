@@ -1,6 +1,7 @@
 import { kilnSteamBath } from './pilgrim-bathing-plan.js';
 import { hasPilgrimBathhouse } from './pilgrim-lodge-plan.js';
 import * as T from './vendor/three.module.min.js';
+import { inscriptionMaterial } from './civic-art.js';
 import { dressSuzuriCourt } from './kyo-bath-art.js';
 import { bathEnclosure } from './bath-enclosures.js';
 import { regionalBackWall, dressRegionalCarpentry } from './regional-bath-carpentry.js';
@@ -236,5 +237,10 @@ export function dressBathEnclosure(p,f,s,level){
     f.put('box',0,y-.04,plan.fore,3.23,.17,.22,plan.wood);
     f.put('roof',0,y+.08,plan.fore,3.79,.52,1.18,plan.roofTint,p.roofs);
     noren(p,f,plan,s,0,plan.fore+.075,y-.16,2.63,.76);
+    if(kilnSteamBath(s)){
+      f.put('box',0,2.47,plan.fore+.27,2.18,.32,.12,'#684f3d',p.wood);
+      f.put('plane',0,2.47,plan.fore+.338,2.09,.284,1,'#fff',
+        inscriptionMaterial(s.name,{ground:'#694c36',ink:'#f4d9a3'}));
+    }
   }
 }

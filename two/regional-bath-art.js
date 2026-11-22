@@ -366,8 +366,8 @@ export function dressRegionalBath(p,f,s,level) {
         j%3?'#a09278':'#827962',p.stone,j*1.82);
     }
   }
-  const tableau=s.rank==='main'?bathTableau(s):null;
-  if(tableau && !custom){
+  const tableau=bathTableau(s);
+  if(s.rank==='main' && !custom){
     const vessel='basin-'+s.id;
     p.shapes[vessel]??=buildBasinVessel(s);
     f.put(vessel,0,0,0,1,1,1,'#fff',basinMaterial(p,s));

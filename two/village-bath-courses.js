@@ -64,7 +64,7 @@ export function villageCourseRim(p,a){
   const access=p.shape==='brineVat'?.90:p.shape==='jar'?.83:p.shape==='shelf'?.88:1.27;
   // The downstream end faces the road. At the upstream side of the lower
   // rice and rock pools, a second cut receives the connecting stairs.
-  const crossing=p.id==='sinter-basin'?-1.72:p.id==='lower-field'?0:undefined;
+  const crossing=p.id==='sinter-basin'?-1.72:p.id==='lower-field'?0:p.id==='pearl-couch'?p.u:undefined;
   const distance=front?Math.abs(u-p.u)-access:crossing===undefined?Infinity:Math.abs(u-crossing)-.61;
   const t=Math.min(1,Math.max(0,distance/.48)),k=t*t*(3-2*t);
   const rough=p.shape==='shelf'||p.shape==='mineral'?.095*Math.sin(7*a+.3)+.052*Math.cos(11*a):0;
@@ -124,6 +124,10 @@ export function addVillageBathSolids(site,add){
         [-5.90,-3.30,.78,.79,1.98],[-4.80,2.77,.40,.39,3.49],[5.43,.78,.66,.67,2.04]])
         add(u,v,w,d,h,'oval',true);
       add(2.58,-1.55,1.45,.29,-.01,'floor',true);
+      // The back threshold of the cooler vat leads directly to the freshwater
+      // room. The two submerged boards also support the recliner's headrest.
+      for(const [v,h] of [[-.81,-.41],[-1.14,-.25],[-1.38,-.115],[-1.93,-.12],[-2.29,-.13],[-2.60,-.10]])
+        add(2.58,v,1.33,.40,h,'floor',true);
       // Closed-up timberwork above the bank. A bather can walk beside both
       // sides of the pump; the stepped top corresponds to its pitched frame.
       {

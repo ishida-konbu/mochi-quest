@@ -16,6 +16,8 @@ const clearings=[
 ];
 export const BATH_YARD=[2.35,4.25];
 export const KETTLE={widthScale:1.22,radius:1.08,lip:1.15,board:.84,water:1.035};
+export const BACK_BOILER={u:-1.07,v:-1.09,r:.43};
+export function kettleLidAngle(kind,bank){return bank==='river'?1.16:kind==='fisher'?.81:1.03;}
 export const GOEMON_SCREEN=[[1.74,-1.09],[2.15,.17],[2.19,1.58]];
 export const KETTLE_STEPS=[
   {z:2.65,top:.23},{z:2.15,top:.46},{z:1.65,top:.69},{z:1.23,top:.92},
@@ -113,6 +115,17 @@ export function hutSolids(height,put){
     const scale=KETTLE.widthScale,radius=KETTLE.radius*scale;
     put(x,z,radius,radius,s.yaw,y+KETTLE.lip,'kettleRim',true);
     put(x,z,scale,scale,s.yaw,y+KETTLE.board,'oval',true);
+    const [boilerX,boilerZ]=sitePoint(s.bath,BACK_BOILER.u*scale,BACK_BOILER.v*scale);
+    put(boilerX,boilerZ,BACK_BOILER.r*scale,BACK_BOILER.r*scale,s.yaw,y+.65,'oval',false);
+    // The stored cypress lid leans away from the bathing well. Four thin
+    // slabs follow the curved arc, leaving air beneath the raised edge.
+    const angle=kettleLidAngle(s.kind,s.bank),rows=4,r=.94;
+    for(let i=0;i<rows;i++){
+      const t=r*(i+.5)/rows;
+      const [px,pz]=sitePoint(s.bath,0,(-1.055-t*Math.cos(angle))*scale);
+      put(px,pz,Math.sqrt(r*r-t*t)*scale,(r/rows*.5*Math.cos(angle)+.036)*scale,s.yaw,
+        y+.93+t*Math.sin(angle),'ceiling',false);
+    }
     for(let bay=1;bay<GOEMON_SCREEN.length;bay++){
       const [ax,az]=GOEMON_SCREEN[bay-1],[bx,bz]=GOEMON_SCREEN[bay];
       const [px,pz]=sitePoint(s.bath,(ax+bx)*scale/2,(az+bz)*scale/2);

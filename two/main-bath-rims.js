@@ -62,11 +62,6 @@ export function addMainRimSolids(s,add){
 // View the tableau across the water on the right shoulder, clear of the
 // inlet and front threshold. The city screen remains visible just behind it.
 function surveyTableau(s){
-  // The little potter's frog watches the three full-size bathing jars from
-  // a dry recess beyond the iron-glaze flue, clear of its removable steps.
-  if(s.kind==='earthen')return {u:5.48,v:-3.13,yaw:-.73,scale:.90};
-  if(s.kind==='shore')return {u:5.96,v:-2.10,yaw:-.58,scale:1.02};
-  if(s.kind==='snow')return {u:-9.8,v:-7.45,yaw:.64,scale:1.55};
   const angle=(s.kind==='inari'?-.025:-.21)*Math.PI,[x,z]=rimPoint(s,angle);
   const length=Math.hypot(x,z);
   const setback=s.kind==='inari'?1.38:1.13;
@@ -75,11 +70,14 @@ function surveyTableau(s){
 
 const tableaus=new WeakMap();
 export function bathTableau(s){
+  if(s.rank!=='main'||(s.kind!=='capital'&&s.kind!=='inari'))return null;
   if(!tableaus.has(s))tableaus.set(s,surveyTableau(s));
   return tableaus.get(s);
 }
 export function tableauGround(s,u,v,ground,level){
-  const t=bathTableau(s),dx=u-t.u,dz=v-t.v;
+  const t=bathTableau(s);
+  if(!t)return ground;
+  const dx=u-t.u,dz=v-t.v;
   if(Math.abs(dx)>3.6 || Math.abs(dz)>3.6)return ground;
   const c=Math.cos(t.yaw),k=Math.sin(t.yaw);
   const edge=Math.max(Math.abs(dx*c-dz*k)-1.58*t.scale,Math.abs(dx*k+dz*c)-.72*t.scale);

@@ -7,7 +7,7 @@ import { Group } from '../two/vendor/three.module.min.js';
 import { regionalSpringBank } from '../two/regional-bath-art.js';
 import { addSpringSurface } from '../two/spring-water.js';
 import { bankSculpture } from '../two/main-bath-art.js';
-import { tableauFooting } from '../two/main-bath-rims.js';
+import { bathTableau,tableauFooting } from '../two/main-bath-rims.js';
 import { KYO_SCREENS } from '../two/kyo-layout.js';
 import { SAZAE_SPRING,SAZAE_POOL } from '../two/ryugu-shell-bath.js';
 import { WAYSIDE_HUTS } from '../two/wayside-hut-layout.js';
@@ -168,8 +168,9 @@ test('regional basins have distinct shorelines, continuous water and a dry appro
   assert.ok(profiles.size>=10,'distinct shorelines across the island');
 });
 
-test('each main bath has its own shoreline and a sculpted, solid scene above the water',()=>{
+test('main bath shores only display freestanding animal carvings in Kyoto and Inari',()=>{
   const sites=[...regional().filter(s=>s.rank==='main'),SNOW_SPRING],profiles=new Set();
+  assert.deepEqual(sites.filter(bathTableau).map(s=>s.kind).sort(),['capital','inari']);
   for(const s of sites){
     const radii=Array.from({length:80},(_,i)=>{
       const angle=i*Math.PI/40;
@@ -182,8 +183,12 @@ test('each main bath has its own shoreline and a sculpted, solid scene above the
       const hearth=sitePoint(s,0,back+.62),aisle=sitePoint(s,0,.30);
       assert.ok(staticVolumeAt(...hearth,level+.63),s.name+' solid steam furnace');
       assert.ok(waterSurfaceAt(...aisle)<level-.04,s.name+' dry brick floor');
-      const old=tableauFooting(s,terrainHeight);
-      assert.ok(!staticVolumeAt(old.x,old.z,level+.64),s.name+' retired outdoor jar footing is clear');
+      const old=sitePoint(s,5.10,-2.51);
+      assert.ok(!staticVolumeAt(...old,level+.64),s.name+' retired outdoor jar footing is clear');
+      continue;
+    }
+    if(s.kind!=='capital' && s.kind!=='inari'){
+      assert.equal(bathTableau(s),null,s.name+' has no bankside statue or plinth');
       continue;
     }
     const art=bankSculpture(s.kind);

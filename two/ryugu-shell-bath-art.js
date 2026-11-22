@@ -1,5 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 import { skinGeometry } from './ryugu-sculpt.js';
+import { bathFinish } from './bath-material-study.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { SAZAE_POOL, SHELL_STEPS } from './ryugu-shell-bath.js';
 
@@ -161,22 +162,36 @@ function addNacre(group) {
 }
 
 function addStepsAndOperculum(group) {
-  const art=sculpture();
+  const art=sculpture(),timber=sculpture();
   for(const [i,q] of SHELL_STEPS.entries()){
     const wet=i>4;
     for(let j=0;j<3;j++){
       const w=q.w/3-.014,x=(j-1)*q.w/3;
       const riser=q.h-.06;
-      art.box(wet?'#828e74':'#896246',x,riser/2,q.v,w-.012,riser,q.d-.022);
-      art.box(wet?'#aab095':['#d0af79','#c4a271','#d5ba8b'][(j+i)%3],
+      timber.box(wet?'#828e74':'#896246',x,riser/2,q.v,w-.012,riser,q.d-.022);
+      timber.box(wet?'#aab095':['#d0af79','#c4a271','#d5ba8b'][(j+i)%3],
         x,q.h-.030,q.v,w,.06,q.d);
       for(const side of [-1,1]){
-        art.stroke(wet?'#868a76':'#a98a64',[[x+side*.108,q.h+.003,q.v-q.d*.40],
+        timber.stroke(wet?'#868a76':'#a98a64',[[x+side*.108,q.h+.003,q.v-q.d*.40],
           [x+side*.087,q.h+.004,q.v],[x+side*.115,q.h+.003,q.v+q.d*.39]],[.001,.006,.001],6);
       }
-      if(j!==1)art.ball('#82765d',x,q.h+.005,q.v+.14,.023,.007,.023);
+      if(j!==1)timber.ball('#82765d',x,q.h+.005,q.v+.14,.023,.007,.023);
     }
   }
+  // The foremost edge of each dry tread is a shell inlay, set into a
+  // shallow rebate. Smaller flakes change direction across the joint.
+  for(const [i,step] of SHELL_STEPS.slice(0,5).entries()){
+    const chips=14;
+    for(let j=0;j<chips;j++){
+      const span=step.w*.86/chips,x=-span*chips*.5+span*(j+.5);
+      const g=skinGeometry(2,6,(u,v)=>{
+        const t=2*u-1,arc=.019*(1-t*t);
+        return [x+t*span*.46,step.h+.0023,step.v+.32*step.d+arc+(v-.5)*.018*(1-.7*t*t),u,v];
+      },false,true);
+      art.add(g,['#b9cab7','#e1d0b4','#cac6af','#aebdb3'][(j+3*i)%4]);
+    }
+  }
+  skin(group,'海水で磨かれた檜の踏段',timber.finish(),bathFinish('cedar'));
   // The detached operculum, convex like a cat's eye, rests on a small
   // lacquer stand. An eccentric spiral is incised in its cream outer face.
   const lid=new T.Group();
@@ -197,7 +212,7 @@ function addStepsAndOperculum(group) {
   art.box('#674a3c',1.71,.09,-.77,1.16,.18,.56);
   for(const side of [-1,1])art.stroke('#8c5940',[[1.71+side*.43,.14,-.93],
     [1.71+side*.39,.36,-.74],[1.71+side*.34,.42,-.52]],[.065,.048,.030],9);
-  skin(group,'漆の蓋立てと檜の踏段',art.finish(),painted);
+  skin(group,'漆の蓋立てと踏段の螺鈿',art.finish(),painted);
 }
 
 function addNameboard(group) {

@@ -77,6 +77,11 @@ export function meadowExclusions(objects,residents=[]) {
   add(COURT.x,COURT.z+11.5,29,reservedScenery);
   add(KIYOMIZU.x,KIYOMIZU.z-16,36,kiyomizuClearing);
   for(const s of RETREATS)add(s.x,s.z,15,reservedScenery);
+  const fishingBath=RETREATS.find(s=>s.kind==='shore'),ca=Math.cos(fishingBath.yaw),sa=Math.sin(fishingBath.yaw);
+  add(fishingBath.x,fishingBath.z,25,(x,z)=>{
+    const dx=x-fishingBath.x,dz=z-fishingBath.z,u=dx*ca-dz*sa,v=dx*sa+dz*ca;
+    return (u>-11.64 && u<-8.36 && v>-2.32 && v<1.08) || (u>-25 && u<-5.7 && Math.abs(v+4.07)<.48);
+  });
   for(const s of WAYSIDE_SITES)
     add(s.x,s.z,14,s.kind==='chaya' ? (x,z)=>inHutYard(x,z)||onTeaFootpath(s,x,z) : inHutYard);
   for(const p of SEAPORTS)add(p.x,p.z,72,portReserved);
