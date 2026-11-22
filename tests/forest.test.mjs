@@ -9,7 +9,7 @@ test('the thinned woodland preserves bamboo groves and crown forms and leaves ro
   assert.equal(bamboo.length,139);
   assert.equal(createHash('sha256').update(JSON.stringify(bamboo)).digest('hex'),'bf8b76abb9076a6bb02bf41f75ffd02fd14a7cbc0d8e526d8afee3c014eff6ae');
   const autumn = TREES.filter(t => REGIONS[regionAt(t.x,t.z)].id === 'autumn' && hasAutumnLeaves(t));
-  assert.equal(autumn.length, 400); // The previous route passed 200 trees in autumn colour.
+  assert.ok(autumn.length >= 400); // Mountain woods now extend the established stands above the valley.
   // The new approach roads and the fire mountain carry additional stands.
   assert.ok(TREES.length-bamboo.length-autumn.length >= 1198);
   assert.ok(TREES.filter(t=>t.z < -416 || t.z > 416).length > 75);

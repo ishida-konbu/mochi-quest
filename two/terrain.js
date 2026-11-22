@@ -1,4 +1,6 @@
+import { mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
+import { plantMountainWoods } from './mountain-woodland.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
 import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, FIRE_COAST, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
@@ -6,7 +8,7 @@ import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from
 import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
 import { RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
-import { CEDAR_GROVES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
+import { CEDAR_GROVES, CLIFF_PINES, PEACH_TREES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS } from './trade-routes.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
@@ -217,7 +219,8 @@ export function springRadius(x,z) {
   return hypot((x-SNOW_SPRING.x)/SNOW_SPRING.rx,(z-SNOW_SPRING.z)/SNOW_SPRING.rz);
 }
 export function terrainHeight(x,z) {
-  const native = portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight));
+  const base=portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight));
+  const native=mountainStreamTerrain(x,z,base);
   const hut=nearbyHut(x,z);
   if(hut){
     const w=clearingWeight(hut,x,z);
@@ -251,7 +254,8 @@ export function waterSurfaceAt(x,z) {
   if(hut?.bath && (x-hut.bath.x)**2+(z-hut.bath.z)**2<KETTLE.widthScale**2) return terrainHeight(hut.x,hut.z)+KETTLE.water;
   const site=nearbyRetreat(x,z);
   if(site && bathRadius(site,x,z)<1) return landHeight(site.x,site.z)+.22;
-  return abs(x-SNOW_SPRING.x)<15 && abs(z-SNOW_SPRING.z)<10 && springRadius(x,z)<1 ? SNOW_SPRING.level : WATER_Y;
+  if(abs(x-SNOW_SPRING.x)<15 && abs(z-SNOW_SPRING.z)<10 && springRadius(x,z)<1)return SNOW_SPRING.level;
+  return max(WATER_Y,mountainStreamWaterAt(x,z));
 }
 export const BRIDGES = [-137, 0, 134].map((x) => ({
   x,
@@ -856,8 +860,26 @@ ROCKS.push(...offshoreReefs(terrainHeight,shoreDistance,seeded(0x687063)));
 // Cut after planting so a cleared trunk does not reshuffle distant woods.
 for(let i=TREES.length-1;i>=0;i--){
   const {x,z}=TREES[i],hut=nearbyHut(x,z);
-  if(hut && (hypot(x-hut.x,z-hut.z)<=8 || inHutYard(x,z))) TREES.splice(i,1);
+  const streamBank=inMountainStreamClearing(x,z);
+  // Two long-established bamboo clumps frame the lower stream on dry banks.
+  // Keep their trunks if the channel's water never reaches their roots.
+  if(hut && (hypot(x-hut.x,z-hut.z)<=8 || inHutYard(x,z)) ||
+     streamBank && (!isBamboo(TREES[i]) || Number.isFinite(mountainStreamWaterAt(x,z)))) TREES.splice(i,1);
 }
+// Append the mountain understory after surveying the earlier rocks, perches and
+// garden trees. All new trunks enter the same contacts and canopy as those trees.
+function mountainGlade(x,z,ground){
+  if(inMountainStreamClearing(x,z) || nearRoad(x,z,3.8) || reservedScenery(x,z) || inFireMeadow(x,z))return false;
+  const orchardApron=hypot((x-DISTRICTS.peach.x)/133,(z-DISTRICTS.peach.z)/112);
+  if(orchardApron<.58 || (orchardApron>=1.02 && protectedDistrict(x,z)))return false;
+  const hut=nearbyHut(x,z);
+  if(hut && (hypot(x-hut.x,z-hut.z)<=9 || inHutYard(x,z)))return false;
+  if(abs(z-riverZ(x))<riverHalfWidth(x)+11 || shoreDistance(x,z)<10 || safe(x,z,6))return false;
+  if(springRadius(x,z)<1.5 || (x>275 && abs(z-mapleStreamZ(x))<8))return false;
+  if(Math.abs(terrainMeshHeight(x,z)-ground)>.14)return false;
+  return BUILDINGS.every(b=>hypot(b.x-x,b.z-z)>hypot(b.w,b.d)*.52+5);
+}
+plantMountainWoods(TREES,ROCKS,PEACH_TREES,CLIFF_PINES,terrainHeight,mountainGlade,seeded);
 export const LANDMARK_TREES = TREES.filter(t => t.form === undefined);
 
 // The shrine's small bamboo stands are planted individually between its
@@ -1141,7 +1163,7 @@ function highest(x, z, pad, feet, supportOnly, body = 1.42) {
 export const solidHeightAt = (x, z, clearance = 0, y = Infinity) => highest(x, z, clearance, y, false);
 // The swimming line is part of locomotion even when grass mochi passes through scenery.
 export function landscapeFloor(x, z) {
-  return max(WATER_Y - 0.57, terrainHeight(x, z));
+  return max(max(WATER_Y,mountainStreamWaterAt(x,z))-.57,terrainHeight(x,z));
 }
 export function groundHeight(x, z, feet = -Infinity) {
   const b = bridgeAt(x, z);

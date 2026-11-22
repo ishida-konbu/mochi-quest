@@ -1,6 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { kyoRidgeHeight } from './higashiyama.js';
-import { TREES, terrainHeight, wrapDelta } from './terrain.js';
+import { BOUND, TREES, terrainHeight, wrapDelta } from './terrain.js';
 import { TREE_FORM_COUNT } from './forest-forms.js';
 import { forestGeometry, forestMaterial, forestTexture } from './forest-mesh.js';
 
@@ -15,13 +15,28 @@ function fade(shader, far) {
 }
 export function* prepareForest(scene, clock) {
   const trees = TREES.filter(t=>t.form!==undefined);
-  const totals = new Uint16Array(TREE_FORM_COUNT);
-  const records = trees.map(t=>{
-    totals[t.form]++;
-    return {tree:t, ground:terrainHeight(t.x,t.z), rotation:t.seed*2.39996323,
-      range:kyoRidgeHeight(t.x,t.z)>6?640:RANGE,
-      tint:.86+(t.seed%131)*.0019};
-  });
+  // Count the largest group of near trees a camera cell can actually see.
+  // The reserve includes neighbouring cells and the camera's update stride.
+  const width=128,cellsAcross=2*BOUND/width,nearRadius=FAR+STEP+1;
+  const cellAt=v=>Math.floor((v+BOUND)/width);
+  const wrapped=i=>(i%cellsAcross+cellsAcross)%cellsAcross;
+  const key=(i,j)=>wrapped(i)*cellsAcross+wrapped(j);
+  const totals=new Uint16Array(TREE_FORM_COUNT),cameraCells=new Map(),groves=new Map();
+  for(const t of trees){
+    const col=cellAt(t.x),row=cellAt(t.z),k=key(col,row);
+    if(!groves.has(k))groves.set(k,{x:(col+.5)*width-BOUND,z:(row+.5)*width-BOUND,range:0,trees:[]});
+    const grove=groves.get(k),range=kyoRidgeHeight(t.x,t.z)>6?640:RANGE;
+    grove.trees.push({tree:t,ground:terrainHeight(t.x,t.z),rotation:t.seed*2.39996323,
+      range,tint:.86+(t.seed%131)*.0019});
+    grove.range=Math.max(grove.range,range);
+    for(let i=cellAt(t.x-nearRadius);i<=cellAt(t.x+nearRadius);i++)
+      for(let j=cellAt(t.z-nearRadius);j<=cellAt(t.z+nearRadius);j++){
+        const cell=key(i,j);
+        if(!cameraCells.has(cell))cameraCells.set(cell,new Uint16Array(TREE_FORM_COUNT));
+        const count=++cameraCells.get(cell)[t.form];
+        totals[t.form]=Math.max(totals[t.form],count);
+      }
+  }
   const loader=new THREE.TextureLoader();
   function read(name) {
     const texture=loader.load(forestTexture(name));
@@ -102,7 +117,9 @@ export function* prepareForest(scene, clock) {
   const distant = new THREE.Mesh(geo,farMaterial);
   distant.frustumCulled=false;distant.name='Distant tree crowns';scene.add(distant);
   const transform=new THREE.Object3D(), tint=new THREE.Color();
-  let lastX=Infinity,lastY=Infinity,lastZ=Infinity;
+  const view=new THREE.Frustum(),projection=new THREE.Matrix4(),crown=new THREE.Sphere();
+  const lastRotation=new THREE.Quaternion();
+  let lastX=Infinity,lastY=Infinity,lastZ=Infinity,lastZoom=0,lastAspect=0;
   return function updateForest(camera, player) {
     const eye=camera.position;
     const scale=player.buffs.full>0 ? 1.28 : 1;
@@ -113,24 +130,38 @@ export function* prepareForest(scene, clock) {
     heroView.value.set(eye.x+wrapDelta(player.x-eye.x),y,eye.z+wrapDelta(player.z-eye.z))
       .applyMatrix4(camera.matrixWorldInverse);
     heroRadius.value.set(scale*(1.17-.18*pull),height+.29);
-    if ((eye.x-lastX)**2+(eye.y-lastY)**2+(eye.z-lastZ)**2<STEP*STEP) return;
+    const zoom=camera.projectionMatrix.elements[5],aspect=camera.projectionMatrix.elements[0];
+    if ((eye.x-lastX)**2+(eye.y-lastY)**2+(eye.z-lastZ)**2<STEP*STEP &&
+        Math.abs(lastRotation.dot(camera.quaternion))>.9999 && zoom===lastZoom && aspect===lastAspect)return;
+    lastZoom=zoom;lastAspect=aspect;lastRotation.copy(camera.quaternion);
+    view.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
     lastX=eye.x;lastY=eye.y;lastZ=eye.z;
     for (const mesh of near) mesh.count=0;
     let used=0;
-    for(const {tree, ground, rotation, range, tint:brightness} of records) {
-      const dx=wrapDelta(tree.x-eye.x), dz=wrapDelta(tree.z-eye.z);
-      const d2=dx*dx+dz*dz+(ground-eye.y)**2;
-      if(d2>range*range) continue;
-      const x=eye.x+dx,z=eye.z+dz;
-      if(d2<(FAR+STEP+1)**2) {
-        const mesh=near[tree.form], idx=mesh.count++;
-        transform.position.set(x,ground,z);transform.rotation.y=rotation;transform.scale.setScalar(tree.h);
-        transform.updateMatrix();mesh.setMatrixAt(idx,transform.matrix);
-        mesh.setColorAt(idx,tint.setRGB(brightness,brightness,brightness));
-      }
-      if(d2>(NEAR-STEP-1)**2) {
-        roots.setXYZW(used,x,ground,z,tree.h);
-        forms.setXYZ(used,tree.form,rotation%(Math.PI*2),brightness);used++;
+    for(const grove of groves.values()){
+      const edgeX=Math.max(0,Math.abs(wrapDelta(grove.x-eye.x))-width/2);
+      const edgeZ=Math.max(0,Math.abs(wrapDelta(grove.z-eye.z))-width/2);
+      if(edgeX*edgeX+edgeZ*edgeZ>grove.range*grove.range)continue;
+      for(const {tree, ground, rotation, range, tint:brightness} of grove.trees) {
+        const dx=wrapDelta(tree.x-eye.x), dz=wrapDelta(tree.z-eye.z);
+        const d2=dx*dx+dz*dz+(ground-eye.y)**2;
+        if(d2>range*range) continue;
+        const x=eye.x+dx,z=eye.z+dz;
+        crown.center.set(x,ground+.58*tree.h,z);
+        // Include the whole baked crown, a camera stride, and the permitted
+        // turn between updates. A newly visible branch cannot pop at the edge.
+        crown.radius=tree.h*1.2+STEP+1+Math.sqrt(d2)*.031;
+        if(!view.intersectsSphere(crown))continue;
+        if(d2<(FAR+STEP+1)**2) {
+          const mesh=near[tree.form], idx=mesh.count++;
+          transform.position.set(x,ground,z);transform.rotation.y=rotation;transform.scale.setScalar(tree.h);
+          transform.updateMatrix();mesh.setMatrixAt(idx,transform.matrix);
+          mesh.setColorAt(idx,tint.setRGB(brightness,brightness,brightness));
+        }
+        if(d2>(NEAR-STEP-1)**2) {
+          roots.setXYZW(used,x,ground,z,tree.h);
+          forms.setXYZ(used,tree.form,rotation%(Math.PI*2),brightness);used++;
+        }
       }
     }
     for(const mesh of near) {

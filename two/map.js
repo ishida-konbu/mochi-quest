@@ -1,3 +1,4 @@
+import { MOUNTAIN_STREAMS } from './mountain-streams.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { DAIBUTSU, INARI_SANCTUARY, PEACH_TREES } from './pilgrimage-layout.js';
 import { PALACE_APPROACH, RYUGU, HALLS, GATE_V } from './ryugu-layout.js';
@@ -233,6 +234,15 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     if (map && left < w && top < h && left + side > 0 && top + side > 0)
       g.drawImage(map, left, top, side, side);
   }
+  for(const stream of MOUNTAIN_STREAMS){
+    g.beginPath();
+    for(const [i,point] of stream.stations.entries()){
+      const x=sx(point.x),y=sy(point.z);
+      if(i===0)g.moveTo(x,y);
+      else g.lineTo(x,y);
+    }
+    g.strokeStyle='#708f8b';g.lineWidth=large?1.15:2.2;g.stroke();
+  }
   for(const ship of FLEET){
     const vessel=vesselPose(ship,state.time);
     if(large && vessel.docked)continue;
@@ -246,6 +256,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   }
   // Keep the fire characters at their surveyed summits at both map scales.
   const marks=[[COURT,'裁'],[KITAYAMA,'大'],[HIGASHIYAMA,'福']];
+  for(const {fall} of MOUNTAIN_STREAMS)marks.push([fall.toe,'滝']);
   for(const site of CHAYA_SITES)marks.push([site,'茶']);
   for(const site of state.objects){
     if(site.retreat)marks.push([site,'♨']);
@@ -258,7 +269,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     const size=large ? (regional && !highlighted ? 11 : 15) : 17;
     g.font='bold '+size+'px serif';g.textAlign='center';g.textBaseline='middle';
     g.lineWidth=3;g.strokeStyle='#fff2d6';
-    g.fillStyle=site===COURT?'#685449':highlighted?'#933c2e':'#8c5140';
+    g.fillStyle=glyph==='滝'?'#416b70':site===COURT?'#685449':highlighted?'#933c2e':'#8c5140';
     const labelX=site===COURT && large?x-4:x;
     g.strokeText(glyph,labelX,y);g.fillText(glyph,labelX,y);
   }

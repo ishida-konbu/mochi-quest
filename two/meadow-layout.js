@@ -1,3 +1,4 @@
+import { inMountainStreamClearing } from './mountain-streams.js';
 import { WAYSIDE_SITES,inHutYard } from './wayside-hut-layout.js';
 import { SEAPORTS,portReserved } from './seaport-layout.js';
 import { HERBS, HERB_FORMS } from './meadow-herbs.js';
@@ -114,7 +115,7 @@ export function visitMeadowTile(i,j,clearings,visit) {
     const uTile=(x-x0)/MEADOW_TILE,vTile=(z-z0)/MEADOW_TILE;
     const scroll=(nw+(ne-nw)*uTile)*(1-vTile)+(sw+(se-sw)*uTile)*vTile;
     const shore=shoreDistance(x,z);
-    if (shore<3 || nearRoad(x,z,.13) || masks.some(f=>f(x,z))) continue;
+    if (shore<3 || nearRoad(x,z,.13) || masks.some(f=>f(x,z)) || inMountainStreamClearing(x,z)) continue;
     const y=terrainMeshHeight(x,z,heightAt);
     if (y<WATER_Y+.13) continue;
     seasonAt(x,z,season);
