@@ -59,12 +59,47 @@ function watershed(a,b,north) {
   return Math.max(0,relief)*folds+crown;
 }
 
-export const eastRidgeHeight=(x,z)=>watershed(x-HIGASHIYAMA.x,z-HIGASHIYAMA.z,false);
-export const northRidgeHeight=(x,z)=>watershed(KITAYAMA.z-z,x-KITAYAMA.x,true);
+// Lower the three divides against the basin without moving their passes or
+// their shores. On each fire slope the drop is proportional to its distance
+// from the avenue, so the drawing moves down intact in the city view. The
+// eastern fires sit a little higher to clear the roofs at the far end of town.
+const ridgeScale=.86, eastFireDrop=.015, northFireDrop=.035;
+function feather(distance,width) {
+  const t=Math.min(1,Math.max(0,distance/width));
+  return 1-t*t*(3-2*t);
+}
+export function earlierFireRidgeHeight(x,z,north) {
+  // The original planting seed sequence also uses this ungraded survey.
+  return north?watershed(KITAYAMA.z-z,x-KITAYAMA.x,true):
+    watershed(x-HIGASHIYAMA.x,z-HIGASHIYAMA.z,false);
+}
+function lowerFireSlope(rise,depth,side,north) {
+  const lowered=rise*ridgeScale;
+  const edge=north?Math.max(166-depth,Math.abs(side)-29):Math.max(192-depth,Math.abs(side)-45);
+  // The upper right stroke of 福 runs across a spur. Behind its shorter
+  // central strokes, the hillside recedes below the summit's view of Kyoto.
+  const back=north?280:298+Math.max(0,Math.min(32,(side-13)*1.3));
+  const terrace=feather(edge,north?38:42)*feather(depth-back,north?38:23);
+  return lowered+(rise-depth*(north?northFireDrop:eastFireDrop)-lowered)*terrace;
+}
+export function eastRidgeHeight(x,z) {
+  const rise=earlierFireRidgeHeight(x,z,false);
+  if(!rise)return 0;
+  const lowered=lowerFireSlope(rise,x-city.x,z-city.z,false);
+  // Otowa's old timber platform and gravel court sit on one rocky shelf.
+  // Keep its foundations and the upper pilgrim approach at their surveyed
+  // level, then merge gradually into the lower shoulders of Higashiyama.
+  const dx=(x-505)/99,dz=(z+724)/71,r=dx*dx+dz*dz;
+  return r<1 ? lowered+(rise-lowered)*feather(r-.38,.62) : lowered;
+}
+export function northRidgeHeight(x,z) {
+  const rise=earlierFireRidgeHeight(x,z,true);
+  return rise?lowerFireSlope(rise,city.z-z,x-city.x,true):0;
+}
 
 // A lower, overlapping pair of wooded ridges above the road to Sakai. Their
 // southern toes die out on the town side of the pass; the shore stays open.
-export function westRidgeHeight(x,z) {
+export function earlierWestRidgeHeight(x,z) {
   const u=x-NISHIYAMA.x,v=z-NISHIYAMA.z;
   if(u< -218 || u>250 || v< -209 || v>142)return 0;
   const axis=u+.32*v+14*Math.sin(v*.021);
@@ -78,6 +113,7 @@ export function westRidgeHeight(x,z) {
   const summit=Math.abs(u-26)>33 || Math.abs(v-16)>58?0:1.9*Math.exp(-(((u-26)/9)**2+((v-16)/18)**2));
   return (Math.max(0,ridge)+summit)*foot*foot*(3-2*foot);
 }
+export const westRidgeHeight=(x,z)=>ridgeScale*earlierWestRidgeHeight(x,z);
 
 export const kyoRidgeHeight=(x,z)=>Math.max(eastRidgeHeight(x,z),northRidgeHeight(x,z),westRidgeHeight(x,z));
 
@@ -199,8 +235,8 @@ const daiStrokes=[
 // Intersect rays with the first rising slope so the figures follow both the
 // land and their intended brush proportions, including the counters of 福.
 export const FIRE_DRAWINGS={
-  east:{width:.2924,foot:.18182,height:.19436},
-  north:{width:.2666,foot:.15154,height:.19092},
+  east:{width:.2924,foot:.18182-eastFireDrop,height:.19436},
+  north:{width:.2666,foot:.15154-northFireDrop,height:.19092},
 };
 function surveyFirebeds(height,east) {
   const viewY=height(city.x,city.z)+1.85,hearths=[];

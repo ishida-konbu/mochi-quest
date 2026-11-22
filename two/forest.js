@@ -32,17 +32,15 @@ export function* prepareForest(scene, clock) {
     const col=cellAt(t.x),row=cellAt(t.z),k=key(col,row);
     if(!groves.has(k))groves.set(k,{x:(col+.5)*width-BOUND,z:(row+.5)*width-BOUND,
       floor:Infinity,top:-Infinity,reach:0,range:0,trees:[]});
-    const grove=groves.get(k), kyoto=Boolean(t.kyotoRidge || kyoRidgeHeight(t.x,t.z)>.5);
+    const grove=groves.get(k), kyoto=kyoRidgeHeight(t.x,t.z)>.5;
     const range=kyoto?640:RANGE;
     const ground=t.ground ?? terrainHeight(t.x,t.z);
     grove.floor=Math.min(grove.floor,ground);
     grove.top=Math.max(grove.top,ground+t.h);
     grove.reach=Math.max(grove.reach,t.h*1.2);
-    // The wet wash joins neighbouring crowns into stands. Leave broken light
-    // on the outward shoulders and a deeper pool where two groves overlap.
-    const folds=kyoto ? .52*Math.sin(.047*t.x+.015*t.z)+.32*Math.cos(.057*t.z-.021*t.x)
-      +.16*Math.sin(.112*t.x-.058*t.z) : 0;
-    const tint=(.86+(t.seed%131)*.0019)*(kyoto ? .77+.34*folds : 1);
+    // Closely related inks keep scattered crowns in the hillside palette.
+    // Leave the deeper shadows to the branches and the local lighting.
+    const tint=kyoto ? .83+(t.seed%131)*.0010 : .86+(t.seed%131)*.0019;
     const inkGrove=kyoto ? (t.kind==='moso' ? 2 : 1) : 0;
     grove.trees.push({tree:t,ground,rotation:t.seed*2.39996323,range,inkGrove,tint});
     grove.range=Math.max(grove.range,range);
@@ -163,7 +161,14 @@ export function* prepareForest(scene, clock) {
         if(inkTree>.5) diffuseColor*=texture2D(inkCrowns,vMapUv);
         else diffuseColor*=texture2D(map,vMapUv);
       `).replace('#include <color_fragment>',
-      '#include <color_fragment>\ndiffuseColor.rgb*=forestTint;');
+      `#include <color_fragment>
+        diffuseColor.rgb*=forestTint;
+        // At town scale, isolated crowns and bamboo sprays share a little of
+        // the ground wash. The translucent ink still carries the branch shape.
+        float distantInk=inkTree*smoothstep(75.,235.,forestDistance);
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.206,.248,.17),
+          distantInk*(.14+.085*inkBamboo));
+      `);
     fade(shader,true);
   };
   const distant = new THREE.Mesh(geo,farMaterial);

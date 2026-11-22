@@ -166,7 +166,7 @@ function* landscape(scene, art) {
   const mat = meadowMaterial(art);
   const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
     '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd','#e4d5b5','#efd5ce','#a9c1b3','#e1d8bb','#dbd6bb','#d8d7bf','#e1d1b4'].map(css);
-  const soil = css('#efeadc'), stone = css('#d5d4c6'), c = new THREE.Color(), season = {};
+  const soil = css('#efeadc'), stone = css('#d5d4c6'), hillPaper = css('#ebe9da'), c = new THREE.Color(), season = {};
   const bins = new Map();
   for (const tree of TREES) {
     const rad = tree.h*.67+2.3;
@@ -197,9 +197,11 @@ function* landscape(scene, art) {
       c.copy(colors[r]).lerp(soil, max(0,1-abs(river-2)/7)*.72);
       c.lerp(stone, max(0,min(1,(y-15)/30))*.68);
       const rise=kyoRidgeHeight(x,z);
-      ridges.push(THREE.MathUtils.smoothstep(rise,3,23));
+      const ridge=THREE.MathUtils.smoothstep(rise,1.5,17);
+      ridges.push(ridge);
       if(rise>0)ridgeTile=true;
       c.multiplyScalar(.96+.042*cos(x*.076+sin(z*.044))+.039*sin(z*.115+sin(x*.093)));
+      c.lerp(hillPaper,ridge*.90);
       let canopy=0;
       for (const tree of bins.get(Math.floor(x/18)*256+Math.floor(z/18)) || []) {
         const radius=tree.h*.67+2.3;

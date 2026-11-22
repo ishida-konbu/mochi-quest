@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DISTRICTS } from '../two/geography.js';
-import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, eastRidgeHeight, northRidgeHeight, westRidgeHeight, fukuFirebeds, daiFirebeds, FIRE_DRAWINGS, FIRE_TRAILS, inFireMeadow, fireTrailDistance } from '../two/higashiyama.js';
-import { CONNECTING_ROADS, TREES, nearRoad, shoreDistance, solidHeightAt, terrainHeight } from '../two/terrain.js';
+import { HIGASHIYAMA, KITAYAMA, KYO_LOOKOUTS, eastRidgeHeight, northRidgeHeight, westRidgeHeight, fukuFirebeds, daiFirebeds, FIRE_DRAWINGS, FIRE_TRAILS, inFireMeadow, fireTrailDistance } from '../two/higashiyama.js';
+import { CONNECTING_ROADS, TREES, nearRoad, shoreDistance, solidHeightAt, terrainHeight, terrainMeshHeight } from '../two/terrain.js';
 import { canopyHeight } from '../two/village-paths.js';
 import { createGame } from '../two/game.js';
 
@@ -13,10 +13,12 @@ for(const east of [true,false]){
   test(name+' rises gradually from a broad skirt into a high, wooded divide',()=>{
     const heightAt=(forward,across=0)=>terrainHeight(...point(forward,across));
     assert.ok(Math.hypot(summit.x-DISTRICTS.kyo.x,summit.z-DISTRICTS.kyo.z)>350);
-    assert.ok(heightAt(0)>150);
+    const cityFloor=terrainHeight(DISTRICTS.kyo.x,DISTRICTS.kyo.z);
+    const relief=heightAt(0)-cityFloor;
+    assert.ok(east ? relief>149 && relief<155 : relief>137 && relief<142);
     assert.ok(heightAt(-263)<18);
     assert.ok(heightAt(-210)>22 && heightAt(-210)<52);
-    assert.ok(heightAt(-135)>65 && heightAt(-135)<100);
+    assert.ok(heightAt(-135)>61 && heightAt(-135)<80);
     for(const v of [-162,158])assert.ok(heightAt(0,v)>78,'outer spur '+v);
     for(let d=-266;d<0;d+=4){
       assert.ok(Math.abs(heightAt(d+4)-heightAt(d))/4<1.06,'sudden escarpment at '+d);
@@ -27,8 +29,9 @@ for(const east of [true,false]){
 }
 
 test('the western divide rises over Kyoto and leaves the Sakai pass at its surveyed grade',()=>{
-  const {x,z}=NISHIYAMA;
-  assert.ok(terrainHeight(x,z)>90);
+  const {x,z}=KYO_LOOKOUTS[2],city=DISTRICTS.kyo;
+  const relief=terrainHeight(x,z)-terrainHeight(city.x,city.z);
+  assert.ok(relief>90 && relief<94);
   assert.ok(TREES.filter(t=>westRidgeHeight(t.x,t.z)>10).length>300);
   for(const road of CONNECTING_ROADS)for(const [x,z] of road.points){
     assert.equal(westRidgeHeight(x,z),0,road.destination);
@@ -43,6 +46,7 @@ test('the 福 and 大 firebeds make complete brushstrokes on terrain visible fro
     assert.ok(beds.length>(east?190:90));
     const chart=beds.map(([x,y,z])=>{
       assert.ok(Math.abs(terrainHeight(x,z)+.38-y)<1e-8);
+      assert.ok(Math.abs(terrainMeshHeight(x,z)+.38-y)<.05,'hearth sits on the painted triangles');
       const depth=east?x-city.x:city.z-z,side=east?z-city.z:x-city.x;
       return [side/depth/drawing.width+.5,((y-.38-eyeY)/depth-drawing.foot)/drawing.height];
     });
@@ -53,7 +57,7 @@ test('the 福 and 大 firebeds make complete brushstrokes on terrain visible fro
       [[.28,.84],[.73,.83],[.67,.48],[.49,.15]];
     for(const [u,v] of ink)assert.ok(nearest(u,v)<.030,'missing brush at '+[east,u,v]);
     for(const [u,v] of gaps)assert.ok(nearest(u,v)>.058,'blocked opening at '+[east,u,v]);
-    for(const offset of [-40,0,66]){
+    for(const offset of [-40,-20,0,22,44,66]){
       const ex=city.x+(east?offset:0),ez=city.z-(east?0:offset),ey=terrainHeight(ex,ez)+1.85;
       for(const [x,y,z] of beds){
         const length=Math.hypot(x-ex,z-ez);

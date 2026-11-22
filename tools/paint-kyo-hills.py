@@ -19,7 +19,7 @@ for(let z=box.z;z<=box.z+box.depth;z+=4)for(let x=box.x;x<=box.x+box.width;x+=4)
   verge.push(+inFireMeadow(x,z,28));
 }
 console.log(JSON.stringify({box,heights,rises,mown,verge,fires:[fukuFirebeds(terrainHeight),daiFirebeds(terrainHeight)],
-  trees:TREES.filter(t=>t.kyotoRidge || kyoRidgeHeight(t.x,t.z)>.5)
+  trees:TREES.filter(t=>kyoRidgeHeight(t.x,t.z)>.5)
   .map(t=>[t.x,t.z,t.h,t.kind])}));
 """
 data=json.loads(subprocess.check_output(['node','--input-type=module','-e',survey],cwd=ROOT))
@@ -54,24 +54,21 @@ for x,z,tall,_ in data['trees']:
     r=tall*ppm*.63
     crowns.ellipse((u-r,v-r*.86,u+r,v+r*.86),fill=198)
 grove=np.asarray(canopy.filter(ImageFilter.GaussianBlur(7*ppm)),dtype=np.float32)/255
-# Indigo-grey pools below wooded folds. The convex faces retain buff paper
-# with islands of cool bare stone breaking through the grass.
-bloom=cloud(137)*.52+cloud(52)*.33+cloud(18)*.14
+# A single sage wash runs from one stand to the next. The lay of the land
+# changes its value over whole ridges; individual crowns only inform small
+# marks on the forest floor. This keeps open slopes green at village distance.
 grade=scale_grid(slope)
-northface=scale_grid(np.clip(.5+dx*.45-dz*.39,0,1))
-mown=blurred(scale_grid(field('mown')),2.6*ppm)
+aspect=blurred(scale_grid(np.clip(.5+dx*.42-dz*.36,0,1)),11*ppm)
+mown=blurred(scale_grid(field('mown')),4*ppm)
 shoulder=scale_grid(np.clip((rise-18)/67,0,1))
-rock=np.clip((grade-.47)*2.5+bloom*2.9+northface*.33,0,1)*shoulder*(1-.68*mown)
-wood=np.clip(grove*1.25+bloom*.44+grade*.10,0,1)
+rock=np.clip((grade-.63)*1.55,0,1)*shoulder*(1-mown)
 def wash(image,colour,density):
     return image+(np.array(colour,dtype=np.float32)-image)*np.clip(density,0,1)[:,:,None]
-paper=np.broadcast_to(np.array([215,205,170],dtype=np.float32),(h,w,3))
-paper=wash(paper,[168,173,141],.28+.32*northface+bloom)
-paper=wash(paper,[112,127,114],wood*.94)
-paper=wash(paper,[176,178,164],rock)
-paper=wash(paper,[216,201,166],mown*.59)
-paper=wash(paper,[83,98,92],np.clip((northface-.50)*.65+bloom*.54,0,.49)*(wood+.6*rock))
-paper+=(bloom*13+cloud(6)*2.6)[:,:,None]
+paper=np.broadcast_to(np.array([158,169,139],dtype=np.float32),(h,w,3))
+paper=wash(paper,[131,148,127],.16+.72*aspect)
+paper=wash(paper,[163,170,150],.39*rock)
+paper=wash(paper,[186,184,150],.58*mown)
+paper+=(cloud(220)*3.2+cloud(7)*1.4)[:,:,None]
 im=Image.fromarray(np.uint8(np.clip(paper,0,255)))
 draw=ImageDraw.Draw(im)
 
@@ -119,9 +116,9 @@ for _ in range(11900):
             t=j/7
             bend=bow*math.sin(t*math.pi)+rng.uniform(-.40,.40)
             path.append((ox+tx*reach*t-ty*bend,oy+ty*reach*t+tx*bend))
-        brush(path,ppm*rng.uniform(.25,.72),tint(x,y,(59,66,58),rng.uniform(.18,.53)))
+        brush(path,ppm*rng.uniform(.25,.72),tint(x,y,(59,66,58),rng.uniform(.11,.26)))
         if across and strand==0:
-            brush([(px,py-ppm) for px,py in path[:6]],.66*ppm,tint(x,y,(242,231,199),.65))
+            brush([(px,py-ppm) for px,py in path[:6]],.66*ppm,tint(x,y,(212,216,191),.34))
 # Moss dots on shaded banks; low, sparse grass between exposed ledges.
 for _ in range(14200):
     x,y=rng.randrange(w),rng.randrange(h)
@@ -131,11 +128,11 @@ for _ in range(14200):
         a,b=x+rng.gauss(0,4.4)*ppm,y+rng.gauss(0,1.8)*ppm
         if moss:
             r=rng.uniform(.65,2.45)*ppm
-            brush([(a-r,b+.15*r),(a,b-.22*r),(a+r,b)],r*.48,tint(x,y,(58,75,63),rng.uniform(.20,.49)))
+            brush([(a-r,b+.15*r),(a,b-.22*r),(a+r,b)],r*.48,tint(x,y,(58,75,63),rng.uniform(.10,.25)))
         else:
             lean=rng.uniform(-1.3,2.3)*ppm
             tall=rng.uniform(1.1,3.2)*ppm
-            brush([(a,b),(a+.48*lean,b-.51*tall),(a+lean,b-tall)],ppm*.36,tint(x,y,(101,97,72),.45))
+            brush([(a,b),(a+.48*lean,b-.51*tall),(a+lean,b-tall)],ppm*.36,tint(x,y,(96,107,82),.29))
 
 # The dark heels of the brush follow exposed roots on a sloping forest floor.
 # At the lip of the mown bank the same gesture turns into a spray of cut stalks.
@@ -151,10 +148,10 @@ for x,z,tall,kind in data['trees']:
         bow=rng.uniform(-.21,.21)
         arc=[(u,v),(u+.28*dx0+bow*dy0,v+.28*dy0-bow*dx0),
              (u+.68*dx0-bow*dy0*.4,v+.68*dy0+bow*dx0*.4),(u+dx0,v+dy0)]
-        brush(arc,ppm*(.49 if kind in ('oak','zelkova') else .33),tint(u,v,(57,58,48),.53))
+        brush(arc,ppm*(.49 if kind in ('oak','zelkova') else .33),tint(u,v,(64,73,56),.38))
         if reach>4.8:
             brush([arc[1],(u+.55*dx0+dy0*.24,v+.55*dy0-dx0*.24),
-                   (u+.78*dx0+dy0*.36,v+.78*dy0-dx0*.36)],ppm*.23,tint(u,v,(75,72,55),.48))
+                   (u+.78*dx0+dy0*.36,v+.78*dy0-dx0*.36)],ppm*.23,tint(u,v,(77,83,64),.33))
 
 # The short, cut grass around the fires reads as a single wash from Kyoto.
 # Let the uncut woodland slowly take over again beyond the bank. These masks

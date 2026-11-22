@@ -1,10 +1,10 @@
 import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
 import { mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
-import { plantMountainWoods, plantKyotoWoods, growNishiyamaBamboo } from './mountain-woodland.js';
+import { plantMountainWoods, growNishiyamaBamboo } from './mountain-woodland.js';
 import { RYUGU, palaceSolid } from './ryugu-layout.js';
 import { KIYOMIZU_APPROACH, kiyomizuTerrain, kiyomizuSolids, kiyomizuClearing, kiyomizuViewTree } from './kiyomizu-layout.js';
-import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow, createFireTreeCeiling, fireTrailDistance } from './higashiyama.js';
+import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, earlierFireRidgeHeight, earlierWestRidgeHeight, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow, createFireTreeCeiling, fireTrailDistance } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
 import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
@@ -697,7 +697,7 @@ export const TREES = trees.filter(t => !portReserved(t.x,t.z) && !reservedScener
 // loose stands of cedar, zelkova and red pine. Keep all gates and views open.
 const saplings = seeded(0x5c311);
 // Retain the seed sequence used for established trees and rocks across the islands.
-// The additional Kyoto planting below uses the current surveyed banks and trails.
+// Current firebeds and footpaths receive their own local clearance below.
 function earlierFireSurvey(x,z){
   const city=DISTRICTS.kyo,east=x-city.x,north=city.z-z;
   function clearing(along,across,rise,minimum,width){
@@ -705,8 +705,8 @@ function earlierFireSurvey(x,z){
     const irregular=10+4.8*sin(along*.082)+3.6*sin(along*.049+across*.025);
     return abs(across)<along*width+irregular && rise+14>(along-47)*minimum;
   }
-  return east>100 && east<370 && clearing(east,z-city.z,eastRidgeHeight(x,z),.128,.17) ||
-    north>100 && north<370 && clearing(north,x-city.x,northRidgeHeight(x,z),.111,.157);
+  return east>100 && east<370 && clearing(east,z-city.z,earlierFireRidgeHeight(x,z,false),.128,.17) ||
+    north>100 && north<370 && clearing(north,x-city.x,earlierFireRidgeHeight(x,z,true),.111,.157);
 }
 function transplant(x,z,family) {
   if(abs(x-RASHOMON.x)<19 && abs(z-RASHOMON.z)<29)return false;
@@ -769,11 +769,11 @@ for(let i=0;i<1100;i++){
 // Broken stands trace the long ridges. Red pine favours exposed shoulders,
 // while cypress and cedar gather in the lower folds beside the fire meadows.
 for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
-  const plant=seeded(east?0x46554b55:0x444149),height=east?eastRidgeHeight:northRidgeHeight;
+  const plant=seeded(east?0x46554b55:0x444149);
   for(let i=0;i<1750;i++){
     const along=(plant()-.55)*511, across=(plant()-.5)*573;
     const x=summit.x+(east?along:across),z=summit.z+(east?across:-along);
-    const high=height(x,z);
+    const high=earlierFireRidgeHeight(x,z,!east);
     if(high<7 || earlierFireSurvey(x,z) || nearRoad(x,z,4) || portReserved(x,z) || protectedDistrict(x,z))continue;
     if(Math.sin(across*.044+along*.013)+Math.sin(along*.055-across*.018)>.93 && plant()<.86)continue;
     if(TREES.some(t=>(t.x-x)**2+(t.z-z)**2<68))continue;
@@ -800,9 +800,9 @@ for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
     return false;
   }
   for(const [centre,height,seed,width,depth] of [
-    [HIGASHIYAMA,eastRidgeHeight,7709,470,540],
-    [KITAYAMA,northRidgeHeight,4093,520,450],
-    [NISHIYAMA,westRidgeHeight,2837,314,295],
+    [HIGASHIYAMA,(x,z)=>earlierFireRidgeHeight(x,z,false),7709,470,540],
+    [KITAYAMA,(x,z)=>earlierFireRidgeHeight(x,z,true),4093,520,450],
+    [NISHIYAMA,earlierWestRidgeHeight,2837,314,295],
   ]){
     const plant=seeded(seed);
     for(let grove=0;grove<220;grove++){
@@ -952,10 +952,45 @@ for(let i=ROCKS.length-1;i>=0;i--){
   const r=ROCKS[i],reach=Math.max(r.rx,r.rz);
   if(inFireOpening(r.x,r.z,r.h,reach,reach))ROCKS.splice(i,1);
 }
-plantKyotoWoods(TREES,ROCKS,terrainHeight,
-  (x,z,ground,h,form)=>!inFireOpening(x,z,h,h*.56,trailBranchReach(h,form),ground) && mountainGlade(x,z,ground),seeded);
-// Survey the full canopy, including the newly grown foothill stands. Keep
-// the approach walkable and the capital visible from the stage and summits.
+// Loose bands of trees follow the contours around the firebeds and break up
+// the old straight cut to the summits. The first few stands stay on the outer
+// shoulders, leaving the city terrace and its avenues open.
+const verges=[
+  [true,[[131,-23],[153,23],[177,-9],[188,28],[212,-37],[244,47],
+    [263,-49],[285,48],[302,-23],[311,-4],[318,21],[328,-33],
+    [337,-7],[347,16],[357,-20],[362,38]]],
+  [false,[[116,19],[136,-18],[158,8],[176,29],[209,-25],[225,34],
+    [251,20],[258,-20],[278,-19],[283,13],[299,1],[307,30],
+    [314,-23],[325,13],[340,-16],[346,2],[357,24]]],
+];
+for(const [east,pockets] of verges){
+  const random=seeded(east?0x752bd:0x548b7),city=DISTRICTS.kyo;
+  for(const [index,[depth,side]] of pockets.entries()){
+    const cx=city.x+(east?depth:side),cz=city.z+(east?side:-depth);
+    const neighbours=TREES.filter(t=>abs(t.x-cx)<25 && abs(t.z-cz)<25);
+    const stones=ROCKS.filter(t=>abs(t.x-cx)<25 && abs(t.z-cz)<25);
+    const across=6+random()*6,along=5+random()*4,lean=index%2 ? .40 : -.29;
+    const target=depth<170 ? 3 : depth>275 ? 9 : 5;
+    let planted=0;
+    for(let i=0;i<target*6 && planted<target;i++){
+      const a=i*2.4+random()*.7,r=Math.sqrt(random()),u=along*cos(a)*r,v=across*sin(a)*r+lean*u;
+      const x=cx+(east?u:v),z=cz+(east?v:-u);
+      if(neighbours.some(t=>(t.x-x)**2+(t.z-z)**2<(2.35+.23*t.h)**2) ||
+         stones.some(t=>(t.x-x)**2+(t.z-z)**2<(1+max(t.rx,t.rz))**2))continue;
+      const ground=terrainHeight(x,z);
+      if(!mountainGlade(x,z,ground))continue;
+      const family=[1,2,13,3][(index+(random()<.76?0:1))%4];
+      const form=family*TREE_FORMS_PER_FAMILY+Math.floor(random()*TREE_FORMS_PER_FAMILY);
+      const t={x,z,h:3.8+2.5*(1-r)+random()*3.2,kind:TREE_FAMILIES[family][0],form,seed:Math.floor(random()*1e8)};
+      // A small pine fits below both the view from the avenue to the fires
+      // and the view back down from the lookout. Test the crown at each size.
+      while(t.h>=2.25 && (inFireOpening(x,z,t.h,t.h*.56,trailBranchReach(t.h,form),ground) || hidesValley(t)))t.h*=.79;
+      if(t.h<2.25)continue;
+      TREES.push(t);neighbours.push(t);planted++;
+    }
+  }
+}
+// Open the temple approach and preserve the stage and summit views.
 for(let i=TREES.length-1;i>=0;i--){
   const t=TREES[i],{x,z}=t;
   if(kiyomizuClearing(x,z) || onTempleApproach(x,z,5.3) || hidesValley(t) ||

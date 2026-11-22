@@ -6,7 +6,7 @@ import { groundImpressions } from './scroll-paper.js';
 import * as THREE from './vendor/three.module.min.js';
 
 const asset = (name) => new URL('./assets/world/' + name + '.webp' +
-  (name === 'kyo-hills' ? '?v=okuribi-wash-1' : ''), import.meta.url).href;
+  (name === 'kyo-hills' ? '?v=kyoto-open-basin-1' : ''), import.meta.url).href;
 const paint = (color) => new THREE.Color(color);
 
 export function loadPigments() {
@@ -134,12 +134,14 @@ export function meadowMaterial(art) {
           vec3 painting=texture2D(hillPainting,vec2(survey.x,1.-survey.y)).rgb;
           // The broad hillside wash is legible from town. Walking up to it
           // brings out the grain of the soil and tapered marks on the rocks.
-          float bristle=clamp(luma*1.16+.79,.81,1.17);
+          // The panorama takes its colour from the continuous mountain wash.
+          // Weave and leaf litter only gain contrast within walking distance.
+          float bristle=clamp(.92+.32*luma,.94,1.07);
           float close=1.-smoothstep(16.,75.,distance(cameraPosition,inkPoint));
           float rock=smoothstep(.064,.28,incline);
           float fineInk=mix(brush*.65,mark.g*.63,rock);
-          vec3 hillside=painting*bristle*(1.-close*fineInk);
-          ground=mix(ground,hillside,vRidge*(.89-.17*close));
+          vec3 hillside=painting*mix(1.,bristle,close)*(1.-close*fineInk*.68);
+          ground=mix(ground,hillside,vRidge*(1.-.18*close));
         }
         diffuseColor.rgb *= ground;
       `,
