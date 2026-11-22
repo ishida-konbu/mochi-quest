@@ -12,7 +12,7 @@ const clearings=[
   ['fisher','敦賀外浜の漁師小屋',557,-1308,2.062],
 ];
 export const BATH_YARD=[2.35,4.25];
-export const KETTLE={radius:1.08,lip:1.15,board:.84,water:1.035};
+export const KETTLE={widthScale:1.22,radius:1.08,lip:1.15,board:.84,water:1.035};
 export const KETTLE_STEPS=[
   {z:2.65,top:.23},{z:2.15,top:.46},{z:1.65,top:.69},{z:1.23,top:.92},
 ];
@@ -29,7 +29,7 @@ for(const s of WAYSIDE_HUTS)for(let x=Math.floor((s.x-14)/32);x<=Math.floor((s.x
 export const nearbyHut=(x,z)=>cells.get(cell(x,z));
 export function clearingWeight(s,x,z){
   const dx=x-s.x,dz=z-s.z,c=Math.cos(s.yaw),k=Math.sin(s.yaw);
-  const edge=Math.max(Math.abs(dx*c-dz*k)-6.28,Math.abs(dx*k+dz*c-2.23)-5.30);
+  const edge=Math.max(Math.abs(dx*c-dz*k)-6.28,Math.abs(dx*k+dz*c-3.33)-6.40);
   const t=Math.max(0,Math.min(1,edge/2.3));
   return 1-t*t*(3-2*t);
 }
@@ -63,11 +63,12 @@ export function hutSolids(height,put){
     }
     // A real circular rim leaves a hollow over the submerged wooden footboard.
     const {x,z}=s.bath;
-    put(x,z,KETTLE.radius,KETTLE.radius,s.yaw,y+KETTLE.lip,'kettleRim',true);
-    put(x,z,1.00,1.00,s.yaw,y+KETTLE.board,'oval',true);
+    const scale=KETTLE.widthScale,radius=KETTLE.radius*scale;
+    put(x,z,radius,radius,s.yaw,y+KETTLE.lip,'kettleRim',true);
+    put(x,z,scale,scale,s.yaw,y+KETTLE.board,'oval',true);
     for(const step of KETTLE_STEPS){
-      const [sx,sz]=sitePoint(s.bath,0,step.z);
-      put(sx,sz,.58,.27,s.yaw,y+step.top,'floor',true);
+      const [sx,sz]=sitePoint(s.bath,0,step.z*scale);
+      put(sx,sz,.58*scale,.27*scale,s.yaw,y+step.top,'floor',true);
     }
   }
 }

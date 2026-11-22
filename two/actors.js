@@ -1635,7 +1635,7 @@ function makeObject(o, parent) {
   if(o.goemon) {
     mesh=new THREE.Group();
     const line=KETTLE.water-KETTLE.board;
-    addSpringSurface(mesh,1,1,line);
+    addSpringSurface(mesh,KETTLE.widthScale,KETTLE.widthScale,line);
     steam=particles('steam',14);
     steam.position.y=line;mesh.add(steam);
   } else if(o.retreat) {

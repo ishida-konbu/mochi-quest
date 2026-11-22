@@ -66,10 +66,13 @@ function circuit(northeast,northwest){
 // reciprocal traffic apart; each final approach runs port side to the quay.
 const tsuruga=SEAPORTS[0];
 function harbourLeg(id,from,waypoints,to){
-  return seaLane(id,[berth(from),...[
-    [-24,31.4],[-28,31.4],[-36,32],[-44,33.8],[-52,36.3],[-57,39.3],[-60,43],
-  ].map(([u,v])=>portPoint(from,u,v)),...waypoints,
-    ...[[49,51.5],[36,45.2],[24,39.2],[14,35.2],[4,32.8],[-4,31.65],[-10,31.4],[-15,31.4]].map(([u,v])=>portPoint(to,u,v)),berth(to)],false,true);
+  const castOff=from===sakai
+    ? [[-35,32.3],[-42,34.45],[-47.8,37.6],[-52,42],[-54.9,47.2]]
+    : [[-36,32],[-44,33.8],[-52,36.3],[-57,39.3],[-60,43]];
+  const approach=[[49,51.5],[36,45.2],[24,39.2],[14,35.2],[4,32.8],[-4,31.65],[-10,31.4],[-15,31.4]];
+  return seaLane(id,[berth(from),portPoint(from,-24,31.4),portPoint(from,-28,31.4),
+    ...castOff.map(([u,v])=>portPoint(from,u,v)),...waypoints,
+    ...approach.map(([u,v])=>portPoint(to,u,v)),berth(to)],false,true);
 }
 const eastbound=harbourLeg('clockwise-east',tsuruga,[
   portPoint(tsuruga,-69,49),portPoint(tsuruga,-84,52),[465,-1503],[590,-1518],[721,-1480],[926,-1309],[1010,-1070],
@@ -77,35 +80,35 @@ const eastbound=harbourLeg('clockwise-east',tsuruga,[
   [-798,649],[-1040,267],[-1113,-63],[-1090,-299],[-1052,-394],[-978,-449],[-814,-475],
   [-627,-510],[-489,-544],[-377,-535],[-293,-548],portPoint(sakai,64,78),portPoint(sakai,61,62),
 ],sakai);
+const sakaiChannel=[[-56,52],[-54.4,62],[-48,81],[-40,101],[-36,115]].map(([u,v])=>portPoint(sakai,u,v));
 const westbound=harbourLeg('counterclockwise-south',sakai,[
-  portPoint(sakai,-62,52),portPoint(sakai,-59,65),portPoint(sakai,-51,83),portPoint(sakai,-40,101),portPoint(sakai,-36,115),[-432,-611],[-591,-585],
+  ...sakaiChannel,[-432,-611],[-591,-585],
   [-811,-522],[-999,-444],[-1135,-302],[-1151,-59],[-1080,305],[-842,702],
   [-360,933],[185,1113],[648,1084],[788,779],[856,392],[1004,-112],
   [1072,-697],[1081,-1066],[960,-1354],[709,-1542],[510,-1562],[339,-1574],
   [187,-1567],[91,-1567],[68,-1563],[51,-1553],[42,-1540],[41,-1527],[49,-1514],[66,-1504],[88,-1501],[128,-1500],[187,-1504],[245,-1510],portPoint(tsuruga,67,58),
 ],tsuruga);
 const northwest=harbourLeg('clockwise-north',sakai,[
-  portPoint(sakai,-62,52),portPoint(sakai,-59,65),portPoint(sakai,-51,83),portPoint(sakai,-40,101),portPoint(sakai,-36,115),[-421,-631],[-583,-626],[-739,-669],
+  ...sakaiChannel,[-421,-631],[-583,-626],[-739,-669],
   [-857,-743],[-896,-898],[-869,-1050],[-825,-1197],[-683,-1306],[-478,-1396],
   [-239,-1473],[4,-1502],[149,-1504],[236,-1510],portPoint(tsuruga,67,58),
 ],tsuruga);
 const southwest=harbourLeg('counterclockwise-west',tsuruga,[
-  [405,-1513],[388,-1557],[249,-1568],[43,-1570],[-195,-1565],[-437,-1523],[-646,-1430],
+  portPoint(tsuruga,-68,53),portPoint(tsuruga,-73,66),portPoint(tsuruga,-73,79),
+  portPoint(tsuruga,-67,92),portPoint(tsuruga,-55,102),portPoint(tsuruga,-36,109),[249,-1568],[43,-1570],[-195,-1565],[-437,-1523],[-646,-1430],
   [-809,-1264],[-881,-1036],[-896,-850],[-827,-662],[-681,-567],[-522,-530],
   [-387,-516],[-298,-535],portPoint(sakai,67,81),portPoint(sakai,61,62),
 ],sakai);
+// A circuit spans two coastal ferry cycles, so a clear landing slot stays
+// clear on every lap. Passage times include the call at the departing quay.
+export const oceanPeriod=2*(crossingTimes[0]+crossingTimes[1]);
+const northernPassage=372,southernPassage=oceanPeriod-northernPassage;
 export const OCEAN_ROUTES=[
-  {direction:'clockwise',legs:[eastbound,northwest]},
-  {direction:'counterclockwise',legs:[southwest,westbound]},
+  {direction:'clockwise',legs:[eastbound,northwest],times:[southernPassage,northernPassage]},
+  {direction:'counterclockwise',legs:[southwest,westbound],times:[northernPassage,southernPassage]},
 ];
 export const SEAWAYS=[{id:'coastal-exchange',points:[...CROSSINGS[0].points,...CROSSINGS[1].points]},
   ...OCEAN_ROUTES.map(r=>({id:r.direction,points:[...r.legs[0].points,...r.legs[1].points]}))];
-const exchangePeriod=crossingTimes[0]+crossingTimes[1];
-export const oceanPeriod=2*exchangePeriod;
-const northernPassage=372;
-for(const route of OCEAN_ROUTES){
-  route.times=route.direction==='clockwise'?[oceanPeriod-northernPassage,northernPassage]:[northernPassage,oceanPeriod-northernPassage];
-}
 function fleet(ports,oldCircuit){
   return [
     ...ports.map((port,i)=>({id:port.id+'-trader',port,lane:null,color:i?'indigo':'red',index:i,moored:true})),
@@ -113,7 +116,7 @@ function fleet(ports,oldCircuit){
     ...[0,.45,.72].map((part,i)=>({
       id:'ocean-trader-'+i,color:i%2?'indigo':'red',index:4+i,
       ...(oldCircuit?{lane:oldCircuit,speed:8.6,hold:0,offset:part*oldCircuit.length/8.6}:
-        {route:OCEAN_ROUTES[i%2],hold:20,offset:[28,82,359][i]}),
+        {route:OCEAN_ROUTES[i%2],hold:20,offset:[35,76,400][i]}),
     })),
   ];
 }
@@ -140,7 +143,7 @@ export function vesselPose(ship,time,out={},lanes=CROSSINGS,bound=WORLD_BOUND){
       speed=lane.length/(times[leg]-hold-easing);
     }else phase=(time+ship.offset)%(lane.length/speed);
     const travel=lane.length/speed;
-    // Cubic end caps ease a laden hull away from and back to her mooring.
+    // Ramp the speed linearly while casting off and making fast.
     docked=hold>0 && phase<hold;
     const d=Math.max(0,phase-hold),w=easing;
     let along=speed*d;

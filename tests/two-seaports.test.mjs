@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
 import { terrainHeight,groundHeight,ROCKS,wrapDelta,CONNECTING_ROADS,constrainMove,WATER_Y } from '../two/terrain.js';
-import { SEAPORTS,portPoint,localPoint,DECK_Y,HOLD_Y,FIXED_BERTH } from '../two/seaport-layout.js';
-import { createVoyage,FLEET,SEAWAYS,CROSSINGS,crossingTimes,vesselPose } from '../two/ocean-voyage.js';
+import { SEAPORTS,portPoint,localPoint,DECK_Y,HOLD_Y,FIXED_BERTH,QUAY_CENTER,QUAY_LENGTH } from '../two/seaport-layout.js';
+import { createVoyage,FLEET,SEAWAYS,CROSSINGS,crossingTimes,vesselPose,hullWidth,oceanPeriod } from '../two/ocean-voyage.js';
 
 function walk(game,x,z){
   const p=game.state.player;
@@ -124,5 +124,97 @@ test('old harbour yards, mounts and ship passengers resume at the same place abo
     assert.equal(game.voyage.sample(p.x,p.z,p.y).pose.ship.index,ship);
     const again=createGame(game.save());
     assert.ok(again.restored);assert.ok(Math.hypot(again.state.player.x-p.x,again.state.player.z-p.z)<1e-5);
+  }
+});
+
+
+test('each offshore merchant circumnavigates the island and opens the gangboard at both ports',()=>{
+  const ocean=FLEET.filter(ship=>ship.route);
+  assert.deepEqual(ocean.map(s=>s.route.direction).sort(),['clockwise','clockwise','counterclockwise']);
+  for(const ship of ocean){
+    const start=oceanPeriod-ship.offset,home=vesselPose(ship,start);
+    const voyage=createVoyage(start),[x,z]=portPoint(home,0,-6.7);
+    const passenger={x,z,y:HOLD_Y+home.y,h:0,heading:home.yaw,mode:'normal',diveDepth:0};
+    let winding=0,last=home;
+    // A full revolution in map space distinguishes a circuit from a ferry
+    // retracing its outward course. A passenger remains in the same hold.
+    for(let step=1;step<=1500;step++){
+      voyage.update(start+oceanPeriod*step/1500,passenger);
+      const p=voyage.poses[ship.index],[u,v]=localPoint(p,passenger.x,passenger.z);
+      assert.ok(Math.hypot(u,v+6.7)<1e-5);
+      assert.ok(Math.hypot(p.x-last.x,p.z-last.z)<9,'continuous passage');
+      winding+=Math.atan2(last.x*p.z-last.z*p.x,last.x*p.x+last.z*p.z);
+      last={...p};
+    }
+    const sense=ship.route.direction==='clockwise'?1:-1;
+    assert.ok(Math.abs(winding-sense*2*Math.PI)<1e-7);
+    assert.ok(Math.hypot(last.x-home.x,last.z-home.z)<1e-6);
+    for(const [i,port] of SEAPORTS.entries()){
+      const t=start+(i?ship.route.times[0]:0)+.25,p=vesselPose(ship,t);
+      const berth=portPoint(port,-20,31.4);
+      assert.ok(p.docked && Math.hypot(p.x-berth[0],p.z-berth[1])<1e-7);
+      assert.ok(vesselPose(ship,t+19.5).docked && !vesselPose(ship,t+20).docked);
+      const saved=createGame().save(),[x,z]=portPoint(port,-20,23.7);
+      Object.assign(saved.player,{x,z,y:DECK_Y,h:0,grounded:true});saved.time=t;
+      const game=createGame(saved);
+      walk(game,...portPoint(p,-2,0));
+      const rider=game.state.player;
+      assert.equal(game.voyage.sample(rider.x,rider.z,rider.y).pose.ship.id,ship.id);
+      walk(game,x,z);
+      assert.ok(Math.abs(rider.y-DECK_Y)<.06);
+    }
+  }
+});
+
+// A conservative full-length hull rectangle tests the bows and sterns of
+// crossing ships as well as the beam between ships berthed side by side.
+function hullClearance(a,b){
+  const dx=wrapDelta(b.x-a.x),dz=wrapDelta(b.z-a.z);
+  const sin=Math.abs(Math.sin(b.yaw-a.yaw)),cos=Math.abs(Math.cos(b.yaw-a.yaw));
+  const length=16*(1+cos)+4.22*sin,width=4.22*(1+cos)+16*sin;
+  return Math.max(...[a.yaw,b.yaw].flatMap(yaw=>[
+    Math.abs(dx*Math.sin(yaw)+dz*Math.cos(yaw))-length,
+    Math.abs(dx*Math.cos(yaw)-dz*Math.sin(yaw))-width,
+  ]));
+}
+test('outward and homeward sailings clear every other hull, both quays and the deepwater channel',()=>{
+  for(let t=0;t<oceanPeriod;t+=.5){
+    const poses=FLEET.map(ship=>vesselPose(ship,t));
+    for(const p of poses.filter(p=>p.ship.route)){
+      for(const q of poses.slice(0,p.ship.index)){
+        if(Math.hypot(wrapDelta(p.x-q.x),wrapDelta(p.z-q.z))<60)
+          assert.ok(hullClearance(p,q)>2,`${p.ship.id} met ${q.ship.id} at ${t}`);
+      }
+      const port=SEAPORTS.find(port=>Math.hypot(p.x-port.x,p.z-port.z)<107);
+      for(const v of [-15.6,-10,-5,0,5,10,16])for(const side of [-1,1]){
+        const [x,z]=portPoint(p,side*hullWidth(v),v);
+        assert.ok(terrainHeight(x,z)<-1.4,`shoal at ${x}, ${z}`);
+        if(port){
+          const [u,w]=localPoint(port,x,z);
+          if(Math.abs(u-QUAY_CENTER)<QUAY_LENGTH/2)assert.ok(w>25.8,'hull grazed jetty');
+        }
+      }
+    }
+  }
+});
+
+test('passengers saved on the previous offshore circuit resume aboard the same vessel and storey',()=>{
+  // Surveyed from the single clockwise circuit used in editions nine and ten.
+  const journeys=[
+    [4,128.3,-2,3.5,DECK_Y,983.5592502,-621.0390868,3.61354587,-.03400484],
+    [5,943.5,0,-6,HOLD_Y,-127.6292013,988.2246775,.71083050,-1.93580603],
+    [6,53.4,1,-6.8,HOLD_Y,-993.3511196,-1176.0957214,.77473082,3.12886003],
+  ];
+  const snap=createGame().save();
+  for(const version of [9,10])for(const [ship,time,u,v,deck,x,z,y,bow] of journeys){
+    snap.version=version;snap.time=time;
+    Object.assign(snap.player,{x,z,y,h:0,heading:bow-.29,grounded:true});
+    const game=createGame(snap);assert.ok(game.restored);
+    const p=game.state.player,pose=game.voyage.poses[ship],spot=portPoint(pose,u,v);
+    assert.ok(Math.hypot(p.x-spot[0],p.z-spot[1])<1e-5);
+    assert.ok(Math.abs(p.y-deck-pose.y)<1e-5);
+    assert.ok(Math.abs(Math.sin(p.heading-pose.yaw+.29))<1e-5);
+    const again=createGame(game.save());assert.ok(again.restored);
+    assert.ok(Math.hypot(again.state.player.x-p.x,again.state.player.z-p.z)<1e-6);
   }
 });

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MERCHANT_ROUTES, ROAD_MERCHANTS, roadMerchantPose } from '../two/road-merchants.js';
 import { cartPosition } from '../two/trade-routes.js';
-import { bridgeAt, bridgeHeight, solidHeightAt, terrainHeight, waterDepth } from '../two/terrain.js';
+import { bridgeAt, bridgeHeight, groundHeight, roadSurfaceHeight, solidHeightAt, waterDepth } from '../two/terrain.js';
 
 test('each inter-village road carries staggered trading journeys in both directions',()=>{
   assert.equal(MERCHANT_ROUTES.length,11);
@@ -39,13 +39,18 @@ test('the entire trading circuit keeps the loads clear of water, scenery and bri
     const traveller={...ROAD_MERCHANTS.find(m=>m.route===route),offset:0};
     for(let t=0;t<=2*(route.length/traveller.speed+7);t+=.42){
       const {x,z}=roadMerchantPose(traveller,t);
-      const bridge=bridgeAt(x,z),floor=bridge?bridgeHeight(bridge,z):terrainHeight(x,z);
+      const bridge=bridgeAt(x,z),floor=bridge?bridgeHeight(bridge,z):roadSurfaceHeight(x,z);
       const where=route.origin+'―'+route.destination+' at '+[x,z].map(Math.round);
       const centre=cartPosition(route,t,traveller.speed);
       assert.ok(Math.hypot(x-centre.x,z-centre.z)<route.width/2,where);
+      assert.ok(Math.abs(groundHeight(x,z)-floor)<.18,where);
       assert.ok(waterDepth(x,z)<.08||bridge,where);
       if(bridge){crossings++;assert.ok(Math.abs(x-bridge.x)+.55<bridge.halfWidth,where);}
-      assert.ok(solidHeightAt(x,z,.57,floor)<=floor+.24,where);
+      // At a step the load can overhang the next tread while the feet
+      // still belong to the lower one. Compare with its surveyed top.
+      const adjacent=bridge?floor:Math.max(floor,roadSurfaceHeight(x-.57,z),
+        roadSurfaceHeight(x+.57,z),roadSurfaceHeight(x,z-.57),roadSurfaceHeight(x,z+.57));
+      assert.ok(solidHeightAt(x,z,.57,floor)<=adjacent+.24,where);
     }
   }
   assert.ok(crossings>100);

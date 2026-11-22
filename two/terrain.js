@@ -234,7 +234,7 @@ export function roadSurfaceHeight(x,z) {
 }
 export function waterSurfaceAt(x,z) {
   const hut=nearbyHut(x,z);
-  if(hut && (x-hut.bath.x)**2+(z-hut.bath.z)**2<1) return terrainHeight(hut.x,hut.z)+KETTLE.water;
+  if(hut && (x-hut.bath.x)**2+(z-hut.bath.z)**2<KETTLE.widthScale**2) return terrainHeight(hut.x,hut.z)+KETTLE.water;
   const site=nearbyRetreat(x,z);
   if(site && bathRadius(site,x,z)<1) return landHeight(site.x,site.z)+.22;
   return abs(x-SNOW_SPRING.x)<15 && abs(z-SNOW_SPRING.z)<10 && springRadius(x,z)<1 ? SNOW_SPRING.level : WATER_Y;

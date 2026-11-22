@@ -157,9 +157,9 @@ function charcoalRoof(s,p,seed){
     for(let row=0;row<4;row++){
       const v0=row*.207;
       const edge=u=>v0+.012*sin(u*49+row*1.35+seed)+.008*cos(u*79.5-row);
-      s.panel(fiber,row%2?'#ede1c6':'#f5e6c4',n,3,(u,v)=>at(u,edge(u)+v*.125,.044*(1-v)+.004),[0,.005,1,.44]);
-      s.panel(fiber,'#a28d6d',n,1,(u,v)=>{
-        const a=at(u,edge(u),.044);a[1]-=(1-v)*(.045+.018*sin(u*46+seed));return a;
+      s.panel(fiber,row%2?'#ede1c6':'#f5e6c4',n,3,(u,v)=>at(u,edge(u)+v*.125,.033*(1-v)+.003),[0,.02+row*.075,1,.18]);
+      s.panel(fiber,'#c3b091',n,1,(u,v)=>{
+        const a=at(u,edge(u),.033);a[1]-=(1-v)*(.035+.017*sin(u*46+seed));return a;
       },[0,.02,1,.09]);
     }
     const tips=hip?24:40;
@@ -241,19 +241,20 @@ function kiln(s,p,seed){
     return [cx+cos(a)*w*(1+.027*sin(3*a+z+seed)),.055+h*Math.pow(Math.max(0,sin(a)),.78)+.025*sin(a*4+z),
       z+.044*sin(a*3+seed)+.019*cos(a+z)];
   }
-  for(let i=0;i<rings.length-1;i++){
-    const lo=rings[i],hi=rings[i+1];
-    s.panel(clay,i>5?'#a68b73':'#c6ad8d',16,3,(u,v)=>{
-      const r=lo.map((val,j)=>val+(hi[j]-val)*u);return arc(r,v*PI);
-    },[i/8,0,1/8,1]);
+  const dome=new T.CatmullRomCurve3(rings.map(r=>new T.Vector3(...r)),false,'catmullrom',.42);
+  function domePoint(t,a,out=0){
+    const [z,w,h]=dome.getPoint(t).toArray();
+    return arc([z,w+out,h+out],a);
   }
+  s.panel(clay,'#deccb0',40,26,(u,v)=>domePoint(u,PI*v));
   const lip=rings.at(-1),inner=[1.75,.48,.66];
   s.panel(clay,'#af9272',16,2,(u,v)=>arc(inner.map((val,i)=>val+(lip[i]-val)*v),u*PI));
   s.panel(clay,'#514b43',16,4,(u,v)=>arc([1.74-v*.89,.477-.07*v,.651-.14*v],u*PI));
   s.panel(clay,'#413d37',10,3,(u,v)=>{
     const a=arc([.861,.405,.51],PI*u);return [cx+(a[0]-cx)*v,.03+(a[1]-.03)*v,.861];
   });
-  p.box('#554a40',cx,.03,1.30,.94,.04,.91);
+  p.box('#51483b',cx,.047,1.268,1.05,.055,1.04);
+  p.ball('#454138',cx,.22,.799,.51,.39,.097);
   for(let i=0;i<9;i++){
     const a=(.15+i*.108)*PI,st=arc(lip,a),ed=arc(inner,a+.015);
     cord(p,[st,[(st[0]+ed[0])*.5,(st[1]+ed[1])*.5,1.73],ed],.012,'#655747',5);
@@ -268,11 +269,13 @@ function kiln(s,p,seed){
     s.panel(clay,i===2?'#998978':'#ac977f',12,2,(u,v)=>[cx-.17+cos(u*tau)*(rad-.036*v),y+v*.22,-.81+sin(u*tau)*(rad-.028*v)]);
   }
   p.ball('#4c453c',cx-.17,2.20,-.81,.192,.012,.191);
-  // Charring travels in short radial tongue marks up from the firemouth.
-  for(let i=0;i<7;i++){
-    const j=(i+1)/8,a=PI*(.16+.70*j),b=arc([1.397,.78,1.008],a),c=arc([1.13,.88,1.18],a+.045);
-    p.stroke(i%2?'#89745e':'#786858',[b,[(b[0]+c[0])/2,(b[1]+c[1])/2+.011,(b[2]+c[2])/2],c],[.027,.023,.003],6);
+  // Soot fissures follow the dome itself, narrowing as the clay dries
+  // away from the firemouth. They sit directly on the earthen surface.
+  for(const [t,a,d] of [[.83,1.09,.06],[.71,1.24,-.08],[.80,1.85,.06],[.90,2.20,.05],[.57,.82,-.04]]){
+    const path=[[t,a],[t-.035,a+.026],[t-.074,a-.018],[t-.128,a+d]].map(([u,v])=>domePoint(u,v,.003));
+    p.stroke('#78644f',path,[.008,.010,.007,.001],7);
   }
+
 }
 function lumber(s,p,seed){
   for(const x of [2.81,4.87])pole(s,[x,.19,-1.43],[x,.16,.64],.094,.09);
@@ -292,6 +295,12 @@ function lumber(s,p,seed){
       s.panel(clay,'#d8c4a3',1,1,(u,v)=>[x+(a[0]+u*(b[0]-a[0])-x)*v,y+(a[1]+u*(b[1]-a[1])-y)*v,z+.004]);
     }
     if((row+col)%2===0){
+      for(const r of [.060,.121]){
+        const rings=Array.from({length:7},(_,i)=>{
+          const a=.22+i*.73+col;return [x+r*cos(a),y+r*.90*sin(a),z+.006];
+        });
+        p.stroke('#9c8266',rings,[.001,.003,.004,.004,.003,.002,.001],7);
+      }
       const a=end[2];p.stroke(bark,[[x+.02,y-.03,z+.011],[x+.05,y+.018,z+.010],[a[0],a[1],z+.01]],[.017,.009,.002],4);
     }
   }

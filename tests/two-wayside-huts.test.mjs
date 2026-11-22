@@ -36,7 +36,7 @@ test('sparse rural clearings have walk-in huts in woodland and on dry beaches',(
 test('each iron bath admits a walker via its steps and restores a saved bather who can walk out again',()=>{
   const g=createGame(),p=g.state.player;
   for(const hut of WAYSIDE_HUTS){
-    const b=hut.bath,approach=sitePoint(b,0,3.55),base=terrainHeight(hut.x,hut.z);
+    const b=hut.bath,approach=sitePoint(b,0,4.15),base=terrainHeight(hut.x,hut.z);
     arrive(p,approach);g.step(.02);
     assert.notEqual(g.nearest()?.target.goemon,hut);
     walk(g,[b.x,b.z]);assert.equal(g.nearest()?.target.goemon,hut);

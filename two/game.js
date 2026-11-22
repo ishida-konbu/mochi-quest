@@ -1,4 +1,4 @@
-import { WAYSIDE_HUTS } from './wayside-hut-layout.js';
+import { WAYSIDE_HUTS,KETTLE } from './wayside-hut-layout.js';
 import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
 import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
@@ -245,7 +245,7 @@ export function createGame(snapshot = null) {
   }
   function gap(target) { return distance(player, target); }
   function insideBath(target, leaving = false) {
-    if (target.goemon) return gap(target) <= (leaving ? 1.65 : .79);
+    if (target.goemon) return gap(target) <= KETTLE.widthScale*(leaving ? 1.65 : .79);
     if (target.retreat) return bathRadius(target.retreat, player.x, player.z) <= (leaving ? 1.07 : .92);
     if (target.grand) return springRadius(player.x, player.z) <= (leaving ? 1 : .88);
     return gap(target) <= (leaving ? 3.35 : 3.1);

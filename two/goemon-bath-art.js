@@ -63,7 +63,12 @@ function hearth(s,p,seed){
     return [-rad*cos(a),.022+.575*v,rad*sin(a)];
   };
   const mouth=.55;
-  s.panel(earth,'#cfbda1',48,6,(u,v)=>section(mouth+u*(tau-2*mouth),v));
+  const sectors=5;
+  for(let j=0;j<sectors;j++){
+    // Each flank picks up a few individual masonry blocks at their own scale.
+    s.panel(earth,'#e9dfcc',12,6,(u,v)=>section(mouth+(j+u)/sectors*(tau-2*mouth),v),
+      [.035*(j%3),.08+.04*(j%2),.9,.82]);
+  }
   // Cut an arched opening out of the stoke side. Its reveal runs into the
   // firebox so the coals and split fuel can be seen through the opening.
   const top=a=>.12+.355*sqrt(Math.max(0,1-(a/mouth)**2));
@@ -96,7 +101,13 @@ function hearth(s,p,seed){
     const a=mouth+.18+(tau-2*mouth-.33)*i/13,v=.16+.07*cos(i*2.9+seed),q=section(a,v);
     p.ball(i%3?'#988878':'#a79a84',q[0],q[1]-.046,q[2],.128+.04*sin(i*5),.085,.12,0,-a,.12*cos(i));
   }
-  p.ball('#534c43',-.6,.037,0,.71,.059,.59);
+  // A sooted back and stone hearth continue under the pot behind the fuel.
+  // From a low camera the firemouth looks into a chamber closed on three sides.
+  s.panel(earth,'#534c43',16,4,(u,v)=>{
+    const a=(u-.5)*PI;return [-.48+.57*cos(a),v*.52,.55*sin(a)];
+  });
+  s.panel(earth,'#585248',8,2,(u,v)=>[-1.20+1.30*u,.052,(2*v-1)*.54]);
+  p.ball('#635b4c',-.69,.071,0,.53,.026,.48);
   for(let j=0;j<10;j++){
     const x=-.91+(j%4)*.131,z=(Math.floor(j/4)-.8)*.13+.062*sin(j*4+seed);
     p.ball(j%3?'#7e4d3c':'#aa654a',x,.115+.023*cos(2*j),z,.105,.065,.079,0,j*.63,.10);
@@ -128,7 +139,7 @@ function steps(s,p,seed){
     for(const side of [-1,1]){
       const end=z+side*.255,start=z+side*.009;
       const tint=(i+seed)%3?'#d7c4a5':'#cbbba1';
-      s.panel(timber,tint,3,3,(u,v)=>[-half+u*half*2,y,start+(end-start)*v],[.14*i,0,.27,1]);
+      s.panel(timber,tint,3,3,(u,v)=>[-half+v*half*2,y,start+(end-start)*u],[.14*i,0,.27,1]);
       s.panel(timber,'#b8a183',4,1,(u,v)=>[-half+u*half*2,y-t+t*v,end],[0,.19,.96,.11]);
       for(const x of [-half,half])s.panel(timber,'#c4ad8c',2,1,(u,v)=>[x,y-t+t*v,start+u*(end-start)]);
       for(const x of [-.45,.45])p.ball('#736858',x,y+.002,(end+start)*.5,.018,.006,.020);
@@ -164,6 +175,7 @@ export function buildGoemonBath(variant=0){
     kettleSets.set(seed,[s.finish(),p.finish()]);
   }
   const group=new T.Group(),mats=bathMaterials();group.name='五右衛門風呂';
+  group.scale.set(KETTLE.widthScale,1,KETTLE.widthScale);
   for(const [i,g] of kettleSets.get(seed).entries()){
     const m=new T.Mesh(g,mats[i]);m.name=i?'羽釜の環と熾火':'鉄肌と火床';m.castShadow=m.receiveShadow=true;group.add(m);
   }
