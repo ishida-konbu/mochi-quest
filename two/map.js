@@ -234,7 +234,10 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   }
   // Keep the fire characters at their surveyed summits at both map scales.
   const marks=[[COURT,'裁'],[KITAYAMA,'大'],[HIGASHIYAMA,'福']];
-  for(const site of state.objects)if(site.retreat)marks.push([site,'♨']);
+  for(const site of state.objects){
+    if(site.retreat)marks.push([site,'♨']);
+    if(site.goemon)marks.push([site,site.goemon.kind==='charcoal'?'炭':'漁']);
+  }
   for(const [site,glyph] of marks){
     const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
     if(x<0||x>w||y<0||y>h)continue;

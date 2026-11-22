@@ -1,3 +1,4 @@
+import { inHutYard } from './wayside-hut-layout.js';
 import { inCapitalWard } from './kyo-layout.js';
 import { reservedScenery } from './retreat-layout.js';
 import * as THREE from './vendor/three.module.min.js';
@@ -354,7 +355,7 @@ function scatteredHerbs(p, art) {
       const dx=x-b.x,dz=z-b.z;
       return abs(dx*b.cos-dz*b.sin)<b.w/2+.80 && abs(dx*b.sin+dz*b.cos)<b.d/2+1.4;
     })))return;
-    if (reservedScenery(x,z) || y < WATER_Y - 0.08 || (z < -185 && seasonAt(x,z).snow>.45)) return;
+    if (inHutYard(x,z) || reservedScenery(x,z) || y < WATER_Y - 0.08 || (z < -185 && seasonAt(x,z).snow>.45)) return;
     const cell = HERB[kind],
       key = Math.floor(x / 68) + ',' + Math.floor(z / 68);
     let group = patches.get(key);
@@ -374,7 +375,7 @@ function scatteredHerbs(p, art) {
     }
   };
   const stone = (x, z, s, yaw, shade) => {
-    if (reservedScenery(x,z)) return;
+    if (inHutYard(x,z) || reservedScenery(x,z)) return;
     p.part(
       'rock',
       x,

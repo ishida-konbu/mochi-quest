@@ -30,7 +30,7 @@ test('historical six-district saves retain their stamps and acquire stocked new 
   const old=createGame().save();
   old.version=2; old.items.length=36;old.bikes.length=6;old.visited.push('market');
   const loaded=decode(encode(old).hash).game.save();
-  assert.equal(loaded.version,9);
+  assert.equal(loaded.version,11);
   assert.deepEqual(loaded.visited,old.visited);
   assert.equal(loaded.bikes.length,16);
 });
@@ -61,7 +61,7 @@ test('older travellers keep their place inside the relocated court and both shop
     const game=createGame(snap);
     assert.ok(game.restored);
     const next=game.save();
-    assert.equal(next.version,9);
+    assert.equal(next.version,11);
     const reloaded=createGame(next).save().player;
     for(const key of ['x','y','z','heading'])close(reloaded[key],next.player[key]);
     return next.player;

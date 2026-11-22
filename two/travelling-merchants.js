@@ -4,6 +4,7 @@ import { CONNECTING_ROADS, WATER_Y, riverZ, coastX, eastCoastX, terrainHeight, w
 import { courtCurtains, ferryCrew } from './kyo-procession-art.js';
 import { harnessBeast, capitalHorse } from './otsu-travellers.js';
 import { OX_SCALE } from './scroll-fauna.js';
+import { createRoadMerchants } from './road-merchants.js';
 import { illustratedMesh, scrollPigment } from './kyo-scrollwork.js';
 import { kosode, silkMaterial, SilkPanels } from './kosode.js';
 import { dressedRiceFace } from './mochi-model.js';
@@ -192,7 +193,7 @@ export function merchantPosition(index,time) {
   return {x:coast+(index===0?-1:1)*(23+12*cos(a)),z};
 }
 export function createTravellers(scene) {
-  const horse=capitalHorse(scene);
+  const horse=capitalHorse(scene), walkers=createRoadMerchants(scene);
   const carts=CONNECTING_ROADS.slice(0,2).map((road,i)=>{
     const cart=oxCarriage();
     scene.add(cart.root);
@@ -205,7 +206,8 @@ export function createTravellers(scene) {
     if(root.visible){root.position.set(player.x+dx,y,player.z+dz);root.rotation.y=yaw;}
     return root.visible;
   }
-  return (time,player)=>{
+  return (time,player,camera)=>{
+    walkers(time,player,camera);
     horse(time,player);
     for(const {route,root,wheels,ox,noble,speed,offset} of carts){
       const q=cartPosition(route,time,speed,offset), bed=terrainHeight(q.x,q.z);

@@ -1,3 +1,4 @@
+import { KETTLE } from './wayside-hut-layout.js';
 import { addFlumes } from './snow-bath.js';
 import { porcelain, makeMoonCakes } from './craftwork.js';
 import { SNOW_SPRING, wrapDelta } from './terrain.js';
@@ -1631,7 +1632,13 @@ export function animateNPC(record, n, t) {
 }
 function makeObject(o, parent) {
   let mesh, feature, steam, flumes;
-  if(o.retreat) {
+  if(o.goemon) {
+    mesh=new THREE.Group();
+    const line=KETTLE.water-KETTLE.board;
+    addSpringSurface(mesh,1,1,line);
+    steam=particles('steam',14);
+    steam.position.y=line;mesh.add(steam);
+  } else if(o.retreat) {
     mesh=new THREE.Group();
     addSpringSurface(mesh,o.retreat.rx,o.retreat.rz,.52,o.retreat);
     steam=particles('steam',30);
@@ -1775,7 +1782,7 @@ export function createActors(scene, renderer) {
     yield* prepareRigs(state);
     const kinds = new Set();
     for (const item of state.objects) {
-      const kind = item.grand ? 'snow-spring' : item.retreat ? 'wayside-spring' : item.type;
+      const kind = item.goemon ? 'goemon' : item.grand ? 'snow-spring' : item.retreat ? 'wayside-spring' : item.type;
       if (!objectModels[item.type] || kinds.has(kind)) continue;
       kinds.add(kind);
       const record = makeObject(item, root);
@@ -1885,7 +1892,7 @@ export function createActors(scene, renderer) {
         rec.feature.position.y = 0.395 + 0.011 * Math.sin(t * 2 + o.x);
         rec.feature.rotation.y = 0.15 * Math.sin(t * 0.8 + o.z);
       }
-      if (rec.steam) mistAt(rec.steam, t + 0.01 * o.x, true, o.grand ? 12.5 : o.retreat ? o.retreat.rx*.78 : 1.65);
+      if (rec.steam) mistAt(rec.steam, t + 0.01 * o.x, true, o.goemon ? .63 : o.grand ? 12.5 : o.retreat ? o.retreat.rx*.78 : 1.65);
       if (rec.flumes) rec.flumes(t);
       if (o.type === 'port') {
         rec.mesh.getObjectByName('park0').visible = o.bikes > 0;

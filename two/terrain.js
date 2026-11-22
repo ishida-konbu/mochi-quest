@@ -1,3 +1,4 @@
+import { nearbyHut, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
 import { HIGASHIYAMA, KITAYAMA, FIRE_COAST, eastRidgeHeight, northRidgeHeight, inFireMeadow } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
@@ -214,6 +215,11 @@ export function springRadius(x,z) {
 }
 export function terrainHeight(x,z) {
   const native = portTerrain(x,z,courtTerrain(x,z,landHeight(x,z),landHeight));
+  const hut=nearbyHut(x,z);
+  if(hut){
+    const w=clearingWeight(hut,x,z);
+    if(w>0)return native+(landHeight(hut.x,hut.z)-native)*w;
+  }
   const site=nearbyRetreat(x,z);
   if(site) return bathTerrain(site,x,z,native,landHeight(site.x,site.z)+.22);
   if (abs(x-SNOW_SPRING.x)>23 || abs(z-SNOW_SPRING.z)>16) return native;
@@ -222,6 +228,8 @@ export function terrainHeight(x,z) {
   return bed+(native-bed)*smooth(1.08,1.60,r);
 }
 export function waterSurfaceAt(x,z) {
+  const hut=nearbyHut(x,z);
+  if(hut && (x-hut.bath.x)**2+(z-hut.bath.z)**2<1) return terrainHeight(hut.x,hut.z)+KETTLE.water;
   const site=nearbyRetreat(x,z);
   if(site && bathRadius(site,x,z)<1) return landHeight(site.x,site.z)+.22;
   return abs(x-SNOW_SPRING.x)<15 && abs(z-SNOW_SPRING.z)<10 && springRadius(x,z)<1 ? SNOW_SPRING.level : WATER_Y;
@@ -892,6 +900,7 @@ for(const {hearths} of STREET_BEATS)for(const {x,z} of hearths)
 gateSolids(terrainHeight,putSolid);
 pilgrimageSolids(terrainHeight,putSolid);
 civicAndBathSolids(terrainHeight,putSolid);
+hutSolids(terrainHeight,putSolid);
 portSolids(putSolid);
 for(const stone of SPRING_STONES) {
   putSolid(SNOW_SPRING.x+stone.x,SNOW_SPRING.z+stone.z,stone.w*.84,stone.d*.84,stone.yaw,
@@ -934,6 +943,10 @@ function surfaceHeight(s, x, z, pad) {
     dz = z - s.z,
     a = dx * s.c - dz * s.s,
     b = dx * s.s + dz * s.c;
+  if (s.kind === 'kettleRim') {
+    const r2=a*a+b*b;
+    return r2<=(s.rx+.045+pad)**2 && r2>=(s.rx-.11-pad)**2 ? s.top : -Infinity;
+  }
   if (s.kind === 'oval' || s.kind === 'springRock') {
     const r2 = (a / (s.rx + pad)) ** 2 + (b / (s.rz + pad)) ** 2;
     if (r2 > 1) return -Infinity;

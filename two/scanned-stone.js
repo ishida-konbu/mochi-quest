@@ -84,7 +84,7 @@ export function setRiverStones(scene, objects) {
     contactRipples(scene, stones, shapes, clock);
     // Each bath has its own batch bounds. Only the spring in view spends
     // triangles on the lichen, chisel edges and dark stones at the waterline.
-    for (const pool of objects.filter((o) => o.type === 'onsen')) {
+    for (const pool of objects.filter((o) => o.type === 'onsen' && !o.goemon)) {
       const rim = shapes.map(() => []);
       const yaw = pool.heading || 0,
         cy = Math.cos(yaw),

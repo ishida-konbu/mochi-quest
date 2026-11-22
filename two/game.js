@@ -1,3 +1,4 @@
+import { WAYSIDE_HUTS } from './wayside-hut-layout.js';
 import { createVoyage,restoreHarbourTraveller } from './ocean-voyage.js';
 import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
 import { COURT, RETREATS, bathRadius, sitePoint } from './retreat-layout.js';
@@ -142,6 +143,10 @@ function makeWorld() {
     object('port',...harbour.port);
     objects.at(-1).region=harbour.id;
   }
+  for(const hut of WAYSIDE_HUTS){
+    object('onsen',hut.bath.x,hut.bath.z,hut.yaw);
+    objects.at(-1).goemon=hut;
+  }
   prepareVillageRoutes(npcs,objects);
   npcs.push(...makeScrollResidents(), ...makeRyuguResidents(), ...makeScrollFauna());
   return { objects, npcs };
@@ -219,6 +224,7 @@ export function createGame(snapshot = null) {
   }
   function gap(target) { return distance(player, target); }
   function insideBath(target, leaving = false) {
+    if (target.goemon) return gap(target) <= (leaving ? 1.65 : .79);
     if (target.retreat) return bathRadius(target.retreat, player.x, player.z) <= (leaving ? 1.07 : .92);
     if (target.grand) return springRadius(player.x, player.z) <= (leaving ? 1 : .88);
     return gap(target) <= (leaving ? 3.35 : 3.1);
@@ -247,6 +253,7 @@ export function createGame(snapshot = null) {
         if (target.type === 'onsen') {
           if (!insideBath(target)) continue;
           radius = Infinity;
+          if (target.goemon) label = '五右衛門風呂につかる';
           if (target.retreat) label = target.retreat.name + 'につかる';
           if (target.grand) label = '雪見の大露天風呂につかる';
         }
@@ -285,7 +292,7 @@ export function createGame(snapshot = null) {
     } else {
       beginActivity(pickup.activity, pickup.duration);
       const lines = { tea: '香ばしいお茶を、両手でひと口。', mitarashi: '炙った団子に、とろりと甘いみたらしのたれ。', tsukimi: '満月を眺めながら、月見団子をひとくち。', bath: 'ほかほかの湯に、ひと休み。', read: '夢中で漫画を読んでいる。', drink: '日本酒をごくごく。', eat: '背脂ラーメンをもぐもぐ。' };
-      message(target.retreat ? target.retreat.name+'に身を沈めた。' : lines[pickup.activity]);
+      message(target.goemon ? target.goemon.name+'の五右衛門風呂に身を沈めた。' : target.retreat ? target.retreat.name+'に身を沈めた。' : lines[pickup.activity]);
     }
   }
   function finishActivity() {
@@ -751,7 +758,7 @@ export function createGame(snapshot = null) {
     if (player.activity || player.h > 1.15 || player.mode === 'kusa') return;
     if (!player.mount && player.grounded) {
       for (const o of objects) {
-        if (!o.grand && !o.retreat && !['tsukimi','kyoTea','mitarashi'].includes(o.type) && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
+        if (!o.grand && !o.retreat && !o.goemon && !['tsukimi','kyoTea','mitarashi'].includes(o.type) && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
             gap(o) <= (o.type === 'onsen' ? 1.55 : .83)) { collect(o); return; }
       }
     }
@@ -864,7 +871,7 @@ export function createGame(snapshot = null) {
 
   function save() {
     return {
-      version: 9, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: 11, flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: objects.map(o => o.cooldown),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -875,14 +882,14 @@ export function createGame(snapshot = null) {
   function restore(data) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
     const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
-    if (!data || ![2,3,4,5,6,7,8,9].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    if (!data || ![2,3,4,5,6,7,8,9,10,11].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
     let p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
     // The original six districts occupy the prefix of the inventory. New
     // stops start stocked even when an old journey resumes on a borrowed bike.
     const old = data.version === 2;
     const savedPorts = old ? 6 : data.version <= 4 ? 10 : data.version <= 6 ? 14 : ports.length;
-    const validItemCounts = old ? [36] : data.version <= 4 ? [48,50] : data.version===5 ? [56] : data.version===6 ? [62] : [objects.length];
+    const validItemCounts = old ? [36] : data.version <= 4 ? [48,50] : data.version===5 ? [56] : data.version===6 ? [62] : data.version<=10 ? [64,objects.length] : [objects.length];
     if (!finite(data.time,0,1e9) || !Number.isSafeInteger(data.score) || data.score<0 ||
         !data.visited.every(id=>REGIONS.some(region=>region.id===id)) ||
         !point(p.x,p.z) || !finite(p.h,0,CEILING) || !finite(p.y,-80,CEILING+Math.max(160,terrainHeight(p.x,p.z)+20)) ||
@@ -916,8 +923,8 @@ export function createGame(snapshot = null) {
       t={...t,x:tx,z:tz,homeX,homeZ};
     }
     let visitor=restoreKyotoLot(p,data.version);
+    if(data.version>=7 && data.version<=10)visitor=restoreHarbourTraveller(visitor,data.time,data.version);
     if(data.version===7 || data.version===8){
-      visitor=restoreHarbourTraveller(visitor,data.time);
       const [x,z]=relocateOldQuay(t.x,t.z),[homeX,homeZ]=relocateOldQuay(t.homeX,t.homeZ);
       t={...t,x,z,homeX,homeZ};
     }

@@ -1,3 +1,6 @@
+import { WAYSIDE_HUTS, BATH_YARD } from './wayside-hut-layout.js';
+import { buildWaysideHut } from './wayside-hut-art.js';
+import { buildGoemonBath } from './goemon-bath-art.js';
 import { HIGASHIYAMA, KITAYAMA, eastRidgeHeight, northRidgeHeight } from './higashiyama.js';
 import { dressSeaports } from './seaports.js';
 import { createOceanShips } from './ocean-ship-art.js';
@@ -1717,6 +1720,26 @@ function driftingLeaves(scene) {
   };
 }
 
+function createWaysideHuts(scene) {
+  const models=new Map();
+  return player=>{
+    for(const s of WAYSIDE_HUTS){
+      const dx=wrapDelta(s.x-player.x),dz=wrapDelta(s.z-player.z);
+      let root=models.get(s);
+      if(dx*dx+dz*dz>190**2){if(root)root.visible=false;continue;}
+      if(!root){
+        root=buildWaysideHut(s.kind,s.variant);
+        const bath=buildGoemonBath(s.variant);
+        bath.position.set(BATH_YARD[0],0,BATH_YARD[1]);
+        root.add(bath);root.rotation.y=s.yaw;root.position.y=h(s.x,s.z);
+        models.set(s,root);scene.add(root);
+      }
+      root.visible=true;
+      root.position.x=player.x+dx;root.position.z=player.z+dz;
+    }
+  };
+}
+
 export function* prepareWorld(scene) {
   const atmosphere = createAtmosphere(scene);
   const paper = grain(),
@@ -1758,7 +1781,7 @@ export function* prepareWorld(scene) {
   dressRyugu(painter);
   yield;
   const updateShrines=pilgrimageLife(scene), updatePalace=createRyuguLife(scene);
-  const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene);
+  const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene), updateHuts=createWaysideHuts(scene);
   yield* painter.finish();
   // Each spatial batch lives in its nearest image of the repeating island.
   // Perspective and populated shorelines are preserved on crossing the ocean.
@@ -1785,7 +1808,8 @@ export function* prepareWorld(scene) {
         updateKyo(time,player,camera);
         updateCourt(time,player);
         updateShrines(time,player,camera);
-        updateTrade(time,player);
+        updateTrade(time,player,camera);
+        updateHuts(player);
         updateOcean(voyageTime,player);
         updatePalace(time,player,camera);
         updateForest(camera, player);
