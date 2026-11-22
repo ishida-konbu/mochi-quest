@@ -9,7 +9,8 @@ import { POUNDING } from './festival.js';
 import { createTempleBell } from './kiyomizu-bell.js';
 
 const places = Object.fromEntries(REGIONS.map(place => [place.id, place]));
-const loops = { bamboo: 27, river: 24, wind: 23, crickets: 25, shore: 29, paddy: 21 };
+const loops = { bamboo: 27, river: 24, wind: 23, crickets: 25, shore: 29, paddy: 21,
+  'inari-rain-drops': 19, 'inari-rain-curtain': 23 };
 const clamp = value => Math.min(1, Math.max(0, value));
 
 function reach(distance, radius) {
@@ -27,7 +28,7 @@ function panTo(p, source, yaw) {
   return .87 * (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / Math.max(3, Math.hypot(dx, dz));
 }
 
-export function landscapeMix(p, season = seasonAt(p.x, p.z)) {
+export function landscapeMix(p, season = seasonAt(p.x, p.z), weather) {
   const coast = reach(Math.max(0, shoreDistance(p.x, p.z)), 78);
   const bank = Math.max(0, Math.abs(p.z - riverZ(p.x)) - riverHalfWidth(p.x));
   const river = reach(bank, 64) * (1 - coast);
@@ -42,8 +43,13 @@ export function landscapeMix(p, season = seasonAt(p.x, p.z)) {
   const paddy = proximity(p, places.terraces, 99);
   const hush = (1 - .95 * season.moon) * (1 - .96 * season.snow);
   const high = reach(Math.max(0, p.h - 2), 38);
+  const rain = clamp(weather?.rain || 0), downpour = clamp(weather?.downpour || 0);
   return {
-    bamboo: (.27 + .13 * proximity(p, places.shrine, 95)) * hush * (1 - .75 * coast) * high,
+    // Birds recede behind the heavier curtain. Near drops remain distinct
+    // on the leaves even with the shrine melody playing underneath.
+    'inari-rain-drops': .145 * Math.sqrt(rain),
+    'inari-rain-curtain': .115 * downpour ** 1.4,
+    bamboo: (1 - .55 * rain) * (.27 + .13 * proximity(p, places.shrine, 95)) * hush * (1 - .75 * coast) * high,
     river: Math.max(.40 * Math.max(river, creek, .44*lakeshore) * high, .76 * falls),
     wind: .045 + .32 * season.snow + .16 * season.autumn + .09 * coast + .15 * (1 - high),
     crickets: (.29 * season.moon + .075 * season.autumn) * high,
@@ -206,8 +212,10 @@ export function createSoundscape(ctx, master) {
     const p = state.player;
     const climate=seasonAt(p.x,p.z);
     climate.moon=Math.max(climate.moon,kyoNight(state.time,p)*kyoInfluence(p.x,p.z));
-    const weights = landscapeMix(p,climate);
-    const roof = Number.isFinite(overheadHeight(p.x, p.z, p.y));
+    const weights = landscapeMix(p,climate,state.inariWeather);
+    // A narrow torii lintel catches drops but admits sound from both sides.
+    // Only a roof or bridge deck muffles the outdoor mix along the ascent.
+    const roof = Number.isFinite(overheadHeight(p.x, p.z, p.y, 0, state.regionId === 'inari'));
     inside=roof;
     const submerged=clamp((p.diveDepth||0)/4);
     outdoor.frequency.setTargetAtTime((roof?1250:14000)*(1-submerged)+690*submerged,now,.22);
@@ -224,8 +232,40 @@ export function createSoundscape(ctx, master) {
       if (volume > bathGain) { nearestBath = bath; bathGain = volume; }
     }
     load('footfalls', now);
+    if (state.regionId === 'inari') load('inari-thunder', now);
   }
 
+
+  let thunderVoice = null, lastThunderId = -1, nextThunder = 0;
+  function distantThunder(state, time, yaw, now, moving) {
+    const weather = state.inariWeather;
+    if (state.regionId !== 'inari') {
+      if (thunderVoice) { thunderVoice.stop(); thunderVoice = null; }
+      return;
+    }
+    // Play only when the travel clock crosses this thunderfront. A reopened
+    // menu, save, or camera cannot collect strikes that occurred in its absence.
+    if (!moving || !weather || weather.thunder <= .006 || weather.thunderId === lastThunderId ||
+        now < nextThunder || !(lastTime < weather.thunderAt && weather.thunderAt <= time)) return;
+    const buffer = samples.get('inari-thunder');
+    if (!buffer) return;
+    const source = ctx.createBufferSource(), amp = ctx.createGain(), pan = ctx.createStereoPanner();
+    const origin = {x: weather.thunderX, z: weather.thunderZ};
+    source.buffer = buffer;
+    source.playbackRate.value = .88 + .22 * ((weather.thunderId >>> 8) % 101) / 100;
+    amp.gain.value = .145 * weather.thunder * (inside ? .48 : 1);
+    pan.pan.value = .56 * panTo(state.player, origin, yaw);
+    source.connect(amp).connect(pan).connect(outdoor);
+    oneShots.add(source);
+    source.onended = () => {
+      oneShots.delete(source); source.disconnect(); amp.disconnect(); pan.disconnect();
+      if (thunderVoice === source) thunderVoice = null;
+    };
+    thunderVoice = source;
+    lastThunderId = weather.thunderId;
+    nextThunder = now + 14;
+    source.start(now);
+  }
 
   function landmarks(state, time, yaw, now) {
     const p = state.player;
@@ -277,6 +317,7 @@ export function createSoundscape(ctx, master) {
       nextMix = now + .14;
     }
     const moving = lastTime !== null && time > lastTime && time - lastTime < .4;
+    distantThunder(state, time, yaw, now, moving);
     templeBell.update(state.bellStrike, p, yaw, state.time, inside);
     if (!moving) lastBeat = null;
     landmarks(state, time, yaw, now);
@@ -322,6 +363,7 @@ export function createSoundscape(ctx, master) {
     templeBell.stop();
     for (const layer of [...layers, ...scores]) stopLayer(layer);
     for (const source of oneShots) source.stop();
+    thunderVoice = null;
     lastTime = lastBeat = null;
     travelled = nextMix = 0;
   }

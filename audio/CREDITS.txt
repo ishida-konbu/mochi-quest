@@ -64,6 +64,13 @@ CC0 1.0 Universal で提供します。
 青銅の倍音を重ね、撞木と三条通知にそれぞれの打音をつけています。
 梵鐘の音色と山間の反響の合成コードも CC0 1.0 Universal で提供します。
 
+伏見稲荷のお天気雨
+inari-rain-drops.mp3　木の葉や石に落ちる雨粒
+inari-rain-curtain.mp3　斜面を移動する強い雨脚
+inari-thunder.mp3　山肌を伝って幾度か返る遠雷
+三つの音源は tools/compose-inari-rain.py によるオリジナルの合成音です。
+音源と生成コードを CC0 1.0 Universal で提供します。
+
 【四季十七景の小品】
 十七の地域のBGMは Mochi Quest 2 のためのオリジナル楽曲です。
 箏と三味線の撥弦、尺八風の息と揺り、鉦、太鼓を合成し、各曲を八小節で構成しています。

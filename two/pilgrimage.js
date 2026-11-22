@@ -5,12 +5,13 @@ import { sculpture } from './pilgrimage-pigment.js';
 import { drawDaibutsu } from './daibutsu.js';
 import { paintPeachCliffs } from './pilgrimage-cliffs.js';
 import { foxParties } from './pilgrimage-foxes.js';
+import { createInariRain } from './inari-rain.js';
 import { brushWash, surfaceGrain } from './scroll-sculpt.js';
 import * as T from './vendor/three.module.min.js';
 import { terrainHeight, terrainMeshHeight, seeded, wrapDelta } from './terrain.js';
 import { DAIBUTSU, PEACH_TREES, nearbyPeaches, WEDDING_SITES, weddingPoint, MOON_GATE, INARI_GATES, INARI_SANCTUARY, TEMPLE_COLUMNS } from './pilgrimage-layout.js';
 
-const { sin,cos,PI,abs,hypot,min,max } = Math, TAU=PI*2;
+const { sin,cos,PI,abs,min } = Math, TAU=PI*2;
 const vec=(...v)=>new T.Vector3(...v);
 const ochre='#be9457', vermilion='#cd492d';
 
@@ -375,33 +376,6 @@ function banks(scene,map,sites,tint,alpha){
     batch.count=count;batch.instanceMatrix.needsUpdate=true;
   };
 }
-function sunshower(scene){
-  const N=170, pos=new Float32Array(N*6), starts=[], rng=seeded(36246);
-  for(let j=0;j<N;j++)starts.push([rng(),rng(),rng(),rng()]);
-  const g=new T.BufferGeometry(),a=new T.BufferAttribute(pos,3).setUsage(T.DynamicDrawUsage);
-  g.setAttribute('position',a);
-  const mat=new T.LineBasicMaterial({color:'#e5dabb',transparent:true,opacity:.45,depthWrite:false});
-  const rain=new T.LineSegments(g,mat);rain.frustumCulled=false;scene.add(rain);
-  return (time,player,active)=>{
-    let weight=0;
-    if(active) for(const [i,s] of WEDDING_SITES.entries()){
-      const dx=wrapDelta(s.x-player.x),dz=wrapDelta(s.z-player.z);
-      const blend=T.MathUtils.smoothstep(1-hypot(dx/(s.rx+16),dz/18),0,.55);
-      weight=max(weight,blend*(.57+.39*sin(time*.095+i*2.093)));
-    }
-    rain.visible=weight>.038;
-    if(!rain.visible)return;
-    mat.opacity=.53*weight;
-    rain.position.set(player.x,player.y,player.z);
-    for(const [j,[u,v,w,speed]] of starts.entries()){
-      const h=((v+time*(-.67-speed*.37))%1+1)%1, x=(u-.5)*19+h*.83, z=(w-.5)*20, y=h*10-.5;
-      const idx=j*6;
-      pos[idx]=x;pos[idx+1]=y;pos[idx+2]=z;
-      pos[idx+3]=x+.043;pos[idx+4]=y+.27+.15*speed;pos[idx+5]=z-.017;
-    }
-    a.needsUpdate=true;
-  };
-}
 function fallingPetals(scene) {
   const shape=new T.Shape();
   shape.moveTo(0,-.58);shape.bezierCurveTo(-.53,-.1,-.64,.77,0,.46);
@@ -447,11 +421,11 @@ export function pilgrimageLife(scene){
   }
   const cloud=banks(scene,map,clouds,'#f0ece3',.64);
   const orchard=createPeachOrchard(scene),gate=gateBlossoms(scene);
-  const foxes=foxParties(scene), rain=sunshower(scene), petals=fallingPetals(scene);
-  return (time,player,camera)=>{
+  const foxes=foxParties(scene), rain=createInariRain(scene), petals=fallingPetals(scene);
+  return (time,player,camera,weather)=>{
     orchard(camera);gate(camera);
     const nearInari=abs(wrapDelta(player.x-DISTRICTS.inari.x+60))<260 && abs(wrapDelta(player.z-DISTRICTS.inari.z-82))<217;
     cloud(time,player,nearInari);foxes(time,player,nearInari,camera);
-    rain(time,player,nearInari);petals(time,player);
+    rain(time,player,camera,weather);petals(time,player);
   };
 }

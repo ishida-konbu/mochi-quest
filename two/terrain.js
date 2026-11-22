@@ -1541,11 +1541,13 @@ function lowerFace(item,top) {
   if (item.kind === 'toriiCrown') return top-item.thickness;
   return item.bottom;
 }
-export function overheadHeight(x, z, feet, radius = 0) {
+export function overheadHeight(x, z, feet, radius = 0, roofsOnly = false) {
   const bridge = bridgeAt(x,z);
   const deck = bridge ? bridgeHeight(bridge,z) : -Infinity;
   let ceiling = feet < deck - .34 ? deck - .235 : Infinity;
   for (const item of cells.get(cell(x,z)) || []) {
+    if (roofsOnly && item.kind !== 'roof' && item.kind !== 'awning' &&
+        item.kind !== 'pagodaEave' && item.kind !== 'ceiling') continue;
     const top = surfaceHeight(item,x,z,item.kind==='slab' ? 0 : radius);
     if (top <= feet + .34) continue;
     const bottom = lowerFace(item,top);

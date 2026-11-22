@@ -2036,7 +2036,7 @@ export function* prepareWorld(scene) {
   const leaves = driftingLeaves(scene);
   return {
     textures: [...Object.values(art), atmosphere.panorama],
-    update(time, player, camera, voyageTime=time, bellStrike=null) {
+    update(time, player, camera, voyageTime=time, bellStrike=null, inariWeather=null) {
       water.update(time,player);
       painter.sway.value = time;
       if (camera) {
@@ -2045,7 +2045,7 @@ export function* prepareWorld(scene) {
         updateKiyomizu(voyageTime,player,bellStrike);
         updateLamps(time,player);
         updateCourt(time,player);
-        updateShrines(time,player,camera);
+        updateShrines(time,player,camera,inariWeather);
         updateTrade(time,player,camera);
         updateHuts(player);
         updateWaterfalls(time,player,camera);

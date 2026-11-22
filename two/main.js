@@ -22,6 +22,7 @@ import { WAYSIDE_SITES } from './wayside-hut-layout.js';
 import { REGIONS, regionAt, WATER_Y, terrainHeight, shoreDistance, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
+import { inariWeatherAt } from './inari-weather.js';
 import { createAudio } from '../sound.js';
 import { MODES, EMOTES, HELP, glyph, paintGlyphs, drawFace } from './interface.js';
 import { loadMapPaper, drawMap, mapHit, mapCoordinates, labels, regionPort, mappedBath } from './map.js';
@@ -87,6 +88,7 @@ const { game, settings: savedSettings, status: transferStatus } = await startJou
 let hasJourney = game.restored;
 const state = game.state,
   p = state.player;
+state.inariWeather = inariWeatherAt(p.x, p.z, state.time, state.flightSeed);
 const audio = createAudio(createSoundscape);
 let audible = savedSettings.sound !== false;
 let yaw = Number.isFinite(savedSettings.yaw) ? savedSettings.yaw : 0;
@@ -935,11 +937,12 @@ function frame(now) {
   } else photoTime += delta;
   updateCamera(delta);
   sun.target.position.set(p.x, p.y, p.z);
-  applyClimateLights(hemisphere, sun, bounce, p, photoMode ? photoTime : state.time);
-  wake(p, photoMode ? photoTime : state.time);
   const sceneTime = photoMode ? photoTime : state.time;
+  inariWeatherAt(p.x, p.z, sceneTime, state.flightSeed, state.inariWeather);
+  applyClimateLights(hemisphere, sun, bounce, p, sceneTime);
+  wake(p, sceneTime);
   audio.updateWorld(state, sceneTime, yaw, photoMode);
-  world.update(sceneTime, p, camera, state.time, state.bellStrike);
+  world.update(sceneTime, p, camera, state.time, state.bellStrike, state.inariWeather);
   meadow(sceneTime, p, camera);
   // Keep the photographic pose alive while the travel clock is paused.
   if (photoMode) {
@@ -1017,7 +1020,7 @@ async function boot() {
     await actors.prepare(state);
     bathReflection = createBathReflection(renderer, scene, actors.hero);
     actors.update(state, 0, camera);
-    world.update(state.time, p, camera);
+    world.update(state.time, p, camera, state.time, state.bellStrike, state.inariWeather);
     meadow(state.time, p, camera);
     await Promise.all([
       ink.prepare(scene),
