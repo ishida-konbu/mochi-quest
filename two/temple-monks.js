@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.min.js';
+import { connectSceneHands } from './story-hands.js';
 import { batchActorParts } from './actors.js';
 import { townPortrait, paintedSilk } from './emaki-costume.js';
 import { monasticHabit, townHand } from './heian-dress.js';
@@ -122,7 +123,8 @@ function makeMonk(monk,parent,habit,sandal){
     // the hands change their grip on the broom or prayer beads.
     const basis=new T.Quaternion().setFromUnitVectors(up,axis);
     const frame=new T.Matrix4().makeRotationFromQuaternion(basis);
-    arms.push({joint,length,bind:axis,frame,inverse:frame.clone().transpose()});
+    const palm=new T.Group();palm.position.copy(axis).multiplyScalar(length);joint.add(palm);
+    arms.push({joint,length,bind:axis,frame,inverse:frame.clone().transpose(),palm});
     joint.matrixAutoUpdate=false;
   }
   let prop,cord;
@@ -130,7 +132,12 @@ function makeMonk(monk,parent,habit,sandal){
   if(monk.duty==='beads')prop=paintedPart(torso,rosary);
   if(monk.duty==='sutra'){prop=sutraBook();torso.add(prop);}
   if(monk.duty==='bell'){cord=bellCord();root.add(cord.mesh);}
-  return {monk,root,torso,neck,arms,feet,prop,cord,at:{}};
+  const actor={monk,root,torso,neck,arms,feet,prop,cord,at:{},targets:{}};
+  if(monk.duty==='bell')connectSceneHands(root,{
+    right:{grip:arms[1].palm,tool:cord.mesh},left:{grip:arms[0].palm},
+    pose(targets){actor.targets=targets;}
+  });
+  return actor;
 }
 
 const stretch=new T.Matrix4();
@@ -202,7 +209,7 @@ export function createTempleMonks(scene){
     }
     precinct.position.set(player.x+dx-KIYOMIZU.x,0,player.z+dz-KIYOMIZU.z);
     for(const a of actors){
-      const {monk,root,torso,neck,feet}=a;
+      const {monk,root,torso,neck,feet,arms}=a;
       const at=templeMonkPose(monk,time,a.at);
       root.position.set(at.x,at.y,at.z);root.rotation.y=at.yaw;
       for(const [i,side] of [-1,1].entries()){
@@ -215,6 +222,13 @@ export function createTempleMonks(scene){
       neck.rotation.x=sweep?.14+.046*Math.cos(time*2.25):bell?.035-.17*pull:sutra?.16+.055*Math.cos(.8*time):.06;
       neck.rotation.y=sweep?.12*Math.sin(time*2.25):sutra?.10*Math.sin(time*.53):.07*Math.sin(time*.64);
       poseHands(a,time,pull,anchor);
+      for (const [side,target] of Object.entries(a.targets)){
+        if(!target)continue;
+        const arm=arms[side==='right'?1:0];
+        const local=torso.worldToLocal(grip.copy(target));
+        local.sub(arm.joint.position).clampLength(.08,arm.length*1.08).add(arm.joint.position);
+        guideHand(arm,local);
+      }
     }
   };
 }

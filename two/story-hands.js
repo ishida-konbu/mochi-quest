@@ -3,7 +3,8 @@ import * as T from './vendor/three.module.min.js';
 // The old residents carry their sleeves, fingers and tools in one upper-arm
 // group. Bind the sleeve and paw to the measured elbow only for an actor that
 // takes part in a close study. Geometry on other copies stays untouched.
-const bindings=new WeakMap();
+const bindings=new WeakMap(),sceneHands=new WeakMap();
+export function connectSceneHands(actor,rig){sceneHands.set(actor,rig);}
 const vec=a=>new T.Vector3(...a);
 const sides=['right','left'];
 const origin=new T.Vector3(), upper=new T.Vector3(), lower=new T.Vector3(), point=new T.Vector3();
@@ -53,21 +54,29 @@ export function connectStoryHands(root,type,limbs){
   }
   bindings.set(root,hands);
 }
-export function storyGrip(root,side='right'){return bindings.get(root)?.[side]?.grip??flexBindings.get(root)?.[side]?.grip??null;}
-export function storyTool(root,side='right'){return bindings.get(root)?.[side]?.tool??flexBindings.get(root)?.[side]?.tool??null;}
+export function storyGrip(root,side='right'){return bindings.get(root)?.[side]?.grip??flexBindings.get(root)?.[side]?.grip??sceneHands.get(root)?.[side]?.grip??null;}
+export function storyTool(root,side='right'){return bindings.get(root)?.[side]?.tool??flexBindings.get(root)?.[side]?.tool??sceneHands.get(root)?.[side]?.tool??null;}
 const want=new T.Vector3(),direction=new T.Vector3(),normal=new T.Vector3(),elbowNew=new T.Vector3(),aim=new T.Vector3(),foreBind=new T.Vector3();
 const rotation=new T.Quaternion();
 export function poseStoryHands(root,targets={}){
+  const sceneRig=sceneHands.get(root);
+  if(sceneRig){sceneRig.pose(targets);return true;}
   const hands=bindings.get(root);
   if(!hands){
     const limbs=flexBindings.get(root);if(!limbs)return false;
-    for(const side of sides)if(limbs[side])placeAppendage(limbs[side],targets?.[side]);
+    for(const side of sides)if(limbs[side]){
+      const first=targets?.[side] && !limbs[side].bones;
+      placeAppendage(limbs[side],targets?.[side]);
+      if(first)root.userData.rigRevision=(root.userData.rigRevision || 0)+1;
+    }
     return true;
   }
   for(const side of sides){
     const hand=hands[side],target=targets?.[side];
     if(!target){hand.hinge?.quaternion.identity();continue;}
-    if(!hand.hinge)bindArm(hand);
+    if(!hand.hinge){
+      bindArm(hand);root.userData.rigRevision=(root.userData.rigRevision || 0)+1;
+    }
     const {joint,hinge,elbow,grip,rest,l1,l2}=hand;
     joint.parent.updateWorldMatrix(true,false);
     want.copy(target);joint.parent.worldToLocal(want).sub(joint.position);

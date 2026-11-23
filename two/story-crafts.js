@@ -999,11 +999,12 @@ export function createStoryEvidence(code,id){
       templates.set(key,variant||createStoryEvidence(code));
     }
     const instance=templates.get(key).clone();
+    instance.userData.storyEvidence=code;
     return instance.userData.joinedLabels?tieLabels(instance):instance;
   }
   if(!evidence[code])throw new RangeError('Unknown story evidence '+code);
   if(!templates.has(code)){
-    const g=new T.Group();evidence[code](g);templates.set(code,g);
+    const g=new T.Group();g.userData.storyEvidence=code;evidence[code](g);templates.set(code,g);
   }
   return templates.get(code).clone();
 }
@@ -1176,6 +1177,7 @@ function serving(parent,n,x,z,y,count=2,scale=1){
   const arrangement=n===9&&count>1?[[0,.00,.058,.78],[-.116,.00,-.038,.73],[.10,.00,-.070,.78],[.004,.135,-.017,.67]]:
     count===1?[[0,0,0,.97]]:[[-.113,0,.037,.70],[.122,0,-.039,.72]];
   for(const [dx,dy,dz,s] of arrangement)add(group,cake(n),dx,vessel.userData.floor+.002+dy,dz,n===10?.13:(dx>0?.23:-.26),s);
+  group.userData.storyEvidence='food/'+n;
   add(parent,group,x,y,z,.13,scale);
 }
 function arrangement(n,chapter){
@@ -1223,6 +1225,7 @@ export function createStoryStillLife(sceneNumber,chapterNumber=0,place){
     else if(n===12){main=new T.Group();teaAndBundle(main);}
     else if(n===13){main=new T.Group();waterBowl(main);}
     else main=createStoryEvidence(exhibits[0],n===8?'prototype':undefined);
+    main.userData.storyEvidence=exhibits[0];
     add(g,main,-.56,y,-.035,-.08,1.20);
     add(g,createStoryEvidence(exhibits[1]),.17,y,.195,-.16,.91);
     if(exhibits[2])add(g,createStoryEvidence(exhibits[2]),.77,y,-.028,-.27,.88);

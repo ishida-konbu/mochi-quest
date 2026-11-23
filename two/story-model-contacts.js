@@ -64,7 +64,7 @@ export function createModelContacts(root,skip=null) {
     return target;
   }
   function collect(node) {
-    if (!node.visible || node===skip) return;
+    if (node===skip) return;
     const outline=node.isMesh && node.geometry===node.parent?.geometry && node.material.side===BackSide;
     if (node.isMesh && !outline && node.material.visible && !(node.material.transparent && !node.material.depthWrite)) {
       if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
@@ -74,12 +74,18 @@ export function createModelContacts(root,skip=null) {
     for (const child of node.children) collect(child);
   }
   collect(root);
-  let lastPose=-1;
+  let lastPose=-1,rigRevision=root.userData.rigRevision;
   return (x,z,feet,height,radius,pose)=>{
+    if(rigRevision!==root.userData.rigRevision){
+      meshes.length=0;collect(root);rigRevision=root.userData.rigRevision;lastPose=-1;
+    }
     if (pose!==lastPose) {
       root.updateWorldMatrix(true,false);
       root.updateMatrixWorld(true);
       for (const {node,box,matrices} of meshes) {
+        let ancestor=node;
+        while(ancestor && ancestor!==root && ancestor.visible)ancestor=ancestor.parent;
+        if(ancestor!==root){box.makeEmpty();continue;}
         if (matrices) {
           for (const [i,bone] of node.skeleton.bones.entries()) {
             matrices[i].multiplyMatrices(node.matrixWorld,node.bindMatrixInverse)

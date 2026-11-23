@@ -227,6 +227,12 @@ export function createStoryCharacter(character,{festivalGuest=false}={}){
     pose=(t,engaged,action)=>{
       poseStoryHands(root);
       n.gesture=engaged?.33:.04;animateNPC(model,n,t);
+      if (root.userData.storyPerforming && artisan) {
+        // Leave the ordinary ladle, pestle or brush stroke while using the
+        // evidence. A small forward lean keeps the near hand in view.
+        model.limbs.torso.rotation.set(.045,0,.012*sin(t));
+        model.limbs.head.rotation.set(.06,.055*sin(t*.9),0);
+      }
       if(action?.effort && artisan){model.limbs.torso.rotation.x+=.095*action.effort;model.limbs.head.rotation.x+=.09*action.effort;}
       if(old){model.limbs.head.rotation.x+=.16;model.limbs.torso.rotation.x+=.12;}
       if(artisan && engaged){model.limbs.head.rotation.y*=.45;model.limbs.head.rotation.x+=.08;}

@@ -1398,3 +1398,74 @@ dialog[data-performance] .sheet {display:none}
 .scene-controls .scene-button:last-child {margin-left:auto;background:#384c43;border-color:#384c43;color:#fff7e5}
 @media(max-width:520px){.scene-caption{width:calc(100% - 16px);margin-bottom:max(7px,env(safe-area-inset-bottom));padding:8px 10px}.scene-title{font-size:13px}.scene-controls{gap:4px}.scene-button{min-height:40px;font-size:12px;padding-inline:7px}.scene-line{margin:5px 0 7px}}
 @media(max-height:480px){.scene-caption{padding:4px 12px;margin-bottom:3px;max-height:46dvh}.scene-line{font-size:14px;margin:2px 0}.scene-button{min-height:30px}.scene-controls{padding-top:3px}.scene-top{padding-block:4px}}
+
+/* Paper balloons share the same perspective and travel camera as the figures. */
+.speech-layer {position:absolute;inset:0;z-index:3;pointer-events:none;}
+.speaker-sign {
+  position:absolute;top:0;left:0;min-width:27px;height:20px;padding:0 6px 4px;
+  border:1.6px solid #40382b;border-radius:53% 47% 49% 45%;
+  background:#faf3df;color:#41392a;box-shadow:0 1px 2px #41392a35;
+  font:900 15px/14px var(--min);pointer-events:auto;
+}
+.speaker-sign::after,.world-speech::after {
+  content:'';position:absolute;bottom:-4px;left:48%;width:6px;height:6px;
+  background:#faf3df;border:solid #40382b;border-width:0 1.5px 1.5px 0;transform:skew(-16deg) rotate(41deg);
+}
+.speaker-sign:disabled {opacity:.9;pointer-events:none;}
+.speaker-sign:not(:disabled) {border-color:#803d2b;box-shadow:0 0 0 2px #f9f0d6aa;}
+.world-speech {
+  position:absolute;top:0;left:0;display:grid;grid-template-columns:4rem minmax(0,1fr);gap:12px;
+  width:min(365px,calc(100% - 16px));padding:12px 18px 13px 12px;
+  color:#302c24;background:#fbf4e1 url('../assets/ui/paper.png');border:1.5px solid #463c30;
+  border-radius:19px 15px 18px 13px / 15px 18px 15px 20px;box-shadow:1px 3px 0 #44392e2b,0 4px 12px #352c211d;
+}
+.world-speech::after {width:11px;height:11px;left:var(--tail,50%);bottom:-7px;background:#f9f1df;}
+.world-speech.outside-view::after {display:none;}
+.speaker-portrait {
+  align-self:start;aspect-ratio:1;border:1px solid #ad9b7b;border-radius:50% 47% 49% 45%;
+  background-color:#e5d8bb;background-image:url('./assets/actors/portraits.webp');background-size:800% 800%;background-repeat:no-repeat;
+}
+.speaker-words {align-self:center;min-width:0;}
+.speaker-byline {display:flex;align-items:baseline;gap:.55em;flex-wrap:wrap;padding-right:10px;}
+.speaker-name {color:#833f30;font:700 17px/1.4 var(--min);letter-spacing:.08em;}
+.courier-line .speaker-name {color:#355d52;}
+.speaker-trade {color:#665a46;font:500 10px/1.4 var(--sans);}
+.spoken-line {margin:3px 0 0;font:600 15px/1.66 var(--min);overflow-wrap:anywhere;line-break:strict;}
+.speech-close {position:absolute;right:0;top:0;width:28px;height:28px;padding:0;color:#6d604c;font:19px/1 var(--sans);pointer-events:auto;}
+.dialogue-replies {
+  position:absolute;bottom:max(19px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;
+  width:min(615px,calc(100vw - 40px));max-height:34dvh;overflow:auto;padding:4px;
+  pointer-events:auto;touch-action:pan-y;overscroll-behavior:contain;scrollbar-width:thin;
+}
+.dialogue-replies.single-reply {width:auto;grid-template-columns:auto;}
+.reply-option,.reply-next {
+  display:flex;align-items:center;gap:9px;padding:8px 13px;min-height:36px;text-align:left;
+  background:#f3ead6 url('../assets/ui/paper.png');border:1px solid #73644c;border-radius:3px 7px 4px 5px;
+  box-shadow:0 1px 3px #3d312b4f;color:#352d23;font:600 14px/1.55 var(--min);
+}
+.reply-key {flex:none;color:#796746;font:600 10px/1.5 var(--sans);min-width:1.4em;text-align:center;border:1px solid #bcad8f;border-radius:2px;}
+.reply-next {background:#3e5348;color:#fff5da;border-color:#e6d6b4;white-space:nowrap;}
+.reply-next .reply-key {color:#fff4d8;border-color:#adac92;}
+.reply-next:disabled,.reply-option:disabled {cursor:default;}
+.speaking :is(.mode-dock,.keyline,#story-book,#speech,#context) {display:none;}
+@media (pointer:coarse), (max-width:900px) {
+  .speaking :is(.hud-player,#mini-button,.place,#target) {visibility:hidden;}
+  .dialogue-replies {width:min(540px,calc(100% - 210px));}
+  .dialogue-replies.single-reply {width:auto;}
+}
+@media (max-width:620px) {
+  .world-speech {width:min(318px,calc(100% - 16px));grid-template-columns:44px minmax(0,1fr);gap:8px;padding:10px 16px 10px 9px;}
+  .speaker-name {font-size:15px;}.speaker-trade {font-size:9px;}.spoken-line {font-size:14px;line-height:1.55;}
+  .dialogue-replies {width:calc(100% - 16px);bottom:max(8px,env(safe-area-inset-bottom));max-height:29dvh;}
+  .reply-option,.reply-next {font-size:13px;gap:5px;padding:7px;min-height:38px;}
+  .speaking .touch {bottom:min(30dvh,200px);}
+}
+@media (max-height:520px) and (orientation:landscape) {
+  .dialogue-replies {width:min(610px,calc(100% - 170px));bottom:4px;}
+  .world-speech {grid-template-columns:38px minmax(0,1fr);padding:6px 18px 7px 8px;gap:8px;}
+  .speaker-name {font-size:14px;}.spoken-line {font-size:13px;line-height:1.45;}
+  .reply-option,.reply-next {min-height:31px;padding:4px 8px;font-size:12px;}
+}
+@media (pointer:coarse) { .reply-key {display:none;} }
+#stage:has(dialog[open]) .speech-layer {display:none;}

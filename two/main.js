@@ -13,8 +13,10 @@ import { loadRiceModel } from './mochi-model.js';
 import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS_KEY as settingsKey,
   transferURL, decodeTransfer, storeTransfer, replaceJourney } from './journey-transfer.js';
 import { createGame, canUseModeOnMount } from './game.js';
-import { createStoryWorld, storyDestination } from './mochiyori-world.js';
+import { createStoryWorld } from './mochiyori-world.js';
 import { createPerformance } from './mochiyori-performance.js';
+import { createStoryDialogue } from './mochiyori-dialogue.js';
+import { createSpeechView } from './mochiyori-bubbles.js';
 import { createBookView } from './mochiyori-book.js';
 import { chapterLabel } from './mochiyori-progress.js';
 import { SPECIES } from './bestiary.js';
@@ -270,10 +272,40 @@ const performancePlayer = createPerformance({
     drawScene();previous=0;updateHUD();
   }
 });
+const dialogue = createStoryDialogue(game.notebook, {
+  onChange() { storyWorld.invalidate(); save(); updateHUD(); }
+});
+function pinnedStorySite() {
+  const id = game.notebook.pin;
+  return id && dialogue.leads().find(lead => lead.id === id)?.site;
+}
+let conversationYaw = null;
+const conversationTarget = new THREE.Vector3();
+let framing = 0, examining = 0;
+const lastExhibit = new THREE.Vector3();
+const partnerFacing = new THREE.Vector3();
+const speech = createSpeechView({
+  stage, canvas, camera, player: p, dialogue, world: () => storyWorld, activate: unlock,
+  approach(who) {
+    conversationTarget.copy(who.anchor);
+    conversationTarget.y -= .38;
+    const dx = p.x-who.anchor.x, dz = p.z-who.anchor.z;
+    // A three-quarter view keeps the larger mochi beside the work, with
+    // the resident's hands visible between them. Dragging releases the turn.
+    const bearing = Math.atan2(dx,dz);
+    who.actor.getWorldDirection(partnerFacing);
+    const faceAngle = Math.atan2(partnerFacing.x,partnerFacing.z);
+    const side = Math.sin(faceAngle-bearing) < 0 ? -1 : 1;
+    // The suspended bell striker crosses the monk at eye level. Stay on
+    // its open side from either bell-tower entrance.
+    conversationYaw = who.site.place === 'bell' ? (dx > .1 ? 3.89 : 1.74)
+      : bearing + side * (camera.aspect < .85 ? 1.09 : 1.25);
+    if (Math.hypot(dx,dz) > .3 && p.speed < .4 && !p.mount && !p.activity) p.heading = Math.atan2(-dx,-dz);
+  }
+});
 const notebook = createBookView({
   dialog, body: $('dialog-content'), heading: $('dialog-title'), book: game.notebook,
-  save, perform: performancePlayer.start, here: () => storyWorld?.nearest(p)?.site,
-  invalidate: () => storyWorld?.invalidate(),
+  save, dialogue, perform: performancePlayer.start,
   track(dest) {
     trackedAnimal = trackedHabitat = goal = null;
     persistSettings();
@@ -287,7 +319,8 @@ function action(name) {
   if (dialog.open || photoMode) return;
   unlock();
   const found = (name === 'interact' || name === 'story') && nearbyAction();
-  if (found?.site) { openDialog('story', found.site); return; }
+  if (speech.active && (name === 'interact' || name === 'story')) { speech.advance(); return; }
+  if (found?.person) { speech.start(found); updateHUD(); return; }
   // As the traveller lies back, the toes drift towards the near corner
   // of the frame. The direction is saved with the rest of the journey.
   game.act(name, name === 'throw' ? actors?.hero.rotation.y : name==='interact' ? yaw+.77 : undefined);
@@ -297,6 +330,7 @@ function action(name) {
 const audioSettings = createAudioSettings({
   volumes,
   onOpen() {
+    speech.stop();
     clearInput();
     unlock();
   },
@@ -371,6 +405,7 @@ function clearInput() {
 }
 function togglePhoto() {
   if (!actors || dialog.open) return;
+  speech.stop();
   clearInput();
   if (!photoMode) {
     priorCamera = { yaw, pitch, distance };
@@ -421,6 +456,7 @@ $('download').onclick = () => {
   }, 'image/png');
 };
 function moveCamera(dx, dy) {
+  conversationYaw = null;
   yaw -= dx * 0.0055;
   pitch = clamp(pitch + dy * 0.004, photoMode ? -0.06 : -1.25, 1.08);
 }
@@ -530,7 +566,9 @@ const bindings = new Set([
 ]);
 document.addEventListener('keydown', (e) => {
   if (!playable || contextLost) return;
-  if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || !bindings.has(e.code)) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+  if (!dialog.open && speech.handleKey(e)) return;
+  if (!bindings.has(e.code)) return;
   if (dialog.open) {
     if (
       !e.repeat &&
@@ -599,6 +637,15 @@ window.addEventListener('pagehide', event => {
   if (event.persisted === false && renderer && !renderer.getContext().isContextLost()) renderer.forceContextLoss();
 });
 function updateCamera(dt, snap = false) {
+  const blend = 1 - Math.exp(-dt * 6);
+  if (speech.active && conversationYaw !== null) {
+    if (keys.has('KeyQ') || keys.has('KeyR')) conversationYaw = null;
+    else yaw += Math.atan2(Math.sin(conversationYaw-yaw),Math.cos(conversationYaw-yaw))*blend;
+  }
+  framing += ((speech.active ? 1 : 0)-framing)*blend;
+  const exhibit = speech.active && dialogue.frame?.action && storyWorld?.actionFocus;
+  if (exhibit) lastExhibit.copy(exhibit);
+  examining += ((exhibit ? 1 : 0)-examining)*blend;
   const full = p.buffs.full > 0 ? 1.26 : 1,
     ride = p.mount === 'bike' ? 0.9 : p.mount === 'turtle' ? .99 : 0;
   // Let the body rise within the frame on takeoff. The camera catches up for
@@ -610,6 +657,10 @@ function updateCamera(dt, snap = false) {
   const seated=bathPosture(bath?.action);
   const bathEye=seated?seatedFeet(p,bath)+seated.eye*full:(p.bathWaterY??p.y)+.32*full;
   heroAt.set(bath?.x ?? p.x,bath ? THREE.MathUtils.lerp(standingEye,bathEye,settle) : standingEye,bath?.z ?? p.z);
+  if (framing > .001) {
+    heroAt.lerp(conversationTarget, framing * .63);
+    if (examining > .001) heroAt.lerp(lastExhibit,examining*.95);
+  }
   if (snap || Math.abs(heroAt.x - focus.x) > BOUND || Math.abs(heroAt.z - focus.z) > BOUND) focus.copy(heroAt);
   else focus.lerp(heroAt, 1 - Math.exp(-dt * 13));
   let cameraYaw=yaw;
@@ -626,7 +677,7 @@ function updateCamera(dt, snap = false) {
   const sx = Math.sin(cameraYaw),
     sz = Math.cos(cameraYaw),
     scenery = photoMode ? 0 : scrollCoverage(p.x,p.z)*(1-settle),
-    d = distance * (full > 1 && photoMode ? 1.18 : 1) * (1+.14*scenery) * (photoMode ? 1 : 1-.12*settle);
+    d = distance * (1-.33*framing-.32*examining) * (full > 1 && photoMode ? 1.18 : 1) * (1+.14*scenery) * (photoMode ? 1 : 1-.12*settle);
   // At the horizon, hold the eye above ground and tilt up to follow an animal overhead.
   const freePitch=Math.max(0,pitch);
   const treatmentPitch=seated?(indoor?seated.camera:Math.max(freePitch,seated.camera)):Math.max(.73,freePitch);
@@ -689,9 +740,9 @@ function updateCamera(dt, snap = false) {
   if (!photoMode) {
     // Give the page to the animal directly ahead. An off-centre mochi keeps
     // the letter trajectory visible between the hero and its recipient.
-    aim.x += (sz*.4*shoulder-sx*(1.65+.82*scenery))*(1-settle);
-    aim.z -= (sx*.4*shoulder+sz*(1.65+.82*scenery))*(1-settle);
-    aim.y += (.53+.25*scenery)*(1-settle)+(camera.aspect<.83 ? .27*settle : 0);
+    aim.x += (sz*.4*shoulder-sx*(1.65+.82*scenery))*(1-settle)*(1-framing);
+    aim.z -= (sx*.4*shoulder+sz*(1.65+.82*scenery))*(1-settle)*(1-framing);
+    aim.y += (.53+.25*scenery)*(1-settle)*(1-framing*.6)*(1-examining)+(camera.aspect<.83 ? .27*settle : 0);
   } else aim.y -= .13;
   camera.lookAt(aim);
   if (!photoMode && pitch < 0) camera.rotateX(-pitch*(1-settle));
@@ -767,7 +818,7 @@ function updateHUD() {
   $('story-volume').textContent = chapter ? chapterLabel(game.notebook.index+1) + (game.notebook.index ? '　·　もち寄り帖' : '　·　旅控え') : '結び　·　もち寄り帖';
   $('story-title').textContent = chapter?.title || '祭のあとの一服';
   const near = nearbyAction();
-  $('context').hidden = !near || dialog.open || photoMode;
+  $('context').hidden = !near || dialog.open || photoMode || speech.active;
   if (near) $('context').querySelector('span').textContent = near.label;
   const deg = -THREE.MathUtils.radToDeg(yaw),
     base = Math.round(deg / 15),
@@ -779,7 +830,7 @@ function updateHUD() {
     el.classList.toggle('major', n % 3 === 0);
     el.firstElementChild.textContent = n % 3 === 0 ? directions[(((n / 3) % 8) + 8) % 8] : '';
   });
-  const targetSite = storyDestination(game.notebook);
+  const targetSite = pinnedStorySite();
   const dest = targetSite || trackedAnimal || REGIONS.find(r => r.id === goal);
   $('target').hidden = !dest;
   if (dest) {
@@ -796,8 +847,9 @@ function updateHUD() {
   }
   if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, targetSite || trackedAnimal);
 }
-function openDialog(kind, site = null) {
+function openDialog(kind) {
   if (!renderer || dialog.open) return;
+  speech.stop();
   if (kind === 'story') unlock();
   clearInput();
   save();
@@ -806,9 +858,9 @@ function openDialog(kind, site = null) {
   dialogKind = kind;
   $('dialog-title').textContent = kind === 'map' ? '十七景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
   dialog.showModal();
-  if (kind === 'story') { notebook.open(site); return; }
+  if (kind === 'story') { notebook.open(); return; }
   if (kind === 'map') {
-    selectedPlace = storyDestination(game.notebook)?.region || goal || state.regionId;
+    selectedPlace = pinnedStorySite()?.region || goal || state.regionId;
     jumpPin = null;
     mapDialog();
   } else if (kind === 'journal') journalDialog();
@@ -934,7 +986,7 @@ function journalDialog() {
 }
 function redrawAtlas() {
   const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
-  const storyTarget = storyDestination(game.notebook);
+  const storyTarget = pinnedStorySite();
   const name = storyTarget?.name || (trackedAnimal ? speciesNames[trackedAnimal.type] : '');
   const atlas = $('atlas');
   atlas.setAttribute('aria-label', '十七の名所、主湯と脇湯、茶屋と小屋、お餅の現在地と選んだ名所の自転車ポート' + (storyTarget ? '、調査先の' + name : name ? '、配達先の' + name + 'の現在地' : ''));
@@ -1141,6 +1193,7 @@ function frame(now) {
       state.time = playTime;
     }
   } else actors.update(state, delta, camera);
+  speech.update(photoMode);
   drawScene();
   if (now >= nextHUD) {
     updateHUD();
@@ -1250,7 +1303,7 @@ async function boot() {
     setLoadingCaption(state.region + 'の景色をひらいています…');
     const arrivalAssets = Promise.all([loadRiceModel(), loadMapPaper(), setRiverStones(scene, state.objects)]);
     [world] = await Promise.all([finishInSlices(prepareWorld(scene, camera), preparation.signal), arrivalAssets]);
-    storyWorld = createStoryWorld(scene, game.notebook, game.storyCollisions);
+    storyWorld = createStoryWorld(scene, game.notebook, game.storyCollisions, () => actors?.hero);
     storyWorld.update(state.time, p);
     meadow = createMeadow(scene, state.objects, coarse, state.npcs);
     wake = createWake(scene);

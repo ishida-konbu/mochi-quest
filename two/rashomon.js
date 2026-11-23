@@ -7,6 +7,7 @@ import { sculpture } from './pilgrimage-pigment.js';
 import { SilkPanels } from './kosode.js';
 import { foldMark,paintedSilk } from './emaki-costume.js';
 import { dressedRiceFace } from './mochi-model.js';
+import { connectStoryAppendage } from './story-hands.js';
 import { scrollPigment } from './kyo-scrollwork.js';
 
 const tau=2*Math.PI,{sin,cos}=Math;
@@ -50,11 +51,22 @@ function oldWoman(){
   }
   for(const side of [-1,1]){
     p.cut(13,5,(u,v)=>fold(.5+side*(.197-.28*v)+.026*u,.96-.47*v,.012),4,'#c0ab87');
-    p.cut(14,18,(u,v)=>{
+    const sleeveSilk=new SilkPanels();
+    sleeveSilk.cut(14,18,(u,v)=>{
       const a=u*tau,r=.116+.034*v;
       return [side*(.24+.188*v)+r*sin(a),.721-.20*v+.14*cos(a),.085+.368*v];
     },4,'#73705a');
-    art.ball('#d6c19d',side*.418,.526,.48,.072,.058,.094);
+    const sleeve=new T.Mesh(sleeveSilk.finish(),paintedSilk());sleeve.castShadow=true;root.add(sleeve);
+    const handArt=sculpture();handArt.ball('#d6c19d',0,0,0,.072,.058,.094);
+    const comb=side>0?new T.Group():null;
+    const path=[[side*.24,.721,.085],[side*.29,.686,.173],[side*.345,.605,.319],[side*.418,.526,.48]];
+    const grip=connectStoryAppendage(root,side>0?'right':'left',sleeve,path,3,comb);
+    grip.add(new T.Mesh(handArt.finish(),scrollPigment()));
+    if(comb){
+      const teeth=sculpture();teeth.box('#826441',-.118,.034,.048,.24,.05,.029,0,.24,-.14);
+      for(let j=0;j<10;j++)teeth.box('#826441',-.215+j*.021,-.024,.057,.010,.079,.014,0,.24,-.14);
+      comb.add(new T.Mesh(teeth.finish(),scrollPigment()));grip.add(comb);
+    }
     const lock=[[side*.14,1.446,.29],[side*.32,1.348,.35],[side*.39,1.09,.398],[side*.32,.920,.455],[side*.38,.811,.410]];
     art.stroke('#797873',lock,[.046,.076,.067,.038,.002],21);
     const greys=['#94958c','#c5c0ae','#87877e','#b3b3a5','#ded1ba','#a3a49a'];
@@ -103,9 +115,6 @@ function oldWoman(){
     art.stroke('#898372',[[x-side*.054,1.201,.464],[x,1.230,.474],[x+side*.057,1.212,.45]],
       [.004,.012,.002],13);
   }
-  const comb='#826441';
-  art.box(comb,.30,.56,.528,.24,.05,.029,0,.24,-.14);
-  for(let j=0;j<10;j++)art.box(comb,.203+j*.021,.502,.537,.010,.079,.014,0,.24,-.14);
   const trim=new T.Mesh(art.finish(),scrollPigment());trim.castShadow=true;root.add(trim);
   return root;
 }

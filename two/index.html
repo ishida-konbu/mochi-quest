@@ -21,7 +21,7 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=handscroll-arrival-1" />
+    <link rel="stylesheet" href="./game.css?v=mochiyori-dialogue-1" />
     <script type="importmap">
       {
         "imports": {
@@ -36,7 +36,16 @@
           "./rock-forms.js": "./rock-forms.js?v=emaki-funatabi-1",
           "./rock-contact.js": "./rock-contact.js?v=emaki-funatabi-1",
           "./pilgrimage-trees.js": "./pilgrimage-trees.js?v=emaki-funatabi-1",
-          "./mochiyori-world.js": "./mochiyori-world.js?v=emaki-funatabi-1",
+          "./mochiyori-world.js": "./mochiyori-world.js?v=mochiyori-dialogue-1",
+          "./mochiyori-progress.js": "./mochiyori-progress.js?v=mochiyori-dialogue-1",
+          "./mochiyori-choreography.js": "./mochiyori-choreography.js?v=mochiyori-dialogue-1",
+          "./mochiyori-story.js": "./mochiyori-story.js?v=mochiyori-dialogue-1",
+          "./story-sites.js": "./story-sites.js?v=mochiyori-dialogue-1",
+          "./story-hands.js": "./story-hands.js?v=mochiyori-dialogue-1",
+          "./story-crafts.js": "./story-crafts.js?v=mochiyori-dialogue-1",
+          "./mochiyori-performance.js": "./mochiyori-performance.js?v=mochiyori-dialogue-1",
+          "./story-models.js": "./story-models.js?v=mochiyori-dialogue-1",
+          "./mochiyori-book.js": "./mochiyori-book.js?v=mochiyori-dialogue-1",
           "./landmark-tree.js": "./landmark-tree.js?v=emaki-funatabi-1",
           "./village-waterworks.js": "./village-waterworks.js?v=amimoto-yudono-1",
           "./village-coping.js": "./village-coping.js?v=amimoto-yudono-1",
@@ -85,7 +94,7 @@
           "./kiyomizu-bell.js": "./kiyomizu-bell.js?v=journey-music-1",
           "./kyo-lights.js": "./kyo-lights.js?v=yuya-emaki-1",
           "./lamp-layout.js": "./lamp-layout.js?v=otowa-1",
-          "./temple-monks.js": "./temple-monks.js?v=otowa-1",
+          "./temple-monks.js": "./temple-monks.js?v=mochiyori-dialogue-1",
           "./temple-duties.js": "./temple-duties.js?v=otowa-1",
           "./ambient-flocks.js": "./ambient-flocks.js?v=quieter-flocks-1",
           "./dango-chaya-art.js": "./dango-chaya-art.js?v=sakuragawa-yumeguri",
@@ -108,7 +117,7 @@
           "./bath-enclosures.js": "./bath-enclosures.js?v=amimoto-yudono-1",
           "./bath-pavilion-art.js": "./bath-pavilion-art.js?v=amimoto-yudono-1",
           "./regional-bath-carpentry.js": "./regional-bath-carpentry.js?v=amimoto-yudono-1",
-          "./actors.js": "./actors.js?v=handscroll-arrival-1",
+          "./actors.js": "./actors.js?v=mochiyori-dialogue-1",
           "./animal-motion.js": "./animal-motion.js?v=ryu-emaki-1",
           "./roof-shell.js": "./roof-shell.js?v=emaki-landscape-1-otowa-1",
           "./architecture.js": "./architecture.js?v=emaki-landscape-1-otowa-1",
@@ -128,7 +137,7 @@
           "./inari-rain.js": "./inari-rain.js?v=inari-rain-1",
           "./inari-weather.js": "./inari-weather.js?v=inari-rain-1",
           "./ink.js": "./ink.js?v=handscroll-arrival-1",
-          "./interface.js": "./interface.js?v=emaki-funatabi-1",
+          "./interface.js": "./interface.js?v=mochiyori-dialogue-1",
           "./kagami-fern.js": "./kagami-fern.js?v=6.3",
           "./kagami-mochibana.js": "./kagami-mochibana.js?v=6.5",
           "./mochibana-rice.js": "./mochibana-rice.js?v=6.5",
@@ -245,7 +254,7 @@
           "./kyo-market.js": "./kyo-market.js?v=emaki-landscape-1-otowa-1",
           "./ocean-ship-art.js": "./ocean-ship-art.js?v=ryugu-brush-1",
           "./ocean-voyage.js": "./ocean-voyage.js?v=boat-audio-1",
-          "./rashomon.js": "./rashomon.js?v=rashomon-stone-1",
+          "./rashomon.js": "./rashomon.js?v=mochiyori-dialogue-1",
           "./seaport-layout.js": "./seaport-layout.js?v=emaki-landscape-1",
           "./seaports.js": "./seaports.js?v=emaki-landscape-1",
           "./tidal-reefs.js": "./tidal-reefs.js?v=kyoto-foothills-1",
@@ -271,7 +280,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=handscroll-arrival-1" />
+    <link rel="modulepreload" href="./main.js?v=mochiyori-dialogue-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -448,7 +457,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=handscroll-arrival-1').catch(error => {
+      import('./main.js?v=mochiyori-dialogue-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'

@@ -354,6 +354,9 @@ function makeHero() {
     pose = group(root, 'mochi'),
     rolling = group(pose, 'roll');
   const rice = makeRiceModel(rolling);
+  const receivingPalm=new THREE.Group();
+  receivingPalm.name='配達人の受け手';receivingPalm.position.set(-.15,-.036,.158);
+  rice.hands[0].add(receivingPalm);
   const leaves = batch(rolling, mugwortSprig, 'leaves');
   const vertices = rice.body.geometry.attributes.position;
   let crown = 0;
@@ -1860,10 +1863,20 @@ export function createActors(scene, renderer) {
     else window.setTimeout(warm,80);
   }
 
+  const storyTarget = new THREE.Vector3(), upperScale = new THREE.Vector3();
   function update(state, dt, camera) {
     const p = state.player,
       t = state.time;
     gaitHero(h, p, t, dt, state);
+    const reach = h.root.userData.storyReach;
+    if (reach && !p.activity && !p.mount && !p.skiff) {
+      // Apply the voluntary reach after gait/morphs, without stretching the
+      // wrist to a witness the player has already walked away from.
+      const hand = h.rice.hands[0], parent = hand.parent;
+      const scale = parent.getWorldScale(upperScale).x;
+      parent.worldToLocal(storyTarget.copy(reach.point)).sub(hand.position);
+      hand.position.addScaledVector(storyTarget.clampLength(0,.26/Math.max(.01,scale)),reach.strength);
+    }
     skyLife(t,state,camera,state.photo ? atPhotoTime : null);
     seaPerformers(t,p,camera,state.nearbyNpcs);
     faunaView.update(state,camera,viewport?.height || window.innerHeight);

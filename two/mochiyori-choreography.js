@@ -176,6 +176,11 @@ export const CLUE_SCENES = Object.fromEntries([
     beat(0,'compare',0,'出荷の内訳を皿などの現物と照らし、松原宛の品をより分ける。',{part:'書付',target:1}),
     beat(0,'present',0,'筒に残った搬入日は検分の当日。海へ落ちる前に書かれた予定だ。',{part:'書付',partner:1}),
   ]),
+  clue('returned-tools',['お浜',courier],[exhibit('tsuruga-plates'),exhibit('old-manifest')],[
+    beat(1,'pass',0,'配達人が竜宮から持ち帰った皿を、お浜に手渡す。',{partner:0}),
+    beat(0,'compare',0,'お浜は浜の道具と出荷の控えを一つずつ突き合わせる。',{target:1}),
+    beat(0,'write',1,'浜の一組がそろう。お浜は受け取った印を控えに入れた。'),
+  ]),
   clue('purchase-list',['豆蔵',courier],[exhibit('purchase-list'),prop('steamer'),exhibit('tsuruga-plates')],[
     beat(0,'open',0,'豆蔵が共同購入の内訳を、荷造り場の見本のそばへ開く。',{helperCaption:'豆蔵が荷造り場の見本を示す。その横で、配達人が共同購入の内訳を開いた。'}),
     beat(0,'compare',0,'内訳の蒸し箱を指し、見本の箱に触れる。敷板、皿、包み、祭札にもそれぞれ欄がある。',{target:1,helperCaption:'豆蔵が品名を読むたび、配達人が見本を指す。蒸し箱、敷板、皿、包み、祭札に、それぞれ欄がある。'}),

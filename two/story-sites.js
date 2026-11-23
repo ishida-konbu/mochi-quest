@@ -37,7 +37,7 @@ export const STORY_SITES = Object.freeze([
   site('kyo', '清水寺の鐘楼前', KIYOMIZU_BELL.x, KIYOMIZU_BELL.z + 5.5, 0, 'bell'),
   site('coast', '松原沖を望む浜', -179, 113, -Math.PI / 2, 'shore'),
   site('snow', '北山越の炭焼き小屋', 448.5, -1064, -1.83, 'charcoal'),
-  site('peach', '桃山の団子茶屋・旅人の休み場', -362.5, -120.6, .3754, 'road-tea'),
+  site('peach', '桃山の団子茶屋・旅人の休み場', -366.7, -116, .3754, 'road-tea'),
 ]);
 
 const sites = new Map(STORY_SITES.map(s => [s.region + '/' + (s.place || ''), s]));
