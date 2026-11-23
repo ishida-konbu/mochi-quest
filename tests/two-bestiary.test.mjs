@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
-import { SPECIES, recipientContact } from '../two/bestiary.js';
+import { SPECIES, legendDeliveryPoint, recipientContact } from '../two/bestiary.js';
 import { BUILDINGS, GATES, nearRoad, groundHeight } from '../two/terrain.js';
 import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { Euler, Vector3 } from '../two/vendor/three.module.min.js';
@@ -55,6 +55,31 @@ test('notices intersect the actual airborne volume, and unique recipients and ol
     const snap=game.save();game=createGame(snap);assert.ok(game.restored);assert.ok(game.state.delivered.has(n.id));
     delete snap.delivered;const legacy=createGame(snap);assert.ok(legacy.restored);assert.equal(legacy.state.score,snap.score);
     assert.equal(legacy.state.delivered.size,0);
+  }
+});
+
+test('the guide leads a winged player to a reachable point on each threefold legend',()=>{
+  const snapshot={...createGame().save(),flightSeed:32495,time:47};
+  for(const [type,oldScale] of [['dragon',4.2],['kirin',1.75]]) {
+    const game=createGame(snapshot), n=game.state.npcs.find(n=>n.type===type), p=game.state.player;
+    assert.ok(Math.abs(n.stature/oldScale-3)<1e-8);
+    const aim=legendDeliveryPoint(n,{});
+    assert.equal(recipientContact(n,aim,1,0,0),0);
+    const bearing=n.heading+Math.PI/2, heading=Math.atan2(Math.sin(bearing),Math.cos(bearing));
+    const range=n.stature*.65+3;
+    const along=n.speed*.28;
+    const x=aim.x+along*Math.sin(n.heading)-range*Math.sin(heading);
+    const z=aim.z+along*Math.cos(n.heading)-range*Math.cos(heading);
+    const y=aim.y+(n.verticalSpeed||0)*.28-.93, h=y-groundHeight(x,z);
+    assert.ok(h>0 && h<180);
+    Object.assign(p,{x,y,z,h,grounded:false,heading,vy:0,mode:'habutae'});
+    assert.equal(recipientContact(n,{x,y:y+.93,z},1,0,0),Infinity,'start outside the silhouette');
+    assert.ok(game.act('throw'));
+    for(let frame=0;frame<80 && !game.state.delivered.has(n.id);frame++)game.step(1/60);
+    assert.ok(game.state.delivered.has(n.id),type);
+    const resume=createGame(game.save());
+    assert.ok(resume.state.delivered.has(n.id));
+    assert.equal(resume.state.npcs.find(animal=>animal.id===n.id).stature,n.stature);
   }
 });
 
@@ -145,7 +170,6 @@ test('a letter crosses the tilted dragon tail at its drawn height during a climb
     n.verticalSpeed = rise;
     const pitch = dragonPitch(n);
     assert.ok(pitch * rise < 0);
-    assert.equal(n.stature,4.2);
     assert.equal(dragonLengthScale,1.5);
     const tail = new Vector3(-.59+sway.x, .60+sway.y, -2.86*dragonLengthScale)
       .multiplyScalar(n.stature).applyEuler(new Euler(pitch, n.heading, 0, 'YXZ'));

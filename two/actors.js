@@ -1887,11 +1887,13 @@ export function createActors(scene, renderer) {
       warmedCrowd=state.nearbyNpcs;
       const localCoats=new Set();
       for(const n of warmedCrowd) {
-        if(n.atMortar || n.seaResident || !within(n,state.player,n.type==='dragon'?330:170))continue;
+        const species=SPECIES[n.type];
+        if(n.atMortar || n.seaResident || !within(n,state.player,species?.skyRange ?? 170))continue;
         if(n.scrollFauna)faunaView.warm();
-        else if(SPECIES[n.type]) {
+        else if(species) {
           if(n.type!=='bird')beastView.warm();
-          if(within(n,state.player,n.type==='bird'?145:n.type==='dragon'?250:55))localCoats.add(n.type);
+          const coatRange=species.rigNear ? species.rigNear+55 : n.type==='bird'?145:55;
+          if(within(n,state.player,coatRange))localCoats.add(n.type);
         } else if(n.type!=='turtle')processionView.warm();
       }
       // The visible material will retry any paint still missing on arrival.
@@ -1934,10 +1936,9 @@ export function createActors(scene, renderer) {
       const view=state.photo ? atPhotoTime(n,t) : n;
       const dx=wrapDelta(view.x-p.x),dz=wrapDelta(view.z-p.z);
       const distance=Math.hypot(dx,dz);
-      const dragon=n.type==='dragon';
-      const viewRange=dragon ? 900 : 128;
+      const spec=SPECIES[n.type], viewRange=spec?.skyRange ?? 128;
       if(distance>=viewRange) continue;
-      const x=p.x+dx,z=p.z+dz,spec=SPECIES[n.type],scale=n.stature||1;
+      const x=p.x+dx,z=p.z+dz,scale=n.stature||1;
       const center=view.y+(spec?.center??(n.type==='turtle'?.78:VILLAGERS.center))*scale;
       const span=(spec?beastFrame(n.type):VILLAGERS.frameY)*scale;
       actorBounds.center.set(x,center,z);
@@ -1956,19 +1957,18 @@ export function createActors(scene, renderer) {
       // The depth of the focused camera subject and its framebuffer size are
       // what determine whether an atlas cell would be visibly magnified.
       slot.view=view;slot.x=x;slot.z=z;slot.depth=depth;
-      slot.fade=Math.min(1,(viewRange-distance)/(dragon?180:16));
-      // Keep singular performances articulated, including the hare's seat and the
-      // kirin's four individual cloud contacts.
-      const performanceRig = n.ridesDeer || n.carriesHare || ['kirin','shishi','turtle'].includes(n.type);
+      slot.fade=Math.min(1,(viewRange-distance)/(spec?.skyRange ? viewRange*.20 : 16));
+      // Keep the seated hare and ceremonial performances articulated across the clearing.
+      const performanceRig = n.ridesDeer || n.carriesHare || n.type==='shishi' || n.type==='turtle';
       // The paper atlas has a walking cycle for each beast. Keep the paired
       // actions articulated from across the clearing, especially the deer’s bow.
       const encounterWeight=n.encounter && distance<24 ? 1.85 : 1;
       slot.priority = performanceRig ? 10000+pixels : pixels*encounterWeight*(npcs.has(n.id)?1.23:1);
-      if(dragon) {
-        // Keep the real belly, claws and winding spine overhead. At long range
-        // switch to the animated ink plate once its native resolution suffices.
-        const articulated=distance<220 || (npcs.has(n.id) ? pixels>72 : pixels>96);
-        slot.priority=articulated && distance<690 ? 20000+pixels : 0;
+      if(spec?.skyRange) {
+        // Keep the dragon's spine and the kirin's cloud-stepping legs articulated
+        // overhead. At a distance the ink plate takes over at its native resolution.
+        const articulated=distance<spec.rigNear || pixels>(npcs.has(n.id)?72:96);
+        slot.priority=articulated && slot.fade===1 ? 20000+pixels : 0;
       }
       visible.push(slot);
     }

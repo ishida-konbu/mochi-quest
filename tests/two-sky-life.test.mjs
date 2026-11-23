@@ -45,7 +45,7 @@ test('each legend traverses all 25 sectors, changing altitude above sea, ridges 
     if(type==='dragon') {
       const {player}=game.state;
       assert.ok(Math.abs(n.x-player.x)<35 && n.z<player.z-90 && n.z>player.z-160);
-      assert.ok(n.altitude>18 && n.altitude<33 && Math.abs(Math.sin(n.heading))>.8,
+      assert.ok(n.altitude>18 && n.altitude<50 && Math.abs(Math.sin(n.heading))>.8,
         'the first dragon crosses the skyline in front of the ferry');
     }
     const samples=period*4*2, cells=new Set(), districts=new Set(), previous={};
@@ -58,6 +58,13 @@ test('each legend traverses all 25 sectors, changing altitude above sea, ridges 
       districts.add(regionAt(p.x,p.z));
       const ground=Math.max(WATER_Y,terrainHeight(p.x,p.z));
       assert.ok(p.y>Math.max(ground,solidHeightAt(p.x,p.z,2),canopyHeight(p.x,p.z,2)));
+      if(type==='kirin' && i%8===0) {
+        for(const side of [-1,1])for(const forward of [-.64,.60]) {
+          const x=wrapDelta(p.x+n.stature*(forward*Math.sin(p.heading)+side*.24*Math.cos(p.heading)));
+          const z=wrapDelta(p.z+n.stature*(forward*Math.cos(p.heading)-side*.24*Math.sin(p.heading)));
+          assert.ok(p.y>Math.max(terrainHeight(x,z),solidHeightAt(x,z,.65),canopyHeight(x,z,.65)),'room under the walking hooves');
+        }
+      }
       if(waterDepth(p.x,p.z)>.25) sea++;
       if(ground>23) mountain++;
       low=Math.min(low,p.altitude);high=Math.max(high,p.altitude);

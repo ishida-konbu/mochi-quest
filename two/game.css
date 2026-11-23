@@ -855,6 +855,12 @@ dialog {border:2px solid #526761;border-radius:2px;}
 #delivery-book {margin-block:18px 4px;}
 .ledger-head {display:flex;align-items:center;gap:15px;justify-content:space-between;margin-bottom:16px;}
 .ledger-head p {font:14px/1.7 var(--min);max-width:30em;}
+.ledger-scale {margin:0 0 14px;border-block:1px solid #aa987b;}
+.ledger-scale summary {padding:9px 4px;cursor:pointer;font:700 14px/1.5 var(--min);color:var(--ink);}
+.ledger-scale figure {margin:0 0 12px;}
+.ledger-scale img {display:block;width:100%;height:auto;}
+.ledger-scale figcaption {display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;margin-top:7px;font:12px/1.6 var(--sans);}
+.ledger-scale a {color:#68482e;text-underline-offset:.2em;}
 #ledger-count {flex:none;color:var(--red);font:700 20px Georgia,serif;}
 .ledger-animals {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid #aa987b;}
 .ledger-entry {

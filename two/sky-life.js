@@ -1,7 +1,7 @@
 import * as T from './vendor/three.module.min.js';
 import { wrapDelta } from './terrain.js';
 import { createAmbientFlocks } from './ambient-flocks.js';
-import { legendFlight } from './bestiary.js';
+import { legendFlight, SPECIES } from './bestiary.js';
 import { kirinFrequency } from './animal-motion.js';
 import { kirinTouchdowns } from './handscroll-beasts.js';
 
@@ -253,7 +253,12 @@ function royalFootsteps(scene) {
   let lastStep, lastRoyal, trail=[];
   return (t,royal,camera)=>{
     clouds.count=0;
-    if(!royal || kirinTouchdowns.length!==4 || Math.hypot(wrapDelta(royal.x-camera.position.x),wrapDelta(royal.z-camera.position.z))>130){clouds.visible=false;return;}
+    if(!royal || kirinTouchdowns.length!==4){clouds.visible=false;return;}
+    const range=SPECIES.kirin.rigNear;
+    const distance=Math.hypot(wrapDelta(royal.x-camera.position.x),wrapDelta(royal.z-camera.position.z));
+    if(distance>=range){clouds.visible=false;return;}
+    const presence=1-T.MathUtils.smoothstep(distance,range*.8,range);
+    const scale=royal.stature;
     const phase=(t+royal.phase)*kirinFrequency,quarter=Math.PI*.5;
     const step=Math.floor((phase+.42)/quarter);
     if(step!==lastStep || royal!==lastRoyal) {
@@ -263,7 +268,7 @@ function royalFootsteps(scene) {
         const leg=((k%4)+4)%4, side=leg<2?-1:1;
         const touch=(k*quarter)/kirinFrequency-royal.phase;
         legendFlight(royal,touch,flight);
-        const sole=kirinTouchdowns[leg], scale=royal.stature;
+        const sole=kirinTouchdowns[leg];
         const x=sole.x*scale,y=sole.y*scale,z=sole.z*scale;
         const c=Math.cos(flight.heading), s=Math.sin(flight.heading);
         trail.push({time:touch,x:flight.x+c*x+s*z,y:flight.y+y,z:flight.z+c*z-s*x,side});
@@ -278,10 +283,10 @@ function royalFootsteps(scene) {
       const z=camera.position.z+wrapDelta(w.z-camera.position.z);
       const tilt=Math.atan2(camera.position.y-w.y, Math.hypot(camera.position.x-x,camera.position.z-z));
       dummy.rotation.set(-.16-.70*tilt,Math.atan2(camera.position.x-x,camera.position.z-z),w.side*.07,'YXZ');
-      dummy.scale.set((1.32+.24*(1-life))*stretch,.57*stretch,1);
+      dummy.scale.set((.755+.137*(1-life))*scale*stretch,.326*scale*stretch,1);
       offset.copy(crest).multiply(dummy.scale).applyQuaternion(dummy.quaternion);
-      dummy.position.set(x,w.y-.17*(1-life),z).sub(offset);dummy.updateMatrix();
-      clouds.setMatrixAt(clouds.count,dummy.matrix);opacity.setX(clouds.count++,appear*life*.94);
+      dummy.position.set(x,w.y-.097*scale*(1-life),z).sub(offset);dummy.updateMatrix();
+      clouds.setMatrixAt(clouds.count,dummy.matrix);opacity.setX(clouds.count++,appear*life*presence*.94);
     }
     clouds.visible=clouds.count>0;clouds.instanceMatrix.needsUpdate=true;opacity.needsUpdate=true;
   };

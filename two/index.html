@@ -21,7 +21,7 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=mochi-travel-note-1" />
+    <link rel="stylesheet" href="./game.css?v=giant-legends-1" />
     <script type="importmap">
       {
         "imports": {
@@ -120,13 +120,13 @@
           "./bath-enclosures.js": "./bath-enclosures.js?v=amimoto-yudono-1",
           "./bath-pavilion-art.js": "./bath-pavilion-art.js?v=amimoto-yudono-1",
           "./regional-bath-carpentry.js": "./regional-bath-carpentry.js?v=amimoto-yudono-1",
-          "./actors.js": "./actors.js?v=travel-camera-1",
+          "./actors.js": "./actors.js?v=giant-legends-1",
           "./animal-motion.js": "./animal-motion.js?v=ryu-emaki-1",
           "./roof-shell.js": "./roof-shell.js?v=emaki-landscape-1-otowa-1",
           "./architecture.js": "./architecture.js?v=emaki-landscape-1-otowa-1",
           "./atmosphere.js": "./atmosphere.js?v=kyoto-groves-snow-1",
           "./beast-art.js": "./beast-art.js?v=handscroll-arrival-1",
-          "./bestiary.js": "./bestiary.js?v=ryu-emaki-1",
+          "./bestiary.js": "./bestiary.js?v=giant-legends-1",
           "./craftwork.js": "./craftwork.js?v=sakuragawa-yumeguri",
           "./crane-flight.js": "./crane-flight.js?v=3.3",
           "./dragon-flight.js": "./dragon-flight.js?v=ryu-emaki-1",
@@ -170,7 +170,7 @@
           "./scroll-sculpt.js": "./scroll-sculpt.js?v=3.3",
           "./seasons.js": "./seasons.js?v=emaki-funatabi-1",
           "./shoreline.js": "./shoreline.js?v=winter-coast-1",
-          "./sky-life.js": "./sky-life.js?v=chaya-wildlife-1",
+          "./sky-life.js": "./sky-life.js?v=giant-legends-1",
           "./snow-country.js": "./snow-country.js?v=islet-escarpment-1",
           "./winter-coast.js": "./winter-coast.js?v=winter-coast-1",
           "./winter-reefs.js": "./winter-reefs.js?v=winter-coast-1",
@@ -284,7 +284,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=travel-camera-1" />
+    <link rel="modulepreload" href="./main.js?v=giant-legends-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -525,7 +525,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=travel-camera-1').catch(error => {
+      import('./main.js?v=giant-legends-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'

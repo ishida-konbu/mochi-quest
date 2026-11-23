@@ -20,7 +20,8 @@ import { createStoryDialogue } from './mochiyori-dialogue.js';
 import { createSpeechView } from './mochiyori-bubbles.js';
 import { createBookView } from './mochiyori-book.js';
 import { chapterLabel } from './mochiyori-progress.js';
-import { SPECIES } from './bestiary.js';
+import { SPECIES, legendDeliveryPoint } from './bestiary.js';
+import { legendary } from './legend-flight.js';
 import { SCROLL_FAUNA, faunaDrawing, FAUNA_SHEET } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { seaPortrait } from './ryugu-performers.js';
@@ -117,6 +118,7 @@ let pitch = 0.23,
 const mapDestinations = atlasDestinations(state);
 let goal = restoreMapGoal(savedSettings.goal, mapDestinations);
 let trackedAnimal = null, trackedHabitat = null;
+const guideTorso = {};
 const speciesNames = { frog:'蛙', rabbit:'兎', turtle:'ミツユビハコガメ',
   ...Object.fromEntries(Object.entries({...SPECIES,...SEA_SPECIES,...SCROLL_FAUNA}).map(([type,spec])=>[type,type==='bird'?'丹頂鶴':spec.label])) };
 function nearestUndelivered(type, habitat) {
@@ -857,9 +859,10 @@ function updateHUD() {
   const dest = targetSite || trackedAnimal || goal;
   $('target').hidden = !dest;
   if (dest) {
-    const height = Number.isFinite(dest.y) ? dest.y - p.y :
+    const aim = dest === trackedAnimal && legendary(dest.type) ? legendDeliveryPoint(dest, guideTorso) : dest;
+    const height = Number.isFinite(aim.y) ? aim.y - p.y :
       dest.id === 'ryugu' ? Math.min(0, terrainHeight(dest.x, dest.z) + 1 - p.y) : 0;
-    const cue = guideBearing(p, dest, yaw, height);
+    const cue = guideBearing(p, aim, yaw, height);
     $('target').dataset.pose = cue.pose;
     $('target-name').textContent = trackedAnimal && !targetSite ? speciesNames[dest.type] : dest.name;
     $('target-mark').textContent = cue.mark;
@@ -916,7 +919,16 @@ function trackDelivery(animal, habitat=null) {
 }
 function journalDialog() {
   const body=$('dialog-content');
-  body.innerHTML='<div id="delivery-book"><div class="ledger-head"><p id="ledger-note"></p><span id="ledger-count"></span></div><div class="ledger-animals"></div></div>';
+  body.innerHTML=`<div id="delivery-book">
+    <div class="ledger-head"><p id="ledger-note"></p><span id="ledger-count"></span></div>
+    <details class="ledger-scale">
+      <summary>龍・麒麟と白餅の大きさを比べる</summary>
+      <figure>
+        <img src="./assets/bestiary/legend-size.webp" width="1800" height="967" loading="lazy" alt="白餅・麒麟・龍を同じ縮尺で並べた大きさの比較図">
+        <figcaption><span>白餅の高さ 約1.64 m ／ 麒麟の高さ 約15.5 m ／ 龍の前後幅 約110 m</span><a href="./assets/bestiary/legend-size.webp" target="_blank" rel="noopener">図を拡大して見る</a></figcaption>
+      </figure>
+    </details>
+    <div class="ledger-animals"></div></div>`;
   const count=state.delivered.size, total=state.recipientTotal;
   $('ledger-count').textContent=count+' / '+total;
   $('ledger-note').textContent=count===total ? '全員に配達しました。鏡餅で十七景の旅をどうぞ。' : state.kagamiUnlocked ? '鏡餅が使えます。新しく加わった動物にも通知を届けてみましょう。' : '動物を選ぶと、まだ届いていない一匹へご案内します。全員に届けると鏡餅が開きます。';
