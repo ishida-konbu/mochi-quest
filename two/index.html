@@ -21,7 +21,7 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=dango-roll-1-mochi-map-1" />
+    <link rel="stylesheet" href="./game.css?v=mochi-travel-note-1" />
     <script type="importmap">
       {
         "imports": {
@@ -285,22 +285,6 @@
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
     <link rel="modulepreload" href="./main.js?v=onsen-motion-1-mochi-map-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
-    <style>
-      #loading-tip {
-        max-inline-size: 38em;
-        margin: clamp(10px, 2.5vh, 24px) auto 0;
-        padding-inline: 8px;
-        font: 500 clamp(14px, 2vw, 17px)/1.65 var(--min);
-        text-wrap: pretty;
-      }
-      #loading-tip strong {
-        margin-inline-end: .7em;
-        color: var(--red);
-        white-space: nowrap;
-      }
-      #loading-tip + #loading-copy { margin-top: 8px; }
-      #loading:has(#load-actions:not([hidden])) #loading-tip { display: none; }
-    </style>
   </head>
   <body>
     <main id="stage">
@@ -448,7 +432,10 @@
               alt="桜川の渡し。卯助が籠を載せた舟に竿をさし、岸のおはなが手を振る。"
             />
           </div>
-          <p id="loading-tip"><strong>旅の豆知識</strong><span id="loading-tip-copy"></span></p>
+          <section id="loading-tip" aria-labelledby="loading-tip-title">
+            <h3 id="loading-tip-title">旅の餅知識</h3>
+            <p id="loading-tip-copy"></p>
+          </section>
           <span id="loading-copy" role="status">絵巻をひらいています…</span>
           <script>
             {

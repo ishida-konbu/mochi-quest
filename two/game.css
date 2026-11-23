@@ -555,6 +555,7 @@ dialog::backdrop {
   inset: 0;
   display: grid;
   place-content: center;
+  align-content: safe center;
   justify-items: center;
   gap: 16px;
   background: var(--paper) url('../assets/ui/paper.png');
@@ -1306,13 +1307,37 @@ dialog {border:2px solid #526761;border-radius:2px;}
   height: auto;
   border-block: 1px solid #bca783;
 }
+#loading-tip {
+  max-inline-size: 35rem;
+  margin: clamp(12px, 2.6vh, 24px) auto 0;
+  padding: 10px clamp(14px, 3vw, 24px) 13px;
+  border: 1px solid #beaf90;
+  background: #fbf6e9;
+  text-align: start;
+}
+#loading-tip-title {
+  display: table;
+  margin-block-end: 6px;
+  border: 1px solid currentColor;
+  padding: 1px 6px;
+  color: var(--red);
+  font: 700 13px/1.45 var(--min);
+  letter-spacing: .09em;
+}
+#loading-tip-copy {
+  color: var(--ink);
+  font: 500 clamp(15px, 1.7vw, 17px)/1.7 var(--min);
+  line-break: strict;
+}
+#loading:has(#load-actions:not([hidden])) #loading-tip { display: none; }
 .loading-folio #loading-copy {
   display: block;
   margin-top: clamp(14px, 3.5vh, 32px);
   font: 600 14px/1.7 var(--min);
   letter-spacing: .08em;
 }
-@media (max-width: 600px) {
+#loading-tip + #loading-copy { margin-top: clamp(8px, 1.8vh, 16px); }
+@media (max-width: 600px) and (orientation: portrait), (max-width: 600px) and (min-height: 481px) {
   .loading-scroll {
     grid-template-columns: 1fr;
     gap: 16px;
@@ -1327,10 +1352,13 @@ dialog {border:2px solid #526761;border-radius:2px;}
   .loading-caption h2 { font-size: clamp(24px, 6vw, 32px); }
   .loading-scroll img { grid-area: 2 / 1; border-block-end: none; }
 }
-@media (max-height: 480px) and (min-width: 601px) {
-  .loading-folio { width: min(92vw, 168vh); }
+@media (max-height: 480px) and (orientation: landscape) {
+  .loading-folio { width: min(92vw, 150vh); }
   .loading-scroll { padding: 10px; }
-  .loading-caption h2 { font-size: min(3vw, 6vh); }
+  .loading-caption h2 { font-size: clamp(14px, 4.6vh, 20px); }
+  #loading-tip { margin-top: 8px; padding: 6px 12px; }
+  #loading-tip-title { margin-bottom: 3px; }
+  #loading-tip-copy { font-size: 15px; line-height: 1.5; }
 }
 dialog[data-folio] {width:min(760px,calc(100vw - 24px));max-height:min(90dvh,840px);padding:0;
   border:1px solid #675c44;box-shadow:0 20px 75px #181b14a6;overscroll-behavior:contain;scrollbar-color:#ac997a #e6dcc8;}
