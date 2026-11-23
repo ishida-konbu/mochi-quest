@@ -1,9 +1,7 @@
 import { residentScale } from './animal-scale-residents.js';
-import { wildlifeScale } from './animal-scale-wildlife.js';
 
-const animals = [...residentScale, ...wildlifeScale];
-const byId = new Map(animals.map(animal => [animal.id, animal]));
-const groups = ['主人公', '陸の動物', '空の動物', '水辺の動物'];
+const byId = new Map(residentScale.map(animal => [animal.id, animal]));
+const groups = ['陸の動物', '空の動物', '水辺の動物'];
 const selections = ['mochi', 'kirin', 'dragon'];
 const formatter = new Intl.NumberFormat('ja-JP', { maximumSignificantDigits: 3 });
 const longMeasure = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 1 });
@@ -77,7 +75,7 @@ function drawLineup(panel) {
   panel.querySelector('.scale-plate-link').hidden = selections.join(',') !== 'mochi,kirin,dragon';
 }
 
-function compare(panel) {
+function compare(panel, targets) {
   panel.innerHTML = `<div class="scale-pickers"></div>
     <div class="scale-frame"><div class="scale-scene" role="img" aria-label="選んだ動物を同じ縮尺で並べた図"></div></div>
     <table class="scale-table"><thead><tr><th scope="col">動物</th><th scope="col">高さ</th><th scope="col">横幅</th></tr></thead><tbody></tbody></table>
@@ -88,12 +86,8 @@ function compare(panel) {
     label.textContent = (i + 1) + '体目';
     const select = document.createElement('select');
     if (i) select.add(option('', '表示しない'));
-    for (const habitat of groups) {
-      const choices = document.createElement('optgroup');
-      choices.label = habitat;
-      for (const a of animals.filter(a => a.group === habitat)) choices.append(option(a.id, a.label));
-      if (choices.children.length) select.append(choices);
-    }
+    select.add(option('mochi', '白餅（基準）'));
+    for (const animal of targets) select.add(option(animal.id, animal.label));
     select.value = id;
     select.onchange = () => { selections[i] = select.value; drawLineup(panel); };
     label.append(select);
@@ -102,7 +96,7 @@ function compare(panel) {
   drawLineup(panel);
 }
 
-function list(panel, selectAnimal) {
+function list(panel, targets, selectAnimal) {
   panel.innerHTML = `<div class="scale-list-tools"><label>表示する動物 <select></select></label>
       <span>動物を選ぶと白餅と並びます</span></div>
     <div class="scale-list"></div>`;
@@ -113,7 +107,7 @@ function list(panel, selectAnimal) {
   const entries = panel.querySelector('.scale-list');
   function draw() {
     entries.replaceChildren();
-    const visible = animals.filter(a => !group || a.group === group).sort((a, b) => b.width - a.width);
+    const visible = targets.filter(a => !group || a.group === group);
     const max = Math.max(...visible.map(a => a.width));
     const step = rulerStep(max / 4);
     entries.style.setProperty('--scale-step', step / max * 94 + '%');
@@ -146,22 +140,23 @@ function list(panel, selectAnimal) {
   draw();
 }
 
-export function openAnimalScale(host, back) {
+export function openAnimalScale(host, speciesNames, back) {
+  const targets = Object.keys(speciesNames).map(id => byId.get(id));
   host.innerHTML = `<section class="scale-book"><div class="scale-toolbar">
       <button type="button" class="scale-back">‹ 配達帳</button>
       <div class="scale-modes" role="group" aria-label="比較の表示方法">
         <button type="button" data-mode="compare">並べて比べる</button>
-        <button type="button" data-mode="list">全員を見る</button>
+        <button type="button" data-mode="list">配達先の一覧</button>
       </div></div><div class="scale-panel"></div>
-      <p class="scale-footnote">ゲーム内の姿を同じ縮尺で計測。個体や姿勢によって寸法は変わります。</p></section>`;
+      <p class="scale-footnote">白餅を基準に、配達先の動物を同じ縮尺で比べられます。寸法は図の姿勢での値です。</p></section>`;
   const panel = host.querySelector('.scale-panel');
   const buttons = host.querySelectorAll('[data-mode]');
   function show(mode) {
     view = mode;
     buttons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
-    if (mode === 'compare') compare(panel);
-    else list(panel, id => {
-      selections.splice(0, 3, 'mochi', id === 'mochi' ? '' : id, '');
+    if (mode === 'compare') compare(panel, targets);
+    else list(panel, targets, id => {
+      selections.splice(0, 3, 'mochi', id, '');
       show('compare');
       buttons[0].focus({ preventScroll: true });
       host.closest('dialog').scrollTop = 0;

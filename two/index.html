@@ -121,9 +121,8 @@
           "./bath-pavilion-art.js": "./bath-pavilion-art.js?v=amimoto-yudono-1",
           "./regional-bath-carpentry.js": "./regional-bath-carpentry.js?v=amimoto-yudono-1",
           "./actors.js": "./actors.js?v=giant-legends-1",
-          "./animal-scale-book.js": "./animal-scale-book.js?v=animal-scale-1",
-          "./animal-scale-residents.js": "./animal-scale-residents.js?v=animal-scale-1",
-          "./animal-scale-wildlife.js": "./animal-scale-wildlife.js?v=animal-scale-1",
+          "./animal-scale-book.js": "./animal-scale-book.js?v=delivery-animal-scale-1",
+          "./animal-scale-residents.js": "./animal-scale-residents.js?v=delivery-animal-scale-1",
           "./animal-motion.js": "./animal-motion.js?v=animal-scale-1",
           "./roof-shell.js": "./roof-shell.js?v=emaki-landscape-1-otowa-1",
           "./architecture.js": "./architecture.js?v=emaki-landscape-1-otowa-1",
@@ -293,7 +292,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=animal-scale-1" />
+    <link rel="modulepreload" href="./main.js?v=delivery-animal-scale-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -534,7 +533,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=animal-scale-1').catch(error => {
+      import('./main.js?v=delivery-animal-scale-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'

@@ -922,11 +922,11 @@ function journalDialog() {
   const body=$('dialog-content');
   body.innerHTML=`<div id="delivery-book">
     <div class="ledger-head"><p id="ledger-note"></p><span id="ledger-count"></span></div>
-    <button type="button" class="ledger-scale-open">動物の大きさを比べる</button>
+    <button type="button" class="ledger-scale-open">配達先の動物の大きさを比べる</button>
     <div class="ledger-animals"></div></div>`;
   body.querySelector('.ledger-scale-open').onclick = () => {
     $('dialog-title').textContent = '動物の大きさ比べ';
-    openAnimalScale(body, () => {
+    openAnimalScale(body, speciesNames, () => {
       $('dialog-title').textContent = '三条通知の配達帳';
       journalDialog();
       body.querySelector('.ledger-scale-open').focus();
