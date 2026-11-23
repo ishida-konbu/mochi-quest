@@ -26,6 +26,8 @@ import { createRyuguPerformers } from './ryugu-performers.js';
 import { dressArtisan, poseArtisan } from './trade-tools.js';
 import { seatedFeet } from './bath-gestures.js';
 import { makeRiceModel, poseRice, gripChayaServing, gripRinsingLadle } from './mochi-model.js';
+import { createDangoBrush } from './dango-brush.js';
+import { isGroundedDango } from './dango-camera.js';
 
 const PI = Math.PI,
   TAU = PI * 2;
@@ -409,6 +411,7 @@ function makeHero() {
     root,
     pose,
     rolling,
+    swim: { phase: 0, stroke: 0, weight: 0 },
     rice,
     wingParts,
     wrap,
@@ -1395,6 +1398,26 @@ function paperNotice() {
 function shortest(a, b) {
   return Math.atan2(Math.sin(b - a), Math.cos(b - a));
 }
+export function poseSwimming(pose, swim, player, bath, dt) {
+  if (player.mount || player.skiff || (player.activity && !bath?.wet)) {
+    swim.weight = swim.stroke = 0;
+    return;
+  }
+  const wading = player.inWater;
+  if (!wading && swim.weight === 0) return;
+  swim.weight = THREE.MathUtils.damp(swim.weight, wading ? 1 : 0, 12, dt);
+  if (!wading && swim.weight < .001) {
+    swim.weight = swim.stroke = 0;
+    return;
+  }
+  swim.stroke = THREE.MathUtils.damp(swim.stroke, wading ? Math.min(1, player.speed / 3) : 0, 10, dt);
+  // Integrate the stroke: a change of pace must not rewind a long-running journey's animation.
+  swim.phase = (swim.phase + dt * (2.3 + 1.9 * swim.stroke)) % TAU;
+  const weight = swim.weight * (1 - (bath?.settle ?? 0));
+  pose.rotation.x += (.08 + .35 * swim.stroke) * weight;
+  pose.rotation.z += .085 * Math.sin(swim.phase) * swim.stroke * weight;
+  pose.position.y += .055 * Math.cos(2 * swim.phase) * weight;
+}
 function gaitHero(h, p, t, dt, state) {
   const mood = getExpression(p, t),
     sit = servingPose(p),
@@ -1418,12 +1441,6 @@ function gaitHero(h, p, t, dt, state) {
   const mountHeight = p.mount === 'bike' ? .90 : p.mount === 'turtle' ? 1.04 : 0;
   h.pose.position.set(0,response.bob+mountHeight,riding?-.14:0);
   h.pose.rotation.set(response.pitch,0,response.lean);
-  if (p.inWater && !riding && !sit) {
-    const stroke=Math.min(1,speed/3),cycle=t*(2.3+stroke*1.9);
-    h.pose.rotation.x+=.08+.35*stroke;
-    h.pose.rotation.z+=.085*Math.sin(cycle)*stroke;
-    h.pose.position.y+=.055*Math.cos(cycle*2);
-  }
   if(sit==='fall'){
     const fall=Math.sin(Math.min(1,(p.activityTime||.1)/.68)*PI);
     h.pose.rotation.z+=fall*.93;
@@ -1450,7 +1467,7 @@ function gaitHero(h, p, t, dt, state) {
       g*THREE.MathUtils.lerp(response.stretch,posture.height,q),g*THREE.MathUtils.lerp(response.width,1.025,q));
   }else if(bath){
     const {recline,settle}=bath, breath=Math.sin(t*1.85);
-    const tilt=THREE.MathUtils.lerp(.065,-1.53,recline);
+    const tilt=THREE.MathUtils.lerp(.065*settle,-1.53,recline);
     const halfLength=response.floatLength*.50*g;
     h.pose.rotation.x=tilt;
     h.pose.rotation.z=.025*recline*Math.sin(t*1.28);
@@ -1458,6 +1475,7 @@ function gaitHero(h, p, t, dt, state) {
     h.pose.position.y=(p.bathWaterY-p.y+.045+.015*breath-Math.cos(tilt)*halfLength)*settle;
     h.pose.scale.set(g*(1+.035*recline),g,g*(1+.018*breath*recline));
   }
+  poseSwimming(h.pose,h.swim,p,bath,dt);
   if(p.buffs?.drunk>0) h.pose.rotation.z+=.115*Math.sin(t*3.7);
   if(bath?.action==='rinse')gripRinsingLadle(h.rice,p);
   h.leaves.visible = p.mode === 'kusa';
@@ -1474,14 +1492,15 @@ function gaitHero(h, p, t, dt, state) {
   h.leaves.scale.set(1-.25*pull,1,1-.25*pull);
   h.wrap.position.set(.052*pull+.06*(bath?.melt || 0),response.extension*.22+response.floatDraw*.54,.018*pull);
   h.wrap.scale.set(1.075-.08*pull,1+.40*pull,1.042-.085*pull-.34*(bath?.melt || 0));
-  if (dango && !riding && !sit) {
-    if ((!p.grounded && p.airStretch > 0) || speed < .22)
-      h.spin += shortest(h.spin,0) * (1-Math.exp(-dt*14));
-    else h.spin = (h.spin + (speed * dt) / 0.79) % TAU;
+  if (dango && !riding && (!sit || bath)) {
+    if (bath || (!p.grounded && p.airStretch > 0) || speed < .22) {
+      const unwind = shortest(h.spin,0) * (1-Math.exp(-dt*14));
+      h.spin += bath ? THREE.MathUtils.clamp(unwind,-5.5*dt,5.5*dt) : unwind;
+    } else h.spin = (h.spin + (speed * dt) / 0.79) % TAU;
     h.rolling.rotation.x = h.spin;
     // Rotate about the centre of the ball while keeping its feet on the ground.
     h.rolling.position.set(0, 0.82 - 0.82 * Math.cos(h.spin), -0.82 * Math.sin(h.spin));
-    h.pose.scale.y *= 1.02;
+    h.pose.scale.y *= 1+.02*(1-(bath?.settle ?? 0));
   } else {
     h.spin = 0;
     h.rolling.rotation.x = 0;
@@ -1599,7 +1618,7 @@ export function makeNPC(entity, root) {
   const shadowMesh = shadow(mesh, kind === 'turtle' ? 1.19 : 1.2, kind === 'turtle' ? 1.32 : 1.0);
   return { mesh, limbs, shadow: shadowMesh };
 }
-export function animateNPC(record, n, t) {
+export function animateNPC(record, n, t, passingDango) {
   const { mesh, limbs } = record,
     isTurtle = n.type === 'turtle',
     sumo = n.role === 'sumo';
@@ -1688,6 +1707,24 @@ export function animateNPC(record, n, t) {
     poseHareRider(limbs,n,t);
     record.shadow.visible = false;
   }
+  if (passingDango && n.role === 'wander' && !n.area && !n.encounter && !n.ridesDeer) {
+    const dx = wrapDelta(passingDango.x - n.x), dz = wrapDelta(passingDango.z - n.z);
+    const distance = Math.hypot(dx, dz, passingDango.y - n.y);
+    const attention = (1 - THREE.MathUtils.smoothstep(distance, 2, 10)) *
+      THREE.MathUtils.smoothstep(passingDango.speed, 7, 18);
+    // The hare draws its long ears together; the frog lifts its free sleeve
+    // while keeping the parasol upright. Both glance down at the passing ball.
+    const side = (dx * Math.cos(mesh.rotation.y) - dz * Math.sin(mesh.rotation.y)) / Math.max(1, distance);
+    limbs.head.rotation.y += .95 * side * attention;
+    limbs.head.rotation.x += .23 * attention;
+    if (n.type === 'rabbit') {
+      limbs['筆穂耳1'].rotation.z += .28 * attention;
+      limbs['筆穂耳-1'].rotation.z -= .21 * attention;
+    } else if (n.type === 'frog') {
+      limbs.arm1.rotation.x -= .96 * attention;
+      limbs.arm1.rotation.z += .26 * attention;
+    }
+  }
   if (n.flash > 0) {
     mesh.position.y += 0.11 * Math.abs(Math.sin(n.flash * 12));
     limbs.head.rotation.z += 0.16;
@@ -1749,6 +1786,7 @@ function within(entity, player, limit) {
 export function createActors(scene, renderer) {
   const root = group(scene, '旅の仲間');
   const h = makeHero();
+  const dangoBrush = createDangoBrush(root);
   const skyLife = createSkyLife(root);
   const seaPerformers = createRyuguPerformers(root);
   const faunaView = createScrollFaunaView(root,batch,shadowMap());
@@ -1867,7 +1905,9 @@ export function createActors(scene, renderer) {
   function update(state, dt, camera) {
     const p = state.player,
       t = state.time;
+    const passingDango = !state.photo && p.speed > 7 && isGroundedDango(p) ? p : null;
     gaitHero(h, p, t, dt, state);
+    dangoBrush(p, t, state.photo);
     const reach = h.root.userData.storyReach;
     if (reach && !p.activity && !p.mount && !p.skiff) {
       // Apply the voluntary reach after gait/morphs, without stretching the
@@ -1952,7 +1992,7 @@ export function createActors(scene, renderer) {
       }
       if (SPECIES[n.type]) refreshBeastCoats(n.type);
       selected.add(n);
-      animateNPC(rec,slot.view,t);
+      animateNPC(rec,slot.view,t,passingDango);
       rec.mesh.position.x=slot.x;rec.mesh.position.z=slot.z;
     }
     for(const [id,rec] of npcs) if(!selected.has(rec.entity)) {

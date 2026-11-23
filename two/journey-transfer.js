@@ -34,6 +34,7 @@ export function decodeTransfer(origin, hash, createGame) {
     if (settings.goal !== null && !goal) return null;
     return { game, settings: {
       sound: settings.sound, volumes: normalizeVolumes(settings.volumes), yaw: settings.yaw, goal: savedMapGoal(goal),
+      ...(typeof settings.dangoCamera === 'boolean' ? { dangoCamera: settings.dangoCamera } : {}),
       ...(settings.minimap ? { minimap: normalizeMiniMap(settings.minimap) } : {}),
     } };
   } catch {

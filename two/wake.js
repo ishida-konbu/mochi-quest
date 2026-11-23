@@ -61,11 +61,16 @@ export function createWake(scene) {
   });
   let next = 0, last = -Infinity;
   return (p, t) => {
-    if (t < last) {
-      // A photograph has its own clock. Discard its impressions on returning
-      // to the journey so they cannot reappear a few seconds down the river.
-      for (const ring of rings) ring.born = -Infinity;
+    const bathing = p.activity === 'bath';
+    if (bathing || t < last) {
+      // The spring shader follows the bather to their berth. Clear the swim
+      // wake at the entry point, and any photo impressions when time rewinds.
+      for (const ring of rings) {
+        ring.born = -Infinity;
+        ring.mesh.visible = false;
+      }
       last = -Infinity;
+      if (bathing) return;
     }
     const moving = p.speed > .3;
     const interval = moving ? Math.max(.18, .33 - p.speed * .012) : 1.12;
@@ -75,9 +80,8 @@ export function createWake(scene) {
       ring.born = last = t;
       ring.strength = Math.min(1, .4 + p.speed * .13);
       ring.span = p.mount === 'turtle' ? 1.35 : p.mount === 'bike' ? .63 : 1;
-      const bath = p.bathWaterY;
-      ring.level = bath ?? waterSurfaceAt(p.x,p.z,t,p.y);
-      ring.waves = bath == null && ring.level === WATER_Y;
+      ring.level = waterSurfaceAt(p.x,p.z,t,p.y);
+      ring.waves = ring.level === WATER_Y;
       const heading = moving ? Math.atan2(p.vx, p.vz) : next * 2.4;
       const tail = moving ? ring.span * .36 : 0;
       ring.mesh.position.set(p.x - tail * Math.sin(heading), ring.level, p.z - tail * Math.cos(heading));

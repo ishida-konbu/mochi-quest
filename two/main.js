@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { applyClimateLights } from './atmosphere.js';
 import { createWake } from './wake.js';
+import { createDangoCamera, onDangoCourse } from './dango-camera.js';
 import { prepareWorld } from './world.js';
 import { finishInSlices, watchArrivalPaint } from './preparation.js';
 import { setRiverStones } from './scanned-stone.js';
@@ -104,8 +105,12 @@ state.inariWeather = inariWeatherAt(p.x, p.z, state.time, state.flightSeed);
 const audio = createAudio(createSoundscape);
 let audible = savedSettings.sound !== false;
 let volumes = normalizeVolumes(savedSettings.volumes);
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let dangoCameraPreference = typeof savedSettings.dangoCamera === 'boolean' ? savedSettings.dangoCamera : undefined;
+let dangoCameraEnabled = dangoCameraPreference ?? !reducedMotion.matches;
 audio.setVolumes(volumes);
 let yaw = Number.isFinite(savedSettings.yaw) ? savedSettings.yaw : 0;
+const dangoCamera = createDangoCamera();
 let pitch = 0.23,
   distance = 6.55,
   priorCamera = null,
@@ -192,7 +197,7 @@ window.addEventListener('storage', event => {
 });
 function journeySettings() {
   return {
-    sound: audible, volumes, yaw: photoMode ? priorCamera.yaw : yaw,
+    sound: audible, volumes, dangoCamera: dangoCameraPreference, yaw: photoMode ? priorCamera.yaw : yaw,
     goal: savedMapGoal(goal), minimap: miniMap.settings, resetAt: savedSettings.resetAt,
   };
 }
@@ -344,6 +349,11 @@ function action(name) {
 }
 const audioSettings = createAudioSettings({
   volumes,
+  dangoCameraEnabled,
+  onDangoCameraChange(enabled) {
+    dangoCameraPreference = dangoCameraEnabled = enabled;
+    persistSettings();
+  },
   onOpen() {
     speech.stop();
     clearInput();
@@ -351,7 +361,7 @@ const audioSettings = createAudioSettings({
   },
   onReset() {
     if (!canSaveJourney()) return;
-    const preferences = { sound: audible, volumes, yaw: 0, goal: null, minimap: miniMap.settings, resetAt: Date.now() };
+    const preferences = { ...journeySettings(), yaw: 0, goal: null, resetAt: Date.now() };
     try {
       replaceJourney(localStorage, preferences, null);
     } catch {
@@ -365,6 +375,11 @@ const audioSettings = createAudioSettings({
     audio.setVolumes(volumes);
     persistSettings();
   },
+});
+reducedMotion.addEventListener('change', () => {
+  if (dangoCameraPreference !== undefined) return;
+  dangoCameraEnabled = !reducedMotion.matches;
+  audioSettings.setDangoCamera(dangoCameraEnabled);
 });
 setAudio(audible);
 $('audio').onclick = () => {
@@ -411,6 +426,7 @@ function updateEmotes() {
 }
 function clearInput() {
   keys.clear();
+  dangoCamera.reset();
   surfaceJumpAt = Infinity;
   jumpTouch = diveTouch = false;
   stick.id = null;
@@ -472,7 +488,9 @@ $('download').onclick = () => {
 };
 function moveCamera(dx, dy) {
   conversationYaw = null;
-  yaw -= dx * 0.0055;
+  const turn = -dx * .0055;
+  if (dx || dy) dangoCamera.manualLook(turn);
+  yaw += turn;
   pitch = clamp(pitch + dy * 0.004, photoMode ? -0.06 : -1.25, 1.08);
 }
 canvas.onpointerdown = (e) => {
@@ -671,32 +689,22 @@ function updateCamera(dt, snap = false) {
   const standingEye=p.y + ride + .9*full + p.airStretch*full*(photoMode ? .72 : .51) - rise - resting;
   const seated=bathPosture(bath?.action);
   const bathEye=seated?seatedFeet(p,bath)+seated.eye*full:(p.bathWaterY??p.y)+.32*full;
-  heroAt.set(bath?.x ?? p.x,bath ? THREE.MathUtils.lerp(standingEye,bathEye,settle) : standingEye,bath?.z ?? p.z);
+  // Keep the travel camera on the visitor's footing. Orbiting the moving
+  // berth sweeps the camera arm across low rims and roof posts during a soak.
+  if (photoMode && bath) heroAt.set(bath.x, THREE.MathUtils.lerp(standingEye,bathEye,settle), bath.z);
+  else heroAt.set(p.x, standingEye, p.z);
   if (framing > .001) {
     heroAt.lerp(conversationTarget, framing * .63);
     if (examining > .001) heroAt.lerp(lastExhibit,examining*.95);
   }
   if (snap || Math.abs(heroAt.x - focus.x) > BOUND || Math.abs(heroAt.z - focus.z) > BOUND) focus.copy(heroAt);
   else focus.lerp(heroAt, 1 - Math.exp(-dt * 13));
-  let cameraYaw=yaw;
-  const indoor=bath?.action==='rinse'||bath?.action==='steam';
-  const shellBath=bath?.id==='sazae-mouth';
-  if((indoor || shellBath) && !photoMode && Number.isFinite(bath.heading)){
-    const rel=Math.atan2(Math.sin(yaw-bath.heading),Math.cos(yaw-bath.heading));
-    // From the shell's open side, the face, pearl lip and spire are all
-    // visible. For the washing bench, stay in the aisle beside the ladle.
-    const threeQuarter=shellBath?-.74:(rel<0?-1:1)*(bath.action==='rinse'?1.64:.94);
-    const turn=threeQuarter-rel;
-    cameraYaw+=Math.atan2(Math.sin(turn),Math.cos(turn))*.84*settle;
-  }
-  const sx = Math.sin(cameraYaw),
-    sz = Math.cos(cameraYaw),
-    scenery = photoMode ? 0 : scrollCoverage(p.x,p.z)*(1-settle),
-    d = distance * (1-.33*framing-.32*examining) * (full > 1 && photoMode ? 1.18 : 1) * (1+.14*scenery) * (photoMode ? 1 : 1-.12*settle);
+  const sx = Math.sin(yaw),
+    sz = Math.cos(yaw),
+    scenery = photoMode ? 0 : scrollCoverage(p.x,p.z),
+    d = distance * (1-.33*framing-.32*examining) * (full > 1 && photoMode ? 1.18 : 1) * (1+.14*scenery);
   // At the horizon, hold the eye above ground and tilt up to follow an animal overhead.
-  const freePitch=Math.max(0,pitch);
-  const treatmentPitch=seated?(indoor?seated.camera:Math.max(freePitch,seated.camera)):Math.max(.73,freePitch);
-  const orbitPitch=photoMode?pitch:THREE.MathUtils.lerp(freePitch,treatmentPitch,settle);
+  const orbitPitch=photoMode ? pitch : Math.max(0,pitch);
   const shoulder=scenery*Math.min(1,camera.aspect)*Math.min(1,d/5);
   const dx = sx * Math.cos(orbitPitch) * d + sz*1.58*shoulder,
     dz = sz * Math.cos(orbitPitch) * d - sx*1.58*shoulder;
@@ -753,10 +761,16 @@ function updateCamera(dt, snap = false) {
   camera.position.copy(eye);
   aim.copy(focus);
   if (!photoMode) {
+    if (bath) {
+      aim.x += bath.x - p.x;
+      aim.z += bath.z - p.z;
+      aim.y += (bathEye - standingEye) * settle;
+    }
     // Give the page to the animal directly ahead. An off-centre mochi keeps
     // the letter trajectory visible between the hero and its recipient.
-    aim.x += (sz*.4*shoulder-sx*(1.65+.82*scenery))*(1-settle)*(1-framing);
-    aim.z -= (sx*.4*shoulder+sz*(1.65+.82*scenery))*(1-settle)*(1-framing);
+    const lookAhead = 1.65 + .82*scenery + 1.9*dangoCamera.lead*fraction;
+    aim.x += (sz*.4*shoulder-sx*lookAhead)*(1-settle)*(1-framing);
+    aim.z -= (sx*.4*shoulder+sz*lookAhead)*(1-settle)*(1-framing);
     aim.y += (.53+.25*scenery)*(1-settle)*(1-framing*.6)*(1-examining)+(camera.aspect<.83 ? .27*settle : 0);
   } else aim.y -= .13;
   camera.lookAt(aim);
@@ -1067,19 +1081,28 @@ function frame(now) {
     Number(keys.has('ArrowUp') || keys.has('KeyW')) -
     Number(backward && !diveChord) -
     stick.y;
-  yaw += (Number(keys.has('KeyQ')) - Number(keys.has('KeyR'))) * delta * 1.65;
+  const orbit = (Number(keys.has('KeyQ')) - Number(keys.has('KeyR'))) * delta * 1.65;
+  if (orbit) {
+    dangoCamera.manualLook(orbit);
+    yaw += orbit;
+  }
   if (!photoMode) {
     const side = right - left + stick.x,
-      c = Math.cos(yaw),
-      s = Math.sin(yaw);
+      assist = dangoCameraEnabled && !speech.active,
+      rolling = assist && onDangoCourse(p),
+      steering = dangoCamera.movementYaw(yaw, side, forward, rolling),
+      c = Math.cos(steering),
+      s = Math.sin(steering),
+      magnitude = rolling ? Math.max(1, Math.hypot(side, forward)) : 1;
     game.step(delta, {
-      x: c * side - s * forward,
-      z: -s * side - c * forward,
+      x: (c * side - s * forward) / magnitude,
+      z: (-s * side - c * forward) / magnitude,
       rightX: c,
       rightZ: -s,
       jump: (!swimming || p.diveDepth>0 || !p.grounded) && !diveChord && !diveTouch && (jumpTouch || keys.has('Space')),
       dive: diveTouch || diveChord,
     });
+    yaw = dangoCamera.follow(yaw, p, delta, assist, look.id !== null || keys.has('KeyQ') || keys.has('KeyR'));
     dispatchEvents();
   } else photoTime += delta;
   updateCamera(delta);

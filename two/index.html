@@ -21,10 +21,12 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=wayfinding-1" />
+    <link rel="stylesheet" href="./game.css?v=dango-roll-1" />
     <script type="importmap">
       {
         "imports": {
+          "./dango-camera.js": "./dango-camera.js?v=dango-roll-1",
+          "./dango-brush.js": "./dango-brush.js?v=dango-roll-1",
           "./ferry-curtain.js": "./ferry-curtain.js?v=handscroll-arrival-1",
           "./landscape-tiles.js": "./landscape-tiles.js?v=handscroll-arrival-1",
           "./travel-paint.js": "./travel-paint.js?v=handscroll-arrival-1",
@@ -117,7 +119,7 @@
           "./bath-enclosures.js": "./bath-enclosures.js?v=amimoto-yudono-1",
           "./bath-pavilion-art.js": "./bath-pavilion-art.js?v=amimoto-yudono-1",
           "./regional-bath-carpentry.js": "./regional-bath-carpentry.js?v=amimoto-yudono-1",
-          "./actors.js": "./actors.js?v=mochiyori-dialogue-1",
+          "./actors.js": "./actors.js?v=onsen-motion-1",
           "./animal-motion.js": "./animal-motion.js?v=ryu-emaki-1",
           "./roof-shell.js": "./roof-shell.js?v=emaki-landscape-1-otowa-1",
           "./architecture.js": "./architecture.js?v=emaki-landscape-1-otowa-1",
@@ -132,12 +134,12 @@
           "./forest-mesh.js": "./forest-mesh.js?v=emaki-funatabi-1",
           "./bamboo-culms.js": "./bamboo-culms.js?v=kyoto-groves-snow-1",
           "./forest.js": "./forest.js?v=kyoto-groves-snow-1",
-          "./game.js": "./game.js?v=boat-audio-1-emaki-funatabi-1",
+          "./game.js": "./game.js?v=onsen-motion-1",
           "./handscroll-beasts.js": "./handscroll-beasts.js?v=3.3",
           "./inari-rain.js": "./inari-rain.js?v=inari-rain-1",
           "./inari-weather.js": "./inari-weather.js?v=inari-rain-1",
           "./ink.js": "./ink.js?v=handscroll-arrival-1",
-          "./interface.js": "./interface.js?v=wayfinding-1",
+          "./interface.js": "./interface.js?v=dango-roll-1",
           "./kagami-fern.js": "./kagami-fern.js?v=6.3",
           "./kagami-mochibana.js": "./kagami-mochibana.js?v=6.5",
           "./mochibana-rice.js": "./mochibana-rice.js?v=6.5",
@@ -145,7 +147,7 @@
           "./kagami-paper.js": "./kagami-paper.js?v=6.1",
           "./kagami-surfaces.js": "./kagami-surfaces.js?v=5.2",
           "./interiors.js": "./interiors.js?v=3.3",
-          "./journey-transfer.js": "./journey-transfer.js?v=wayfinding-1",
+          "./journey-transfer.js": "./journey-transfer.js?v=dango-roll-1",
           "./legend-flight.js": "./legend-flight.js?v=ryu-emaki-1",
           "./map.js": "./map.js?v=wayfinding-1",
           "./meadow-herbs.js": "./meadow-herbs.js?v=emaki-landscape-1",
@@ -178,8 +180,8 @@
           "./lake-shore.js": "./lake-shore.js?v=islet-escarpment-1",
           "./snow-bath.js": "./snow-bath.js?v=yuya-emaki-1",
           "./snow-daruma.js": "./snow-daruma.js?v=3.3",
-          "./audio-settings.js": "./audio-settings.js?v=boat-audio-1-reset1",
-          "./soundscape.js": "./soundscape.js?v=boat-audio-1-emaki-funatabi-1",
+          "./audio-settings.js": "./audio-settings.js?v=dango-roll-1",
+          "./soundscape.js": "./soundscape.js?v=dango-roll-1",
           "./journey-music.js": "./journey-music.js?v=boat-audio-1",
           "./journey-player.js": "./journey-player.js?v=region-tracks-2",
           "./spring-water.js": "./spring-water.js?v=suzuri-roji-1",
@@ -189,7 +191,7 @@
           "./trade-tools.js": "./trade-tools.js?v=mochiyori-2",
           "./turtle-art.js": "./turtle-art.js?v=3.3",
           "./village-paths.js": "./village-paths.js?v=kyoto-groves-snow-1",
-          "./wake.js": "./wake.js?v=emaki-funatabi-1",
+          "./wake.js": "./wake.js?v=onsen-motion-1",
           "./wilds.js": "./wilds.js?v=emaki-funatabi-1",
           "./workshops.js": "./workshops.js?v=emaki-landscape-1",
           "./kyo.js": "./kyo.js?v=yumeguri-shohou-1",
@@ -280,7 +282,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=wayfinding-1" />
+    <link rel="modulepreload" href="./main.js?v=onsen-motion-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -457,6 +459,10 @@
           <tbody></tbody>
         </table>
       </details>
+      <label class="camera-option">
+        <span>団子の進行方向にカメラを合わせる</span>
+        <input id="dango-camera" type="checkbox">
+      </label>
       <div class="journey-reset">
         <p id="reset-description">旅の記録と手帖を消して、桜川の渡しから始めます。</p>
         <button id="reset-journey" type="button" class="choice" aria-describedby="reset-description">ゲームをリセット</button>
@@ -478,7 +484,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=wayfinding-1').catch(error => {
+      import('./main.js?v=onsen-motion-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'

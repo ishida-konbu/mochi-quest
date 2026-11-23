@@ -22,11 +22,14 @@ function fillSoundtrack(table) {
   }
 }
 
-export function createAudioSettings({ volumes, onChange, onOpen, onReset }) {
+export function createAudioSettings({ volumes, dangoCameraEnabled, onDangoCameraChange, onChange, onOpen, onReset }) {
   const panel = document.getElementById('audio-settings');
   const toggle = document.getElementById('audio-settings-toggle');
   const dismiss = document.getElementById('audio-settings-close');
   const reset = document.getElementById('reset-journey');
+  const follow = document.getElementById('dango-camera');
+  follow.checked = dangoCameraEnabled;
+  follow.addEventListener('change', () => onDangoCameraChange(follow.checked));
   reset.addEventListener('click', () => {
     if (window.confirm('ほんとうにリセットしてもよいか？')) onReset();
   });
@@ -90,6 +93,7 @@ export function createAudioSettings({ volumes, onChange, onOpen, onReset }) {
   document.addEventListener('focusin', closeFromOutside);
   return {
     close,
+    setDangoCamera(enabled) { follow.checked = enabled; },
     setMuted(muted) { document.getElementById('audio-muted').hidden = !muted; },
   };
 }

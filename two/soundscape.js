@@ -11,6 +11,7 @@ import { createTempleBell } from './kiyomizu-bell.js';
 import { palaceInteriorAt } from './ryugu-layout.js';
 import { journeyMusicCue } from './journey-music.js';
 import { createJourneyPlayer } from './journey-player.js';
+import { isGroundedDango } from './dango-camera.js';
 
 const places = Object.fromEntries(REGIONS.map(place => [place.id, place]));
 const loops = { bamboo: 27, river: 24, wind: 23, crickets: 25, shore: 29, paddy: 21,
@@ -446,8 +447,12 @@ export function createSoundscape(ctx, master, channels = {}) {
             const speed = clamp(p.speed / 46);
             brush(now, 640 + 560 * speed, 310, .23, .10 + .07 * speed);
             note(now + .021, 610, 315, .048, .033, .08, 'triangle');
-          } else if (p.mode === 'dango' && !p.inWater) {
-            brush(now, 450, 175, .25, .13);
+          } else if (isGroundedDango(p)) {
+            const speed = clamp(p.speed / 23.6);
+            const ground = footSurface(p);
+            // The rice brushes softly across turf; grit brightens as the roll gathers speed.
+            const grain = ground === 'gravel' ? 780 : ground === 'wood' ? 510 : 340;
+            brush(now, grain * (.76 + .74 * speed), 155 + 105 * speed, .19 + .13 * speed, .055 + .085 * speed);
           } else footfall(p, p.mount === 'turtle' ? .32 : .23);
         }
       } else travelled = 0;

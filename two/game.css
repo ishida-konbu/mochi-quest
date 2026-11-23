@@ -1149,6 +1149,24 @@ dialog {border:2px solid #526761;border-radius:2px;}
   font: 600 12px var(--sans);
   font-variant-numeric: tabular-nums;
 }
+.camera-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  font: 700 14px/1.5 var(--min);
+  cursor: pointer;
+}
+.camera-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--sage);
+  cursor: pointer;
+}
 .journey-reset {
   border-top: 1px solid var(--line);
   padding: 12px 0;
@@ -1198,7 +1216,7 @@ dialog {border:2px solid #526761;border-radius:2px;}
   margin-top: 2px;
   color: #675d4c;
 }
-#soundtrack summary:focus-visible, .volume-row input:focus-visible {
+#soundtrack summary:focus-visible, .volume-row input:focus-visible, .camera-option input:focus-visible {
   outline: 2px solid var(--red);
   outline-offset: 2px;
 }

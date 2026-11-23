@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getExpression } from '../two/actors.js';
+import { getExpression, poseSwimming } from '../two/actors.js';
 import { createGame } from '../two/game.js';
+import { groundHeight } from '../two/terrain.js';
+import { Group } from '../two/vendor/three.module.min.js';
 
 test('actions interrupt a lingering flush, and the face settles back after the action', () => {
   const player = createGame().state.player;
@@ -76,6 +78,31 @@ test('E tips the bather back before the dough spreads, and a saved soak resumes 
   assert.ok(resumed.state.player.bathPose.recline<.25);assert.equal(resumed.state.player.bathPose.melt,0);
   for(let i=0;i<3;i++)resumed.step(.1);
   assert.equal(resumed.state.player.bathPose,undefined);assert.equal(resumed.state.player.mode,'kusa');
+});
+
+test('changing pace in hot spring water keeps a continuous stroke on an old journey and settles into the soak', () => {
+  const game = createGame(), p = game.state.player;
+  const pool = game.state.objects.find(o => o.grand);
+  game.state.time = 1800;
+  Object.assign(p, { x:pool.x, z:pool.z, y:groundHeight(pool.x,pool.z), grounded:true, inWater:true, mode:'kusa' });
+  const pose = new Group(), swim = { phase:0, stroke:0, weight:0 };
+  let fastest = 0;
+  function frame(input) {
+    const oldHeight = pose.position.y, oldRoll = pose.rotation.z;
+    game.step(1/60, input);
+    pose.position.set(0,0,0);
+    pose.rotation.set(0,0,0);
+    poseSwimming(pose,swim,p,p.bathPose,1/60);
+    assert.ok(Math.abs(pose.position.y-oldHeight) < .011, 'wading lift jumps between consecutive frames');
+    assert.ok(Math.abs(pose.rotation.z-oldRoll) < .016, 'wading roll jumps between consecutive frames');
+    fastest = Math.max(fastest,p.speed);
+  }
+  for (let i=0; i<80; i++) frame({ x:i<38 ? i/38 : 0 });
+  assert.ok(fastest > 3 && p.speed < .1);
+  assert.ok(game.act('interact'));
+  for (let i=0; i<90; i++) frame({});
+  assert.equal(p.bathPose.settle, 1);
+  assert.deepEqual([pose.position.y,pose.rotation.x,pose.rotation.z], [0,0,0]);
 });
 
 test('the cyclist smiles through acceleration and coasting, including in the moonlight', () => {

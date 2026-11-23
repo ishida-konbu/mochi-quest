@@ -506,9 +506,6 @@ export function createGame(snapshot = null) {
       lastBath=target;lastPlace=place;
       berth=null;
       if(Number.isFinite(facing))player.heading=Math.atan2(Math.sin(facing),Math.cos(facing));
-      if (target.goemon) {
-        player.x = target.x; player.z = target.z; player.y = target.y;
-      }
       player.h = player.vy = 0;
       player.grounded = true;
       if(place?.action!=='rinse' && place?.action!=='steam')sound('bath');

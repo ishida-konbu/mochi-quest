@@ -26,7 +26,10 @@ test('a transfer carries only a normalized Mochi Quest 2 save and settings in th
   assert.equal(incoming.game.save().player.unknown,undefined);
   assert.equal(incoming.game.save().unknown,undefined);
   assert.deepEqual(incoming.settings,{...settings,volumes:{effects:1,ambient:1,music:1}});
-  const mixed=decode(encode(save,{...settings,volumes:{effects:0,ambient:.6,music:.25}}).hash);
+  const mixed=decode(encode(save,{...settings,dangoCamera:false,volumes:{effects:0,ambient:.6,music:.25}}).hash);
+  assert.equal(mixed.settings.dangoCamera,false);
+  assert.equal(decode(encode(save,{...settings,dangoCamera:true}).hash).settings.dangoCamera,true);
+  assert.equal(decode(encode(save,{...settings,dangoCamera:'false'}).hash).settings.dangoCamera,undefined);
   assert.deepEqual(mixed.settings.volumes,{effects:0,ambient:.6,music:.25});
 });
 
