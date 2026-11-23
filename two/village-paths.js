@@ -181,7 +181,7 @@ export function prepareVillageRoutes(npcs,objects) {
   seatWorkers(npcs);
   const workers=npcs.filter(n=>n.area);
   for(const n of npcs) {
-    if(n.room!==undefined || n.atMortar || ['bird','dragon','kirin'].includes(n.type)) continue;
+    if(n.room!==undefined || n.atMortar || n.waterHare || ['bird','dragon','kirin'].includes(n.type)) continue;
     if(n.type==='tiger' || n.type==='shishi') {
       settlePredator(n,workers,objects);
       continue;

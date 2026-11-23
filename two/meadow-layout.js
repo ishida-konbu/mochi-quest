@@ -1,3 +1,4 @@
+import { onKaedeWaterStep } from './kaede-water-steps.js';
 import { fireTrailDistance, inFireMeadow } from './higashiyama.js';
 import { POUNDING } from './festival.js';
 import { inMountainStreamClearing } from './mountain-streams.js';
@@ -180,7 +181,7 @@ export function visitMeadowTile(i,j,clearings,visit) {
     if(pathDistance<.54+width*.25 || inFireMeadow(x,z,width*.25))continue;
     // Prune after drawing the seed. Adjacent ledges and the opposite bank
     // retain exactly the same plants, including the younger daughter shoots.
-    if(!onSlateFace(x,z,heightAt)){
+    if(!onSlateFace(x,z,heightAt) && !onKaedeWaterStep(x,z,width*.42)){
       visit(x,y-.022,z,width,height,angle,family*HERB_FORMS+form,shade,hue);
       count++;
     }
@@ -198,7 +199,7 @@ export function visitMeadowTile(i,j,clearings,visit) {
     if(pathDistance<2 && fireTrailDistance(sx,sz)<.54+width*young*.25 ||
        inFireMeadow(sx,sz,width*young*.25))continue;
     const seedlingForm=family*HERB_FORMS+floor(rng()*2);
-    if(!onSlateFace(sx,sz,heightAt)){
+    if(!onSlateFace(sx,sz,heightAt) && !onKaedeWaterStep(sx,sz,width*young*.42)){
       visit(sx,sy-.022,sz,width*young*.91,height*young,bearing,seedlingForm,shade*.98,hue);
       count++;
     }

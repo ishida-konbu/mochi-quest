@@ -29,6 +29,8 @@ import { RYUGU, PALACE_BED, palacePoint, palaceInteriorAt, boardingHeightAt } fr
 import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, terrainContactHeight, swimSurfaceAt, canDiveAt, groundHeight, landscapeFloor, constrainMove, canOccupy, staticVolumeAt, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, springLevel, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
 import { POUNDING, POUNDING_CREW } from './festival.js';
+import { updateWaterHare } from './kaede-water-hare.js';
+import { KAEDE_WATER_TREADS } from './kaede-water-steps.js';
 import { prepareVillageRoutes, animalRadius, openGround, walkCircuit } from './village-paths.js';
 import { procession } from './procession.js';
 import { walkingScore } from './animal-motion.js';
@@ -131,6 +133,10 @@ function makeWorld() {
         }
       } else {
         npc('rabbit', 'wander', x - 7, z - 12, i + 1.4);
+        if(id==='autumn') {
+          const hare=npcs.at(-1), landing=KAEDE_WATER_TREADS[0];
+          Object.assign(hare,{waterHare:true,homeX:landing.x,homeZ:landing.z});
+        }
         npc('frog', 'porter', x - 19, z + 5, i + 2.8);
       }
       return;
@@ -927,6 +933,7 @@ export function createGame(snapshot = null) {
     for (const n of state.nearbyNpcs) {
       n.flash = Math.max(0, n.flash - dt);
       if (n === turtle || n.atMortar || n.ridesDeer) continue;
+      if (n.waterHare) {updateWaterHare(n,state.time,player);continue;}
       if (n.encounter) {updateScrollResident(n,state.time);continue;}
       if (n.scrollFauna) {moveScrollFauna(n,state.time);continue;}
       if (n.seaResident) {updateRyuguResident(n,state.time);continue;}
@@ -1043,7 +1050,7 @@ export function createGame(snapshot = null) {
       const half=((top ?? 2*halfHeight)-low)*.5;
       Object.assign(fromBody,{x:wrapCoord(x+s*offset),y:y+low+half,z:wrapCoord(z+c*offset)});
       for(const n of state.nearbyNpcs){
-        if(n.mounted)continue;
+        if(n.mounted || (n.waterHare && n.waterYield>.12 && !player.mount))continue;
         const t=sweepResident(n,fromBody,dx,dy,dz,width || radius,half,moving,contactNormal);
         if(t<first){
           first=t;hit=n;Object.assign(hitNormal,contactNormal);
@@ -1053,7 +1060,7 @@ export function createGame(snapshot = null) {
       }
     }
     if(hit && !bumped && !hit.area && !hit.encounter && !hit.scrollFauna &&
-        !hit.seaResident && !hit.atMortar && hit!==turtle)bumped=hit;
+        !hit.seaResident && !hit.atMortar && !hit.waterHare && hit!==turtle)bumped=hit;
     return first;
   }
   function crowdMove(x,z,dx,dz,height,radius) {
@@ -1689,7 +1696,8 @@ export function createGame(snapshot = null) {
   const validSeed=Number.isInteger(savedSeed) && savedSeed>=0 && savedSeed<=0xffffffff;
   state.flightSeed=restored ? (validSeed?savedSeed:0x82c6710b) : Math.floor(Math.random()*0x100000000);
   for(const n of npcs) {
-    if(n.encounter) updateScrollResident(n,state.time);
+    if(n.waterHare) updateWaterHare(n,state.time,player);
+    else if(n.encounter) updateScrollResident(n,state.time);
     else if(n.scrollFauna) moveScrollFauna(n,state.time);
     else if(n.seaResident) updateRyuguResident(n,state.time);
     else if(SPECIES[n.type]) {

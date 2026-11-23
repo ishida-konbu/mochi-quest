@@ -1,3 +1,4 @@
+import { dressKaedeWaterSteps } from './kaede-water-step-art.js';
 import { buildKaedeDragonShrine } from './kaede-dragon-shrine.js';
 import { KAEDE_DRAGON_SHRINE } from './kaede-dragon-layout.js';
 import { prepareKaedeGround } from './kaede-grove.js';
@@ -232,6 +233,7 @@ export function* prepareSeasonalPlaces(p,kaedePaths) {
   moonField(p, light);
   yield* prepareKaedeGround(p,kaedePaths);
   visitMapleFixtures((...args)=>frame(p,...args),p);
+  dressKaedeWaterSteps(p);
   const shrine=buildKaedeDragonShrine();
   const {x,z,yaw}=KAEDE_DRAGON_SHRINE;
   p.shapes.kaedeDragonShrine=shrine.geometry;

@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.min.js';
+import { kaedeStairBed } from './kaede-water-steps.js';
 import { SOURCE_STONES } from './mountain-streams.js';
 import { terrainHeight, terrainMeshHeight } from './terrain.js';
 
@@ -48,7 +49,10 @@ export function carveKaedeRock(stream, vertex, indices, random) {
       tint.copy(shale).lerp(warm,.32+.18*sin(dip*.75+across*.59));
       tint.lerp(saturated,(1-smooth(Math.abs(across),1.1,4.6))*.81);
       tint.lerp(lichen,smooth(bed,.44,.92)*smooth(Math.abs(across),2.0,4.3)*.52);
-      const a=vertex(x,y-.035,z,tint,.83+.16*bed+.09*joint,fade);
+      // This shell protrudes from the soil at the cascade. Dress its
+      // outer shoulder to the same stair cut as the bank beneath it.
+      const rockTop=Math.min(y-.035,kaedeStairBed(x,z,y-.035));
+      const a=vertex(x,rockTop,z,tint,.83+.16*bed+.09*joint,fade);
       if(i<cols && j<rows)quad(a,a+rows+1);
     }
   }

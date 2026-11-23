@@ -24,6 +24,8 @@ import { buildBeast, beastRig, poseBeast, readyBeastCoats, refreshBeastCoats, pr
 import { updateScrollResident } from './scroll-encounters.js';
 import { createScrollFaunaView } from './scroll-fauna-view.js';
 import { createRyuguPerformers } from './ryugu-performers.js';
+import { fitWaterPail, poseWaterHare } from './kaede-water-pail.js';
+import { updateWaterHare } from './kaede-water-hare.js';
 import { dressArtisan, poseArtisan } from './trade-tools.js';
 import { seatedFeet } from './bath-gestures.js';
 import { makeRiceModel, poseRice, gripChayaServing, gripRinsingLadle } from './mochi-model.js';
@@ -1601,6 +1603,7 @@ export function makeNPC(entity, root) {
   const limbs = {};
   for (const key of ['torso', 'head', 'leg-1', 'leg1', 'arm-1', 'arm1', '筆穂耳-1', '筆穂耳1'])
     limbs[key] = mesh.getObjectByName(key);
+  if (entity.waterHare) fitWaterPail(limbs,model,batch);
   if (entity.area) {
     const key=kind+entity.dye;
     const coat=mesh.getObjectByName('haori');
@@ -1706,6 +1709,7 @@ export function animateNPC(record, n, t, passingDango) {
       limbs.head.rotation.y+=.32*pause*Math.sin(t*.85);
     }
   }
+  if (n.waterHare) poseWaterHare(limbs,n,phase);
   if (n.area) poseArtisan(limbs,n,t);
   if (n.ridesDeer) {
     poseHareRider(limbs,n,t);
@@ -1857,10 +1861,11 @@ export function createActors(scene, renderer) {
   const viewport=renderer?.domElement || document.getElementById('scene');
   const cameraFlight = new WeakMap();
   function atPhotoTime(n, time) {
-    if(!n.encounter && n.type!=='kirin' && !isFlying(n.type))return n;
+    if(!n.waterHare && !n.encounter && n.type!=='kirin' && !isFlying(n.type))return n;
     let view=cameraFlight.get(n);
     if(!view) {view=Object.create(n);cameraFlight.set(n,view);}
-    if(n.encounter) updateScrollResident(view,time);
+    if(n.waterHare) updateWaterHare(view,time);
+    else if(n.encounter) updateScrollResident(view,time);
     else moveWildlife(view,time);
     return view;
   }
@@ -1969,7 +1974,7 @@ export function createActors(scene, renderer) {
       slot.view=view;slot.x=x;slot.z=z;slot.depth=depth;
       slot.fade=Math.min(1,(viewRange-distance)/(spec?.skyRange ? viewRange*.20 : 16));
       // Keep the seated hare and ceremonial performances articulated across the clearing.
-      const performanceRig = n.ridesDeer || n.carriesHare || n.type==='shishi' || n.type==='turtle';
+      const performanceRig = (n.waterHare && distance<40) || n.ridesDeer || n.carriesHare || n.type==='shishi' || n.type==='turtle';
       // The paper atlas has a walking cycle for each beast. Keep the paired
       // actions articulated from across the clearing, especially the deer’s bow.
       const encounterWeight=n.encounter && distance<24 ? 1.85 : 1;

@@ -1,3 +1,4 @@
+import { onKaedeWaterStep } from './kaede-water-steps.js';
 import {inkTree} from './landmark-tree.js';
 import { inMountainStreamClearing } from './mountain-streams.js';
 import { inHutYard } from './wayside-hut-layout.js';
@@ -229,6 +230,8 @@ function scatteredHerbs(p, art) {
       d.rotation.set(-0.05 + rng() * 0.15, a, (rng() - 0.5) * 0.12, 'YXZ');
       const wide = (0.9 + rng() * 0.18) * size * width * herbAspect[cell];
       d.scale.set(wide, size * (0.88 + rng() * 0.2), wide);
+      // Prune after drawing each leaf fan's transform to retain the surrounding verge.
+      if(onKaedeWaterStep(d.position.x,d.position.z,wide*.46))continue;
       d.updateMatrix();
       group.push({ m: d.matrix.clone(), cell, color: new THREE.Color(tint) });
     }
@@ -399,6 +402,7 @@ function scatteredHerbs(p, art) {
   const material = herbsMaterial(art, p.sway),
     base = herbGeometry();
   for (const arr of patches.values()) {
+    if(!arr.length)continue;
     const geo = base.clone(),
       cells = new Float32Array(arr.length * 2);
     const mesh = new THREE.InstancedMesh(geo, material, arr.length);
