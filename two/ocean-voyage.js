@@ -253,15 +253,29 @@ export function restoreHarbourTraveller(player,time,edition){
 }
 export function createVoyage(time=0){
   const poses=FLEET.map(s=>vesselPose(s,time)),prior=FLEET.map(s=>vesselPose(s,time));
+  let boardedShip=null;
   function sample(x,z,y,radius=0,bodyHeight=1.33){
     for(const p of poses){const c=localContact(p,x,z,y,radius,WORLD_BOUND,bodyHeight);if(c)return c;}return null;
   }
+  function supportingHull(player){
+    if(!player || player.mode==='kusa' || player.diveDepth || player.skiff)return null;
+    const hit=sample(player.x,player.z,player.y);
+    return hit && player.y>=hit.floor-.12 && player.y-hit.floor<Math.max(.44,player.h+.18) && player.y>HOLD_Y-.15 ? hit : null;
+  }
+  function aboard(hit,player){
+    // Keep a passenger through a jump, but a traveller flying across the masts
+    // has not boarded. The taller mast rises 9.3 m above the main deck.
+    return hit && (player.y-hit.floor<.44 || (hit.pose.ship===boardedShip && player.y<hit.pose.y+DECK_Y+9.3));
+  }
+  function passenger(player){
+    const hit=supportingHull(player);
+    if(!aboard(hit,player))return null;
+    const {pose,u,v,floor,ceiling}=hit;
+    return {id:pose.ship.id,u,v,docked:pose.docked,exposed:floor>=pose.y+DECK_Y-.36 && !Number.isFinite(ceiling)};
+  }
   function update(t,player){
-    let rider=null;
-    if(player&&player.mode!=='kusa'&&!player.diveDepth){
-      rider=sample(player.x,player.z,player.y);
-      if(rider && !(player.y>=rider.floor-.12&&player.y-rider.floor<Math.max(.44,player.h+.18)&&player.y>HOLD_Y-.15))rider=null;
-    }
+    const rider=supportingHull(player);
+    boardedShip=aboard(rider,player) ? rider.pose.ship : null;
     for(let i=0;i<FLEET.length;i++){
       Object.assign(prior[i],poses[i]);vesselPose(FLEET[i],t,poses[i]);
     }
@@ -286,5 +300,5 @@ export function createVoyage(time=0){
     }
     return {x,z};
   }
-  return {poses,sample,update,move};
+  return {poses,sample,passenger,update,move};
 }

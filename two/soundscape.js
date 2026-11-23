@@ -58,6 +58,7 @@ export function landscapeMix(p, season = seasonAt(p.x, p.z), weather) {
   const hush = (1 - .95 * season.moon) * (1 - .96 * season.snow);
   const high = reach(Math.max(0, (p.h || 0) - 2), 38);
   const rain = clamp(weather?.rain || 0), downpour = clamp(weather?.downpour || 0);
+  const wind = .045 + .32 * season.snow + .16 * season.autumn + .09 * coast + .15 * (1 - high);
   return {
     // Birds recede behind the heavier curtain. Near drops remain distinct
     // on the leaves even with the shrine melody playing underneath.
@@ -65,7 +66,7 @@ export function landscapeMix(p, season = seasonAt(p.x, p.z), weather) {
     'inari-rain-curtain': .115 * downpour ** 1.4,
     bamboo: (1 - .55 * rain) * (.27 + .13 * proximity(p, places.shrine, 95)) * hush * (1 - .75 * coast) * high * offshore * surface,
     river: Math.max(.40 * Math.max(river, creek, .44*lakeshore) * high, .76 * falls) * (.40 + .60 * surface),
-    wind: (.045 + .32 * season.snow + .16 * season.autumn + .09 * coast + .15 * (1 - high)) * surface,
+    wind: (p.vessel?.exposed ? Math.max(.36, wind) : wind) * surface,
     crickets: (.29 * season.moon + .075 * season.autumn) * high * offshore * surface,
     shore: .53 * coast * (.45 + .55 * high) * (.28 + .72 * offshore) * (.24 + .76 * surface),
     paddy: .27 * paddy * (1 - season.snow) * high * surface,
@@ -77,6 +78,7 @@ const steps = {
 };
 
 export function footSurface(p) {
+  if (p.vessel) return 'wood';
   if (p.inWater) return 'water';
   if (palaceInteriorAt(p.x,p.z,p.y) || bridgeAt(p.x, p.z) || Number.isFinite(overheadHeight(p.x, p.z, p.y))) return 'wood';
   const climate = seasonAt(p.x, p.z);
@@ -90,6 +92,7 @@ export function footSurface(p) {
 // without horizontal motion, so a nearby bike port and the offshore dive take priority.
 export function upcomingMusicCue(state, cue, ports) {
   const p = state.player;
+  if (cue === 'boat') return p.vessel?.docked ? state.regionId : null;
   if (p.grounded && !p.activity && p.mount !== 'turtle' && ports.some(port =>
     port.active && (port.bikes > 0 || cue === 'bike') && Math.abs(p.y - port.y) < 3 &&
     Math.hypot(wrapDelta(port.x - p.x), wrapDelta(port.z - p.z)) < 9)) {
@@ -249,7 +252,7 @@ export function createSoundscape(ctx, master, channels = {}) {
     src.start(now, slot * .75, .69);
   }
 
-  let lastTime = null, lastX = 0, lastZ = 0, lastDepth = 0, onGround = true, wasWet = false;
+  let lastTime = null, lastSurface = null, lastX = 0, lastZ = 0, lastDepth = 0, onGround = true, wasWet = false;
   let travelled = 0, lastStep = 0, nextMix = 0, nextActivity = 0, nextBell = 0;
   let lastBeat = null, objectList, baths = [], ports = [], nearestBath, bathGain = 0, inside = false;
   let drummer = null, drumBeat = null, drumGain = 0;
@@ -260,9 +263,9 @@ export function createSoundscape(ctx, master, channels = {}) {
     climate.moon=Math.max(climate.moon,kyoNight(state.time,p)*kyoInfluence(p.x,p.z));
     const weights = landscapeMix(p,climate,state.inariWeather);
     // A narrow torii lintel catches drops but admits sound from both sides.
-    // Only a roof or bridge deck muffles the outdoor mix along the ascent.
+    // A roof, the ship's hold or a bridge deck muffles the outdoor mix.
     const inPalace=palaceInteriorAt(p.x,p.z,p.y);
-    const roof = inPalace || Number.isFinite(overheadHeight(p.x, p.z, p.y, 0, state.regionId === 'inari'));
+    const roof = inPalace || p.vessel?.exposed === false || Number.isFinite(overheadHeight(p.x, p.z, p.y, 0, state.regionId === 'inari'));
     inside=roof;
     const submerged=clamp((p.diveDepth||0)/4);
     const cutoff = (roof ? 1250 : 14000) * (1 - submerged) + 690 * submerged;
@@ -418,17 +421,22 @@ export function createSoundscape(ctx, master, channels = {}) {
     const enteredWater = !photo && lastTime !== null && p.inWater && !wasWet;
     if (enteredWater) enterWater(p.impact || 0);
     const depth = p.diveDepth || 0;
+    // Use the hull's own coordinates: a passenger standing on a turning deck
+    // travels through the world without covering any distance on its planks.
+    const vessel = p.vessel, surface = vessel?.id ?? p.skiff ?? null;
+    const x = vessel?.u ?? p.x, z = vessel?.v ?? p.z;
     if (!photo && moving) {
-      const distance = Math.hypot(wrapDelta(p.x - lastX), wrapDelta(p.z - lastZ), depth - lastDepth);
-      if (distance < 6 && (p.grounded || depth > 0) && !p.activity) {
+      const distance = surface === lastSurface ? Math.hypot(wrapDelta(x - lastX), wrapDelta(z - lastZ), depth - lastDepth) : 0;
+      if (surface !== lastSurface) travelled = 0;
+      if (distance < 6 && (p.grounded || depth > 0) && !p.activity && !p.skiff) {
         travelled += distance;
         const landing = p.grounded && !onGround && p.landing > 0;
         if (enteredWater) { travelled = 0; lastStep = now; }
         else if (landing) {
-          footfall(p, .28 + .37 * p.impact);
+          if (!vessel || distance > .0001) footfall(p, .28 + .37 * p.impact);
           if (!p.inWater) note(now + .003, 143, 70, .13, .075 * p.impact);
           travelled = 0; lastStep = now;
-        } else if (travelled > (p.mount || p.mode === 'dango' ? 2.25 : 1.33) && now - lastStep > (depth ? .55 : .19)) {
+        } else if (distance > .0001 && travelled > (p.mount || p.mode === 'dango' ? 2.25 : 1.33) && now - lastStep > (depth ? .55 : .19)) {
           travelled = 0; lastStep = now;
           if (depth > 0) {
             const pan = ++stepIndex % 2 ? -.14 : .14;
@@ -444,7 +452,7 @@ export function createSoundscape(ctx, master, channels = {}) {
         }
       } else travelled = 0;
     } else travelled = 0;
-    lastTime = time; lastX = p.x; lastZ = p.z; lastDepth = depth; onGround = p.grounded; wasWet = p.inWater;
+    lastTime = time; lastSurface = surface; lastX = x; lastZ = z; lastDepth = depth; onGround = p.grounded; wasWet = p.inWater;
   }
 
   function enterWater(impact = 0) {

@@ -7,7 +7,7 @@ function fillSoundtrack(table) {
     if (id === 'ryugu') name += '（潜水中）';
     return [id, name];
   });
-  areas.push(['palace', '竜宮城の御殿'], ['bike', '電動自転車に乗っている間']);
+  areas.push(['palace', '竜宮城の御殿'], ['boat', '船に乗っている間'], ['bike', '電動自転車に乗っている間']);
   for (const [id, label] of areas) {
     const track = JOURNEY_MUSIC[id];
     const row = table.insertRow();

@@ -300,6 +300,8 @@ export function createGame(snapshot = null) {
   };
   const climate = {};
   const voyage = createVoyage();
+  // The ship's local coordinates stay fixed while a standing passenger is carried.
+  Object.defineProperty(player,'vessel',{get:() => voyage.passenger(player)});
   let heldJump = false;
   let flapRemaining = 0;
   // The render rig reads this transient stroke without adding it to journey saves.

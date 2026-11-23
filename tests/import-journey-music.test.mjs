@@ -16,10 +16,11 @@ test('matches delivered titles, artists and instrumental versions exactly', () =
   assert.equal(match('ES_Sanctity (Instrumental Version) - Isaku Kageyama.wav'), 'sanctity-instrumental-version.mp3');
   assert.equal(match('sanctity-instrumental-version.wav'), 'sanctity-instrumental-version.mp3');
   assert.equal(match('Waking Dream.mp3'), 'waking-dream.mp3');
+  assert.equal(match('ES_Water Mirror - Akibakid.mp3'), 'water-mirror.mp3');
   for (const wrong of ['ES_Sanctity - Isaku Kageyama.wav', 'ES_Rise of the Red Sun - Other Artist.mp3',
     'ES_Rise of the Red Sun - Mandala Dreams - Melody.mp3', 'ES_Rise of the Red Sun - Mandala Dreams - fullmix_preview.mp3',
     'ES_Rise of the Red Sun Remix - Mandala Dreams.wav', 'ES_Rise of the Red Sun - Mandala Dreams.zip',
-    'ES_Water Mirror - Akibakid.mp3', 'ES_Strange Tales (Instrumental Version) - Isaku Kageyama.mp3']) {
+    'ES_Strange Tales (Instrumental Version) - Isaku Kageyama.mp3']) {
     assert.equal(match(wrong), undefined, wrong);
   }
 });

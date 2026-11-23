@@ -21,11 +21,13 @@ export const JOURNEY_MUSIC = {
   tsuruga: { title: 'Kyoto by Dawn', artist: 'Ooyy, Smartface', file: 'kyoto-by-dawn.mp3', repeatLead: 2.5 },
   sakai: { title: 'Greeted in Osaka', artist: 'Sight of Wonders', file: 'greeted-in-osaka.mp3', repeatLead: 4.1 },
   palace: { title: 'Hong Kong Calling', artist: 'Philip Ayers', file: 'hong-kong-calling.mp3', repeatLead: 9.2, fadeInAt: 3.0 },
+  boat: { title: 'Water Mirror', artist: 'Akibakid', file: 'water-mirror.mp3', repeatLead: 3.0 },
   bike: { title: 'Mayonaka', artist: 'Usnow', file: 'mayonaka.mp3', repeatLead: 3.6, gain: .20 },
 };
 
 export function journeyMusicCue({ regionId, player }, inPalace = palaceInteriorAt(player.x, player.z, player.y)) {
   if (player.mount === 'bike') return 'bike';
+  if (player.vessel || player.skiff) return 'boat';
   if (regionId !== 'ryugu') return regionId;
   if (inPalace) return 'palace';
   return player.diveDepth > 0 ? 'ryugu' : 'coast';

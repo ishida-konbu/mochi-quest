@@ -14,6 +14,38 @@ function walk(game,x,z){
   }
   assert.fail('obstructed at '+[p.x,p.y,p.z].map(v=>v.toFixed(2))+' on the way to '+[x,z]);
 }
+test('passenger coordinates distinguish deck walking from a sailing hull and identify shelter',()=>{
+  const ship=FLEET[2],time=103;
+  const saved=createGame().save(),pose=vesselPose(ship,time);
+  const [x,z]=portPoint(pose,2,5);
+  Object.assign(saved,{time});
+  Object.assign(saved.player,{x,z,y:pose.y+DECK_Y});
+  const game=createGame(saved),p=game.state.player;
+  const start=p.vessel;
+  assert.equal(start.id,ship.id);
+  assert.equal(start.docked,false);
+  assert.equal(start.exposed,true);
+  for(let i=0;i<8;i++)game.step(.1);
+  assert.ok(Math.hypot(p.x-x,p.z-z)>3,'the vessel moved');
+  assert.ok(Math.hypot(p.vessel.u-start.u,p.vessel.v-start.v)<1e-6,'the passenger stood still');
+  for(let i=0;i<4;i++)game.step(.1,{x:Math.sin(pose.yaw),z:Math.cos(pose.yaw)});
+  assert.ok(Math.hypot(p.vessel.u-start.u,p.vessel.v-start.v)>.75,'the passenger walked');
+  assert.equal(Object.hasOwn(game.save().player,'vessel'),false);
+  game.act('jump');game.step(.1);game.step(.1);
+  assert.ok(!p.grounded && p.h>1 && p.vessel.id===ship.id);
+  const now=game.voyage.poses[ship.index];
+  for(const [u,v,y,exposed] of [[0,-6.7,HOLD_Y,false],[0,-11,DECK_Y,false],[0,-11,DECK_Y+3.37,true]]){
+    const [x,z]=portPoint(now,u,v);
+    Object.assign(p,{x,z,y:y+now.y,h:0,grounded:true});
+    assert.equal(p.vessel.id,ship.id);
+    assert.equal(p.vessel.exposed,exposed);
+  }
+  p.y=now.y+DECK_Y+42;p.h=42;p.grounded=false;
+  assert.equal(p.vessel,null);
+  Object.assign(p,{y:now.y-4,h:0,diveDepth:4});
+  assert.equal(p.vessel,null);
+});
+
 test('both ports have uninterrupted approaches from the market into the hull, up its companionway and back ashore',()=>{
   for(const [i,port] of SEAPORTS.entries()){
     const game=createGame(),p=game.state.player;
