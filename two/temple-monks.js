@@ -1,5 +1,5 @@
 import * as T from './vendor/three.module.min.js';
-import { connectSceneHands } from './story-hands.js';
+import { connectSceneHands, workshopStride } from './story-hands.js';
 import { batchActorParts } from './actors.js';
 import { townPortrait, paintedSilk } from './emaki-costume.js';
 import { monasticHabit, townHand } from './heian-dress.js';
@@ -44,6 +44,7 @@ function bellCord(){
   }
   geo.setIndex(indices);
   const mesh=new T.Mesh(geo,new T.MeshLambertMaterial({color:'#a18b62',side:T.DoubleSide}));
+  mesh.userData.unborrowable=true;
   mesh.frustumCulled=false;
   const tangent=new T.Vector3(),cross=new T.Vector3(),vertical=new T.Vector3(),n=new T.Vector3();
   function stretch(from,to,slack){
@@ -133,6 +134,7 @@ function makeMonk(monk,parent,habit,sandal){
   if(monk.duty==='sutra'){prop=sutraBook();torso.add(prop);}
   if(monk.duty==='bell'){cord=bellCord();root.add(cord.mesh);}
   const actor={monk,root,torso,neck,arms,feet,prop,cord,at:{},targets:{}};
+  root.userData.storyCanStep=monk.duty==='bell';
   if(monk.duty==='bell')connectSceneHands(root,{
     right:{grip:arms[1].palm,tool:cord.mesh},left:{grip:arms[0].palm},
     pose(targets){actor.targets=targets;}
@@ -185,8 +187,17 @@ function poseHands(actor,time,pull,anchor){
       if(anchor){
         // The keeper faces north. Convert the moving rope eye to his frame
         // so the line stays threaded through his hands as the log returns.
-        grip.set(-wrapDelta(anchor.x-at.x),(anchor.y-at.y),-wrapDelta(anchor.z-at.z)).divideScalar(monk.size);
-        cord.stretch(lower,grip,.043*(1-pull));
+        const root=actor.root,precinct=root.parent,unit=monk.size;
+        const from=lower.multiplyScalar(unit).applyAxisAngle(up,at.yaw).add(grip.set(at.x,at.y,at.z));
+        const eye=upper.set(at.x+wrapDelta(anchor.x-at.x),anchor.y,at.z+wrapDelta(anchor.z-at.z));
+        const dt=Math.min(.1,Math.max(0,time-(actor.ropeTime ?? time)));actor.ropeTime=time;
+        actor.ropeLoose=T.MathUtils.damp(actor.ropeLoose || 0,root.userData.storyAway?1:0,7,dt);
+        // On stepping away the keeper releases the lower end of the rope.
+        // It settles below the eye of the log, still fixed to the belfry.
+        const length=from.distanceTo(eye);
+        from.lerp(grip.set(eye.x+.016,Math.max(at.y+.08,eye.y-length),eye.z+.012),actor.ropeLoose);
+        root.worldToLocal(precinct.localToWorld(from));root.worldToLocal(precinct.localToWorld(eye));
+        cord.stretch(from,eye,.043*(1-pull));
       }
       break;
   }
@@ -211,9 +222,11 @@ export function createTempleMonks(scene){
     for(const a of actors){
       const {monk,root,torso,neck,feet,arms}=a;
       const at=templeMonkPose(monk,time,a.at);
-      root.position.set(at.x,at.y,at.z);root.rotation.y=at.yaw;
+      const away=root.userData.storyAway;
+      if(!away){root.position.set(at.x,at.y,at.z);root.rotation.y=at.yaw;}
+      const stride=root.userData.storyCanStep ? workshopStride(root,time) : 0;
       for(const [i,side] of [-1,1].entries()){
-        const step=side*at.stride;
+        const step=side*(away?stride:at.stride);
         feet[i].position.set(side*.168,Math.max(0,step)*.045,step*.145);
       }
       torso.position.y=Math.abs(at.stride)*.027;

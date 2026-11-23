@@ -44,3 +44,15 @@ test('a failed sheet of paper releases the loading screen to the error handler',
   await assert.rejects(pending, /opening view/);
   watch.close();
 });
+
+test('a cached image can reach the opening material in the promise callback after the final load event', async () => {
+  const manager = new LoadingManager(), watch = watchArrivalPaint(manager);
+  const paint = new Texture();
+  manager.itemStart('ink.webp');
+  const pending = watch.waitFor(openingView({uniforms:{map:{value:paint}}}, {}), {environment:{}});
+  manager.itemEnd('ink.webp');
+  await Promise.resolve();
+  paint.image = {};
+  await pending;
+  watch.close();
+});

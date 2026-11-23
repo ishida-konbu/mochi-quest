@@ -6,10 +6,10 @@ import { performedScenes, memoryScene, sceneLocation } from '../two/mochiyori-sc
 import { storySite } from '../two/story-sites.js';
 
 test('every playable mystery, resident and local specialty has a located performance with valid cues',()=>{
-  const expected=CHAPTERS.reduce((n,ch)=>n+ch.clues.length+ch.proofs.length+1,0)+CAST.length+SCENES.length+7;
+  const expected=CHAPTERS.reduce((n,ch)=>n+ch.clues.length+ch.proofs.length+1,0)+CAST.length+SCENES.length+7+1; // seven visiting scenes and the festival invitations
   assert.equal(performedScenes.size,expected);
   assert.deepEqual(new Set(memoryKeys),new Set(performedScenes.keys()));
-  const gestures=new Set(['present','point','lift','turn','open','compare','fit','divide','stack','write','tie','pass','set','pour']);
+  const gestures=new Set(['present','point','lift','turn','open','compare','fit','divide','stack','write','tie','pass','set','pour','taste','sip']);
   for(const [key,s] of performedScenes){
     assert.ok(s.title && s.site && s.beats.length>=2,key);
     for(const b of s.beats){
@@ -22,6 +22,8 @@ test('every playable mystery, resident and local specialty has a located perform
 
 test('an observed scene is recalled at its original worktable before the note has been entered',()=>{
   const b=createNotebook(),k='clue/joined-cake',site=storySite('river');
+  b.acceptRequest();
+  assert.ok(b.record('leaf-marks'));
   assert.equal(b.seen(k),false);
   assert.equal(b.remember(k,sceneLocation(site)),true);
   const loaded=createNotebook(b.save());
@@ -37,6 +39,7 @@ test('an observed scene is recalled at its original worktable before the note ha
 
 test('a pre-performance notebook recovers only its recorded findings, solved questions and completed chapters',()=>{
   const first=CHAPTERS[0],b=createNotebook();
+  b.acceptRequest();
   while(b.leads().length)b.record(b.leads()[0].id);
   const shot=b.save();shot.proof=1;
   const old=createNotebook(shot);

@@ -7,7 +7,7 @@ import { sculpture } from './pilgrimage-pigment.js';
 import { SilkPanels } from './kosode.js';
 import { foldMark,paintedSilk } from './emaki-costume.js';
 import { dressedRiceFace } from './mochi-model.js';
-import { connectStoryAppendage } from './story-hands.js';
+import { connectStoryAppendage, workshopStride } from './story-hands.js';
 import { scrollPigment } from './kyo-scrollwork.js';
 
 const tau=2*Math.PI,{sin,cos}=Math;
@@ -32,7 +32,7 @@ function elderPortrait(){
 }
 function oldWoman(){
   const root=new T.Group(), p=new SilkPanels(),art=sculpture();
-  root.name='羅生門の老婆餅';
+  root.name='羅生門の老婆餅';root.userData.storyCanStep=true;
   // A hunched shoulders-to-knees drape with patched hemp and a folded
   // reverse at the feet. Hair falls out of the parted hood on both sides.
   function fold(u,v,pad=0){
@@ -106,6 +106,15 @@ function oldWoman(){
     const u=.40+.014*k;art.stroke('#c1b8a1',[hood(u,.88),hood(u,.66),hood(u,.40),hood(u,.08)],
       [.001,.003,.006,.002],9);
   }
+  const feet=[];
+  for(const side of [-1,1]){
+    const straw=sculpture();
+    straw.ball('#ad9064',0,.024,.037,.078,.025,.143);
+    straw.ball('#c8b69a',0,.055,.070,.068,.037,.095);
+    straw.stroke('#766342',[[-.059,.052,.026],[0,.087,.094],[.056,.052,.032]],[.008,.011,.008],9);
+    const foot=new T.Mesh(straw.finish(),scrollPigment());foot.position.set(side*.166,0,.192);
+    foot.castShadow=true;root.add(foot);feet.push(foot);
+  }
   const coat=new T.Mesh(p.finish(),paintedSilk());coat.castShadow=true;root.add(coat);
   const head=dressedRiceFace(1,0,elderPortrait());
   head.position.set(0,.618,.20);head.rotation.x=.17;head.scale.set(.37,.32,.32);root.add(head);
@@ -116,7 +125,7 @@ function oldWoman(){
       [.004,.012,.002],13);
   }
   const trim=new T.Mesh(art.finish(),scrollPigment());trim.castShadow=true;root.add(trim);
-  return root;
+  return {root,feet};
 }
 // A second, shallow line of kawara shelters the approach below the balustrade.
 // Each half-round cover tile flares with the swept eave and ends over a round seal.
@@ -281,12 +290,21 @@ export function createRashomon(scene,p){
   put('gateEmber',lampX+.24,floor+.333,lampZ+.105,1,1,1,'#fff',ember);
   const glow=new T.PointLight('#efa762',.65,3.5,1.7);
   glow.position.set(RASHOMON.x+lampX+.22,y+floor+.53,RASHOMON.z+lampZ+.1);scene.add(glow);
-  const woman=oldWoman();
+  const {root:woman,feet}=oldWoman();
   woman.position.set(RASHOMON.x-2.58,y+floor+.13,RASHOMON.z-.7);woman.rotation.y=.72;woman.scale.setScalar(1.15);
   scene.add(woman);
   return (t,hero)=>{
     const near=Math.hypot(wrapDelta(hero.x-RASHOMON.x),wrapDelta(hero.z-RASHOMON.z))<105;
     woman.visible=near;
-    if(near){woman.rotation.y=.72+.089*sin(t*.46);woman.rotation.x=.038+.017*sin(t*1.2);glow.intensity=.64+.09*sin(t*5.43)+.027*cos(t*12.1);}
+    if(near){
+      const stride=workshopStride(woman,t);
+      for(const [i,foot] of feet.entries()){
+        const step=i?stride:-stride;foot.position.y=Math.max(0,step)*.031;foot.position.z=.192+step*.095;
+      }
+      if(!woman.userData.storyAway && !woman.userData.storyPerforming){
+        woman.rotation.y=.72+.089*sin(t*.46);woman.rotation.x=.038+.017*sin(t*1.2);
+      }
+      glow.intensity=.64+.09*sin(t*5.43)+.027*cos(t*12.1);
+    }
   };
 }

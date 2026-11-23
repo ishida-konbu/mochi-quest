@@ -169,8 +169,8 @@ function fauna(root,type,phase){
     const mesh=new T.Mesh(p.geometry,p.material||faunaPigment());mesh.name=p.name;mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);return [p,mesh];
   });
   const state={type,phase,speed:0,flash:0,gesture:0,variant:0,spread:0};
-  return (time,engaged)=>{
-    state.gesture=engaged?.40:.10;
+  return (time,engaged,action)=>{
+    state.speed=action?.speed || 0;state.gesture=engaged?.40:.10;
     for(const [p,m] of parts)poseFaunaPart(p,state,time,m);
   };
 }
@@ -226,6 +226,8 @@ export function createStoryCharacter(character,{festivalGuest=false}={}){
     if(artisan||type==='monkey')connectStoryHands(root,type,model.limbs);
     pose=(t,engaged,action)=>{
       poseStoryHands(root);
+      n.speed=action?.speed || 0;
+      if(type==='turtle')n.role=n.speed>.04?'walk':'rest';
       n.gesture=engaged?.33:.04;animateNPC(model,n,t);
       if (root.userData.storyPerforming && artisan) {
         // Leave the ordinary ladle, pestle or brush stroke while using the
@@ -240,17 +242,18 @@ export function createStoryCharacter(character,{festivalGuest=false}={}){
   }
   if(['riceMonk','riceElder','chicken','crane','fishfolk'].includes(type))dressSpecial(root,type,character.name);
   if(type==='octopus'){
-    const sheet=root.getObjectByName('octopus-paper'),notes=part(sheet.parent,'墨八の書付');
-    notes.add(sheet,...[0,1,2].map(i=>root.getObjectByName('scribe-stroke-'+i)));
+    // Arms 1 and 7 already support his brush and written sheet. The free
+    // arms 0 and 2 can receive a parcel without putting either down.
     for(const [side,index,grasp] of [['right',0,4],['left',2,5]]){
       const surface=root.getObjectByName('octopus-arm-'+index);
-      connectStoryAppendage(root,side,surface,seaArmSpine(index),grasp,side==='right'?root.getObjectByName('octopus-brush'):notes);
+      connectStoryAppendage(root,side,surface,seaArmSpine(index),grasp);
     }
   }else if(type==='seaTurtle'){
+    pose(0,false);
     for(const [side,s] of [['right',1],['left',-1]]){
       const fin=root.getObjectByName('turtle-'+side),stick=root.getObjectByName('turtle-stick-'+side);
       const path=[[0,-.015,0],[.096,-.107,-.017],[.21,-.116,.060],[.343,-.067,.221],[.421,.012,.339]].map(([x,y,z])=>[x*s,y,z]);
-      connectStoryAppendage(root,side,fin,path,4,stick);
+      const grip=connectStoryAppendage(root,side,fin,path,4,stick);grip.attach(stick);
     }
   }else if(type==='elephant')connectStoryAppendage(root,'right',root.getObjectByName('trunk'),elephantTrunkSpine,7);
   else if(type==='fishfolk'){

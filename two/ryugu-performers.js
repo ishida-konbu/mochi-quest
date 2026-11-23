@@ -516,10 +516,22 @@ export function makeSeaSolo(type,root,phase){
     mesh.name=rig.name;mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);return {rig,mesh};
   });
   const resident={phase,flash:0,gesture:0,beat:0};
+  let last,inkTime;
   return (time,engaged)=>{
     resident.gesture=engaged?.78:.35;
     resident.beat=time*(type==='seaTurtle'?3.9:type==='bream'?2.15:1.79)+phase;
-    for(const {rig,mesh} of rigs)movement(rig,resident,time,mesh);
+    if(type==='octopus'){
+      const listening=root.userData.storyPerforming || root.parent?.userData.storyPerforming;
+      if(last==null || time<last)inkTime=time;
+      else if(!listening)inkTime+=Math.min(time-last,.12);
+      last=time;
+    }
+    for(const {rig,mesh} of rigs){
+      // A costumed drummer's stick follows the actual fin or its keeper.
+      if(rig.name.startsWith('turtle-stick-') && mesh.parent!==root)continue;
+      const writer=type==='octopus' && (['octopus-brush','octopus-arm-1'].includes(rig.name) || rig.name.startsWith('scribe-stroke'));
+      movement(rig,resident,writer?inkTime:time,mesh);
+    }
   };
 }
 export function createRyuguPerformers(scene) {

@@ -5,6 +5,20 @@ import * as T from './vendor/three.module.min.js';
 // takes part in a close study. Geometry on other copies stays untouched.
 const bindings=new WeakMap(),sceneHands=new WeakMap();
 export function connectSceneHands(actor,rig){sceneHands.set(actor,rig);}
+
+// Gate and temple residents use the same distance-driven shuffle both when
+// coming to the desk and when carrying a tool back to their usual post.
+export function workshopStride(actor,time){
+  const {x,z}=actor.position;
+  const gait=actor.userData.workshopGait ??= {x,z,time,phase:0,amount:0};
+  const d=Math.hypot(x-gait.x,z-gait.z),dt=time-gait.time;
+  if(dt>0 && dt<.25 && d<.55 && actor.userData.storyAway){
+    gait.phase+=d*Math.PI/.24;
+    gait.amount=T.MathUtils.damp(gait.amount,Math.min(1,d/(dt*.85)),14,dt);
+  }else gait.amount=0;
+  gait.x=x;gait.z=z;gait.time=time;
+  return Math.sin(gait.phase)*gait.amount;
+}
 const vec=a=>new T.Vector3(...a);
 const sides=['right','left'];
 const origin=new T.Vector3(), upper=new T.Vector3(), lower=new T.Vector3(), point=new T.Vector3();
@@ -49,15 +63,51 @@ export function connectStoryHands(root,type,limbs){
     const paw=monkey?(s===1?[.148,-.091,.373]:[-.060,-.194,.368]):(s===1?[.24,-.105,.262]:[-.045,-.15,.19]);
     const elbow=vec(monkey?(s===1?[.171,-.275,.069]:[-.113,-.31,.067]):[s*(s===1?.16:.105),-.205,-.03]);
     const held=joint.children.find(o=>o.isGroup && o.visible);
-    const grip=new T.Group();grip.name=side==='right'?'作業右掌':'作業左掌';grip.position.fromArray(paw);joint.add(grip);
-    hands[side]={joint,grip,elbow,tool:held,rest:vec(paw),l1:elbow.length(),l2:elbow.distanceTo(vec(paw))};
+    const grip=new T.Group();grip.name=side==='right'?'作業右掌':'作業左掌';grip.position.fromArray(paw);
+    // Grip at the base of the visible fingers, clear of the solid palm.
+    grip.position.z+=monkey?.037:type==='frog'?.061:.049;
+    joint.add(grip);
+    hands[side]={joint,grip,elbow,tool:held,rest:grip.position.clone(),l1:elbow.length(),l2:elbow.distanceTo(grip.position)};
   }
   bindings.set(root,hands);
 }
 export function storyGrip(root,side='right'){return bindings.get(root)?.[side]?.grip??flexBindings.get(root)?.[side]?.grip??sceneHands.get(root)?.[side]?.grip??null;}
 export function storyTool(root,side='right'){return bindings.get(root)?.[side]?.tool??flexBindings.get(root)?.[side]?.tool??sceneHands.get(root)?.[side]?.tool??null;}
+// Bind the tool's wrist before a worker frees that hand. Lazy binding later
+// in the score must not take a holstered implement back from its belt loop.
+export function bindToolWrist(actor,tool){
+  const hand=Object.values(bindings.get(actor) || {}).find(h=>h.tool===tool);
+  if(hand && !hand.hinge){bindArm(hand);actor.userData.rigRevision=(actor.userData.rigRevision || 0)+1;}
+}
 const want=new T.Vector3(),direction=new T.Vector3(),normal=new T.Vector3(),elbowNew=new T.Vector3(),aim=new T.Vector3(),foreBind=new T.Vector3();
 const rotation=new T.Quaternion();
+const elbowPlane=new T.Vector3(), candidate=new T.Vector3(), sleeve=new T.Vector3();
+const bendAngles=[0,.45,-.45,.88,-.88,1.38,-1.38,1.92,-1.92,2.52,-2.52,Math.PI];
+function bendElbow(hand,along,height,support){
+  const {joint}=hand;
+  let least=Infinity;
+  for(const turn of bendAngles){
+    elbowPlane.copy(normal).applyAxisAngle(direction,turn);
+    candidate.copy(direction).multiplyScalar(along).addScaledVector(elbowPlane,height);
+    // Keep the elbow on the outside of the ribcage for a cross-body reach.
+    // Test in the shoulder's local axes, even on a mirrored artisan.
+    const lateral=(joint.position.x+candidate.x)*Math.sign(joint.position.x);
+    const chest=candidate.z<.13 ? Math.max(0,Math.abs(joint.position.x)*.8-lateral) : 0;
+    let depth=0;
+    if(support){
+      // A sleeve is thicker at the elbow. Sample both elbow and forearm
+      // before choosing a pole on the anatomically valid bend circle.
+      sleeve.copy(candidate).add(joint.position).applyMatrix4(joint.parent.matrixWorld);
+      depth=support(sleeve,.073);
+      sleeve.copy(want).lerp(candidate,.54).add(joint.position).applyMatrix4(joint.parent.matrixWorld);
+      depth=Math.max(depth,support(sleeve,.05));
+    }
+    const cost=depth*5+chest*2+Math.abs(turn)*.002;
+    if(cost<least){elbowNew.copy(candidate);least=cost;}
+    if(cost===0)break;
+  }
+}
+
 export function poseStoryHands(root,targets={}){
   const sceneRig=sceneHands.get(root);
   if(sceneRig){sceneRig.pose(targets);return true;}
@@ -89,7 +139,8 @@ export function poseStoryHands(root,targets={}){
     normal.copy(elbow).addScaledVector(aim,-elbow.dot(aim)).normalize();
     rotation.setFromUnitVectors(aim,direction);normal.applyQuaternion(rotation);
     const along=(l1*l1-l2*l2+reach*reach)/(2*reach);
-    elbowNew.copy(direction).multiplyScalar(along).addScaledVector(normal,Math.sqrt(Math.max(0,l1*l1-along*along)));
+    want.copy(direction).multiplyScalar(reach);
+    bendElbow(hand,along,Math.sqrt(Math.max(0,l1*l1-along*along)),targets?.support);
     joint.quaternion.setFromUnitVectors(aim.copy(elbow).normalize(),foreBind.copy(elbowNew).normalize());
     const lowerDirection=aim.copy(direction).multiplyScalar(reach).sub(elbowNew).normalize()
       .applyQuaternion(rotation.copy(joint.quaternion).invert());

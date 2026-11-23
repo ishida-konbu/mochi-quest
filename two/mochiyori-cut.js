@@ -94,3 +94,42 @@ export function dividePastry(source,region){
   split.position.copy(source.position);split.quaternion.copy(source.quaternion);split.scale.copy(source.scale);
   source.parent.add(split);source.visible=false;return split;
 }
+
+// During the preceding placement the cook has laid the cake and its wrapping
+// back on the dish. Only the edible part leaves it again.
+export function servingLiner(dish) {
+  const liner=dish.getObjectByName('桜餅に敷いた舟形の葉') || dish.getObjectByName('笹結び餅の開き笹');
+  if(!liner)return null;
+  return ()=>{dish.attach(liner);};
+}
+
+export function levelServing(stage, pastry) {
+  const rotation=stage.getWorldQuaternion(new T.Quaternion()).invert().multiply(pastry.getWorldQuaternion(new T.Quaternion()));
+  const up=new T.Vector3(0,1,0);
+  return new T.Quaternion().setFromUnitVectors(up.clone().applyQuaternion(rotation),up);
+}
+
+// The working finger follows a vertex on the raised rim, clear of the food.
+export function dishRim(dish,handle){
+  const vessel=dish.children.find(child=>child.userData.floor!==undefined),rim=[];
+  if(!vessel)return null;
+  const p=new T.Vector3(),m=new T.Matrix4(),inverse=handle.matrixWorld.clone().invert();
+  vessel.traverseVisible(mesh=>{
+    if(!mesh.isMesh)return;
+    m.multiplyMatrices(inverse,mesh.matrixWorld);
+    const vertices=mesh.geometry.attributes.position;
+    for(let i=0;i<vertices.count;i++){
+      p.fromBufferAttribute(vertices,i).applyMatrix4(m);
+      const bin=Math.round(Math.atan2(p.z,p.x)*16/Math.PI+32)%32;
+      const old=rim[bin];
+      if(!old || p.x*p.x+p.z*p.z>old.x*old.x+old.z*old.z)rim[bin]=p.clone();
+    }
+  });
+  const edge=rim.filter(Boolean);
+  if(!edge.length)return null;
+  return {nearest(world){
+    const at=handle.worldToLocal(world.clone());
+    const point=edge.reduce((a,b)=>at.distanceToSquared(a)<at.distanceToSquared(b)?a:b);
+    return handle.localToWorld(point.clone());
+  }};
+}

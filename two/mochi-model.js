@@ -244,13 +244,71 @@ function palmSamples(body, hand) {
   // the palm when the air-stretch morph pulls the skin away from its bone.
   const { position, skinIndex, skinWeight } = body.geometry.attributes;
   const joint = body.skeleton.bones.indexOf(hand);
-  let front, back;
+  let front, back, top;
   for (let i = 0; i < position.count; i++) {
     if (skinIndex.getX(i) !== joint || skinWeight.getX(i) < .72) continue;
     if (front === undefined || position.getZ(i) > position.getZ(front)) front = i;
     if (back === undefined || position.getZ(i) < position.getZ(back)) back = i;
+    if (top === undefined || position.getY(i) > position.getY(top)) top = i;
   }
-  return { front, back };
+  return { front, back, top };
+}
+
+// Locate the support on the deforming rice mitt. Its wrist bone can be well
+// inside the cheek when the dough stretches or the traveller reaches first.
+export function placeRiceGrip(r,side,marker){
+  const samples=r.storyPalmSamples ??= [];
+  const sample=samples[side] ??= palmSamples(r.body,r.hands[side]);
+  if(sample.top===undefined)return;
+  const work=r.storyPalmPoints ??= [new T.Vector3(),new T.Vector3()];
+  const [p,q]=work;
+  r.model.parent.updateWorldMatrix(true,false);
+  r.model.updateMatrixWorld(true);
+  r.body.getVertexPosition(sample.top,p);
+  r.body.getVertexPosition(sample.front,q);
+  p.lerp(q,.32);
+  marker.position.copy(marker.parent.worldToLocal(r.body.localToWorld(p)));
+  // The action director may solve the wrist again after the feet move or
+  // the tray meets its rim. Start each solve from this frame's gait pose.
+  const hand=r.hands[side];
+  let workPose=marker.userData.storyWorkPose;
+  if(!workPose){
+    workPose={chest:r.chest.position.clone(),turn:r.chest.quaternion.clone(),wrist:hand.position.clone()};
+    marker.userData.storyWorkPose=workPose;
+    marker.userData.storyAim=reach=>{
+      r.chest.position.copy(workPose.chest);r.chest.quaternion.copy(workPose.turn);hand.position.copy(workPose.wrist);
+      reachRiceGrip(r,side,marker,reach);
+      return marker.getWorldPosition(new T.Vector3());
+    };
+  }
+  workPose.chest.copy(r.chest.position);workPose.turn.copy(r.chest.quaternion);workPose.wrist.copy(hand.position);
+}
+
+// Keep the feet planted when accepting a broad tray. The chest first leans
+// towards the far rim, then the soft mitt covers the remaining handspan.
+export function reachRiceGrip(r,side,marker,reach){
+  const hand=r.hands[side],chest=r.chest;
+  const point=new T.Vector3(),from=marker.getWorldPosition(new T.Vector3());
+  if(reach.handoff){
+    const rotation=chest.quaternion.clone(),parent=chest.parent;
+    const delta=parent.worldToLocal(reach.point.clone()).sub(parent.worldToLocal(from.clone()));
+    const unit=parent.getWorldScale(new T.Vector3()).x;
+    // Stretch up from the planted feet at a high counter. The chest raises
+    // the face and both mitts together before the working wrist unfolds.
+    chest.position.y+=T.MathUtils.clamp(delta.y-.22/unit,0,.23/unit)*reach.strength;
+    const shift=delta.clampLength(0,.20/unit).multiplyScalar(reach.strength);
+    chest.position.addScaledVector(shift,.66);
+    const lateral=Math.atan2(shift.x,Math.max(.01,.7/unit)),forward=Math.atan2(shift.z,Math.max(.01,.7/unit));
+    chest.rotateZ(-lateral*.6);chest.rotateX(forward*.6);
+    chest.updateWorldMatrix(true,true);
+    // A sideways roll that would pull the near mitt away is unnecessary.
+    if(marker.getWorldPosition(point).distanceTo(reach.point)>from.distanceTo(reach.point))chest.quaternion.copy(rotation);
+  }
+  const space=hand.parent,scale=space.getWorldScale(point).x;
+  const residual=space.worldToLocal(reach.point.clone()).sub(space.worldToLocal(marker.getWorldPosition(point)));
+  const upward=reach.handoff?T.MathUtils.clamp((reach.point.y-from.y-.18)*.40,0,.13):0;
+  const length=reach.taste?.56:reach.handoff?.38+upward:.30;
+  hand.position.addScaledVector(residual.clampLength(0,length/Math.max(.01,scale)),reach.strength);
 }
 
 // Seat the prop against the moving palm, including the rice skin's soft stretch.
@@ -370,6 +428,19 @@ export function makeRiceModel(parent) {
   const hands=['Hand_R','Hand_L'].map(name=>model.getObjectByName(name));
   const chest=model.getObjectByName('Chest');
   const head=model.getObjectByName('Head');
+  // Locate the painted lip on the skinned surface using the face atlas
+  // projection above, then bind the contact point to the moving head.
+  const positions=body.geometry.attributes.position, point=new T.Vector3(), mouth=new T.Group();
+  let closest=Infinity, lip=0;
+  for(let i=0;i<positions.count;i++){
+    if(positions.getZ(i)<.60)continue;
+    const d=(positions.getX(i)-.012)**2+(positions.getY(i)-1.165)**2;
+    if(d<closest){closest=d;lip=i;}
+  }
+  mouth.name='配達人の口元';
+  point.fromBufferAttribute(positions,lip);point.z+=.025;
+  mouth.position.copy(head.worldToLocal(body.localToWorld(point)));
+  head.add(mouth);
   const bones=[...legs,...hands,chest,head];
   const samples=bones.map(b=>({p:b.position.clone(),q:b.quaternion.clone()}));
   return { model,body,uniforms,mixer,actions,legs,hands,chest,head,bones,samples,
@@ -380,17 +451,30 @@ export function makeRiceModel(parent) {
 const poses = { curious:'Normal',calm:'Warm',sleepy:'Drowsy',bath:'Bathe',
   hurt:'Bump',determined:'Bump',calling:'Notify',surprise:'Surprise',blush:'Warm',eating:'Read' };
 const tints = {normal:new T.Color(0xffffff),kusa:new T.Color('#acc58f'),kinako:new T.Color('#f1c38a')};
-function playGesture(r,name,dt,face=name) {
+function playGesture(r,name,dt,face=name,sample) {
   for (let i=0;i<r.bones.length;i++){
     r.bones[i].position.copy(r.samples[i].p);
     r.bones[i].quaternion.copy(r.samples[i].q);
   }
-  if (r.clip!==name) {
+  if(sample){
+    // A replay can visit the same instant for the two lenses or for a wrist
+    // solve. Evaluate its authored clock without advancing the mixer again.
+    if(r.clip!==name){
+      r.mixer.stopAllAction();r.actions.Normal.reset().play();
+      if(name!=='Normal')r.actions[name].reset().play();
+      r.clip=name;
+    }
+    const weight=name==='Normal'?1:sample.weight;
+    const idle=r.actions.Normal,action=r.actions[name];
+    idle.setEffectiveWeight(1-weight);idle.time=sample.time%idle.getClip().duration;
+    action.setEffectiveWeight(weight);action.time=sample.time%action.getClip().duration;
+    r.mixer.update(0);
+  }else if (r.clip!==name) {
     const action=r.actions[name].reset().play();
     if(r.clip) action.crossFadeFrom(r.actions[r.clip],.19,false);
     r.clip=name;
   }
-  r.mixer.update(dt);
+  if(!sample)r.mixer.update(dt);
   for(let i=0;i<r.bones.length;i++) {
     r.samples[i].p.copy(r.bones[i].position);
     r.samples[i].q.copy(r.bones[i].quaternion);
@@ -431,7 +515,7 @@ export function poseRice(r,p,t,dt,mood,bath) {
   const name=p.activity==='read' ? 'Read' : (poses[mood]||'Normal');
   const seated=seatedGesture(bath,t,p.activityTime);
   const bathFace=seated && !p.emote && (bath.action==='steam' || bath.action==='seat')?'Warm':name;
-  const cell=playGesture(r,bath?'Float':name,dt,bathFace);
+  const cell=playGesture(r,bath?'Float':name,dt,bathFace,p.gestureSample);
   const melt=bath?.melt || 0, recline=bath?.recline || 0;
   r.smile=T.MathUtils.damp(r.smile,joy?1:0,42,dt);
   r.body.morphTargetInfluences[0]=r.smile;

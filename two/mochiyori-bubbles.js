@@ -13,7 +13,7 @@ function node(tag, cls, label) {
   return el;
 }
 
-export function createSpeechView({stage, canvas, camera, player, dialogue, world, approach, activate}) {
+export function createSpeechView({stage, canvas, camera, player, dialogue, world, approach, activate, destination, inspectHands}) {
   const layer = node('div', 'speech-layer');
   const signs = node('div', 'speaker-signs');
   const bubble = node('section', 'world-speech');
@@ -25,6 +25,16 @@ export function createSpeechView({stage, canvas, camera, player, dialogue, world
   const line = node('p', 'spoken-line');
   const close = node('button', 'speech-close', '×');
   const controls = node('div', 'dialogue-replies');
+  const lens = node('button','handwork-lens','手元を拡大');
+  let closeView = false;
+  lens.type = 'button';
+  lens.onclick = () => {
+    if (!inspectHands?.(!closeView)) return;
+    closeView = !closeView;
+    lens.textContent = closeView ? '全景に戻る' : '手元を拡大';
+    lens.setAttribute('aria-pressed',String(closeView));
+    canvas.focus({preventScroll:true});
+  };
   close.type = 'button';
   close.title = '会話を終える（Esc）';
   close.setAttribute('aria-label', close.title);
@@ -42,7 +52,6 @@ export function createSpeechView({stage, canvas, camera, player, dialogue, world
   const point = new Vector3();
   const origin = new Vector3();
   let frame = null, playing = false, width = 0, height = 0;
-  let framedSpeaker = null;
 
   // Measure the balloon only when its content wraps or the viewport changes.
   new ResizeObserver(([entry]) => {
@@ -57,10 +66,6 @@ export function createSpeechView({stage, canvas, camera, player, dialogue, world
     controls.replaceChildren();
     if (!next) return;
     const speaker = next.speaker === 'お餅' ? heroName : next.speaker;
-    if (speaker !== heroName && speaker !== framedSpeaker) {
-      const subject = world().speakers().find(who => who.person.name === speaker && who.site.key === next.site.key);
-      if (subject) { approach(subject); framedSpeaker = speaker; }
-    }
     const person = residents.get(speaker) || (next.person.name === speaker && next.person);
     const tile = portraits.get(speaker);
     portrait.hidden = tile == null;
@@ -70,11 +75,12 @@ export function createSpeechView({stage, canvas, camera, player, dialogue, world
     line.textContent = next.text;
     bubble.classList.toggle('courier-line',speaker === heroName);
     if (next.action) world().playAction(next.action.key, next.person.id);
+    else world().stopAction();
     for (const [i, option] of next.choices.entries()) {
       const reply = node('button','reply-option');
       reply.type = 'button';
       if (i < 9) {
-        const key = node('kbd','reply-key',String(i+1));
+        const key = node('kbd','reply-key',next.choices.length === 1 ? 'E' : String(i+1));
         key.setAttribute('aria-hidden','true');
         reply.append(key);
       }
@@ -89,17 +95,19 @@ export function createSpeechView({stage, canvas, camera, player, dialogue, world
       more.onclick = () => advance();
       controls.append(more);
     }
-    controls.classList.toggle('single-reply',!next.choices.length);
+    controls.append(lens);
+    controls.classList.toggle('single-reply',next.choices.length <= 1);
     controls.scrollTop = 0;
     playing = !world().actionPlaying;
     syncPlayback();
   }
 
   function syncPlayback() {
+    lens.hidden = !(closeView || frame?.action && world().actionFocus);
     const busy = !!world().actionPlaying;
     if (playing === busy) return;
     playing = busy;
-    for (const button of controls.children) button.disabled = busy;
+    for (const button of controls.children) if (button !== lens) button.disabled = busy;
     const more = controls.querySelector('.reply-next span');
     if (more) more.textContent = busy ? '手元を見る…' : '続きを読む';
   }
@@ -115,6 +123,7 @@ export function createSpeechView({stage, canvas, camera, player, dialogue, world
 
   function advance(id) {
     if (!frame || world().actionPlaying) return;
+    if (id === undefined && frame.choices.length === 1) id = frame.choices[0].id;
     if (id === undefined && frame.choices.length) {
       controls.firstElementChild.focus({preventScroll:true});
       return;
@@ -132,11 +141,13 @@ export function createSpeechView({stage, canvas, camera, player, dialogue, world
     const who = world().speakers().find(s => s.person.id === contact.person.id && s.site.key === contact.site.key);
     if (!who) return;
     who.actor.getWorldPosition(origin);
-    const next = dialogue.start(who.person, who.site);
+    const next = contact.pickup ? dialogue.inspect(contact.pickup, who.site) : dialogue.start(who.person, who.site);
     if (!next) return;
+    closeView = false;
+    lens.textContent = '手元を拡大';
+    lens.setAttribute('aria-pressed','false');
     world().holdSpeaker(who.person.id);
-    framedSpeaker = who.person.name;
-    approach(who);
+    approach();
     show(next);
     canvas.focus({preventScroll:true});
   }
@@ -180,6 +191,7 @@ export function createSpeechView({stage, canvas, camera, player, dialogue, world
     const people = world().speakers(), w = canvas.clientWidth, h = canvas.clientHeight;
     signs.hidden = !!frame;
     if (!frame) {
+      const lead = destination();
       for (const [id, sign] of markers) {
         if (!people.some(who => who.person.id === id)) { sign.remove(); markers.delete(id); }
       }
@@ -189,6 +201,12 @@ export function createSpeechView({stage, canvas, camera, player, dialogue, world
         point.copy(who.anchor).project(camera);
         sign.hidden = d > 28*28 || point.z < -1 || point.z > 1 || Math.abs(point.x) > 1 || Math.abs(point.y) > 1;
         if (sign.hidden) continue;
+        const expected = lead && who.person.name === lead.person && who.site.region === lead.site.region && who.site.place === lead.site.place;
+        const label = expected ? who.person.name : '…';
+        if (sign.textContent !== label) {
+          sign.textContent = label;
+          sign.classList.toggle('awaited', Boolean(expected));
+        }
         const near = d < 4.8*4.8 && world().nearest(player,who.person.id)?.person.id === who.person.id;
         if (sign.disabled === near) sign.disabled = !near;
         const x = (point.x+1)*w/2, y = (1-point.y)*h/2;
@@ -210,6 +228,13 @@ export function createSpeechView({stage, canvas, camera, player, dialogue, world
     const ahead = point.z >= -1 && point.z <= 1;
     const x = ahead ? (1+point.x)*w/2 : w/2, y = ahead ? (1-point.y)*h/2 : h*.45;
     const bw = width || bubble.offsetWidth, bh = height || bubble.offsetHeight;
+    if (closeView) {
+      // Leave the area around the hands open, even when the speaker is the
+      // courier bending over the work. Keep the caption in the upper margin.
+      bubble.style.transform = 'translate('+Math.round(w-bw-8)+'px,'+Math.round(Math.min(66,h*.13))+'px)';
+      bubble.classList.add('outside-view');
+      return;
+    }
     const left = MathUtils.clamp(x-bw*.44,8,Math.max(8,w-bw-8));
     const top = MathUtils.clamp(y-bh-15,8,Math.max(8,h-bh-28));
     bubble.style.transform = 'translate('+Math.round(left)+'px,'+Math.round(top)+'px)';

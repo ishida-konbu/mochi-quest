@@ -28,7 +28,7 @@ import { fitWaterPail, poseWaterHare } from './kaede-water-pail.js';
 import { updateWaterHare } from './kaede-water-hare.js';
 import { dressArtisan, poseArtisan } from './trade-tools.js';
 import { seatedFeet } from './bath-gestures.js';
-import { makeRiceModel, poseRice, gripChayaServing, gripRinsingLadle } from './mochi-model.js';
+import { makeRiceModel, poseRice, placeRiceGrip, reachRiceGrip, gripChayaServing, gripRinsingLadle } from './mochi-model.js';
 import { createDangoBrush } from './dango-brush.js';
 import { isGroundedDango } from './dango-roll.js';
 
@@ -1411,7 +1411,7 @@ export function poseSwimming(pose, swim, player, bath, dt) {
   pose.position.y += .055 * Math.cos(2 * swim.phase) * weight;
 }
 function gaitHero(h, p, t, dt, state) {
-  const mood = getExpression(p, t),
+  const mood = h.root.userData.storyReach?.taste ? 'eating' : getExpression(p, t),
     sit = servingPose(p),
     speed = p.speed || 0;
   const riding = !!p.mount;
@@ -1917,7 +1917,8 @@ export function createActors(scene, renderer) {
     else window.setTimeout(warm,80);
   }
 
-  const storyTarget = new THREE.Vector3(), upperScale = new THREE.Vector3();
+  const restingPalm=h.root.getObjectByName('配達人の受け手');
+  h.root.userData.storyRestPalm=new THREE.Vector3();
   function update(state, dt, camera) {
     const p = state.player,
       t = state.time;
@@ -1926,13 +1927,12 @@ export function createActors(scene, renderer) {
     gaitHero(h, p, t, dt, state);
     dangoBrush(p, t, state.photo);
     const reach = h.root.userData.storyReach;
-    if (reach && !p.activity && !p.mount && !p.skiff) {
+    if(reach || !h.rice.storyPalmSamples)placeRiceGrip(h.rice,0,restingPalm);
+    restingPalm.getWorldPosition(h.root.userData.storyRestPalm);
+    if (reach && !p.activity && !p.skiff) {
       // Apply the voluntary reach after gait/morphs, without stretching the
       // wrist to a witness the player has already walked away from.
-      const hand = h.rice.hands[0], parent = hand.parent;
-      const scale = parent.getWorldScale(upperScale).x;
-      parent.worldToLocal(storyTarget.copy(reach.point)).sub(hand.position);
-      hand.position.addScaledVector(storyTarget.clampLength(0,.26/Math.max(.01,scale)),reach.strength);
+      reachRiceGrip(h.rice,0,restingPalm,reach);
     }
     skyLife(t,state,camera,state.photo ? atPhotoTime : null);
     seaPerformers(t,p,camera,state.nearbyNpcs);

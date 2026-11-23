@@ -122,7 +122,8 @@ function build(n){
       const bow=form==='boat'||form==='leaf'? .041*Math.pow(Math.abs(c),4):form==='shell'?.029*(s+1)/2+.012*Math.cos(12*a):0;
       const rib=form==='shell'?.006*Math.cos(12*a)*r*r:0;
       pos.push(w*R*c,y+bow*r**4+rib,d*R*s);
-      const col=j<=2?biscuit:j===9||j===10?trim:j===7?pigment.clone().lerp(trim,.23):pigment.clone();
+      const col=(j<=2?biscuit:j===9||j===10?trim:pigment).clone();
+      if(j===7)col.lerp(trim,.23);
       if(form==='shell')col.lerp(colour(c>0?'#bcd9ad':'#b8a0c4'),.31+.22*Math.cos(12*a+.5));
       if(j===12||j===13)col.lerp(trim,kind==='lacquer'?.06:.22);
       const hand=1+.021*Math.sin(13*a+r*7)+.008*Math.sin(a*43+3*r);
@@ -147,6 +148,14 @@ function build(n){
   // Merge adjacent strips using the same finish to keep the number of draw calls independent of the profile resolution.
   const groups=[];for(const strip of geometry.groups){const last=groups.at(-1);if(last?.materialIndex===strip.materialIndex)last.count+=strip.count;else groups.push({...strip});}geometry.groups=groups;
   geometry.setAttribute('position',new T.Float32BufferAttribute(pos,3));geometry.setAttribute('color',new T.Float32BufferAttribute(normalColours,3));geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));geometry.setIndex(indices);geometry.computeVertexNormals();
+  // The frieze wraps at these duplicate vertices, but the glazed surface is continuous.
+  const normals=geometry.attributes.normal, joined=new T.Vector3(), other=new T.Vector3();
+  for(let j=0;j<levels.length;j++){
+    const first=j*(sideCount+1),last=first+sideCount;
+    joined.fromBufferAttribute(normals,first).add(other.fromBufferAttribute(normals,last)).normalize();
+    normals.setXYZ(first,joined.x,joined.y,joined.z);
+    normals.setXYZ(last,joined.x,joined.y,joined.z);
+  }
   let finish;
   if(stoneware){
     finish=marketStoneware();

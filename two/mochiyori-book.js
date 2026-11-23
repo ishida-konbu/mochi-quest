@@ -1,9 +1,12 @@
 import { BOUND, REGIONS } from './terrain.js';
 import { CAST, CHAPTERS, SCENES, SUPPLY_REGISTER } from './mochiyori-story.js';
-import { chapterLabel } from './mochiyori-progress.js';
+import { chapterLabel, entries } from './mochiyori-progress.js';
 import { memoryScene, performedScenes, sceneLocation } from './mochiyori-scenes.js';
-import { CLUE_LINES } from './mochiyori-lines.js';
+import { CHAPTER_LINES, CLUE_LINES } from './mochiyori-lines.js';
 import { createStudy } from './mochiyori-study.js';
+import { storySite } from './story-sites.js';
+import { itemIllustration } from './story-item-art.js';
+import { PARCELS } from './mochiyori-parcels.js';
 
 const cast = new Map(CAST.map(person => [person.id, person]));
 function el(tag, cls, text) {
@@ -54,8 +57,11 @@ export function createBookView({dialog, body, heading, book, dialogue, save, tra
   function tabs(container, name) {
     const bar = el('nav','folio-tabs');
     bar.setAttribute('aria-label','帳面の頁');
-    for (const [label,fn] of [['いまの頼まれごと',overview],['旅の記録',archive],['場面の回想',memories]]) {
-      const b = button(label,fn);
+    for (const [label,fn] of [['いまの頼まれごと',overview],['所持アイテム',inventory],['旅の記録',archive],['場面の回想',memories]]) {
+      const b = button(label,() => {
+        fn();
+        body.querySelector('[aria-current="page"]')?.focus({preventScroll:true});
+      });
       if (name === label) b.setAttribute('aria-current','page');
       bar.append(b);
     }
@@ -92,11 +98,6 @@ export function createBookView({dialog, body, heading, book, dialogue, save, tra
     tabs(wrap,'いまの頼まれごと');
     if (book.index === 0) showArtwork(wrap);
     if (book.requested) wrap.append(el('blockquote','folio-question',chapter.question));
-    const items = book.items();
-    if (items.length) {
-      appendHeading(wrap,'預かっている品');
-      wrap.append(el('p','folio-note',items.join('、')));
-    }
     appendHeading(wrap,'訪ねる相手');
     for (const lead of dialogue.leads()) {
       const {site, person, label, id} = lead;
@@ -106,6 +107,84 @@ export function createBookView({dialog, body, heading, book, dialogue, save, tra
       });
     }
     if (book.pin) wrap.append(button('道しるべを外す',() => {book.track(null); save(); overview();},'folio-link'));
+  }
+  function parcelStop(event) {
+    const clue = entries.get(event);
+    if (clue) return {name:clue.speaker, site:storySite(clue.region,clue.place)};
+    const [kind,id] = event.split('/');
+    const chapter = CHAPTERS.find(ch => ch.id === id);
+    const scene = CHAPTER_LINES[id];
+    const name = kind === 'request' ? scene.opener || scene.host : scene.host;
+    const opening = kind === 'request' && name !== scene.host && chapter.clues.find(c => c.speaker === name);
+    const site = opening ? storySite(opening.region, opening.place) : storySite(chapter.verdictRegion, chapter.verdictPlace);
+    return {name, site};
+  }
+  function itemImage(item) {
+    const img = el('img','parcel-art');
+    img.src = itemIllustration(item);
+    img.alt = '';
+    return img;
+  }
+  function inventory() {
+    const held = book.inventory(), delivered = book.deliveredItems();
+    const wrap = reset('旅の風呂敷','手荷物　／　' + held.length + '品','所持アイテム');
+    tabs(wrap,'所持アイテム');
+    if (!held.length) {
+      const empty = el('div','parcel-empty');
+      empty.append(itemImage({art:'empty'}), el('p','',delivered.length
+        ? '風呂敷の中は空っぽ。届けた品は下の控えで確かめられます。'
+        : '風呂敷の中は空っぽ。旅先で拾った品や、誰かに託された品がここに入ります。'));
+      wrap.append(empty);
+    }
+    const byDestination = new Map();
+    for (const item of held) {
+      if (!byDestination.has(item.target)) byDestination.set(item.target, []);
+      byDestination.get(item.target).push(item);
+    }
+    const leads = dialogue.leads();
+    for (const [target, parcels] of byDestination) {
+      const group = el('div','parcel-group');
+      wrap.append(group);
+      if (target) {
+        const dest = parcelStop(target);
+        const id = target.startsWith('end/') ? 'verdict' : target;
+        const route = el('div','parcel-route');
+        route.append(el('small','','届け先'),el('strong','',dest.site.name + '　' + dest.name));
+        const required = PARCELS.filter(item => item.target === target).length;
+        if (required > 1) {
+          const remaining = required - parcels.length;
+          route.append(el('span','parcel-tally',remaining ? 'あと' + remaining + '品' : required + '品そろった'));
+        }
+        if (leads.some(lead => lead.id === id)) {
+          route.append(button(book.pin === id ? '道しるべを外す' : '道しるべを付ける',() => {
+            if (book.pin === id) { book.track(null); save(); inventory(); }
+            else if (book.track(id)) { save(); track(dest.site); }
+          },'parcel-pin'));
+        }
+        group.append(route);
+      }
+      for (const item of parcels) {
+        const origin = parcelStop(item.source);
+        const pickedUp = entries.get(item.source)?.pickup;
+        const card = el('section','folio-parcel'), words = el('div','parcel-words');
+        words.append(el('h4','',item.name), el('p','parcel-description',item.description),
+          el('p','parcel-origin', pickedUp ? '拾った場所　' + origin.site.name : '入手先　' + origin.site.name + '・' + origin.name));
+        card.append(itemImage(item),words);
+        group.append(card);
+      }
+    }
+    if (delivered.length) {
+      const log = el('details','folio-chapter parcel-register');
+      log.append(el('summary','','届けた品の控え　' + delivered.length + '品'));
+      const list = el('ul','');
+      for (const item of delivered) {
+        const dest = parcelStop(item.target);
+        const row = el('li','');
+        row.append(el('strong','',item.name),el('span','',dest.site.name + '　' + dest.name));
+        list.append(row);
+      }
+      log.append(list); wrap.append(log);
+    }
   }
   function archive() {
     const wrap = reset('旅の記録','もち寄り帖','見たこと、聞いたこと');
@@ -199,5 +278,5 @@ export function createBookView({dialog, body, heading, book, dialogue, save, tra
     tabs(wrap,'いまの頼まれごと'); showArtwork(wrap,true);
     wrap.append(el('p','folio-resolution',CHAPTERS.at(-1).resolution),button('旅の記録を読む',archive,'folio-primary'));
   }
-  return {open: overview, close() { study.clear(); delete dialog.dataset.folio; }};
+  return {open: overview, inventory, close() { study.clear(); delete dialog.dataset.folio; }};
 }

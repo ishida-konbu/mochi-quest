@@ -18,9 +18,10 @@ function rectangle(u, v, w, d) {
   return Math.hypot(Math.max(0,a), Math.max(0,b)) + Math.min(0,Math.max(a,b));
 }
 
-function structuralDistance(parts,u,v,bottom,top) {
+function structuralDistance(parts,u,v,bottom,top,radius) {
   let best=Infinity;
   for(const q of parts) {
+    if(q.minRadius && radius<q.minRadius)continue;
     if(q.type==='slab'){
       if(bottom>=q.y+q.h*.5 || top<=q.y-q.h*.5)continue;
       let inside=false,distance=Infinity;
@@ -64,22 +65,24 @@ export function createStoryCollisions() {
       let depth = 0;
       if (contact) contact.person = null;
       for (const f of nearby) {
-        const bottom = feet-f.y, top = bottom+height;
+        const origin=f.model?.position || f;
+        const bottom = feet-origin.y, top = bottom+height;
 
-        const dx=wrapWorld(x-f.x), dz=wrapWorld(z-f.z);
+        const dx=wrapWorld(x-origin.x), dz=wrapWorld(z-origin.z);
         if (f.modelContact && Math.abs(dx)<5+radius && Math.abs(dz)<5+radius && top>-.5 && bottom<5) {
-          const modelDepth=f.modelContact(f.x+dx,f.z+dz,feet,height,radius,pose);
+          const modelDepth=f.modelContact(origin.x+dx,origin.z+dz,feet,height,radius,pose);
           if (modelDepth>depth) {
             depth=modelDepth;
             if (contact) contact.person=f.kind==='person' ? f.name : null;
           }
           if (f.kind==='person') continue;
         }
+        if (f.kind==='stand')continue;
         if (top<=0 || bottom>=2.25 || Math.abs(dx)>1.65+radius || Math.abs(dz)>1.65+radius) continue;
         const u=dx*f.co-dz*f.si, v=dz*f.co+dx*f.si;
         let signed;
         if (f.kind==='table') {
-          signed=structuralDistance(f.parts,u,v,bottom,top);
+          signed=structuralDistance(f.parts,u,v,bottom,top,radius);
         } else {
           const [w,d,lo,hi]=f.body;
           if (bottom>=hi || top<=lo) continue;

@@ -15,34 +15,42 @@ function beat(actor, gesture, prop, caption, { partner = null, ...details } = {}
 function scene(title, cast, props, beats) { return { title, cast, props, beats }; }
 function clue(id, cast, props, beats) { return [id, scene(notes.get(id).action, cast, props, beats)]; }
 
+export const festivalLetters=scene('祭の招待状を預かる',['勘兵衛',courier],
+  [prop('ledger','peach-invite'),prop('ledger','palace-invite')],[
+    beat(0,'pass',0,'「桃子さんには、桃の葉を添えたほうを」。勘兵衛が一通目を渡す。',{partner:1}),
+    beat(0,'pass',1,'「こっちは小鞠さんへ。濡れてもいいように包んだよ」。配達人は二通目を受け取った。',{partner:1}),
+  ]);
+
 export const CLUE_SCENES = Object.fromEntries([
-  clue('leaf-marks',['おはな',courier],[exhibit('leaf-marks'),exhibit('warm-cakes')],[
-    beat(0,'set',1,'おはなが餅を皿に取りよけ、籠の底をあける。'),
-    beat(0,'turn',0,'籠をこちらへ向けると、舟のような細長い跡が並んでいる。',{partner:1}),
-    beat(0,'point',0,'端からひと列、四つずつ。三列で十二枚分の敷き跡がある。'),
+  clue('leaf-marks',['おはな',courier],[exhibit('leaf-marks'),prop('basket','ferry-leaf')],[
+    beat(1,'lift',1,'配達人が籠の縁から舟形の葉を一枚拾う。'),
+    beat(0,'turn',0,'おはなが籠の底を向ける。葉と同じ細長い跡が、四つずつ三列。',{partner:1}),
+    beat(1,'present',1,'葉を返すと、片側だけ筋が浮いている。餅の裏に合わせるため取っておこう。',{partner:0}),
   ]),
   clue('lunch-wrap',['卯助',courier],[exhibit('lunch-wrap'),prop('basket')],[
-    beat(0,'open',0,'「おれの昼飯だよ」。卯助は懐から出した包みを開く。'),
-    beat(0,'present',0,'中にはかじりかけの餅と桜の葉。卯助が自分で買った分だという。',{partner:1}),
+    beat(0,'open',0,'「おれの昼飯だよ」。卯助は竹皮の先をつまみ、外の一枚を開いた。',{part:'昼飯を覆う外葉',unfold:true}),
+    beat(0,'open',0,'もう一枚を反対側へ開くと、桜の葉に載せた食べかけの餅が現れた。',{part:'昼飯を覆う内葉',unfold:true}),
+    beat(0,'point',0,'卯助が欠けたところを指した。「これはおれが自分で買って、さっきひと口食べたやつさ」',{part:'ひと口欠けた昼餅',partner:1}),
     beat(0,'turn',1,'荷籠の縁を少し傾けてみせる。「舟が揺れたのはこの時さ。蓋は開けなかったよ」'),
   ]),
-  clue('joined-cake',['おはな',courier],[exhibit('joined-cake')],[
-    beat(0,'point',0,'同じ舟形の葉の上で、一つだけ大きな餅が隣へはみ出している。'),
+  clue('joined-cake',['おはな',courier],[exhibit('joined-cake'),prop('basket','ferry-leaf')],[
+    beat(1,'set',1,'拾っておいた葉を籠の隣に置く。おはなが、一つだけ隣へはみ出した餅を指した。'),
     beat(0,'lift',0,'おはなが大きな餅だけを、つぶさないように持ち上げる。',{part:'合わせ餅'}),
     beat(0,'turn',0,'裏には左右に一組ずつ、向きの違う葉脈。真ん中に浅い筋が一本走っている。',{part:'合わせ餅',pose:'lift',partner:1}),
   ]),
   clue('warm-cakes',['おはな','卯助'],[food('river'),exhibit('old-tool-marks'),prop('basket')],[
-    beat(0,'set',0,'おはなが花筏餅を敷板へ置く。「いつもは、ここで冷ますんだよ」',{target:1}),
+    beat(0,'set',0,'おはなが花筏餅を敷板へ置く。「いつもは、ここで冷ますんだよ」',{target:1,surface:'敷板一'}),
     beat(0,'lift',0,'今朝は冷めるのを待たず、柔らかいままの餅を籠に移したという。',{target:2}),
     beat(0,'pass',2,'「出舟に遅れそうでね」。おはなが縁を両手で支え、卯助に渡す。',{partner:1}),
   ]),
   clue('same-rice',['みのり',courier],[prop('rice'),exhibit('same-rice')],[
     beat(0,'open',0,'みのりが米俵の口をほどく。「どちらも、この一袋からね」'),
-    beat(0,'divide',0,'ひとすくいずつ左右へ分け、二皿の米を同じ量にそろえる。',{target:1}),
-    beat(0,'present',1,'皿を並べて差し出す。「峠で蒸してごらん。米の違いで結果は変わらないはずよ」',{partner:1}),
+    beat(0,'divide',0,'みのりが竹皮を二枚広げ、米をひとすくいずつ分けた。',{target:1,ricePacket:'open'}),
+    beat(0,'present',1,'みのりが竹皮の端を折って二包みにする。「どっちも同じ米だよ」',{partner:1,ricePacket:'fold'}),
+    beat(0,'pass',1,'「峠で蒸してごらん」。配達人は両手を出し、米を二包みとも預かった。',{partner:1}),
   ]),
   clue('steam-test',['留吉',courier],[exhibit('steam-test'),exhibit('same-rice')],[
-    beat(0,'set',1,'留吉が二皿の米をかまどの脇へ。同じ火で、同じだけ蒸してみる。'),
+    beat(0,'set',1,'留吉がかまどの脇で竹皮を開く。「同じ火で、同じだけ蒸してみよう」',{ricePacket:'open'}),
     beat(0,'lift',0,'上段をよけると、開いた底を通って米まで湯気が上がる。',{part:'蒸し箱の上段',pose:'single'}),
     beat(0,'stack',0,'二段をぴたりと重ねる。下の蒸気口に上の底が重なり、上段の米には芯が残る。',{part:'蒸し箱の上段',pose:'stacked'}),
   ]),
@@ -52,31 +60,41 @@ export const CLUE_SCENES = Object.fromEntries([
     beat(0,'present',0,'楓が一本を取り上げ、刻みのある側をこちらに向けた。',{part:'取り外し桟0',partner:1,helperCaption:'楓に教わり、配達人が一本を手に取る。こちらへ返した木の片側に、刻みが見える。'}),
   ]),
   clue('packing-bars',['こま',courier],[exhibit('packing-bars')],[
-    beat(0,'lift',0,'こまが荷造り台の端から短い木を一本拾い上げる。',{part:'取り外し桟0'}),
-    beat(0,'set',0,'もう一本、もう一本。荷を小さくするために外した三本がそろう。',{part:'取り外し桟1'}),
-    beat(0,'pass',0,'「傷よけの当て木だとばかり思ってたよ」。こまは刻みをこちらに向けて渡した。',{part:'取り外し桟2',partner:1}),
+    beat(1,'lift',0,'荷造り台の端から、配達人が刻みのついた桟を一本拾い上げた。',{part:'取り外し桟0'}),
+    beat(1,'set',0,'一本目を荷造り台の端へ下ろす。',{part:'取り外し桟0',reseat:true}),
+    beat(1,'compare',0,'配達人が二本目の刻みを指でたどる。最初の一本と同じ形だ。',{part:'取り外し桟1'}),
+    beat(0,'point',0,'こまが、その隣の桟を指した。「ほら、三本目もここ」',{part:'取り外し桟2'}),
+    beat(0,'pass',0,'こまが三本まとめて下から支えた。「これで全部だよ」。配達人が揃えて受け取る。',{partner:1}),
   ]),
-  clue('steam-repair',['留吉','楓'],[exhibit('steam-repair'),exhibit('same-rice')],[
-    beat(1,'fit',0,'楓が下段の縁に、合印をそろえて三本の桟を渡す。',{part:'取り外し桟0',helperCaption:'楓が合印を教える。配達人は刻みを合わせ、下段の縁に三本の桟を渡した。'}),
+  clue('steam-repair',['留吉','楓'],[prop('steamer','repair-body'),exhibit('same-rice'),exhibit('packing-bars')],[
+    beat(0,'lift',0,'留吉が上段をよける。「ここに、持ち帰った木を渡しておくれ」',{part:'蒸し箱の上段',pose:'single'}),
+    beat(1,'fit',2,'楓が一本目の刻みを合わせ、下段の左端へ渡す。',{part:'取り外し桟0',target:0,helperCaption:'配達人が一本目を左の合印に合わせる。'}),
+    beat(1,'fit',2,'二本目は真ん中へ。楓は指の腹で桟を押し、がたつきを確かめた。',{part:'取り外し桟1',target:0,helperCaption:'二本目は真ん中へ。配達人は指の腹でそっと押してみた。'}),
+    beat(1,'fit',2,'楓が残りの一本を右端に置く。「これで上の段を戻せるよ」',{part:'取り外し桟2',target:0,helperCaption:'配達人が最後の一本を右端に置いた。「これで上の段を戻せるね」と留吉。'}),
     beat(0,'stack',0,'留吉が上段をそっと戻す。段の間に、試作品と同じ隙間ができた。',{part:'蒸し箱の上段',pose:'spaced'}),
-    beat(0,'present',1,'湯気が上段を抜ける。留吉が米を一粒つまみ、芯まで柔らかいのを楓に見せた。',{partner:1}),
+    beat(0,'present',1,'湯気が上段を抜ける。留吉が竹皮を開いて楓に見せる。「ほら、今度は芯まで柔らかい」',{partner:1,ricePacket:'open'}),
   ]),
-  clue('wedding-filling',['結',courier],[prop('tray'),exhibit('wedding-filling')],[
+  clue('wedding-filling',['結',courier],[prop('tray'),exhibit('wedding-filling'),prop('ledger','wedding-print')],[
     beat(0,'present',0,'「東大寺でお冬さんから預かりました」。結が婚礼専用の盆を寄せる。',{partner:1,helperCaption:'配達人が婚礼の盆を寄せる。「東大寺で、お冬さんから預かりました」と結。'}),
     beat(0,'divide',1,'花形の祝い餅を二つに割る。薄い皮の中に白い餡がのぞいた。',{part:'割餅左',helperCaption:'結に勧められて配達人が花形の祝い餅を割ると、薄い皮の中から白い餡がのぞいた。'}),
     beat(0,'turn',1,'底を上に向けると、蒸した肌に三角の布目が残っている。',{part:'割餅右',helperCaption:'「底も見てください」。配達人が返した餅の肌に、三角の布目が残っている。'}),
+    beat(1,'write',2,'配達人が三角の角まで紙に写す。白餡の祝い餅の写しが一枚できた。'),
+    beat(1,'lift',2,'墨の乾いた紙を端から取り上げる。'),
   ]),
-  clue('walnut-filling',['望',courier],[exhibit('walnut-filling')],[
+  clue('walnut-filling',['望',courier],[exhibit('walnut-filling'),prop('ledger','trial-print')],[
     beat(0,'present',0,'望が作業台の花形餅を一つ選ぶ。「これは私の試作です」',{partner:1}),
     beat(0,'divide',0,'薄い皮を開くと、挽いた胡桃の香りが立つ。切り口の餡は薄茶色だ。',{part:'割餅左'}),
     beat(0,'turn',0,'望が片方を裏返す。底には小さな三角の布目がある。',{part:'割餅右'}),
+    beat(1,'write',1,'胡桃餡の試作にも、三角の針目。配達人が輪郭を写し取った。'),
+    beat(1,'lift',1,'配達人は写しを手に取り、三角の角をもう一度確かめた。'),
   ]),
-  clue('mended-cloth',['おこげ',courier],[exhibit('mended-cloth'),exhibit('walnut-filling')],[
-    beat(0,'open',0,'おこげが布をひざに広げ、かぎ裂きを繕ったところを引き伸ばした。',{helperCaption:'おこげの言うとおり、配達人が布を左右に広げる。かぎ裂きを繕った跡が顔を出した。'}),
-    beat(0,'compare',0,'布の角を餅の底の跡へ寄せる。とがった三角の向きが重なった。',{target:1,helperCaption:'配達人が布の角を餅の底へ寄せる。おこげが見ていたのは、二つの三角の向きだ。ぴたりと重なる。'}),
-    beat(0,'point',0,'「ここだけ糸を返したろ。望の蒸し布を、あたしが繕ったのさ」',{helperCaption:'配達人が縫い目を指すと、おこげが笑った。「そこだけ糸を返したろ。望の蒸し布を、あたしが繕ったのさ」'}),
+  clue('mended-cloth',['おこげ',courier],[exhibit('mended-cloth'),prop('ledger','wedding-print'),prop('ledger','trial-print')],[
+    beat(1,'set',1,'配達人が先に広げたのは、稲荷の婚礼で見た白餡の餅の写しだ。',{offset:[0,.45]}),
+    beat(1,'set',2,'その隣に、薄野で取った胡桃餡の餅の写しを置く。二枚の三角の向きをそろえた。'),
+    beat(0,'set',0,'おこげが繕った布を写しに重ねる。両方とも、三角の同じ角で二針返している。',{target:1,offset:[-.48,-.19],frameWith:2}),
+    beat(0,'pass',0,'「写しは預かるよ。この端切れを使ってごらん」。おこげが手を離すと、配達人は写しの上から試し布を取り上げた。',{partner:1,fromWorktop:true}),
   ]),
-  clue('cloth-test',['蓮照',courier],[exhibit('cloth-test'),exhibit('wedding-filling')],[
+  clue('cloth-test',['蓮照',courier],[exhibit('mended-cloth'),exhibit('wedding-filling')],[
     beat(0,'open',0,'蓮照が蒸し布を広げる。冷えた餅に当ててから外しても、底の肌は元のまま。'),
     beat(0,'set',1,'今度は柔らかい生地を繕い目の上に載せ、そのまま蒸す。',{target:0}),
     beat(0,'turn',1,'蒸したほうを持ち上げて返すと、底に三角が浮いた。'),
@@ -98,7 +116,7 @@ export const CLUE_SCENES = Object.fromEntries([
   ]),
   clue('crescent-case',['安蔵','お澄'],[prop('crate'),prop('ledger','case-sketches')],[
     beat(0,'open',1,'安蔵が敦賀と堺の控えを帳場に広げる。どちらの見取図にも、蓋の隅に傷がある。'),
-    beat(1,'turn',0,'お澄が通い箱の向きを変え、三日月形の傷のある面を見せた。',{partner:0,helperCaption:'お澄が傷の位置を教える。配達人が通い箱を回すと、側面に三日月形の傷が現れた。'}),
+    beat(1,'turn',0,'お澄が通い箱の向きを変え、蓋の右隅にある三日月形の傷を見せた。',{partner:0,helperCaption:'お澄が傷の位置を教える。配達人が通い箱を回すと、蓋の右隅に三日月形の傷が見えた。'}),
     beat(0,'compare',1,'絵の傷を現物に合わせる。両港の見取図は、この外箱を同じ向きから描いていた。',{target:0}),
   ]),
   clue('sakai-boards',['とわ',courier],[exhibit('sakai-boards'),prop('crate','board-liner')],[
@@ -121,22 +139,25 @@ export const CLUE_SCENES = Object.fromEntries([
     beat(0,'write',0,'その言葉を紙へ写す。受け取った道具を、今度はどこへ運べばよいかという問い合わせだ。'),
     beat(0,'pass',0,'みのりは控えを手元に残し、八重に渡すほうを配達人へ託した。',{partner:1}),
   ]),
-  clue('changed-day',['八重',courier],[exhibit('terrace-letter'),exhibit('changed-day')],[
-    beat(1,'pass',0,'配達人が棚田から預かった便りを、京で八重へ届ける。',{partner:0}),
+  clue('changed-day',['八重',courier],[{...exhibit('terrace-letter'),showFor:'八重'},prop('ledger','sakai-date'),prop('ledger','dawn-date'),prop('ledger','inari-date')],[
+    beat(1,'pass',0,'棚田からの便りが京に届いた。配達人が文台の上を指すと、八重が紙の端をつまんで取り上げた。',{partner:0,fromWorktop:true}),
     beat(0,'write',1,'「米も道具もありがとう。搬入は検分の翌朝に」。八重は返書に自分の名を入れた。'),
-    beat(0,'pass',1,'八重が書き終わった返事を渡す。港へも船積みを組み直す知らせが要る。',{partner:1}),
+    beat(0,'pass',1,'「堺のお澄さんへ」。八重の字で、検分の翌朝とある。',{partner:1}),
+    beat(0,'pass',2,'「こっちは浦の二人に。餅を搗く日が変わるからね」',{partner:1}),
+    beat(0,'pass',3,'最後は稲荷の結宛て。配達人は宛名を確かめて三通を預かった。',{partner:1}),
   ]),
-  clue('ship-instruction',['お澄',courier],[exhibit('changed-day'),exhibit('ship-instruction')],[
+  clue('ship-instruction',['お澄',courier],[prop('ledger','sakai-date'),exhibit('ship-instruction')],[
     beat(1,'pass',0,'配達人が八重の返事を運び、お澄が開いて日を読み上げる。',{partner:0}),
     beat(0,'lift',1,'お澄が祭の荷を示す木札を積み順の列から抜いた。',{helperCaption:'お澄が積み順を読む。配達人はその列から、祭の荷を示す木札を抜いた。'}),
     beat(0,'set',1,'指示に合わせ、札を京へ翌朝に着く便の列へ置き直す。',{helperCaption:'「その荷は翌朝の京へ」。お澄の指図どおり、配達人が別の便の列に木札を置き直す。'}),
   ]),
-  clue('dawn-delivery',['朝吉','うめ',courier],[exhibit('dawn-delivery'),food('dawn')],[
+  clue('dawn-delivery',['朝吉','うめ',courier],[prop('ledger','dawn-date'),food('dawn')],[
     beat(1,'set',1,'うめが紅白の餅をいったん置く。「朝吉さん、二人で聞こう」'),
     beat(2,'pass',0,'配達人が浦へ持って来た日取りの知らせを、朝吉が受け取った。',{partner:0}),
     beat(0,'present',0,'朝吉は札をうめにも向けた。「検分の翌朝だな。搗き始める時刻を合わせよう」',{partner:1}),
   ]),
-  clue('inari-delivery',['結',courier],[exhibit('inari-delivery'),prop('crate')],[
+  clue('inari-delivery',['結',courier],[exhibit('inari-delivery'),prop('crate'),{...prop('ledger','inari-date'),showFor:'結'}],[
+    beat(1,'pass',2,'配達人が稲荷宛ての文を届けた。結は台から一通を取り上げ、新しい日付を読み上げた。',{partner:0,fromWorktop:true}),
     beat(0,'turn',0,'結が稲荷の陸荷に付いていた札を裏返す。古い日付は消さずに伏せた。',{part:'古い荷札',helperCaption:'結に教わり、配達人が稲荷の陸荷の札を裏返す。古い日付は消さず、裏に伏せる。'}),
     beat(0,'tie',0,'同じ紐に翌朝の日付の札を結び足す。新しいほうの文字が表にくる。',{part:'新しい荷札',target:1,helperCaption:'「同じ紐でいいんです」。配達人は翌朝の日付を表にして、新しい札を結び足した。'}),
     beat(0,'present',0,'「この日なら運ぶ人も替えましょう」。結は二枚の札が揃ったところを確かめた。',{partner:1,helperCaption:'配達人が二枚の札をそろえる。結は新しい日付を読み、「この日なら運ぶ人も替えましょう」。'}),
@@ -146,15 +167,22 @@ export const CLUE_SCENES = Object.fromEntries([
     beat(0,'point',0,'持ち手のそばに弥平の預け札がある。「蒸籠一組、ささへ」。'),
     beat(0,'set',1,'笹結び餅を蒸す支度に戻る。「里のお餅は、私たちで用意します」',{target:0}),
   ]),
-  clue('mountain-tea',['茶屋の亭主','炭焼き',courier],[exhibit('mountain-tea'),prop('steamer')],[
+  clue('mountain-tea',['茶屋の亭主','炭焼き',courier],[exhibit('mountain-tea'),prop('steamer'),prop('bowl','mountain-flask')],[
     beat(0,'set',0,'亭主が床几に湯呑みを一つ置く。「あの蛙さんも、飲んだのは一人分」',{part:'湯呑み'}),
     beat(0,'lift',0,'荷の大きさを聞くと、亭主は片手で下げられるほどの旅包みを示した。',{part:'旅包み'}),
     beat(1,'point',1,'炭焼きが蒸し箱を指す。「うちのこれを直して、桃林の方へ下りなすったよ」'),
+    beat(0,'pass',2,'亭主が山茶の竹筒を渡す。「桃林で二人で飲んどくれ」',{partner:2}),
   ]),
-  clue('rest-wish',['弥平','桃子'],[exhibit('rest-wish'),food('peach')],[
+  clue('rest-wish',['弥平','桃子',courier],[exhibit('rest-wish'),food('peach'),prop('bowl','mountain-flask')],[
+    beat(2,'lift',2,'配達人が竹筒の口から栓を抜く。',{part:'山茶の栓'}),
+    beat(2,'set',2,'栓を筒の脇へ置いた。',{part:'山茶の栓',beside:true}),
+    beat(2,'pour',2,'竹筒を傾けると、山茶が弥平の湯呑みに細く落ちた。',{part:'山茶の竹筒の胴',target:0,tea:true}),
+    beat(2,'set',2,'茶が切れるのを待ち、配達人は筒を立てて置いた。',{part:'山茶の竹筒の胴',reseat:true}),
+    beat(2,'fit',2,'栓を筒の口へ戻す。',{part:'山茶の栓',reseat:true}),
     beat(1,'set',1,'桃子が木陰に桃しずく餅を一つ置く。弥平のそばには小さな旅包みだけ。'),
     beat(0,'lift',0,'弥平は仕事道具の代わりに湯呑みを取った。「腰をのばしたかった。それだけさ」',{part:'湯呑み'}),
-    beat(0,'set',0,'茶をひと口飲んで、静かに置く。「蒸籠はささに預けた。祭じゃ座って餅を食いたいね」',{part:'湯呑み'}),
+    beat(0,'sip',0,'弥平は湯呑みの縁を口に当て、山茶をひと口すすった。',{part:'湯呑み'}),
+    beat(0,'set',0,'湯呑みを静かに下ろす。「蒸籠はささに預けた。祭じゃ座って餅を食いたいね」',{part:'湯呑み'}),
   ]),
   clue('broken-hinge',['汀',courier],[exhibit('broken-hinge')],[
     beat(0,'present',0,'汀が網に掛かった積み綱と、北十郎が持ち帰った金具を浜に並べる。',{helperCaption:'汀が浜に場所を空ける。配達人が網に掛かった積み綱と、北十郎の持ち帰った金具を並べた。'}),
@@ -171,40 +199,49 @@ export const CLUE_SCENES = Object.fromEntries([
     beat(0,'fit',0,'松原の浜から持って来た蝶番を、ぎざぎざの割れ目へ沿わせる。',{part:'欠けた蝶番',target:1}),
     beat(0,'point',1,'飛び出したところは窪みへ。端までぴたりと収まるのが見える。'),
   ]),
-  clue('old-manifest',['墨八',courier],[exhibit('old-manifest'),exhibit('tsuruga-plates')],[
-    beat(0,'open',0,'墨八が漆の内筒を開く。水の跡は外側までで、中の紙は乾いている。',{part:'漆の内筒'}),
+  clue('old-manifest',['墨八',courier],[{...exhibit('old-manifest'),sealed:true},exhibit('tsuruga-plates'),{...prop('crate','salvaged-tools'),showFor:courier}],[
+    beat(0,'open',0,'墨八が一本の腕で漆筒を押さえ、もう一本で栓を引き抜く。',{part:'漆筒の栓',archive:'unplug'}),
+    beat(0,'lift',0,'のぞいた紙端をつまみ、細く畳んだ書付を筒から抜いて卓に置く。',{part:'書付',archive:'extract'}),
+    beat(0,'open',0,'折り目を開くと、乾いた紙に「松原行」。水の跡は筒の外側までだ。',{part:'書付',archive:'spread'}),
     beat(0,'compare',0,'出荷の内訳を皿などの現物と照らし、松原宛の品をより分ける。',{part:'書付',target:1}),
     beat(0,'present',0,'筒に残った搬入日は検分の当日。海へ落ちる前に書かれた予定だ。',{part:'書付',partner:1}),
+    beat(0,'pass',2,'「お浜に頼む」。墨八が道具の包みを取って差し出す。配達人は底に手を添え、重みを引き受けた。',{partner:1}),
   ]),
-  clue('returned-tools',['お浜',courier],[exhibit('tsuruga-plates'),exhibit('old-manifest')],[
+  clue('returned-tools',['お浜',courier],[prop('crate','salvaged-tools'),exhibit('old-manifest')],[
     beat(1,'pass',0,'配達人が竜宮から持ち帰った皿を、お浜に手渡す。',{partner:0}),
     beat(0,'compare',0,'お浜は浜の道具と出荷の控えを一つずつ突き合わせる。',{target:1}),
     beat(0,'write',1,'浜の一組がそろう。お浜は受け取った印を控えに入れた。'),
   ]),
-  clue('purchase-list',['豆蔵',courier],[exhibit('purchase-list'),prop('steamer'),exhibit('tsuruga-plates')],[
+  clue('purchase-list',['豆蔵',courier],[{...exhibit('purchase-list'),showFor:courier},prop('steamer'),exhibit('tsuruga-plates')],[
     beat(0,'open',0,'豆蔵が共同購入の内訳を、荷造り場の見本のそばへ開く。',{helperCaption:'豆蔵が荷造り場の見本を示す。その横で、配達人が共同購入の内訳を開いた。'}),
     beat(0,'compare',0,'内訳の蒸し箱を指し、見本の箱に触れる。敷板、皿、包み、祭札にもそれぞれ欄がある。',{target:1,helperCaption:'豆蔵が品名を読むたび、配達人が見本を指す。蒸し箱、敷板、皿、包み、祭札に、それぞれ欄がある。'}),
     beat(0,'set',2,'皿を見本へ戻した。「このひと揃いで一組さ。運ぶ外箱は数えないよ」',{part:'運んだ丸皿',target:1,helperCaption:'配達人が皿を元へ戻す。「このひと揃いで一組さ。運ぶ外箱は数えないよ」と豆蔵。'}),
+    beat(0,'pass',0,'「買い物控えはここに写しておいたよ」。豆蔵の前の卓から、配達人が写しを取った。',{partner:1,fromWorktop:true}),
   ]),
-  clue('old-tool-marks',['おはな',courier],[exhibit('old-tool-marks'),exhibit('prototype'),prop('ledger')],[
+  clue('old-tool-marks',['おはな',courier],[exhibit('old-tool-marks'),exhibit('prototype'),prop('ledger'),prop('ledger','tool-rubbing')],[
     beat(0,'turn',0,'おはなが冷まし台の敷板を回し、左角の木の継ぎを見せる。',{part:'敷板一'}),
     beat(1,'compare',2,'最初の写しを横に置く。継ぎの向きも、下敷きとの合わせ方も同じだ。',{target:0}),
     beat(0,'point',1,'蒸し箱には楓が刻んだ合印があり、端の小さな欠けまで写しと合う。',{part:'取り外し桟0'}),
+    beat(1,'write',3,'配達人が薄紙を当て、木の継ぎ目と桟の跡を墨で写した。',{target:0}),
+    beat(1,'lift',3,'配達人は紙の端をつまみ、桟の欠けが墨に出ているのを確かめた。'),
   ]),
-  clue('loaned-boards',['蓮照','大吉'],[exhibit('loaned-boards'),exhibit('sakai-boards')],[
+  clue('loaned-boards',['蓮照','大吉',courier],[exhibit('loaned-boards'),exhibit('sakai-boards'),prop('ledger','loan-slip')],[
     beat(0,'present',0,'蓮照が配膳板の貸出札を示す。「薄野の望へ、二枚です」'),
     beat(1,'lift',1,'大吉が運んだのと同じ長さの板を持ち上げ、二枚重ねた運び方を見せる。',{part:'敷板一'}),
     beat(0,'compare',0,'現物と札を並べ直す。使い手は望でも、板の名義は東大寺の組に残してある。',{target:1}),
+    beat(0,'pass',2,'蓮照が卓の上の写しを示した。「こちらをどうぞ」。配達人は板二枚の写しを取り上げ、元の札は寺に残した。',{partner:2,fromWorktop:true}),
   ]),
-  clue('regional-returns',['すずり',courier],[exhibit('regional-returns'),exhibit('purchase-list'),exhibit('old-tool-marks')],[
-    beat(0,'open',0,'すずりが、各地から届いた現物の写しと受取人の控えを広げる。'),
-    beat(1,'compare',2,'桜川の角継ぎから一つずつ、写しの印と道具の特徴をつき合わせる。',{target:0}),
-    beat(0,'write',0,'購入内訳の欄を消し込むと、地方十四景の分がそろった。京の欄だけは別に調べられる。',{target:1}),
+  clue('regional-returns',['すずり',courier],[exhibit('regional-returns'),exhibit('purchase-list'),prop('ledger','tool-rubbing'),prop('ledger','loan-slip')],[
+    beat(1,'set',1,'買い物控えの内訳を、土地ごとの受取札と突き合わせる。',{target:0}),
+    beat(1,'compare',2,'桜川の墨拓には角継ぎと桟の合印。現物の写しと同じ形だ。',{target:0}),
+    beat(1,'set',3,'寺の貸出札も一緒に綴じる。薄野の板二枚の行き先がつながった。',{target:0}),
+    beat(0,'pass',0,'すずりから十四組の照合帳を受け取る。京の一組を記す欄が一つ残っている。',{partner:1}),
   ]),
-  clue('kyoto-set',['ちよ',courier],[exhibit('kyoto-set'),prop('tag')],[
+  clue('kyoto-set',['ちよ',courier],[exhibit('kyoto-set'),prop('tag','kyo-return-tag')],[
     beat(0,'lift',0,'ちよが大路の茶屋で配膳用の皿を持つ。皿には京の組の印。',{part:'運んだ丸皿'}),
     beat(0,'present',1,'「蔵から借りたのは、うちで配り方を試すため」。ちよが返却札も差し出す。',{partner:1}),
     beat(0,'compare',1,'皿と札を並べて読むと、茶屋から蔵へ返す日は検分の翌朝だ。',{target:0}),
+    beat(0,'pass',1,'ちよから返却札を預かる。京の一組を使った人と、返す日が分かった。',{partner:1}),
   ]),
   clue('withdrawal-cover',['すずり',courier],[exhibit('withdrawal-cover')],[
     beat(0,'point',0,'すずりが提出束を開く前に、表紙の「辞退に伴う引揚げ」という文字を示す。',{part:'見出しの表紙'}),
@@ -231,49 +268,55 @@ export const CLUE_SCENES = Object.fromEntries([
     beat(0,'set',0,'翌朝に京へ届く便の列に、祭の札が並ぶ。'),
     beat(0,'compare',1,'積替えの控えを開くと、動かした荷に応じて八重の依頼の変更料が支払われていた。',{target:0,partner:1}),
   ]),
-  clue('joint-work',['お冬',courier],[exhibit('joint-work'),food('snow')],[
-    beat(0,'present',0,'雪の店先で、お冬が掛け直した札を手にする。作り手の欄に二人の名。',{partner:1}),
-    beat(0,'point',0,'「お冬と望。婚礼の礼金だって、二人の仕事に合わせて分けたよ」'),
-    beat(0,'set',1,'保存餅を支度の台へ戻す。今年出す量を相談し、店の仕込みは続いている。'),
+  clue('joint-work',['お冬',courier],[prop('tag','festival-maker-tag'),food('snow')],[
+    beat(0,'present',0,'お冬が札を開く。数は去年の半分。名前の隣には、もう一人分の空きがある。',{partner:1}),
+    beat(0,'point',0,'お冬の花印が一つ。「こっちは私の分。隣は望に聞いておくれ」'),
+    beat(0,'pass',0,'雪の宿から薄野へ。配達人が花印を押した札を預かった。',{partner:1}),
   ]),
-  clue('continued-work',['望',courier],[exhibit('continued-work')],[
-    beat(0,'lift',0,'望が自分の名を入れた焼き印を柄から持つ。',{part:'刷り印'}),
-    beat(0,'fit',0,'試作の表へ印を当てる。「私の名で、今年は半分の量をお願いしたんです」',{part:'刷り印'}),
-    beat(0,'present',0,'餅の表に「望」が残る。差し出した本人は、やめると言った覚えはないと答えた。',{partner:1}),
+  clue('continued-work',['望',courier],[exhibit('continued-work'),{...prop('tag','festival-maker-tag'),signedAs:'makers-seals'}],[
+    beat(1,'pass',1,'配達人が雪の宿から運んだ札を渡す。半分の量の横に、お冬の印が一つ。',{partner:0}),
+    beat(0,'fit',0,'望が隣に自分の印を押す。「二人で、合わせてこの量です」',{part:'刷り印',target:1,stamp:'望の薄の印'}),
+    beat(0,'pass',1,'望が同じ札を返す。お冬の花印の隣に、薄の印が並んだ。',{partner:1}),
   ]),
   clue('submission-check',['すずり',courier],[exhibit('submission-check'),exhibit('withdrawal-cover')],[
     beat(0,'open',0,'すずりが受理した日の記録を、提出されたままの束の横に開いた。'),
     beat(0,'point',1,'書記が確認したのは、この見出しと、この下の受領書の取り合わせだった。',{part:'見出しの表紙'}),
     beat(0,'compare',0,'「これでよい、とご自分で」。受理控えの確認欄には八重の名がある。',{target:1}),
+    beat(0,'pass',0,'すずりが受理記録の写しを配達人に渡す。',{partner:1}),
   ]),
-  clue('omission-copy',['版次','すずり'],[exhibit('omission-copy'),exhibit('withdrawal-cover'),prop('tag')],[
-    beat(0,'compare',0,'版次が控えの紙と道具用の札を並べる。紙の厚みも、刷った版も別々だ。',{target:2,helperCaption:'版次の言うとおり、配達人が控えの紙と道具用の札を並べる。紙の厚みも刷った版も違う。'}),
-    beat(0,'point',0,'提出用の控えに、八重の依頼で「再搬入の予定は添えず」とある。',{helperCaption:'配達人が控えを開くと、版次が八重の頼んだ文言を読んだ。「再搬入の予定は添えず」'}),
-    beat(1,'open',1,'すずりが預かった束を確かめる。添えてあるのは古い受領書で、新しい予定は入っていない。',{part:'見出しの表紙'}),
+  clue('omission-copy',['版次','すずり',courier],[exhibit('omission-copy'),exhibit('withdrawal-cover'),exhibit('submission-check')],[
+    beat(2,'pass',2,'配達人が受理記録の写しを渡す。版次は同じ日の注文を開いた。',{partner:0}),
+    beat(0,'compare',0,'注文には八重の名で「再搬入の予定は添えず」。受理された束に新しい日取りはない。',{target:1}),
+    beat(0,'pass',0,'版次は受理の写しを預かった。「同じ日の注文控えなら、そこに」。配達人は卓から控えを取り上げた。',{partner:2,fromWorktop:true}),
   ]),
   clue('port-wages',['勘兵衛','お澄'],[exhibit('port-wages'),prop('ledger')],[
     beat(0,'open',1,'勘兵衛が大飾りの見積もりを広げる。「これなら、まだ頼んどらん」'),
     beat(0,'write',0,'小ぶりな飾りに直し、浮いた分を追加の運び賃と仕上げの手間賃へ書き移す。'),
     beat(1,'pass',0,'仕事内容と金額を確かめたお澄が、支払いの済んだ受取を勘兵衛へ返す。',{partner:0,helperCaption:'お澄が仕事の中身と金額を読み合わせ、配達人が支払い済みの受取を勘兵衛へ返した。'}),
   ]),
-  clue('peach-invitation',['桃子',courier],[prop('ledger'),food('peach')],[
+  clue('peach-invitation',['桃子',courier],[prop('ledger','peach-invite'),food('peach'),prop('ledger','peach-reply')],[
     beat(1,'pass',0,'桃林で配達人が招待状を手渡す。餅を持つかどうかも里の人が決められる。',{partner:0}),
     beat(0,'open',0,'桃子が文を開いて笑った。「手ぶらでもいいの？　それなら、私たちが持って行きたいの」'),
     beat(0,'present',1,'桃しずく餅を一つ、盆へのせる。「弥平さんと、またお茶を飲みにね」',{partner:1}),
+    beat(0,'pass',2,'桃子が桃の葉を添えた返事を配達人に託した。',{partner:1}),
   ]),
-  clue('palace-invitation',['小鞠','鼓太',courier],[prop('ledger'),food('ryugu'),prop('bowl')],[
-    beat(2,'pass',0,'配達人が竜宮の水際で招待状を届ける。小鞠は水の中から文を読む。',{partner:0}),
-    beat(0,'present',1,'「あの箱の人たちに会いたいわ」。小鞠が潮葛の餅を指して、持参する品を選ぶ。',{helperCaption:'「あの箱の人たちに会いたいわ」。小鞠が選んだ潮葛の餅を、配達人が持ってくる。'}),
-    beat(1,'point',2,'鼓太となぎが地上の道を案内する。餅を乾かさずに運べる器は、これから試してみる。',{helperCaption:'配達人は持参する餅を確かめた。地上の道は鼓太となぎが案内する。乾かずに運べる器も要る。'}),
+  clue('palace-invitation',['小鞠','鼓太',courier],[{...prop('ledger','palace-invite'),showFor:courier},{...food('ryugu'),showFor:courier},prop('bowl')],[
+    beat(2,'point',0,'水ぎわの文台に招待状が広がった。配達人が指で示すと、小鞠は水の中から祭の日を読み上げた。'),
+    beat(0,'point',1,'「あの箱の人たちに会いたいわ」。小鞠がひれで潮葛の餅を指し、持参する品を選ぶ。',{helperCaption:'「あの箱の人たちに会いたいわ」。小鞠の目を追って、配達人は潮葛の餅を指さした。'}),
+    beat(1,'point',2,'鼓太が器を指した。「おれとなぎは道案内だ。お餅さんは、この真珠餅を堺のとわさんに。器を選んでもらおう」',{helperCaption:'鼓太が道案内を引き受けた。配達人は器をのぞく。「この真珠餅を持って、堺のとわさんに相談してくるね」'}),
+    beat(0,'pass',1,'小鞠が水ぎわの貝皿を示した。配達人は皿に手を添え、真珠餅を傾けずに持ち上げた。',{partner:2,fromWorktop:true,helperCaption:'小鞠がうなずく。配達人は水ぎわの貝皿に手を添え、真珠餅を傾けずに持ち上げた。'}),
   ]),
-  clue('lidded-bowl',['とわ','小鞠'],[exhibit('lidded-bowl'),food('ryugu')],[
-    beat(1,'divide',1,'小鞠が真珠餅を取り分け、同じ分ずつ小皿と水鉢に入れる。',{target:0,helperCaption:'「同じ分ずつね」。小鞠が見守るなか、配達人は真珠餅を小皿と水鉢に取り分けた。'}),
-    beat(0,'fit',0,'とわが水鉢に蓋を合わせる。小皿のほうは、そのまま空気に触れさせた。',{part:'水鉢の合い蓋'}),
-    beat(0,'open',0,'同じだけ待って蓋を開く。小皿の餅は縁が乾き、水の中の餅はまだ柔らかく揺れる。',{part:'水鉢の合い蓋',partner:1}),
+  clue('lidded-bowl',['とわ',courier],[exhibit('lidded-bowl'),food('ryugu')],[
+    beat(1,'divide',1,'配達人が真珠餅を二つに分け、片方を小鞠の貝皿に残した。',{part:'取り分ける餅'}),
+    beat(1,'set',1,'もう片方を、とわが汲んだ水にそっと浮かべる。',{part:'取り分ける餅',target:0,nest:'水中の餅の置き場'}),
+    beat(0,'fit',0,'とわが水鉢に蓋を合わせた。貝皿のほうは、そのまま待とう。',{part:'水鉢の合い蓋'}),
+    beat(0,'open',0,'蓋を開ける。皿の餅は縁が乾きかけている。水に浮かべたほうは、まだふるふるだ。',{part:'水鉢の合い蓋',socket:'水鉢の蓋置き',partner:1}),
+    beat(0,'fit',0,'とわは調べ終えた餅に、もう一度そっと蓋をした。',{part:'水鉢の合い蓋'}),
+    beat(0,'pass',0,'「これなら京まで持つよ」。とわの両手から、水鉢を受け取った。',{partner:1}),
   ]),
-  clue('seats-for-crew',['ちよ','勘兵衛'],[exhibit('seats-for-crew'),prop('ledger')],[
+  clue('seats-for-crew',['ちよ',courier],[exhibit('seats-for-crew'),prop('ledger')],[
     beat(0,'write',1,'ちよが十五景から届いた量と返事を、一景ずつ帳面へ写していく。'),
-    beat(1,'point',0,'望の分は半分。「小さく切れば倍に配れる？　その計算は腹には通じん！」と勘兵衛。'),
+    beat(1,'point',0,'「望さんの分は、食べたい人で分けましょう」。配達人が空いた席を指す。「弥平さんにも、お客のお皿を一枚！」'),
     beat(0,'set',0,'ちよが客席にも皿を置く。配る番を二組に分ければ、運んだ人もここへ座れる。'),
   ]),
 ]);
@@ -286,11 +329,14 @@ function argument(chapter, turn, cast, props, beats) {
 export const PROOF_SCENES = Object.fromEntries([
   argument(1,1,['おはな','卯助'],[exhibit('joined-cake'),exhibit('leaf-marks')],[
     beat(0,'turn',0,'おはなが一つだけ大きな餅を返す。裏の左右の葉脈は、別々の葉の跡だ。',{part:'合わせ餅',pose:'lift'}),
-    beat(0,'divide',0,'浅い継ぎ目をそっと開くと二つに分かれた。「十二個、ちゃんと舟に乗ってた！」',{part:'合わせ餅'}),
+    beat(0,'set',0,'おはなが二枚の敷き葉の上へ、餅をそっと戻した。',{part:'合わせ餅',reseat:true}),
+    beat(0,'divide',0,'浅い継ぎ目をそっと開くと二つに分かれた。「十二個、ちゃんと舟に乗ってた！」',{part:'継ぎ目から離す餅'}),
     beat(1,'point',1,'卯助が籠底を数え直す。十二枚の敷き跡と、十二個の餅が揃う。'),
   ]),
   argument(2,1,['楓','留吉'],[exhibit('steam-repair'),food('spring')],[
-    beat(0,'fit',0,'楓が短い桟を段の間へ渡す。横からのぞくと、隙間の向こうまで明るい。',{part:'取り外し桟1',helperCaption:'楓に位置を教わり、配達人が段の間へ短い桟を渡す。横から、隙間の向こうの明かりが見える。'}),
+    beat(0,'fit',0,'楓が左の合印に桟を一本渡した。',{part:'取り外し桟0',helperCaption:'楓に位置を教わり、配達人が左の合印に桟を一本置く。'}),
+    beat(0,'fit',0,'次は真ん中へ。二本の桟の間を風が通る。',{part:'取り外し桟1'}),
+    beat(0,'fit',0,'右端にも一本。上段を支える三本の木が並んだ。',{part:'取り外し桟2'}),
     beat(1,'stack',0,'留吉が上段を重ねても、今度は湯気の道が開いたままだ。',{part:'蒸し箱の上段',pose:'spaced'}),
     beat(1,'divide',1,'蒸した米で作った味噌餅を割る。硬い芯はなく、胡桃味噌の香りが立った。'),
   ]),
@@ -405,21 +451,24 @@ export const CHAPTER_SCENES = {
     beat(1,'set',1,'ささは弥平の預け札を蒸籠と一緒に置く。休んでいる人を呼び戻さず、里の仕事を続けられる。'),
     beat(2,'open',2,'配達人が次の通知を開く。「京の蔵に道具が一組もありません」'),
   ]),
-  mystery_06:scene('中止の沙汰を待つ',['宗伯','お澄','すずり'],[exhibit('regional-returns'),exhibit('withdrawal-cover'),exhibit('changed-day')],[
+  mystery_06:scene('中止の沙汰を待つ',['宗伯','お澄','すずり'],[exhibit('regional-returns'),exhibit('withdrawal-cover'),exhibit('changed-day'),prop('tag','kyo-return-tag')],[
+    beat(2,'set',3,'すずりが茶屋から届いた返却札を置く。照合帳の空いた一行に、京の印が入った。'),
     beat(0,'present',0,'宗伯は十五組の所在を認め、お澄に横流しの責任はないと告げた。',{partner:1,helperCaption:'配達人が記録を開く。十五組の行き先を読み終え、宗伯はお澄に横流しの責任はないと告げた。'}),
     beat(2,'set',1,'すずりが提出束を受け取る。綴じ紐をそのままにして、次の審理まで保全する。'),
     beat(1,'open',2,'お澄は翌朝の手配をもう一度開いた。道具の売却は止まり、祭の支度は続く。',{helperCaption:'お澄に促され、配達人が翌朝の手配を開く。道具の売却は止まった。祭の支度を続けられる。'}),
   ]),
-  mystery_07:scene('差配の札を置くとき',['八重','宗伯','すずり'],[prop('tag'),exhibit('omission-copy'),prop('ledger')],[
+  mystery_07:scene('差配の札を置くとき',['八重','宗伯','すずり'],[prop('tag'),exhibit('omission-copy'),prop('ledger'),prop('tag','signed-maker-tag')],[
+    beat(2,'set',3,'すずりが、二人分の印のそろった作り手札を注文控えの隣へ置いた。'),
     beat(1,'set',1,'証拠をそろえた宗伯は、虚偽の辞退に基づく清算を止めた。',{helperCaption:'配達人がそろえた証拠に目を通し、宗伯は虚偽の辞退に基づく清算を止めた。'}),
     beat(0,'set',0,'八重は差配の札を外して置く。「休ませたかった。でも、相談するのが怖かった」'),
     beat(2,'write',2,'すずりが申立ての撤回を記す。損失の始末は八重が引き受け、祭の量と役目は各地へ返された。'),
   ]),
-  festival:scene('十七景が同じ卓につく',['ささ','弥平','八重','桃子','墨八'],[food('peach'),food('ryugu'),food('kyo')],[
+  festival:scene('十七景が同じ卓につく',['ささ','弥平','八重','桃子','墨八'],[food('peach'),prop('bowl','lidded-bowl'),food('kyo'),prop('ledger','peach-reply')],[
+    beat(3,'set',3,'届いた返事は桃の葉つき。桃子はそれを自分の席の前へ置いた。'),
     beat(3,'set',0,'京の十五景の膳へ、桃の葉を添えた盆が届く。'),
-    beat(4,'set',1,'水を張った器のそばに、竜宮の真珠餅も並んだ。初めての二つの席が揃う。'),
+    beat(4,'set',1,'墨八が蓋付きの水鉢を置く。中には堺で浮かべた真珠餅。桃林と竜宮の席がそろった。'),
     beat(0,'pass',2,'「今日は、こちらです」。ささが仕事の道具の代わりに、客の皿を弥平へ手渡した。',{partner:1}),
-    beat(2,'lift',2,'八重も向かいで皿を取った。二人は仕事をせず、しばらく黙って同じ餅を味わった。'),
+    beat(2,'lift',2,'八重が弥平の皿から重ね餅をひと切れ取る。「お向かい、座ってもいいですか」',{part:'取り分ける餅'}),
   ]),
 };
 // Each regional tasting can be watched on an early visit. Keep case evidence and verdicts out of these scenes.
@@ -428,17 +477,17 @@ const tastingHelp = {
   market: [
     '豆蔵が、焼き目のついた厚い角餅を選ぶ。配達人がそっと持ち上げた。',
     '「ほら、中にも豆だ」。配達人が餅を割ると、炒り豆の切り口が両方の面につながっている。',
-    '豆蔵が「こっちはおまけだよ」と笑う。配達人が香ばしい一切れを客へ渡した。',
+    '「こっちはおまけだよ」。豆蔵に勧められ、配達人は割った片方を手に取った。',
   ],
   ryugu: [
     '小鞠が選んだ、薄青く透ける潮葛の餅を、配達人が小皿からひとつ取る。',
     '「光の方を向けてみて」。配達人が少し傾けると、丸い皮の向こうに水の光が揺れた。',
-    '配達人が小鞠の待つ水際に皿を寄せる。つるりとした餅に、ほのかな磯の塩味がある。',
+    '「ひと口どうぞ」と小鞠。勧められた配達人は、つるりとした餅を落とさぬよう手のひらで受けた。',
   ],
   inari: [
     'お紺が籠の底敷きを示す。配達人はきつね色に揚がった三角餅をひとつ取った。',
     '「角は薄いからね」。配達人はふくらんだ真ん中を支えて、三角餅をそっと返す。',
-    'お紺に教わった持ち方のまま、配達人が皿を差し出す。ぱりっとした皮の中には白胡麻餡。',
+    '「真ん中からどうぞ」。お紺の言葉にうなずき、配達人は三角餅を手のひらに載せた。',
   ],
 };
 function tasting(region, maker, title, first, second, last, gesture = 'turn') {
@@ -446,28 +495,31 @@ function tasting(region, maker, title, first, second, last, gesture = 'turn') {
   const help = tastingHelp[region] || [];
   return [region, scene(title, [maker, courier], [dish], [
     beat(0,'lift',0,first,{part:'取り分ける餅',helperCaption:help[0]}),
+    ...(gesture==='divide' ? [beat(0,'set',0,'餅を皿へそっと戻し、両側に手を添える。',{part:'取り分ける餅',reseat:true})] : []),
     beat(0,gesture,0,second,{part:'取り分ける餅',helperCaption:help[1]}),
-    beat(0,'pass',0,last,{partner:1,helperCaption:help[2]}),
+    ...(['river','shrine'].includes(region) ? [beat(0,'set',0,region==='river'?'舟形の葉を餅ごと皿へ下ろす。':'開いた笹を餅ごと皿へ下ろし、両端を広げておく。',{part:'取り分ける餅',reseat:true})] : []),
+    beat(0,'pass',0,last,{partner:1,part:'取り分ける餅',helperCaption:help[2],...(region==='market'?{fromWorktop:true}:{})}),
+    beat(1,'taste',0,'配達人は受け取った餅を口へ運ぶ。ひと口かじって、ゆっくり味わう。',{part:'取り分ける餅'}),
   ])];
 }
 export const FOOD_SCENES = Object.fromEntries([
-  tasting('river','おはな','舟に見立てた桜葉','おはなが舟形にした桜葉ごと、薄い白餅を取り上げる。','白い餅の上には桜の塩漬けが一輪。葉は巻かず、舟のように下から受ける。','花筏餅をそっと手渡すと、葉と桜の香りが立った。'),
+  tasting('river','おはな','舟に見立てた桜葉','おはなが舟形にした桜葉ごと、薄い白餅を取り上げる。','白い餅の上には桜の塩漬けが一輪。葉は巻かず、舟のように下から受ける。','花筏餅をそっと手渡すと、葉と桜の香りが立った。','present'),
   tasting('shrine','ささ','笹の留めをほどく','ささが竹皮の留めをつまんで笹結び餅を持ち上げる。','向かい合う二枚の笹をそっと開く。細長い草餅に、結び目の浅い跡が残る。','きなこ塩を添えたひとつを、客の手もとへ。','open'),
-  tasting('market','豆蔵','角餅を割って炒り豆を見る','豆蔵が焼き目のある厚い角餅を持ち上げる。','割った切り口から炒り豆がのぞく。豆の割れる向きは、二つの面で続いている。','「こっちはおまけだよ」。香ばしい一切れが配られた。','divide'),
+  tasting('market','豆蔵','角餅を割って炒り豆を見る','豆蔵が焼き目のある厚い角餅を持ち上げる。','割った切り口から炒り豆がのぞく。豆の割れる向きは、二つの面で続いている。','「こっちはおまけだよ」。豆蔵が勧めると、配達人は割った片方を皿から取った。','divide'),
   tasting('spring','留吉','湯気の中の胡桃味噌','留吉が蒸したての小判形の餅を取り出す。','薄い皮を半分に開くと、甘い胡桃味噌の中から湯気がひとすじ。','湯を上がった客に、温かいうちにひとつ渡す。','divide'),
   tasting('terraces','おせん','穂の花餅の米粒','おせんが手のひらにのる丸い穂の花餅を選ぶ。','指で開くと、表だけでなく中にも米粒の輪郭が残っている。真ん中には甘い小豆。','「口で言うより、食べてみて」。割ったひとつを差し出した。','divide'),
   tasting('coast','お浜','浜塩餅に海苔を巻く','お浜が薄く焼いた浜塩餅を一枚取る。','海苔の端をそろえ、焼きたての餅の真ん中に一周だけ巻きつける。','塩を少し振って渡す。今巻いた海苔が、指にぱりっと触れた。','tie'),
   tasting('snow','お冬','寒風の凍み餅を取り分ける','お冬が蒸し直した凍みくるみ餅を手にのせる。','少し割るとふっくらと開いた。乾かして運んだ餅を水に戻し、蒸したものだ。','胡桃だれを添えて、食べごろのひとつを客へ。','divide'),
   tasting('autumn','栗太','栗の焼き餅の焼き色','栗太が平たい栗の餅を炉の石から上げる。','餅を返すと片面だけに薄い焼き色がついている。縁には砕いた栗の粒。','楓葉を包みに添える。「葉っぱは目で食べて、餅は口でね」'),
-  tasting('moon','望','薄野の月見あわ餅','望が供え台のそばで、あわの粒を練り込んだ小さな丸餅を選ぶ。','丸い表を客に向ける。淡い色の粒が、小さな月にむらをつくっている。','「歌もありますけど、まずはひと口」。望は餅を客へ差し出した。'),
+  tasting('moon','望','薄野の月見あわ餅','望が供え台のそばで、あわの粒を練り込んだ小さな丸餅を選ぶ。','丸い表を客に向ける。淡い色の粒が、小さな月にむらをつくっている。','「歌もありますけど、まずはひと口」。望は餅を客へ差し出した。','present'),
   tasting('dawn','うめ','紅白を一緒に配る','うめが杵のそばから紅白の朝焼け餅をひとつ取る。','手の上で回してみせる。白と淡紅の二本が細長くねじれ、切り口まで二色が続いている。','海を背に、搗き手の朝吉にも同じ一皿を残して客へ渡す。'),
-  tasting('kyo','ちよ','重ね餅の薄い層','ちよが小さな四角い花の重ね餅を取り上げる。','切り口を上に向ける。白と抹茶の薄い餅が重なり、その間に白餡がのぞく。','「どの層からでもどうぞ」。ちよは客の前に一切れ置いた。'),
-  tasting('peach','桃子','桃しずく餅を木陰で','桃子が桃の葉を描いた包みから薄い白餅をひとつ取る。','少し開くと、中には里の桃をじっくり煮詰めた餡。皮越しに甘い香りが立つ。','「もう一つほしくなったら言ってね」。先にひとつだけ手渡した。','divide'),
-  tasting('ryugu','小鞠','水に揺れる真珠餅','小鞠が透けた薄青の潮葛の餅を小皿に取る。','皿をわずかに傾けると、丸い皮を透かして水の光が揺れる。','小鞠は水際へ差し出した。つるりとした餅に、ほのかな磯の塩味がある。'),
+  tasting('kyo','ちよ','重ね餅の薄い層','ちよが小さな四角い花の重ね餅を取り上げる。','切り口を上に向ける。白と抹茶の薄い餅が重なり、その間に白餡がのぞく。','「どの層からでもどうぞ」。ちよは客の前に一切れ置いた。','present'),
+  tasting('peach','桃子','桃しずく餅を木陰で','桃子が皿から、薄い皮の桃しずく餅をひとつ取る。','少し開くと、中には里の桃をじっくり煮詰めた餡。皮越しに甘い香りが立つ。','「もう一つほしくなったら言ってね」。先にひとつだけ手渡した。','divide'),
+  tasting('ryugu','小鞠','水に揺れる真珠餅','小鞠が透けた薄青の潮葛の餅を小皿に取る。','皿をわずかに傾けると、丸い皮を透かして水の光が揺れる。','小鞠は水際へ差し出した。つるりとした餅に、ほのかな磯の塩味がある。','present'),
   tasting('todaiji','蓮照','蓮のちぎり餅を分ける','蓮照が蓮の花のような分け目のある大きな餅をのせる。','浅い切れ目に沿って一口ぶんをちぎると、黒胡麻の粒が新しい切り口に現れた。','「配り終えた人の分も取っておいて」。客の皿へひとつ渡した。','divide'),
   tasting('inari','お紺','二つの角をそろえて','お紺が籠の底敷きから、きつね色の三角餅を取る。','二つの薄い角が折れないよう、ふくらんだ真ん中で支えて返す。','白胡麻餡の入った揚げ餅を、ぱりっとした角ごと手渡す。'),
   tasting('tsuruga','のり','昆布巻き餅の食べごろ','のりが軟らかく戻した昆布と細長い白餅を手に取る。','昆布を餅のまわりへ巻く。「舟で運ぶときは、どちらも乾かして別包みにするの」','軽く蒸した昆布巻き餅をひとつ。ほどけないようにそっと差し出した。','tie'),
-  tasting('sakai','とわ','片面ずつの胡麻','とわが小皿の縁を支え、鉄板で焼いた平たい餅を持ち上げる。','表の白胡麻、裏の黒胡麻。餅を返すだけで、同じ一枚の景色が変わる。','甘い醤油の香るひと切れを、陶器の小皿で渡した。'),
+  tasting('sakai','とわ','片面ずつの胡麻','とわが小皿の縁を支え、鉄板で焼いた平たい餅を持ち上げる。','表の白胡麻、裏の黒胡麻。餅を返すだけで、同じ一枚の景色が変わる。','とわが白胡麻の面を上にして、ひと切れを手渡した。甘い醤油が香る。'),
 ]);
 const people = new Map(CAST.map(person => [person.name, person]));
 function everyday(name, title, props, beats) {
@@ -496,7 +548,7 @@ export const AMBIENT_SCENES = Object.fromEntries([
   ]),
   everyday('豆蔵','勘定の分とおまけ',[tool('winnow'),food('market')],[
     beat(0,'divide',0,'豆蔵が箕を傾け、客の分をきっちり取り分ける。',{helperCaption:'豆蔵の合図で配達人が箕を傾ける。「もうひとつ。よし、そこまでが客の分だ」'}),
-    beat(0,'pass',1,'帳面を締めてから、豆の香るひと切れを差し出した。「ここからはおまけだ！」',{partner:1,helperCaption:'配達人が豆の香るひと切れを皿へ足す。豆蔵はもう勘定を締めている。「ここからはおまけだ！」'}),
+    beat(0,'pass',1,'豆蔵が帳面を締めた。「ここからはおまけだ！」 配達人は皿から豆の香るひと切れを取った。',{partner:1,part:'取り分ける餅',fromWorktop:true}),
   ]),
   everyday('お絹','反物の端の色',[prop('cloth'),tool('loom')],[
     beat(0,'open',0,'お絹が干している裂を広げる。端にだけ、まだ水の重みが残っている。'),
@@ -542,9 +594,9 @@ export const AMBIENT_SCENES = Object.fromEntries([
     beat(0,'open',0,'お浜が網をぴんと張って、一目だけ大きく開いた所を見つけた。'),
     beat(0,'tie',1,'網針の糸をその目へくぐらせ、隣と同じ張りになるまで引き締める。',{target:0}),
   ]),
-  everyday('汀','海へ出る前の一服',[tool('guide'),tool('tea')],[
+  everyday('汀','海へ出る前の一服',[tool('guide'),prop('bowl','shore-tea')],[
     beat(0,'set',0,'汀が案内の棹を浜へ置き、まず旅人のほうへ体を向ける。',{helperCaption:'配達人が案内の棹を浜へ置くのを待ち、汀が旅人へ向き直った。'}),
-    beat(0,'pass',1,'茶を差し出して待った。「海の向こうの、どなたにご用でしょう」',{partner:1,helperCaption:'汀に勧められて、配達人が茶を寄せる。「海の向こうの、どなたにご用でしょう」'}),
+    beat(0,'pass',1,'汀が湯呑みを勧めた。「海の向こうの、どなたにご用でしょう」。配達人は湯呑みに手を添えた。',{partner:1,fromWorktop:true}),
   ]),
   everyday('お冬','寒風から戻した餅',[food('snow'),tool('bake',1)],[
     beat(0,'lift',0,'お冬が、乾かしたあとで戻して蒸した餅を手に取る。',{part:'取り分ける餅'}),
@@ -628,7 +680,7 @@ export const AMBIENT_SCENES = Object.fromEntries([
   ]),
   everyday('桃子','木陰で休む支度',[food('peach'),tool('tea')],[
     beat(0,'set',1,'桃子が木陰へ茶をひとつ運び、客のそばに腰を落とす。'),
-    beat(0,'pass',0,'相手がうなずいたのを見て、桃しずく餅をひとつだけ渡した。',{partner:1}),
+    beat(0,'pass',0,'相手がうなずくと、桃子は皿から桃しずく餅をひとつ取り、そっと手渡した。',{part:'取り分ける餅',partner:1}),
   ]),
   everyday('久蔵','木陰の一席',[tool('flowers',1),tool('tea')],[
     beat(0,'lift',0,'久蔵が果樹の仕事に使う籠を持ち上げ、木陰のよい場所を空ける。'),
@@ -643,12 +695,12 @@ export const AMBIENT_SCENES = Object.fromEntries([
     beat(0,'write',0,'残る腕で紙を押さえ、たっぷり墨を含ませた一筆をゆっくり引いた。',{target:1}),
   ]),
   everyday('小鞠','内海の小皿',[food('ryugu')],[
-    beat(0,'set',0,'小鞠が水面の光を受ける所へ、真珠餅の小皿を据える。',{helperCaption:'小鞠が水面の光の差す場所を選ぶ。配達人はその光の中に、真珠餅の小皿を据えた。'}),
-    beat(0,'turn',0,'皿を少し向け直し、薄青い餅に光が揺れるところを客に見せた。',{partner:1,helperCaption:'配達人が皿を少し傾けると、小鞠は薄青い餅越しに、揺れる光を客と一緒にのぞき込んだ。'}),
+    beat(0,'set',0,'小鞠が水面の光を受ける所へ、真珠餅の小皿を据える。',{wholeDish:true,helperCaption:'小鞠が水面の光の差す場所を選ぶ。配達人はその光の中に、真珠餅の小皿を据えた。'}),
+    beat(0,'turn',0,'皿の縁に触れて少し向きを変えると、餅は薄青い光に透けた。',{wholeDish:true,partner:1,helperCaption:'小鞠に合わせて配達人が小皿を少し回す。二人で薄青い餅に揺れる光をのぞき込んだ。'}),
   ]),
   everyday('鼓太','話し始める前の一拍',[tool('drum'),tool('drum',1)],[
     beat(0,'lift',0,'鼓太がばちを上げる。気の早い一拍が太鼓の皮を鳴らした。',{target:1,helperCaption:'鼓太の拍に合わせ、配達人がばちを振る。思わずひと足早く、太鼓の皮を鳴らしてしまった。'}),
-    beat(0,'set',0,'話を聞いているのに気付いて、ばちをひざに戻した。「よし、今度こそ聞くよ」',{helperCaption:'配達人がそっとばちを下ろす。話の途中だったのを思い出した鼓太が、「よし、今度こそ聞くよ」。'}),
+    beat(0,'set',0,'鼓太は、ばちをそっと置いた。「おっと、話の途中だったね。それで？」',{helperCaption:'配達人がそっとばちを下ろす。鼓太がこちらを向いた。「おっと、話の途中だったね。それで？」'}),
   ]),
   everyday('なぎ','水門の案内',[tool('guide'),tool('tea')],[
     beat(0,'point',0,'なぎが案内の棹で、水面から上がれる奥の段を指し示す。'),
@@ -716,7 +768,8 @@ AMBIENT_SCENES[people.get('弥平').id].sites = {
   peach: {
     ...scene('木陰の湯呑み', ['弥平', courier], [exhibit('rest-wish')], [
       beat(0,'lift',0,'弥平は膝の上の手をゆっくり開き、小さな湯呑みを取った。',{part:'湯呑み'}),
-      beat(0,'set',0,'ひと口飲んで、旅包みのそばに戻す。手は次の仕事を探さず、木陰で休んでいる。',{part:'湯呑み'}),
+      beat(0,'sip',0,'縁を口に寄せ、ひと口だけすすった。',{part:'湯呑み'}),
+      beat(0,'set',0,'湯呑みを旅包みのそばに戻す。手は次の仕事を探さず、木陰で休んでいる。',{part:'湯呑み'}),
     ]),
     line:'この湯呑みは、両手で包むとあったかい。……ああ、いまは急がんでもいいんだった。',
   },
@@ -738,7 +791,7 @@ export const FESTIVAL_SCENES = Object.fromEntries([
   ]),
   guest('桃子','桃の葉を描いた包み',courier,[food('peach'),tool('tea')],[
     beat(0,'set',1,'京の卓に、桃子が木陰で飲んだのと同じように茶を一杯置く。'),
-    beat(0,'pass',0,'「あのときのお茶、覚えてる？」桃の葉を添えた桃しずく餅を、配達人へ手渡した。',{partner:1}),
+    beat(0,'pass',0,'「あのときのお茶、覚えてる？」桃子は皿から桃しずく餅をひとつ取り、配達人に手渡した。',{part:'取り分ける餅',partner:1}),
   ]),
   guest('墨八','今日は筆を置いて','お澄',[food('ryugu'),food('sakai')],[
     beat(0,'set',0,'墨八が水の入った移動用の鉢から腕を伸ばし、自分たちの真珠餅を卓へのせる。'),

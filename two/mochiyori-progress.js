@@ -1,5 +1,6 @@
 // The journal stores only acquired knowledge. Text and dependency rules stay in the authored story.
 import { CAST, CHAPTERS, SCENES } from './mochiyori-story.js';
+import { PARCELS } from './mochiyori-parcels.js';
 
 export const entries = new Map(CHAPTERS.flatMap(chapter => chapter.clues.map(clue => [clue.id, clue])));
 export const placeKey = (region, place = '') => region + '/' + (place || '');
@@ -14,7 +15,7 @@ export const memoryKeys = [
   ...CAST.map(c => 'talk/'+c.id),
   ...CAST.filter(c => ['弥平','八重','桃子','墨八','お澄','ささ'].includes(c.name)).map(c => 'guest/'+c.id),
   ...CAST.filter(c => c.name==='弥平').map(c => 'rest/'+c.id),
-  'clue/returned-tools'
+  'clue/returned-tools', 'request/festival'
 ];
 const memoryIndex = new Map(memoryKeys.map((key,i) => [key,i]));
 
@@ -23,22 +24,14 @@ const milestones = new Map(CHAPTERS.flatMap((ch,chapter) => [
   ...ch.proofs.map((_,proof) => ['proof/'+ch.id+'/'+proof,{chapter,proof}])
 ]));
 
-// A handover is atomic with its note. Reconstructing a parcel from these two
-// receipts also restores the bag of travellers with a pre-dialogue notebook.
-const parcels = [
-  ['same-rice', '棚田の米二包み', ['steam-test']],
-  ['packing-bars', '蒸し箱の桟三本', ['steam-repair']],
-  ['mended-cloth', 'おこげに借りた試し布', ['cloth-test']],
-  ['terrace-letter', 'みのりから八重への便り', ['changed-day']],
-  ['changed-day', '堺へ届ける搬入日の知らせ', ['ship-instruction']],
-  ['changed-day', '浦へ届ける搬入日の知らせ', ['dawn-delivery']],
-  ['changed-day', '稲荷へ届ける搬入日の知らせ', ['inari-delivery']],
-  ['old-manifest', '竜宮から松原へ返す道具包み', ['returned-tools']],
-  ['broken-hinge', '松原で預かった蝶番', ['matched-hinge']],
-  ['request/festival', '桃林への招待状', ['peach-invitation']],
-  ['request/festival', '竜宮への招待状', ['palace-invitation']],
-  ['palace-invitation', '器を試す潮葛の真珠餅', ['lidded-bowl']],
-];
+// Possession and delivery share the same receipt, including in older saves.
+// An exchange consumes every required parcel and grants the new one in a single record().
+const chapterNumbers = new Map(CHAPTERS.map((chapter, index) => [chapter.id, index]));
+const deliveries = new Map();
+for (const parcel of PARCELS) {
+  if (!deliveries.has(parcel.target)) deliveries.set(parcel.target, []);
+  deliveries.get(parcel.target).push(parcel);
+}
 
 export function createNotebook(snapshot) {
   const heard = new Set();
@@ -59,17 +52,22 @@ export function createNotebook(snapshot) {
     if (pin === 'request') pin = null;
     return true;
   }
-  function carrying() {
-    const requestKey = requested ? 'request/' + current()?.id : null;
-    return parcels.filter(([source, , destinations]) =>
-      (source === requestKey || heard.has(source)) && !destinations.some(id => heard.has(id)));
+  function eventOccurred(key) {
+    if (!key) return false;
+    if (key.startsWith('end/')) return chapterNumbers.get(key.slice(4)) < chapterIndex;
+    if (key.startsWith('request/')) {
+      const index = chapterNumbers.get(key.slice(8));
+      return index < chapterIndex || (index === chapterIndex && requested);
+    }
+    return heard.has(key);
   }
+  const held = item => eventOccurred(item.source) && !eventOccurred(item.target);
+  function inventory() { return PARCELS.filter(held); }
   function hasParcelFor(id) {
-    return !parcels.some(([, , destinations]) => destinations.includes(id)) ||
-      carrying().some(([, , destinations]) => destinations.includes(id));
+    return (deliveries.get(id) || []).every(held);
   }
   function available(clue) {
-    return clue.requires.every(id => heard.has(id));
+    return requested && clue.requires.every(id => heard.has(id)) && hasParcelFor(clue.id);
   }
   function record(id) {
     const clue = current()?.clues.find(item => item.id === id);
@@ -87,7 +85,7 @@ export function createNotebook(snapshot) {
     return true;
   }
   function finish() {
-    if (!ready() || proofIndex !== current().proofs.length) return false;
+    if (!ready() || proofIndex !== current().proofs.length || !hasParcelFor('end/' + current().id)) return false;
     chapterIndex++;
     proofIndex = 0;
     pin = null;
@@ -113,12 +111,20 @@ export function createNotebook(snapshot) {
       let changed;
       do {
         changed = false;
-        for (const id of saved) if (record(id)) changed = true;
+        // A previous edition could witness the target before the new pickup.
+        // Honour that note and its original clue prerequisites on resuming.
+        for (const clue of current().clues) {
+          if (saved.has(clue.id) && !heard.has(clue.id) && clue.requires.every(id => heard.has(id))) {
+            heard.add(clue.id);
+            changed = true;
+          }
+        }
       } while (changed);
       if (chapterIndex >= snapshot.chapter || !Number.isInteger(snapshot.chapter) ||
           snapshot.chapter > CHAPTERS.length || !ready()) break;
+      requested = true;
       proofIndex = current().proofs.length;
-      finish();
+      if (!finish()) break;
     }
     if (current() && ready() && chapterIndex === snapshot.chapter && Number.isInteger(snapshot.proof))
       proofIndex = Math.max(0, Math.min(current().proofs.length, snapshot.proof));
@@ -139,7 +145,9 @@ export function createNotebook(snapshot) {
   }
   return {
     get index() { return chapterIndex; }, get proofIndex() { return proofIndex; }, get pin() { return pin; },
-    get requested() { return requested; }, acceptRequest, hasParcelFor, items: () => carrying().map(([,name]) => name),
+    get requested() { return requested; }, acceptRequest, hasParcelFor, inventory,
+    deliveredItems: () => PARCELS.filter(item => eventOccurred(item.source) && eventOccurred(item.target)),
+    items: () => inventory().map(item => item.name),
     remember, seen, seenAt: key => memories.get(memoryIndex.get(key)),
     has: id => heard.has(id), current, ready, leads, record, prove, finish, track,
     save: () => ({v: 1, chapter: chapterIndex, proof: proofIndex, notes: [...heard], pin,

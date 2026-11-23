@@ -359,18 +359,7 @@ export function paintMapPaper() {
   g.setLineDash([2.5,4]);g.strokeStyle='#537e80';g.lineWidth=1.6;g.stroke();g.setLineDash([]);
   stampOtowa(g);return c;
 }
-export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null, recipientName = '', options = {}) {
-  const ratio = options.pixelRatio || 1, zoom = options.zoom || 1;
-  const w = canvas.width/ratio, h = canvas.height/ratio, g = canvas.getContext('2d'), p = state.player;
-  const midX = options.centerX ?? (large ? 0 : p.x);
-  const midZ = options.centerZ ?? (large ? 0 : p.z);
-  const scale = large ? Math.min(w, h)*zoom/SPAN : w*zoom/miniMapWorldWidth;
-  const sx = x => w/2 + (large ? x-midX : wrapDelta(x-midX))*scale;
-  const sy = z => h/2 + (large ? z-midZ : wrapDelta(z-midZ))*scale;
-  g.setTransform(ratio,0,0,ratio,0,0);
-  g.clearRect(0, 0, w, h);
-  g.fillStyle = '#ece7d1';
-  g.fillRect(0, 0, w, h);
+function printMapGround(g, midX, midZ, w, h, scale, large) {
   // A panned chart can straddle the world's seam. Print the survey details
   // on the same copy of the sheet as its coast and roads.
   for (let u = -1; u <= 1; u++) for (let v = -1; v <= 1; v++) {
@@ -390,10 +379,88 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
       g.strokeStyle='#708f8b';g.lineWidth=large?1.15:2.2;g.stroke();
     }
   }
+}
+
+function drawMiniNorth(g, w, h, rotation) {
+  // A fixed seal and a rotating nib keep north legible alongside the route
+  // marker at twelve o'clock, even when the route itself points due north.
+  g.save();
+  g.translate(w * .72, Math.min(48, h * .26));
+  g.save();
+  g.rotate(rotation);
+  g.beginPath();
+  g.moveTo(0, -18); g.lineTo(5, -7); g.lineTo(-5, -7); g.closePath();
+  g.fillStyle = '#3e5b52'; g.strokeStyle = '#fff5da'; g.lineWidth = 2;
+  g.stroke(); g.fill(); g.restore();
+  g.beginPath(); g.arc(0, 0, 9.5, 0, Math.PI * 2);
+  g.fillStyle = '#f6ecd2'; g.strokeStyle = '#596754'; g.lineWidth = 1.2;
+  g.fill(); g.stroke();
+  g.font = 'bold 13px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#374c43'; g.fillText('北', 0, .5);
+  g.restore();
+}
+
+function drawMiniDestination(g, point, x, y, w, h) {
+  const dx = x - w/2, dy = y - h/2;
+  // Allow for the inset sides when placing the tip inside the tall chart's rim.
+  const tall = h > w * 1.15;
+  const rx = w * (tall ? .32 : .5) - 12, ry = h/2 - 17;
+  const radial = Math.hypot(dx/rx, dy/ry);
+  if (radial < 1 && y >= 24) {
+    if (point.kind && point.kind !== 'point') {
+      // The P balloon rises from its surveyed point, and bath glyphs sit on
+      // theirs. Run a short leader beside the symbol so its ink stays clear.
+      g.save(); g.translate(x, y); g.scale(x < w * .36 ? 1 : -1, 1);
+      g.beginPath(); g.moveTo(point.kind === 'port' ? 0 : 7, 0); g.lineTo(11, -2);
+      g.lineCap = 'round';
+      g.strokeStyle = '#fff5dc'; g.lineWidth = 3.5; g.stroke();
+      g.strokeStyle = '#413b2e'; g.lineWidth = 1.3; g.stroke();
+      drawAtlasFlag(g, point, 9, 0);
+      g.restore();
+    } else {
+      drawAtlasFlag(g, point, x, y);
+    }
+    return;
+  }
+  if (radial === 0) return;
+  g.save();
+  g.translate(w/2 + dx/radial, h/2 + dy/radial);
+  g.rotate(Math.atan2(dx, -dy));
+  g.beginPath();
+  g.moveTo(0, -8); g.lineTo(7, 4); g.lineTo(0, 1); g.lineTo(-7, 4); g.closePath();
+  g.lineJoin = 'round'; g.lineWidth = 3; g.strokeStyle = '#fff5da';
+  g.fillStyle = '#a23d28'; g.stroke(); g.fill();
+  g.restore();
+}
+
+export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null, recipientName = '', options = {}) {
+  const ratio = options.pixelRatio || 1, zoom = options.zoom || 1;
+  const w = canvas.width/ratio, h = canvas.height/ratio, g = canvas.getContext('2d'), p = state.player;
+  const midX = options.centerX ?? (large ? 0 : p.x);
+  const midZ = options.centerZ ?? (large ? 0 : p.z);
+  const scale = large ? Math.min(w, h)*zoom/SPAN : w*zoom/miniMapWorldWidth;
+  const rotation = large ? 0 : options.rotation || 0;
+  const cos = Math.cos(rotation), sin = Math.sin(rotation);
+  function project(point) {
+    const dx = (large ? point.x-midX : wrapDelta(point.x-midX)) * scale;
+    const dz = (large ? point.z-midZ : wrapDelta(point.z-midZ)) * scale;
+    return [w/2 + cos*dx - sin*dz, h/2 + sin*dx + cos*dz];
+  }
+  g.save();
+  g.setTransform(ratio, 0, 0, ratio, 0, 0);
+  g.fillStyle = '#ece7d1'; g.fillRect(0, 0, w, h);
+  // Print the entire rotated viewport's world-aligned bounding box. Survey
+  // linework and seam neighbours share the same extent as the paper itself.
+  const groundWidth = Math.abs(cos)*w + Math.abs(sin)*h;
+  const groundHeight = Math.abs(sin)*w + Math.abs(cos)*h;
+  g.save();
+  g.translate(w/2, h/2); g.rotate(rotation); g.translate(-groundWidth/2, -groundHeight/2);
+  printMapGround(g, midX, midZ, groundWidth, groundHeight, scale, large);
+  g.restore();
   for(const ship of FLEET){
     const vessel=vesselPose(ship,state.time);
     if(large && vessel.docked)continue;
-    const x=sx(vessel.x), y=sy(vessel.z);
+    const [x,y] = project(vessel);
     if(x<0||x>w||y<0||y>h)continue;
     g.save();g.translate(x,y);
     const size=large?.72:1.0;g.scale(size,size);
@@ -403,6 +470,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   }
   let hits;
   if (large) {
+    const sx = x => w/2 + (x-midX)*scale, sy = z => h/2 + (z-midZ)*scale;
     const places = options.destinations || atlasDestinations(state);
     const selected = options.selection || places.find(place=>place.id===goal);
     hits = drawAtlasMarks(g,places,selected,state.visited,{zoom},w,h,sx,sy);
@@ -417,7 +485,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
       if(bath)marks.push([bath,bath.rank==='main'?'♨':'湯']);
     }
     for(const [site,glyph] of marks){
-      const x=sx(site.x), y=sy(site.z);
+      const [x,y] = project(site);
       if(x<0||x>w||y<0||y>h)continue;
       const mainBath=site.rank==='main', subBath=site.rank==='sub';
       const size=subBath ? 14 : 17;
@@ -427,7 +495,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
       g.strokeText(glyph,x,y);g.fillText(glyph,x,y);
     }
     for (const r of REGIONS) {
-      const x = sx(r.x), y = sy(r.z),
+      const [x,y] = project(r),
         on = state.visited.includes(r.id),
         rad = 6;
       if (goal === r.id) {
@@ -447,15 +515,15 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     }
     for (const o of state.objects) {
       if (o.type !== 'port') continue;
-      const x = sx(o.x), y = sy(o.z);
+      const [x,y] = project(o);
       if (x >= 0 && x <= w && y >= 0 && y <= h) drawPort(g, x, y, o.bikes);
     }
   }
   if (recipient || pin) {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     for (const [point, tint] of [[recipient, '#435e62'], [pin, '#ae452c']]) {
-      if (!point) continue;
-      const x = sx(point.x), y = sy(point.z);
+      if (!point || (!large && point === options.navigationTarget)) continue;
+      const [x,y] = project(point);
       if (x < -8 || x > w+8 || y < -8 || y > h+8) continue;
       g.save(); g.translate(x,y); g.rotate(Math.PI/4);
       g.strokeStyle = '#fff5db'; g.lineWidth=2; g.fillStyle=tint;
@@ -473,9 +541,13 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
       }
     }
   }
+  if (!large && options.navigationTarget) {
+    const [x,y] = project(options.navigationTarget);
+    drawMiniDestination(g, options.navigationTarget, x, y, w, h);
+  }
   g.save();
-  g.translate(sx(p.x), sy(p.z));
-  g.rotate(-cameraYaw);
+  g.translate(...project(p));
+  g.rotate(rotation - cameraYaw);
   g.fillStyle = '#1e6359';
   g.strokeStyle = '#fff6dd';
   g.lineWidth = 2;
@@ -489,13 +561,16 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   g.stroke();
   g.restore();
   if (large && options.activeGoal) {
-    const point = options.activeGoal, x = sx(point.x), y = sy(point.z);
+    const point = options.activeGoal, [x,y] = project(point);
     if (x >= 0 && x <= w && y >= 0 && y <= h) hits.unshift(drawAtlasFlag(g,point,x,y));
   }
-  if (!large) {
+  if (!large && (options.navigationTarget || rotation)) {
+    drawMiniNorth(g, w, h, rotation);
+  } else if (!large) {
     g.textAlign = 'center'; g.textBaseline = 'top';
     g.font = 'bold 17px "Hiragino Mincho ProN", "Yu Mincho", serif';
     g.fillStyle = '#544231'; g.fillText('北',w/2,5);
   }
+  g.restore();
   return hits;
 }

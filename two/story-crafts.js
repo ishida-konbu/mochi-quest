@@ -2,14 +2,14 @@
 // its materials and geometry with the object examined close up in the journal.
 import * as T from './vendor/three.module.min.js';
 import { InkForm, surface } from './ryugu-ink.js';
-import { brushWash } from './scroll-sculpt.js';
+import { brushWash, surfaceGrain } from './scroll-sculpt.js';
 import { residentRobeSurface } from './resident-art.js';
-import { tablePlan } from './story-table-plan.js';
+import { tablePlan, hullStrake, waveBracket } from './story-table-plan.js';
 import { regionalVessel, dressRegionalTable } from './story-tableware.js';
 
 const tau = 2 * Math.PI, { sin, cos, abs, sqrt } = Math;
-const tiles = { wood: 0, rice: 1, cloth: 2, leaf: 3, paper: 1 };
-const raw = () => new InkForm(tiles, 2, 2);
+const tiles = {wood:0, rice:1, paper:2, clay:3, cloth:4, leaf:5, endGrain:6, iron:7};
+const raw = () => new InkForm(tiles, 4, 2);
 const straw = '#d1b781', dark = '#584c3c', edge = '#897653';
 const white = '#faf2db', ink = '#544e40';
 const neutral = [0, 0, 0], one = [1, 1, 1];
@@ -55,9 +55,31 @@ function grid(f, columns, rows, point, tint, tile='paper') {
 function stroke(f, pts, width, col=dark, sides=5, steps) {
   f.stroke(pts,width,col,'paper',sides,steps ?? Math.max(4,pts.length*2));
 }
-function block(f,x,y,z,w,h,d,tint=straw, tile='wood') {
+// A board is sawn along its longest dimension. On a cut end the growth rings
+// cross the board, even when the worker turns the piece upright in their hand.
+function timberGrain(form,geometry,span,middle,origin) {
+  const position=geometry.attributes.position,normal=geometry.attributes.normal;
+  const first=form.uv.length-2*position.count;
+  const long=span.indexOf(Math.max(...span));
+  const phase=Math.abs(Math.sin(origin[0]*19+origin[1]*41+origin[2]*67));
+  const cross=[0,1,2].filter(axis=>axis!==long).sort((a,b)=>span[b]-span[a]);
+  const sampleSpan=span.map(length=>Math.min(.9,length/.44));
+  for(let i=0;i<position.count;i++){
+    const point=[position.getX(i),position.getY(i),position.getZ(i)];
+    const face=[Math.abs(normal.getX(i)),Math.abs(normal.getY(i)),Math.abs(normal.getZ(i))];
+    const cut=face[long]>.84, width=face[cross[0]]>face[cross[1]]?cross[1]:cross[0];
+    const along=axis=>T.MathUtils.clamp((point[axis]-middle[axis])/span[axis],-.5,.5);
+    const u=cut?.5+along(cross[0])*sampleSpan[cross[0]]:.41+.12*phase+along(long)*.80;
+    const transverse=cut?cross[1]:width;
+    const v=.34+.29*phase+along(transverse)*Math.min(.64,sampleSpan[transverse]);
+    const tile=cut?tiles.endGrain:tiles.wood;
+    form.uv[first+i*2]=(tile%4+.015+u*.97)/4;
+    form.uv[first+i*2+1]=(1-Math.floor(tile/4)+.014+v*.972)/2;
+  }
+}
+function block(f,x,y,z,w,h,d,tint=straw, tile='wood', bevel=.013) {
   // A plane-cut timber with worn, chamfered arrises and grain running along its length.
-  const c=Math.min(.013,h*.19,d*.14), shape=new T.Shape();
+  const c=Math.min(bevel,h*.19,d*.14), shape=new T.Shape();
   shape.moveTo(-w/2+c,-d/2+c);shape.lineTo(w/2-c,-d/2+c);
   shape.lineTo(w/2-c,d/2-c);shape.lineTo(-w/2+c,d/2-c);shape.closePath();
   const g=new T.ExtrudeGeometry(shape,{depth:h-2*c,bevelEnabled:true,bevelThickness:c,bevelSize:c,bevelSegments:1,steps:1});
@@ -69,7 +91,16 @@ function block(f,x,y,z,w,h,d,tint=straw, tile='wood') {
     uv.setXY(k,T.MathUtils.clamp(u,0,1),T.MathUtils.clamp(v,0,1));
   }
   f.draw(g,[x,y-h/2+c,z],one,tint,[-Math.PI/2,0,0],tile);
+  if(tile==='wood')timberGrain(f,g,[w,d,h],[0,0,h/2-c],[x,y,z]);
   g.dispose();
+}
+// Sliding furniture uses the same plane-cut corners and longitudinal wood
+// grain as a local worktop. Workshop paint is shared with the still life.
+export function drawerTimbers(parent,name,boards,plainWood){
+  const form=raw();
+  for(const [x,y,z,w,h,d,tint] of boards)block(form,x,y,z,w,h,d,tint,'wood',Math.min(.009,w*.18));
+  const mesh=new T.Mesh(form.geometry(),pigment || plainWood);
+  mesh.name=name;mesh.castShadow=mesh.receiveShadow=true;parent.add(mesh);
 }
 function turned(f,x,y,z,profile,tint,tile='wood',sides=40) {
   const g=new T.LatheGeometry(profile.map(([r,h])=>new T.Vector2(Math.max(r,.0003),h)),sides);
@@ -138,7 +169,25 @@ function wrappedRice(f,length,depth,height,band,colour,base){
     return [(u-.5)*length,height+(height+offset)*r*round(cos(a)),(depth+offset)*r*round(sin(a))];
   }
   grid(f,40,32,(u,v)=>skin(u,v),base,f.doughTile||'rice');
-  f.unfold=(x,y,z,v)=>[0,.009+.018*Math.cos(v*tau)-y,(v-.5)*Math.PI*(height+depth)*1.42-z];
+  // Unroll each half of the strip from its free end. At the peeling edge
+  // the loose length extends along the tangent to the rounded rice surface.
+  f.unfold=(x,y,z,v,open)=>{
+    const u=.5+x/length,side=v<.5?1:-1,angle=Math.PI*Math.abs(2*v-1);
+    const hinge=Math.PI*(1-open);
+    if(angle<=hinge)return [0,0,0];
+    const point=a=>skin(u,.5-side*a/tau,.0028);
+    const edge=point(hinge), before=point(Math.max(0,hinge-.005)),after=point(hinge+.005);
+    const dy=after[1]-before[1],dz=after[2]-before[2],tangent=Math.hypot(dy,dz);
+    let last=edge,arc=0;
+    for(let i=1;i<=8;i++){
+      const p=point(hinge+(angle-hinge)*i/8);
+      arc+=Math.hypot(p[1]-last[1],p[2]-last[2]);last=p;
+    }
+    const across=edge[2]+dz/tangent*arc;
+    const rim=Math.hypot(x/.343,across/.226);
+    const drape=.005+.066*T.MathUtils.smoothstep(rim,.55,.99)-.025*T.MathUtils.smoothstep(rim,1.04,1.36);
+    return [0,Math.max(edge[1]+dy/tangent*arc,open*drape)-y,across-z];
+  };
   grid(f,24,40,(u,v)=>skin(.5+(u-.5)*band+.009*sin(v*tau*4),v,.0028),colour,f.wrapTile||'leaf');
   f.unfold=null;
 }
@@ -150,26 +199,37 @@ const ingredientByScene=[null,'steamed','halfPounded','beanDough','steamedOval',
 let ingredients;
 function modelFood(parent,name,scene,draw){
   const f=raw(), rootDraw=f.draw.bind(f),indices=[[],[]];
-  const movement=[2,6,16].includes(scene)?[]:null;
+  const poses=[6,16].includes(scene)?[1,.25,.5,.75]:scene===2?[1]:[];
+  const movement=poses.map(()=>[]);
+  let articulated=false;
   f.doughTile=ingredientByScene[scene];
   f.draw=function(geometry,pos,scale,col,rotation,tile,uvMode){
     const ingredient=Object.hasOwn(ingredientTiles,tile);
-    this.columns=this.rows=ingredient?4:2;this.patches=ingredient?ingredientTiles:tiles;
+    this.columns=4;this.rows=ingredient?4:2;this.patches=ingredient?ingredientTiles:tiles;
     const start=this.ix.length,first=this.p.length;rootDraw(geometry,pos,scale,col,rotation,tile,uvMode);
-    if(movement){
+    if(poses.length){
       const uv=geometry.attributes.uv;
       for(let j=first,i=0;j<this.p.length;j+=3,i++){
-        if(this.unfold)movement.push(...this.unfold(this.p[j],this.p[j+1],this.p[j+2],uv.getY(i)));
-        else movement.push(0,0,0);
+        const x=this.p[j],y=this.p[j+1],z=this.p[j+2];
+        poses.forEach((open,k)=>{
+          const d=this.unfold?.(x,y,z,uv.getY(i),open);
+          if(d)movement[k].push(x+d[0],y+d[1],z+d[2]);
+          else movement[k].push(x,y,z);
+        });
       }
+      if(this.unfold)articulated=true;
     }
     const target=indices[ingredient?1:0];for(let i=start;i<this.ix.length;i++)target.push(this.ix[i]);
   };
   draw(f);
   const mesh=finish(f,name), geometry=mesh.geometry;
-  if(movement){
-    geometry.morphTargetsRelative=true;
-    geometry.morphAttributes.position=[new T.Float32BufferAttribute(movement,3)];
+  if(articulated){
+    geometry.morphAttributes.position=movement.map(points=>new T.Float32BufferAttribute(points,3));
+    geometry.morphAttributes.normal=geometry.morphAttributes.position.map(position=>{
+      const shape=new T.BufferGeometry();
+      shape.setAttribute('position',position);shape.setIndex(geometry.index);shape.computeVertexNormals();
+      return shape.attributes.normal;
+    });
     mesh.updateMorphTargets();mesh.userData.foodMotion=scene===2?'open':'tie';
   }
   if(!ingredients){
@@ -220,21 +280,32 @@ function halfPounded(f){
   }
 }
 function furledBamboo(f){
-  dough(f,.202,.055,.076,'#b4bd7e');
   for(const flip of [-1,1]){
     const surface=(u,v,lift=0)=>{
       const r=sin(Math.PI*Math.max(.0001,Math.min(.9999,u)))**.62;
       const a=-1.12+v*3.76+.14*(2*u-1);
       return [flip*((u-.50)*.48+.031),.059+(.061+lift)*r*cos(a),flip*(.086+lift)*r*sin(a)];
     };
-    f.unfold=(x,y,z)=>[0,.020+.028*Math.abs(x)/.28-y,flip*(.077+.86*Math.abs(z)+.73*y)-z];
+    // Each leaf opens onto its own half of the dish. The veins retain the
+    // same spacing as the paper-thin blade instead of folding onto themselves.
+    f.unfold=(x,y,z)=>{
+      const a=Math.atan2(flip*z/.086,(y-.059)/.061);
+      const u=T.MathUtils.clamp(.5+(flip*x-.031)/.48,0,1);
+      const breadth=sin(Math.PI*u)**.62;
+      const across=flip*(.043+(a+1.12)*.066)*breadth;
+      const rim=Math.hypot(x/.32,across/.18);
+      const height=.008+.053*T.MathUtils.smoothstep(rim,.52,1)-.021*T.MathUtils.smoothstep(rim,1.05,1.6);
+      return [0,height-y,across-z];
+    };
     grid(f,36,16,(u,v)=>surface(u,v),flip>0?'#d6df9e':'#c3d18f','sasa');
     for(let j=0;j<6;j++){
       const v=(j+.6)/6.6,pts=Array.from({length:9},(_,i)=>surface(.035+i*.116,v,.0018));
       stroke(f,pts,iColourRadius(j),j===3?'#8b995b':'#adb578',4,10);
     }
   }
-  f.unfold=(x,y,z)=>[.18,.055-y+.24*z,-.16-z+.55*y];
+  // Lay the loosened tie along the outer blade. Its loop stays visible on
+  // the dish while the unwrapped cake is taken away.
+  f.unfold=(x,y,z)=>[.12,.012+.12*(y-.059)-y,-.135+.76*z-z];
   function iColourRadius(i){return i===3?.0021:.00085;}
   for(const x of [-.028,-.013])stroke(f,Array.from({length:23},(_,i)=>[x,.059+.064*cos(tau*i/22),.089*sin(tau*i/22)]),.0052,straw,5,25);
   stroke(f,[[-.022,.123,0],[-.065,.164,.028],[-.091,.151,.040],[-.025,.125,.009],[.008,.147,-.043],[.042,.125,-.073]],[.004,.006,.004,.006,.005,.001],straw);
@@ -244,7 +315,7 @@ function food(parent,scene){
     switch(scene){
       case 1:
         dough(f,.170,.047,.120,'#fff9ef');grain(f,12,.14,.094,.047,'#e7d7be');blossom(f,.018,.095,.006,1.09);break;
-      case 2: furledBamboo(f);break;
+      case 2: dough(f,.202,.055,.076,'#b4bd7e');break;
       case 3:
         f.doughTile='steamed';dough(f,.163,.069,.114,'#fff8e8',1,'square');
         for(let j=0;j<9;j++){
@@ -301,6 +372,11 @@ function food(parent,scene){
         break;
     }
   });
+  if(scene===2){
+    const wrapper=new T.Group();wrapper.name='笹結び餅の開き笹';
+    modelFood(wrapper,'笹の葉と竹皮の留め',scene,furledBamboo);
+    parent.add(wrapper);
+  }
   if(scene===13){
     // A second pale core remains visible through the blue kuzu skin, especially at its lip.
     if(!pearlSkin)pearlSkin=new T.MeshPhysicalMaterial({map:ingredients.map,vertexColors:true,
@@ -315,7 +391,16 @@ export function poseStoryFood(object,gesture,progress){
   object.traverse(part=>{
     if(!part.userData.foodMotion||!part.morphTargetInfluences)return;
     const action=part.userData.foodMotion;
-    part.morphTargetInfluences[0]=gesture===action?(action==='open'?t:1-t):0;
+    const weights=part.morphTargetInfluences;
+    if(gesture==='rest')weights.fill(0);
+    else if(action==='open' && gesture==='open')weights[0]=t;
+    else if(action==='tie' && (gesture==='lift' || gesture==='tie')){
+      const phase=(gesture==='lift'?t:1-t)*weights.length;
+      weights.fill(0);
+      const lower=Math.floor(phase),mix=phase-lower;
+      if(lower>0)weights[lower%weights.length]=1-mix;
+      if(mix>0)weights[(lower+1)%weights.length]=mix;
+    }
   });
 }
 
@@ -351,21 +436,30 @@ function basketWeave(f,rx,rz,h){
   }
 }
 function fusedCake(parent) {
-  const body=collect(parent,'裏の葉脈が二組ある花筏餅',f=>{
-    const breadth=c=>.88+.22*Math.sin(Math.PI*Math.abs(c)*.72);
-    const height=(x,p)=>.056*(1-cos(p))+Math.exp(-(x*x)/.00015)*(.0059*cos(p/2)**4-.008*sin(p/2)**3);
-    grid(f,80,30,(u,v)=>{
-      const a=u*tau,p=v*Math.PI,r=sin(p)**.72,x=.25*cos(a)*r;
-      return [x,height(x,p),.124*sin(a)*r*breadth(cos(a))];
-    },white,'rice');
-    function under(x,z){
-      const dx=x/.25;
-      let r=Math.hypot(dx,z/.124);
-      for(let i=0;i<7 && r>.00001;i++)r=Math.hypot(dx,z/(.124*breadth(dx/r)));
-      const p=Math.asin(Math.min(.999,r)**(1/.72));
-      return [x,height(x,p)-.0018,z];
-    }
-    for(const s of [-1,1]){
+  const body=new T.Group();
+  body.name='合わせ餅';parent.add(body);
+  const breadth=c=>.88+.22*Math.sin(Math.PI*Math.abs(c)*.72);
+  const height=(x,p)=>.056*(1-cos(p))+Math.exp(-(x*x)/.00015)*(.0059*cos(p/2)**4-.008*sin(p/2)**3);
+  function under(x,z){
+    const dx=x/.25;
+    let r=Math.hypot(dx,z/.124);
+    for(let i=0;i<7 && r>.00001;i++)r=Math.hypot(dx,z/(.124*breadth(dx/r)));
+    const p=Math.asin(Math.min(.999,r)**(1/.72));
+    return [x,height(x,p)-.0018,z];
+  }
+  for(const s of [-1,1]){
+    collect(body,s===1?'継ぎ目から離す餅':'敷き葉に残す餅',f=>{
+      grid(f,40,30,(u,v)=>{
+        const a=(s<0?.5:-.5)*Math.PI+u*Math.PI,p=v*Math.PI,r=sin(p)**.72,x=.25*cos(a)*r;
+        return [x,height(x,p),.124*sin(a)*r*breadth(cos(a))];
+      },white,'rice');
+      // The halves share a seam before inspection. Each torn face keeps its
+      // own inward bow and rice grain when the two leaf impressions part.
+      grid(f,16,30,(u,v)=>{
+        const p=v*Math.PI,r=sin(p)**.72,z=(u-.5)*.248*r*breadth(0);
+        const hollow=.0028*sin(Math.PI*u)*sin(p)*(1+.2*cos(27*u+19*v));
+        return [s*hollow,height(0,p),-s*z];
+      },'#f2e5cd','rice');
       blossom(f,s*.108,.111,s*.011,.86);
       // The tips point away from each other. Both sets of secondary veins
       // branch towards their own tip, preserving the handed impression.
@@ -376,12 +470,14 @@ function fusedCake(parent) {
         stroke(f,[mark(t),mark(t+.011,side*.013),mark(t+.025,side*span*.73),mark(t+.032,side*span)],
           [.0018,.0022,.0015,.0005],'#ad9979');
       }
-    }
-    const join=[-.097,-.075,-.052,-.026,0,.024,.050,.075,.098].map((z,j)=>under(.002*sin(j*1.33),z));
-    stroke(f,join,[.0007,.0019,.0029,.0026,.0031,.0028,.0021,.0019,.0006],'#aa9477');
-    stroke(f,[[.004,.047,.107],[.002,.087,.084],[-.003,.102,.008],[.002,.087,-.084]],[.002,.003,.002,.0008],'#ccb89a');
-  });
-  body.name='合わせ餅';return body;
+      if(s===1){
+        const join=[-.097,-.075,-.052,-.026,0,.024,.050,.075,.098].map((z,j)=>under(.002+.0015*sin(j*1.33),z));
+        stroke(f,join,[.0007,.0019,.0029,.0026,.0031,.0028,.0021,.0019,.0006],'#aa9477');
+        stroke(f,[[.004,.047,.107],[.002,.087,.084],[.001,.102,.008],[.002,.087,-.084]],[.002,.003,.002,.0008],'#ccb89a');
+      }
+    });
+  }
+  return body;
 }
 function basket(parent){
   const rx=.78,rz=.47;
@@ -408,6 +504,23 @@ function squareTray(f,x,y,z,w,d,h){
     block(f,x+s*(w/2-.015),y+h/2,z,.031,h,d,'#c7ae7e');
     for(const side of [-1,1])for(let k=1;k<4;k++)
       block(f,x+side*(w/2-.018),y+k*h/4,z+s*d/2,.033,.015,.006,edge);
+  }
+}
+// Saw the alignment notch into the side of each removable batten. Its top
+// and underside stay level so all three still bear the upper tray.
+function batten(f,width,height,tint,chipped=false){
+  const x=width/2, end=.215;
+  const corner=chipped ? [[x,end-.031],[.003,end-.013],[-.002,end-.016],[-.009,end]] : [[x,end]];
+  const profile=new T.Shape([[-x,-end],[x,-end],[x,.102],[x-.010,.103],
+    [x-.010,.125],[x,.128],...corner,[-x,end]].map(([a,z])=>new T.Vector2(a,-z)));
+  const bevel=.0012;
+  const wood=new T.ExtrudeGeometry(profile,{depth:height-2*bevel,bevelEnabled:true,
+    bevelSize:bevel,bevelThickness:bevel,bevelSegments:1});
+  f.draw(wood,[0,bevel+.001,0],one,tint,[-Math.PI/2,0,0],'wood');
+  timberGrain(f,wood,[width,2*end,height],[0,0,height/2-bevel],[width,height,chipped?end:0]);
+  wood.dispose();
+  for(const z of [.140,.155]){
+    stroke(f,[[-x*.88,height+.002,z+.006],[x*.55,height+.002,z-.004]],[.0024,.001],ink,4,3);
   }
 }
 function steamer(parent,prototype=false) {
@@ -439,25 +552,65 @@ function steamer(parent,prototype=false) {
     }
   },0,.171,0);
   for(let i=0;i<3;i++)collect(parent,'取り外し桟'+i,f=>{
-    block(f,0,.019,0,.038,.035,.43,'#dfcda0');
-    stroke(f,[[-.013,.038,.151],[.010,.038,.143]],[.003,.002],ink);
-    stroke(f,[[-.013,.038,.128],[.010,.038,.120]],[.003,.002],ink);
+    batten(f,.038,.035,'#dfcda0');
   },.399+i*.058,0,0);
+}
+// Two folds turn around the edge of the parcel. The tips rise over the rice
+// before the leaves settle on the mat, preserving the crease under the hand.
+function lunchParcel(parent){
+  collect(parent,'卯助の昼飯を置く敷物',f=>{
+    grid(f,24,14,(u,v)=>[(u-.5)*.80,.012+.002*sin(18*u)*sin(9*v),(v-.5)*.34],'#c9b691','cloth');
+    leaf(f,0,.019,0,.35,.116,.16);
+  });
+  collect(parent,'ひと口欠けた昼餅',f=>{
+    grid(f,60,24,(u,v)=>{
+      const a=u*tau,p=v*Math.PI,r=sin(p)**.78;
+      const notch=Math.max(0,cos(a))**12*(.045+.016*cos(a*17));
+      return [(.122-notch)*cos(a)*r,.023+.042*(1-cos(p)),.096*sin(a)*r];
+    },white,'rice');
+    for(let j=0;j<5;j++)f.oval([.061,.061+.007*sin(j*2),.020*(j-2)],[.004,.003,.004],'#e4d4b6',neutral,'rice');
+  });
+  for(const side of [-1,1]){
+    const flap=new T.Group(),base=new T.Group(),tip=new T.Group();
+    flap.name=side>0?'昼飯を覆う外葉':'昼飯を覆う内葉';
+    flap.position.set(side*.132,.022,0);flap.userData.leafSide=side;
+    parent.add(flap);flap.add(base);base.add(tip);
+    const height=side>0?.098:.088;
+    tip.position.y=height;
+    collect(base,'竹皮の折り目',f=>{
+      grid(f,12,12,(u,v)=>[side*.010*sin(Math.PI*u),u*height,(v-.5)*(.214+.014*sin(Math.PI*u))],'#a3a477','leaf');
+    });
+    const edge=(u,v)=>[-side*u*.157,.008*sin(Math.PI*u)+.004*v*v,u*.008+v*(.107*(1-.52*u*u))];
+    collect(tip,'竹皮の葉脈',f=>{
+      grid(f,20,10,(u,v)=>edge(u,v*2-1),'#b4af81','leaf');
+      for(const v of [-.74,-.44,-.14,.16,.46,.76]){
+        const points=[0,.25,.5,.75,1].map(u=>{const pt=edge(u,v*(1-u*.53));pt[1]+=.0012;return pt;});
+        stroke(f,points,[.0008,.0012,.0011,.0009,.0004],'#8c895e');
+      }
+    });
+    const pinch=new T.Group();pinch.name='竹皮をつまむ先';pinch.position.fromArray(edge(.93,.25));tip.add(pinch);
+  }
+}
+
+export function openLunchLeaf(flap,progress){
+  const base=flap.children[0],tip=base.children[0],side=flap.userData.leafSide;
+  base.rotation.z=-side*1.53*progress;tip.rotation.z=-side*1.54*progress;
+  return tip.getObjectByName('竹皮をつまむ先');
 }
 function documentSheet(f,x,y,z,w,d,tint=white){
   const at=(u,v)=>[x+(u-.5)*w,y+.010*(cos(u*Math.PI*2)*.43+sin(v*Math.PI*2)*.38)+.009*(u-v)**3,z+(v-.5)*d];
-  grid(f,12,7,at,tint,'cloth');
+  grid(f,12,7,at,tint,'paper');
   for(let i=0;i<5;i++)for(let j=0;j<4-(i%2);j++){
     const u=.82-i*.148,v=.18+j*.133+.015*(i%2);
     const line=[[u+.014,v],[u-.009,v+.026],[u+.012,v+.043],[u-.022,v+.066]].map(([a,b])=>{const p=at(a,b);p[1]+=.002;return p;});
     stroke(f,line,[.001,.0026,.0019,.0007],ink,4,4);
   }
-  const seal=at(.15,.72);block(f,seal[0],seal[1]+.003,seal[2],.033,.003,.035,'#ae715c','cloth');
+  const seal=at(.15,.72);block(f,seal[0],seal[1]+.003,seal[2],.033,.003,.035,'#ae715c','paper');
 }
 function ledger(parent){
   collect(parent,'開いた控え',f=>documentSheet(f,-.06,.066,-.04,.43,.31));
   collect(parent,'綴じ帳と二つの書付',f=>{
-    for(let j=0;j<5;j++)block(f,-.062,.012+j*.007,-.042,.49,.009,.37,j%2?'#e6d8b6':'#d6c5a2','cloth');
+    for(let j=0;j<5;j++)block(f,-.062,.012+j*.007,-.042,.49,.009,.37,j%2?'#e6d8b6':'#d6c5a2','paper');
     block(f,-.064,.049,-.044,.498,.012,.375,'#8c9690','cloth');
 
     documentSheet(f,.13,.018,.196,.51,.19);
@@ -473,7 +626,7 @@ function cloth(parent){
     collect(wrap,'繕い目のある右袂',f=>{
     grid(f,18,15,(u,v)=>sheet(.5+u*.5,v),'#ddd1b1','cloth');
     const patch=(u,v)=>{const p=sheet(.53+.32*u,.33+.43*(1-u)*v);p[1]+=.005;return p;};
-    grid(f,14,7,patch,'#a7b0a1','cloth');
+    grid(f,14,7,patch,'#82929b','cloth');
     for(const [a,b] of [[[0,0],[1,0]],[[0,1],[1,0]],[[0,0],[0,1]]]){
       for(let i=0;i<9;i++){
         const p0=patch(T.MathUtils.lerp(a[0],b[0],i/9),T.MathUtils.lerp(a[1],b[1],i/9)),p1=patch(T.MathUtils.lerp(a[0],b[0],(i+.52)/9),T.MathUtils.lerp(a[1],b[1],(i+.52)/9));
@@ -543,22 +696,36 @@ function crate(parent,marked=true){
       [.001,.003,.004,.001],'#e6d2a8');
   });
 }
+// Keep the dark hammer scale continuous across both sides of a fracture.
+// ExtrudeGeometry's default UVs are drawing coordinates and can reach into
+// the neighbouring swatch, especially at the square holes in the small coins.
+function metalPlate(form,geometry,origin,colour,extent){
+  const {position,normal,uv}=geometry.attributes;
+  for(let i=0;i<position.count;i++){
+    const flat=abs(normal.getZ(i))>.5;
+    const u=flat || abs(normal.getY(i))>abs(normal.getX(i))?position.getX(i):position.getY(i);
+    const v=flat?position.getY(i):position.getZ(i);
+    uv.setXY(i,.5+u/extent,.5+v/extent);
+  }
+  form.draw(geometry,origin,one,colour,[-Math.PI/2,0,0],'iron');
+  geometry.dispose();
+}
 function hinge(parent,{pieces='main',joined=false,rope=true}={}){
   const cut=[[-.144,.040],[-.116,.051],[-.103,.069],[-.079,.063],[-.061,.090],[-.052,.125]];
   const draw=(f,points,colour)=>{
     const shape=new T.Shape(points.map(([x,z])=>new T.Vector2(x,-z)));
     const geo=new T.ExtrudeGeometry(shape,{depth:.014,bevelEnabled:true,bevelThickness:.0018,bevelSize:.0015,bevelSegments:1});
-    f.draw(geo,[0,.012,0],one,colour,[-Math.PI/2,0,0],'rice');geo.dispose();
+    metalPlate(f,geo,[0,.012,0],colour,.33);
     stroke(f,cut.map(([x,z])=>[x,.028,z]),.002,'#c6b69b');
   };
   if(pieces!=='chip')collect(parent,'欠けた蝶番',f=>{
     draw(f,[[-.144,-.122],[.118,-.122],[.118,.125],...cut.slice().reverse()],'#6c7168');
     for(const z of [-.085,.005,.091]){
       const barrel=new T.CylinderGeometry(.023,.023,.064,14);
-      f.draw(barrel,[.122,.033,z],one,'#61685c',[Math.PI/2,0,0],'rice');barrel.dispose();
+      f.draw(barrel,[.122,.033,z],one,'#61685c',[Math.PI/2,0,0],'iron');barrel.dispose();
     }
     for(const x of [-.088,.060])for(const z of [-.076,.034]){
-      f.oval([x,.029,z],[.014,.005,.014],'#464c43');
+      f.oval([x,.029,z],[.014,.005,.014],'#464c43',neutral,'iron');
       stroke(f,[[x-.007,.034,z+.002],[x+.007,.034,z-.002]],.002,'#a6a391');
     }
   });
@@ -585,16 +752,25 @@ function tag(parent){
     stroke(f,[[-.102,.039,-.065],[-.17,.058,-.105],[-.237,.03,-.070],[-.201,.026,.030],[-.151,.026,.030]],.005,edge);
   });
 }
+let celadon;
 function waterBowl(parent){
-  collect(parent,'蓋付きの運搬用水鉢',f=>{
+  // Keep the celadon and its lid on the same glaze. The timber and rice
+  // pigment atlas gives a ceramic a conspicuous woodgrain in a close-up.
+  celadon ??= surfaceGrain(brushWash(new T.MeshPhysicalMaterial({
+    vertexColors:true,side:T.DoubleSide,roughness:.44,clearcoat:.28,clearcoatRoughness:.33
+  }),.17),3.4);
+  const belly=collect(parent,'蓋付きの運搬用水鉢',f=>{
     turned(f,0,0,0,[[.001,.009],[.14,.009],[.15,.029],[.207,.063],[.26,.162],[.27,.239],[.258,.262],[.234,.264],[.227,.235],[.18,.12],[.001,.05]],'#a1a89a','rice');
 
     for(let i=0;i<3;i++)ring(f,0,.096+i*.040,0,.234+i*.010,.003,'#697d73');
     for(const s of [-1,1])stroke(f,[[s*.235,.21,-.02],[s*.307,.228,-.016],[s*.313,.168,.008],[s*.247,.158,.009]],.012,'#889a89');
+    turned(f,0,0,0,[[.138,.006],[.144,.007],[.147,.014]],'#ba9c78');
   });
-  collect(parent,'水鉢の合い蓋',f=>{
+  const lid=collect(parent,'水鉢の合い蓋',f=>{
     turned(f,0,0,0,[[.001,.263],[.224,.263],[.278,.274],[.273,.287],[.18,.298],[.046,.307],[.036,.327],[.045,.343],[.035,.352],[.001,.353]],'#c1c3aa','wood');
+    ring(f,0,.290,0,.249,.0018,'#9ca593');
   });
+  belly.material=lid.material=celadon;
 }
 function riceSack(parent) {
   collect(parent,'藁縄を掛けた米俵',f=>{
@@ -682,7 +858,7 @@ function sheetWithText(g,lines,wooden){
       for(let i=0;i<3;i++)stroke(f,[[x-.011,.016,z-.010+i*.009],[x+.007,.016,z-.010+i*.009],[x+.007,.016,z-.006+i*.009]],.0014,'#ae715c',4,4);
     }
   });
-  written(g,lines,0,wooden?.021:.0155,0,w*.85,d*.89,0,wooden);
+  if(lines.some(Boolean))written(g,lines,0,wooden?.021:.0155,0,w*.85,d*.89,0,wooden);
 }
 function boards(g,joining=false){
   for(let k=0;k<2;k++)collect(g,k?'敷板二':'敷板一',f=>{
@@ -698,8 +874,7 @@ function boards(g,joining=false){
 }
 function rail(g){
   collect(g,'共通道具の桟',f=>{
-    block(f,0,.016,0,.051,.032,.43,'#af9473');
-    for(const z of [.137,.158])stroke(f,[[-.025,.034,z+.009],[.021,.034,z-.009]],[.005,.003],dark);
+    batten(f,.051,.032,'#af9473',true);
   },.395,0,0);
 }
 function oldSteamer(g){
@@ -717,11 +892,30 @@ function oldSteamer(g){
     }
   });
 }
+class TeaSurface extends T.Mesh {
+  updateMatrix(){
+    super.updateMatrix();
+    if(!this.parent)return;
+    // Keep the tea level across the round bore as the cup tips and returns
+    // to the table. Its circular footprint is measured in the cup's frame.
+    const m=this.parent.matrixWorld.elements;
+    if(m[5]>1e-5){
+      this.matrix.elements[1]=-m[1]/m[5];
+      this.matrix.elements[9]=-m[9]/m[5];
+    }
+  }
+}
+function servingCup(g,x,z){
+  const cup=collect(g,'湯呑み',f=>{
+    turned(f,0,0,0,[[.001,.005],[.051,.005],[.056,.018],[.082,.023],[.104,.112],[.099,.135],[.087,.136],[.083,.04],[.001,.029]],'#a6b4a7','rice');
+  },x,0,z);
+  const tea=raw();
+  turned(tea,0,0,0,[[.087,.002],[.0003,0]],'#99956a','rice');
+  const meniscus=new TeaSurface(tea.geometry(),cup.material);
+  meniscus.name='湯呑みの茶面';meniscus.position.y=.108;meniscus.receiveShadow=true;cup.add(meniscus);
+}
 function teaAndBundle(g){
-  collect(g,'湯呑み',f=>{
-    turned(f,-.22,0,.04,[[.001,.005],[.051,.005],[.056,.018],[.082,.023],[.104,.112],[.099,.135],[.087,.136],[.083,.04],[.001,.029]],'#a6b4a7','rice');
-    turned(f,-.22,0,.04,[[.001,.108],[.091,.11]],'#99956a','rice');
-  });
+  servingCup(g,-.22,.04);
   collect(g,'旅包み',f=>{
     grid(f,40,20,(u,v)=>{
       const a=tau*u,h=Math.PI*v,r=sin(h)**.74*(1+.039*cos(6*a+v));
@@ -760,12 +954,52 @@ function halfCake(g,hue,patch){
   },s*.063,0,0);
 }
 function surfaceOfRice(g){
-  for(const x of [-.212,.212])collect(g,x<0?'同じ袋の米・左':'同じ袋の米・右',f=>{
-      turned(f,x,0,0,[[0,.012],[.09,.012],[.14,.034],[.168,.067],[.161,.074],[.141,.062],[.099,.042],[0,.031]],'#b1b7a6','rice');
-      for(let i=0;i<68;i++){
-        const a=i*2.4,r=sqrt((i+.5)/68)*.123;
-        f.oval([x+r*cos(a),.057+.031*(1-r/.123),r*sin(a)],[.013,.005,.0065],'#eee4cf',[.12,a,.1],'rice');
+  for(const x of [-.165,.165]){
+    const packet=collect(g,x<0?'同じ袋の米・左':'同じ袋の米・右',f=>{
+      grid(f,12,8,(u,v)=>{
+        const a=u*2-1,b=v*2-1;
+        return [.145*a,.004+.039*Math.pow(abs(a),5)+.031*b*b,.077*b*(1-.20*a*a)];
+      },'#bb9b6b','leaf');
+      for(const end of [-1,1]){
+        grid(f,7,4,(u,v)=>[end*(.145-.035*v)*(1-.08*abs(2*u-1)),.043+.023*v,(u-.5)*.124*(1-.65*v)],'#ad8857','leaf');
       }
+      for(let i=0;i<50;i++){
+        const a=i*2.4+x*9,r=sqrt((i+.5)/50);
+        f.oval([.115*r*cos(a),.030+.032*(1-r*r),.059*r*sin(a)],[.014,.005,.007],
+          i%4===0?'#d5c9a7':'#f2e6c8',[.12,a,.1],'rice');
+      }
+    },x,0,0);
+    for(const side of [-1,1]){
+      const skin=(u,v)=>{
+        const a=2*u-1,tip=(side>0?.99:1.05)-.22*a*a+.08*a*side+.22*x*sin(u*4);
+        return [.144*a*(1-.08*v)+.003*v*side,
+          (.047+.007*side)*v+.016*sin(Math.PI*v)-.009*a*a*v,
+          -side*(.086*tip*v)];
+      };
+      const flap=collect(packet,side>0?'竹皮の折り返し・手前':'竹皮の折り返し・奥',f=>{
+        grid(f,14,8,skin,side>0?'#c6a574':'#b18f63','leaf');
+        for(const v of [.14,.29,.48,.71,.89,.99]){
+          const line=Array.from({length:8},(_,i)=>{
+            const u=i/7,p=skin(u,v+.009*sin(6*u+9*v));
+            p[1]+=.0006;return p;
+          });
+          stroke(f,line,v>.98?.0012:.00065,v>.98?'#846b4c':'#ab8c60',3,7);
+        }
+      },0,.036,side*.066);
+      flap.userData.riceFold=side;
+    }
+  }
+}
+export function poseRicePackets(model,motion,progress){
+  model.traverse(part=>{
+    const side=part.userData.riceFold;
+    if(!side)return;
+    const second=part.parent.name==='同じ袋の米・右';
+    const packetProgress=T.MathUtils.smoothstep(progress,second?.36:0,second?1:.64);
+    const phase=motion==='fold'?1-packetProgress:packetProgress;
+    // The outer fold lifts first and settles last, leaving the lapped edge on top.
+    const opened=T.MathUtils.smoothstep(phase,side>0?.05:.24,side>0?.76:.95);
+    part.rotation.x=side*2.21*opened;
   });
 }
 function manifestTube(g){
@@ -784,6 +1018,59 @@ function manifestTube(g){
     shell(f,[[.056,.321],[.072,.321],[.072,.43],[.066,.439],[.001,.439],[.001,.426],[.059,.422],[.059,.322]],'#82574c');
     stroke(f,Array.from({length:26},(_,j)=>[.072*cos(j*tau/25),.070+.072*sin(j*tau/25),-.135]),.004,edge);
   }).userData.performPart='open';
+}
+
+// A cargo note folds narrowly enough to fit the lacquer tube. The same ink
+// crosses all eight panels and stays on the paper as each crease opens.
+function cargoNote(){
+  const note=new T.Group(),sample=new T.Group(),width=.055,depth=.278;
+  note.name='書付';
+  written(sample,inscriptions['old-manifest'],0,0,0,width*8,depth);
+  const ink=sample.children[0].material;sample.children[0].geometry.dispose();
+  let previous=note;
+  for(let i=0;i<8;i++){
+    const panel=new T.Group();panel.name='内訳の折り目'+i;
+    panel.position.x=i?width:0;previous.add(panel);previous=panel;
+    collect(panel,'出荷控の楮紙',f=>grid(f,3,12,(u,v)=>[u*width,.001+.0008*Math.sin(v*17+i)*u,(v-.5)*depth],
+      i%2?'#eee1c6':'#ede0c4','paper'));
+    const strip=new T.PlaneGeometry(width,depth,2,12),uv=strip.attributes.uv;
+    for(let j=0;j<uv.count;j++)uv.setX(j,(i+uv.getX(j))/8);
+    const text=new T.Mesh(strip,ink);text.rotation.x=-Math.PI/2;text.position.set(width/2,.0024,0);
+    text.renderOrder=2;panel.add(text);
+  }
+  const edge=new T.Group();edge.name='内訳を広げる紙端';edge.position.set(width,.002,-depth*.38);previous.add(edge);
+  return note;
+}
+function foldCargoNote(note,amount){
+  for(let i=1;i<8;i++)note.getObjectByName('内訳の折り目'+i).rotation.z=(i%2?1:-1)*Math.PI*.983*amount;
+}
+export function sealCargoNote(model){
+  const note=model.getObjectByName('書付'),tube=model.getObjectByName('漆の内筒');
+  foldCargoNote(note,1);
+  note.position.copy(note.parent.worldToLocal(tube.localToWorld(new T.Vector3(-.027,.056,-.003))));
+  note.quaternion.copy(note.parent.getWorldQuaternion(new T.Quaternion()).invert()).multiply(tube.getWorldQuaternion(new T.Quaternion()));
+}
+export function readCargoNote(handle,part,model,act){
+  if(!act)return null;
+  const tube=model.getObjectByName('漆の内筒'),start=handle.position.clone(),angle=handle.quaternion.clone();
+  const base=handle.parent.worldToLocal(tube.localToWorld(new T.Vector3()));
+  const offset=(x,y,z)=>handle.parent.worldToLocal(tube.localToWorld(new T.Vector3(x,y,z))).sub(base);
+  const smooth=t=>T.MathUtils.smoothstep(t,0,1);
+  return {pose(t){
+    handle.quaternion.copy(angle);handle.position.copy(start);
+    if(act==='unplug'){
+      const draw=smooth(t/.44),set=smooth((t-.44)/.56);
+      handle.position.add(offset(.14*set,.003*set,-.12*draw+.17*set));
+    }else if(act==='extract'){
+      const draw=smooth(t/.43),across=smooth((t-.43)/.30),down=smooth((t-.73)/.27);
+      handle.position.add(offset(-.50*across,.025*across-.077*down,-.303*draw+.31*down));
+    }else foldCargoNote(part,1-t);
+  },corner:()=>{
+    if(act==='unplug')return tube.localToWorld(new T.Vector3(0,.104,-.185))
+      .add(handle.getWorldPosition(new T.Vector3()).sub(handle.parent.localToWorld(start.clone())));
+    if(act==='extract')return part.localToWorld(new T.Vector3(.023,.004,-.14));
+    return part.getObjectByName('内訳を広げる紙端').getWorldPosition(new T.Vector3());
+  },spine:()=>act==='spread'?part.localToWorld(new T.Vector3(0,.003,.055)):tube.localToWorld(new T.Vector3(0,.128,.10))};
 }
 export function createStoryFood(n){
   const group=new T.Group();
@@ -810,7 +1097,50 @@ function driedDough(g){
 function exhibitVariant(code,id){
   if(!id)return null;
   const g=new T.Group();
-  if(id==='artisan-steamer'){oldSteamer(g);}
+  const letters={
+    'sakai-date':['堺　お澄殿','検分の翌朝','蔵前へ'],
+    'dawn-date':['浦　朝吉殿','うめ殿','検分の翌朝'],
+    'inari-date':['稲荷　結殿','検分の翌朝','陸路の荷'],
+    'kyo-return-tag':['茶屋借用','京の一組','翌朝返却'],
+    'peach-invite':['桃林の皆様','もち寄り祭へ','勘兵衛'],
+    'palace-invite':['竜宮の皆様','もち寄り祭へ','勘兵衛'],
+  };
+  if(letters[id]){
+    sheetWithText(g,letters[id],id==='kyo-return-tag');
+    if(id==='peach-invite')collect(g,'封に添えた桃の葉',f=>leaf(f,-.15,.026,.06,.22,.045,-.69));
+    if(id==='palace-invite')collect(g,'油紙のかかり紐',f=>{
+      for(const z of [-.08,.07]) stroke(f,[[-.25,.012,z],[-.18,.026,z],[.19,.027,z],[.25,.013,z]],.0055,'#728674');
+    });
+  }else if(id==='salvaged-tools'){
+    collect(g,'道具を包む縞木綿',f=>{
+      grid(f,42,20,(u,v)=>{
+        const a=tau*u,h=Math.PI*v,r=sin(h)**.55*(1+.044*cos(8*a+v*3));
+        return [.28*r*cos(a),.125*(1-cos(h)),.195*r*sin(a)];
+      },'#879987','cloth');
+      for(const s of [-1,1])stroke(f,[[0,.24,0],[s*.056,.29,.016],[s*.111,.306,.045],[s*.143,.28,.086]],[.034,.027,.019,.005],'#788d7d',8);
+    });
+  }else if(id==='artisan-steamer'){oldSteamer(g);}
+  else if(id==='festival-maker-tag'||id==='signed-maker-tag'){
+    sheetWithText(g,[],true);
+    written(g,['半量'],.175,.022,.035,.210,.168,0,true);
+    collect(g,'お冬の花印',f=>{
+      const x=-.092,z=.004;
+      for(let i=0;i<5;i++){
+        const a=i*tau/5;
+        f.oval([x+.027*cos(a),.022,z+.027*sin(a)],[.025,.0014,.020],
+          i%2?'#a9543f':'#a54f3d',[0,-a,0],'paper');
+        stroke(f,[[x+.008*cos(a),.0235,z+.008*sin(a)],[x+.023*cos(a),.0235,z+.023*sin(a)]],
+          [.0016,.001],'#d6af81',4,3);
+      }
+    });
+    const secondSeal=collect(g,'望の薄の印',f=>{
+      for(const [dx,dz] of [[-.052,-.031],[-.025,-.054],[.016,-.058],[.049,-.037],[.058,-.012]]){
+        stroke(f,[[.046,.022,.043],[.046+dx*.24,.022,dz*.59+.043],[.046+dx*.72,.022,dz+.034],
+          [.046+dx,.022,dz+.035]],[.0038,.0035,.002,.0004],'#584333',4,9);
+      }
+    });
+    secondSeal.visible=id==='signed-maker-tag';
+  }
   else if(id==='plain-crate'){
     collect(g,'町人の荷箱',f=>{squareTray(f,0,.008,0,.63,.48,.26);});
     collect(g,'町人の荷箱の蓋',f=>{
@@ -851,6 +1181,46 @@ function exhibitVariant(code,id){
       });
       page.position.set((i-.5)*.49,.006*i,-.035*i);page.rotation.y=i?.065:-.052;
     }
+  }else if(id==='ferry-leaf'){
+    collect(g,'舟形の敷き葉',f=>leaf(f,0,.004,0,.42,.082,-.13));
+  }else if(id==='wedding-print'||id==='trial-print'){
+    sheetWithText(g,[''],false);
+    written(g,[id==='wedding-print'?'祝い餅':'試作'],.183,.016,0,.06,.14);
+    collect(g,'三角の繕い目の写し',f=>{
+      const y=.018;
+      ring(f,-.045,y,0,.126,.0018,ink,.099);
+      const corners=[[-.10,y,-.046],[.018,y,-.029],[-.075,y,.055],[-.10,y,-.046]];
+      stroke(f,corners,.002,ink);
+      for(let i=0;i<4;i++){
+        const x=-.091+i*.028,z=-.045+i*.004;
+        stroke(f,[[x,y,z-.006],[x-.005,y,z+.008]],.002,ink);
+      }
+    });
+  }else if(id==='tool-rubbing'){
+    sheetWithText(g,[''],false);
+    collect(g,'角継ぎと桟の墨拓',f=>{
+      const y=.018;
+      stroke(f,[[-.19,y,-.10],[-.03,y,-.10],[-.03,y,-.041],[-.13,y,-.041],[-.13,y,.097],[-.19,y,.097],[-.19,y,-.10]],.003,ink);
+      for(let i=0;i<3;i++){
+        const x=.018+i*.064;
+        stroke(f,[[x,y,.098],[x,y,-.099],[x+.03,y,-.099],[x+.03,y,.098-(i===2?.028:0)],[x,y,.098]],.002,ink);
+        stroke(f,[[x,y,-.06],[x+.03,y,-.07]],.003,ink);
+      }
+    });
+  }else if(id==='shore-tea'){
+    servingCup(g,0,0);
+  }else if(id==='mountain-flask'){
+    collect(g,'山茶の竹筒の胴',f=>{
+      turned(f,0,0,0,[[.001,.003],[.084,.003],[.087,.016],[.084,.263],[.089,.278],[.072,.284],[.066,.244]],'#9b9b62');
+      for(const h of [.04,.173,.233])ring(f,0,h,0,.085,.005,edge);
+      stroke(f,[[-.079,.228,0],[-.106,.347,0],[-.058,.385,.018],[.059,.369,.026],[.087,.231,0]],.006,straw);
+    });
+    collect(g,'山茶の栓',f=>turned(f,0,0,0,[[.001,0],[.068,0],[.076,.010],[.079,.025],[.069,.035],[.001,.035]],'#bca179'),0,.268,0);
+  }else if(id==='loan-slip'){
+    sheetWithText(g,['貸出札の写し','配膳板　二枚','寺より薄野へ'],false);
+  }else if(id==='peach-reply'){
+    sheetWithText(g,['京へ参ります','桃子'],false);
+    collect(g,'返事に添えた桃の葉',f=>leaf(f,-.13,.02,0,.23,.047,.95));
   }else if(id==='leaf-marks'){
     const base=createStoryEvidence('basket');
     base.children.filter(o=>o.name==='十一に見える餅籠と底の敷き跡').forEach(o=>g.add(o));
@@ -860,17 +1230,16 @@ function exhibitVariant(code,id){
         leaf(f,(i-1.5)*.286*(j===1?1:.86),.035,(j-1)*.218,.269,.089,(i%2-.5)*.14,true);
     });
   }else if(id==='lunch-wrap'){
-    collect(g,'別の餅の昼飯包み',f=>{
-      grid(f,18,16,(u,v)=>[(u-.5)*.61,.015+.012*sin(u*17)+.010*sin(v*12),(v-.5)*.44],'#c6c2a3','cloth');
-      leaf(f,0,.040,0,.43,.095,.17);
-    });
-    add(g,cake(4),0,.060,.037,0,.74);
+    lunchParcel(g);
   }else if(id==='warm-cakes'||id==='peach-invitation'){stillWithPlate(g,id==='warm-cakes'?1:12);}
   else if(id==='same-rice')surfaceOfRice(g);
   else if(id==='steam-test'){
     steamer(g);const old=new T.Group();oldSteamer(old);add(g,old,-.60,0,-.56,.14,.80);
   }
-  else if(id==='prototype'||id==='steam-repair'){steamer(g,id==='prototype');setEvidencePose(g,'spaced');}
+  else if(id==='repair-body'){
+    steamer(g);
+    for(const part of [...g.children])if(part.name.startsWith('取り外し桟'))part.removeFromParent();
+  }else if(id==='prototype'||id==='steam-repair'){steamer(g,id==='prototype');setEvidencePose(g,'spaced');}
   else if(id==='wedding-filling'||id==='walnut-filling')halfCake(g,id==='wedding-filling'?'#dfcda0':'#986e4d',true);
   else if(id==='cloth-test'){cloth(g);add(g,cake(4),-.19,.077,.026,-.1,.57);}
   else if(id==='sakai-boards'||id==='old-tool-marks'){boards(g,id==='old-tool-marks');if(id==='old-tool-marks')rail(g);}
@@ -900,17 +1269,17 @@ function exhibitVariant(code,id){
         [.003,.005,.003,.006,.005,.001],dark);
       for(const y of [.277,.194])f.oval([-.112,y,.246],[.007,.006,.002],'#594a37');
     });
-    const h=new T.Group();hinge(h,{pieces:id==='matched-hinge'?'both':'chip',joined:true,rope:false});
+    const h=new T.Group();hinge(h,{pieces:'chip',joined:true,rope:false});
     h.rotation.x=Math.PI/2;h.rotation.z=-.09;h.scale.setScalar(.61);h.position.set(-.14,.236,.252);g.add(h);
-  }else if(id==='old-manifest'){const manifest=new T.Group();manifest.name='書付';sheetWithText(manifest,inscriptions[id],false);g.add(manifest);const tube=new T.Group();manifestTube(tube);add(g,tube,.375,0,-.04,.24);}
+  }else if(id==='old-manifest'){add(g,cargoNote(),-.28,.003,0);const tube=new T.Group();manifestTube(tube);add(g,tube,.375,0,-.04,.24);}
   else if(id==='loaned-boards'){boards(g);const tag=new T.Group();sheetWithText(tag,inscriptions[id],true);add(g,tag,0,.067,.015,-.075,.58);}
   else if(id==='lidded-bowl'){
     waterBowl(g);
-    const lid=g.getObjectByName('水鉢の合い蓋');lid.position.set(-.235,-.168,-.221);lid.rotation.x=.24;
+    const lid=g.getObjectByName('水鉢の合い蓋');
+    const rest=new T.Group();rest.name='水鉢の蓋置き';rest.position.set(-.58,-.258,-.11);g.add(rest);lid.position.copy(rest.position);
+    const serving=new T.Group();serving.name='水中の餅の置き場';serving.position.set(0,.135,0);g.add(serving);
     collect(g,'水の張られた鉢',f=>turned(f,0,0,0,[[.001,.157],[.214,.157],[.229,.161]],'#a8c1b2','rice'));
-    add(g,cake(13),0,.149,0,.26,.78);
-    const dry=new T.Group();collect(dry,'取り分け皿',f=>dish(f,.22));collect(dry,'縁が乾いた葛の餅',f=>dough(f,.111,.076,.107,'#d8ddc8'),0,.06,0);
-    add(g,dry,.543,0,.093);
+
   }
   else if(id==='continued-work')driedDough(g);
   else if(id==='seats-for-crew'){for(const [i,n] of [1,11,13].entries()){const plate=new T.Group();stillWithPlate(plate,n);add(g,plate,(i-1)*.36,0,i%2?.07:-.07,i*.65,.68);}}
@@ -933,7 +1302,7 @@ function exhibitVariant(code,id){
             const coin=new T.Shape();coin.absarc(0,0,.037,0,tau,false);
             const hole=new T.Path();hole.moveTo(-.009,-.009);hole.lineTo(-.009,.009);hole.lineTo(.009,.009);hole.lineTo(.009,-.009);hole.closePath();coin.holes.push(hole);
             const geo=new T.ExtrudeGeometry(coin,{depth:.006,bevelEnabled:false,curveSegments:12});
-            f.draw(geo,[x,.023+i*.004,z],one,i%2?'#798171':'#9b8c69',[-Math.PI/2,0,0],'rice');geo.dispose();
+            metalPlate(f,geo,[x,.023+i*.004,z],i%2?'#798171':'#9b8c69',.085);
           }
           stroke(f,[[.226,.029,.178],[.240,.067,.214],[.288,.055,.230],[.34,.048,.245]],.004,edge);
         });
@@ -1000,6 +1369,7 @@ export function createStoryEvidence(code,id){
     }
     const instance=templates.get(key).clone();
     instance.userData.storyEvidence=code;
+    instance.userData.storyVariant=id;
     return instance.userData.joinedLabels?tieLabels(instance):instance;
   }
   if(!evidence[code])throw new RangeError('Unknown story evidence '+code);
@@ -1031,9 +1401,11 @@ function furnishTable(f,n,p){
   }else if(style==='hull'){
     // The bow and stern lift off two runners; caulk lies in the seams between the strakes.
     for(const s of [-1,1])for(let i=0;i<3;i++){
-      const row=i/3;
-      grid(f,40,4,(u,v)=>{const t=(u-.5)*2,fl=1-.21*t*t+.05*row;
-        return [t*(half-.16+.095*row),.13+(i+v)*.164+.095*t*t,s*((.22+.086*(i+v))*fl)];},['#39636a','#4a6c70','#8b7959'][i],'wood');
+      const strake=hullStrake(half,s,i);
+      for(const [lo,hi,height] of strake.spans){
+        grid(f,Math.ceil((hi-lo)*20),4,(u,v)=>strake.point(lo+(hi-lo)*u,height*v),
+          ['#39636a','#4a6c70','#8b7959'][i],'wood');
+      }
     }
     // The diamond mesh is threaded over the front gunwale; its floats have an auger hole.
     const hanging=(u,v)=>[-.99+1.97*u,.661-.34*v-.14*sin(Math.PI*u),front+.027+.033*v];
@@ -1049,12 +1421,12 @@ function furnishTable(f,n,p){
   }else if(style==='hearth'||style==='kiln'){
     for(let row=0;row<4;row++)for(const side of [-1,1])for(let k=0;k<3;k++){
       const x=side*(half*.41+k*.202+.035*(row%2));
-      block(f,x,.14+row*(h-.20)/4,front-.05,.188,.085,.033,['#9b684f','#a97a60','#8b5e48'][(row+k)%3],'wood');
+      block(f,x,.14+row*(h-.20)/4,front-.05,.188,.085,.033,['#9b684f','#a97a60','#8b5e48'][(row+k)%3],'clay');
     }
     for(let i=0;i<5;i++)stroke(f,[[-.27+i*.11,.125,-.19],[-.24+i*.105,.11,.26]],[.035,.049],i%2?'#615145':'#8a755a',7);
     if(style==='hearth'){
       for(const x of [-.99,-.82,-.65])for(let i=0;i<3;i++){
-        const a=i*.06;block(f,x+a,h-.142,front-.06,.025,.083,.039,'#524d41');
+        const a=i*.06;block(f,x+a,h-.142,front-.06,.025,.083,.039,'#524d41','iron');
       }
     }else{
       for(const end of [-1,1])for(let i=0;i<4;i++)f.oval([end*(half-.105),h+.002,(i-1.5)*.21],[.012,.004,.012],'#8f8e7d',neutral,'paper');
@@ -1068,7 +1440,7 @@ function furnishTable(f,n,p){
       stroke(f,[[x-.093,y+.012,front+.022],[x-.082,y-.044,front+.048],[x+.075,y-.047,front+.047],[x+.095,y+.012,front+.02]],.009,dark,6);
     }
     if(style==='cargo')for(const s of [-1,1]){
-      block(f,s*.953,h*.49,front-.003,.066,h*.92,.042,'#474f49');
+      block(f,s*.953,h*.49,front-.003,.066,h*.92,.042,'#474f49','iron');
       for(let i=0;i<5;i++)f.oval([s*.953,.12+.143*i,front+.018],[.010,.010,.005],gold);
     }
   }else if(style==='court'){
@@ -1084,7 +1456,7 @@ function furnishTable(f,n,p){
   }else if(style==='tide'){
     // Layered wave brackets sweep towards a pearl in the pierced centre.
     for(const s of [-1,1])for(const face of [-1,1]){
-      const pts=[[s*(lx-.20),.15,face*.24],[s*(lx-.27),.34,face*.30],[s*(lx-.48),.52,face*.33],[s*(lx-.61),.57,face*.33],[s*(lx-.67),.50,face*.33],[s*(lx-.62),.45,face*.33]];
+      const pts=waveBracket(lx,s,face);
       stroke(f,pts,[.058,.082,.062,.047,.030,.008],'#48848b',8,24);
       stroke(f,pts.map(q=>[q[0],q[1]+.027,q[2]+face*.047]),[.006,.013,.014,.013,.008,.002],gold,5,21);
     }
@@ -1118,8 +1490,8 @@ function furnishTable(f,n,p){
   }else if(n===5){
     for(let j=0;j<3;j++){
       const x=(j-1)*.51;
-      f.oval([x,.25,-.045],[.255,.172,.21],'#c3a35e',neutral,'cloth');
-      for(const k of [-1,1])stroke(f,Array.from({length:17},(_,i)=>[x+k*.13,.25+.148*cos(i*tau/16),-.045+.185*sin(i*tau/16)]),.010,edge,5);
+      f.oval([x,.25,.225],[.255,.172,.21],'#c3a35e',neutral,'cloth');
+      for(const k of [-1,1])stroke(f,Array.from({length:17},(_,i)=>[x+k*.13,.25+.148*cos(i*tau/16),.225+.185*sin(i*tau/16)]),.010,edge,5);
     }
   }else if(n===8||n===15){
     for(const side of [-1,1]){
@@ -1136,6 +1508,7 @@ export function createStoryWorktable(sceneNumber,chapterNumber=0,place){
   const n=Number(sceneNumber), key=n+'-'+(place||'');
   if(!tableTemplates.has(key)){
     const p=tablePlan(n,place),group=new T.Group();group.name=p.name;group.userData.worktop=p.top;
+    group.userData.worktopThickness=p.parts[0].h;
     const batches=new Map();
     for(const part of p.parts){
       if(!batches.has(part.finish))batches.set(part.finish,[]);
@@ -1144,26 +1517,40 @@ export function createStoryWorktable(sceneNumber,chapterNumber=0,place){
     for(const [material,parts] of batches){
       const mesh=collect(group,p.name+'・'+material,f=>{
         for(const q of parts){
-          if(q.type==='box')block(f,q.x,q.y,q.z,q.w,q.h,q.d,q.tint);
+          const tile=material==='clay'||material==='iron'?material:'wood';
+          if(q.type==='box')block(f,q.x,q.y,q.z,q.w,q.h,q.d,q.tint,tile);
           else if(q.type==='slab'){
             const profile=new T.Shape(q.outline.map(([x,z])=>new T.Vector2(x,-z)));
             const shell=new T.ExtrudeGeometry(profile,{depth:q.h,bevelEnabled:false});
             const uv=shell.attributes.uv,loc=shell.attributes.position;
             for(let i=0;i<uv.count;i++)uv.setXY(i,.5+loc.getX(i)/p.width,.5+loc.getY(i)/p.depth);
-            f.draw(shell,[0,q.y-q.h*.5,0],one,q.tint,[-Math.PI/2,0,0],'wood');shell.dispose();
+            f.draw(shell,[0,q.y-q.h*.5,0],one,q.tint,[-Math.PI/2,0,0],'wood');
+            timberGrain(f,shell,[p.width,p.depth,q.h],[0,0,q.h/2],[0,q.y,q.outline[0][1]]);
+            shell.dispose();
           }
-          else if(q.round)stroke(f,[q.a,q.b],q.r,q.tint,10,3);
+          else if(q.round){
+            const first=f.uv.length;
+            f.stroke([q.a,q.b],q.r,q.tint,'wood',10,3);
+            // Stroke coordinates follow the circumference first. Turn the
+            // swatch so the fibres follow the length of the bamboo or pole.
+            for(let j=first;j<f.uv.length;j+=2){
+              const around=(f.uv[j]*4-.015)/.97,along=(f.uv[j+1]*2-1-.014)/.972;
+              f.uv[j]=(.015+.97*along)/4;f.uv[j+1]=(1.25+.225*(1-cos(tau*around)))/2;
+            }
+          }
           else {
             const from=new T.Vector3(...q.a),to=new T.Vector3(...q.b),axis=to.clone().sub(from);
             const rotation=new T.Euler().setFromQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0,1,0),axis.clone().normalize()));
             const beam=new T.BoxGeometry(q.r*1.78,axis.length(),q.r*1.78);
-            f.draw(beam,from.lerp(to,.5).toArray(),one,q.tint,[rotation.x,rotation.y,rotation.z],'wood');beam.dispose();
+            const centre=from.lerp(to,.5).toArray(),side=q.r*1.78;
+            f.draw(beam,centre,one,q.tint,[rotation.x,rotation.y,rotation.z],'wood');
+            timberGrain(f,beam,[side,axis.length(),side],neutral,centre);beam.dispose();
           }
         }
       });
       if(material==='lacquer'||material==='iron'){
         const glossy=material==='lacquer';
-        mesh.material=brushWash(new T.MeshPhysicalMaterial({vertexColors:true,roughness:glossy?.33:.56,metalness:glossy?.06:.49,clearcoat:glossy?.61:0}),.10);
+        mesh.material=brushWash(new T.MeshPhysicalMaterial({map:mesh.material.map,vertexColors:true,roughness:glossy?.33:.56,metalness:glossy?.06:.49,clearcoat:glossy?.61:0}),.10);
       }
     }
     collect(group,p.name+'・仕口と意匠',f=>furnishTable(f,n,p));
@@ -1190,6 +1577,35 @@ function arrangement(n,chapter){
     15:['tray','tag'],16:['crate','ledger'],17:['crate','bowl']
   })[n];
 }
+// Open folds give the hand a real place to stow and retrieve things. The
+// inner pleats are dark enough that a parcel disappears below the turned hem.
+export function createParcelWrap() {
+  const key='travel/indigo-wrap';
+  if(!templates.has(key)){
+    const bag=new T.Group();
+    const point=(a,t)=>{
+      const r=.45+.55*Math.sin(t*2.23+.1),fold=1+.067*cos(a*7+.9*t)+.032*sin(11*a-t);
+      return [.30*r*fold*cos(a),.36*t+.018*t*sin(3*a),.19*r*fold*sin(a)];
+    };
+    collect(bag,'藍の風呂敷・布目と返し縫い',f=>{
+      grid(f,56,19,(u,v)=>point(u*tau,v),'#647f81','cloth');
+      grid(f,56,8,(u,v)=>{
+        const p=point(u*tau,1-v*.73);return [p[0]*(1-v*.26),p[1]-.005,p[2]*(1-v*.26)];
+      },'#536b6a','cloth');
+      grid(f,28,6,(u,v)=>{const p=point(u*tau,.27);return [p[0]*v,.092,p[2]*v];},'#465c5b','cloth');
+      for(let i=0;i<36;i++){
+        const a=i*tau/36;
+        stroke(f,[point(a,.96),point(a+.082,.96)],.0027,'#c5bc9b',4,2);
+      }
+      for(const s of [-1,1]){
+        stroke(f,[[s*.22,.332,-.023],[s*.25,.387,-.009],[s*.19,.453,-.040],[s*.124,.454,-.075]],
+          [.029,.029,.021,.006],'#728b86',8);
+      }
+    });
+    templates.set(key,bag);
+  }
+  return templates.get(key).clone();
+}
 export function createStoryStillLife(sceneNumber,chapterNumber=0,place){
   const n=Number(sceneNumber), g=new T.Group();
   if(!cakeNames[n])throw new RangeError('Unknown settlement '+sceneNumber);
@@ -1204,6 +1620,16 @@ export function createStoryStillLife(sceneNumber,chapterNumber=0,place){
   if(place==='shore'||(place==='teahouse'&&chapterNumber<8)){
     const shore=place==='shore';
     add(g,createStoryEvidence(shore?'hinge':'tray',shore?'broken-hinge':'kyoto-set'),-.20,y,.02,-.08,1.25);
+    if(shore){
+      // Two narrow bearing strips leave room beneath the broken iron for
+      // the turtle's lower beak to lift it without scraping the boat plank.
+      const blockRest=collect(g,'蝶番を受ける舟大工の台木',f=>{
+        for(const x of [-.068,.068])block(f,x,.145,0,.058,.29,.175,'#9c7954','wood',.007);
+        block(f,0,.088,0,.178,.090,.054,'#765a40','wood',.005);
+        for(const x of [-.068,.068])block(f,x,.295,0,.059,.010,.178,'#be9d74','wood',.002);
+      },-.99,y,.34);
+      Object.assign(blockRest.userData,{storyStorage:true,storyEvidence:'台木',worktop:.30});
+    }
     return g;
   }
   const exhibits=arrangement(n,chapterNumber);
@@ -1221,7 +1647,8 @@ export function createStoryStillLife(sceneNumber,chapterNumber=0,place){
     // Persistent work surfaces hold ordinary tools. Dated replies, joint
     // signatures and the accepted return ledger appear in their authored clues.
     let main;
-    if(n===2){main=new T.Group();oldSteamer(main);}
+    if(n===4)main=createStoryEvidence('steamer','repair-body');
+    else if(n===2){main=new T.Group();oldSteamer(main);}
     else if(n===12){main=new T.Group();teaAndBundle(main);}
     else if(n===13){main=new T.Group();waterBowl(main);}
     else main=createStoryEvidence(exhibits[0],n===8?'prototype':undefined);
@@ -1263,7 +1690,7 @@ export function setEvidencePose(group,mode){
     upper.position.set(single?-.65:0, single?0:spaced?.212:.171,0);
     for(let i=0;i<3;i++){
       const rail=group.getObjectByName('取り外し桟'+i);
-      rail.position.set(spaced?(i-1)*.213:.399+i*.058,spaced?.169:0,0);
+      if(rail)rail.position.set(spaced?(i-1)*.213:.399+i*.058,spaced?.169:0,0);
     }
   }
 }

@@ -4,6 +4,7 @@ import { createGame } from '../two/game.js';
 import { BOUND } from '../two/terrain.js';
 import { atlasDestinations } from '../two/atlas-destinations.js';
 import { guideBearing, mapPoint, restoreMapGoal, savedMapGoal } from '../two/wayfinding.js';
+import { normalizeMiniMap, waypointRotation } from '../two/mini-map.js';
 import { decodeTransfer, transferURL, PAGES_ORIGIN, WORKER_ORIGIN } from '../two/journey-transfer.js';
 
 test('the pointing mochi follows camera-relative movement in all eight directions and across the seam', () => {
@@ -23,6 +24,19 @@ test('the pointing mochi follows camera-relative movement in all eight direction
   assert.equal(guideBearing(player, player, 0, -12).label, '真下');
 });
 
+test('a waypoint stays at twelve o’clock on the small map, including across the world seam', () => {
+  const player = { x: 26, z: -70 };
+  for (const [east, south] of [[0, -7], [5, -5], [7, 0], [5, 5], [0, 7], [-5, 5], [-7, 0], [-5, -5]]) {
+    const angle = waypointRotation(player, { x: player.x + east, z: player.z + south });
+    assert.ok(Math.abs(east * Math.cos(angle) - south * Math.sin(angle)) < 1e-10);
+    assert.ok(east * Math.sin(angle) + south * Math.cos(angle) < 0);
+  }
+  assert.equal(waypointRotation({ x: BOUND - 2, z: 0 }, { x: -BOUND + 3, z: 0 }), -Math.PI / 2);
+  assert.equal(waypointRotation(player, player, .75), .75);
+  assert.equal(waypointRotation(player, null, .75), 0);
+  for (const old of [undefined, {}, { goalUp: 'false' }]) assert.equal(normalizeMiniMap(old).goalUp, false);
+});
+
 test('new and old map goals reopen at surveyed positions, and a custom pin retains its exact location on transfer', () => {
   const game = createGame();
   const destinations = atlasDestinations(game.state);
@@ -36,15 +50,15 @@ test('new and old map goals reopen at surveyed positions, and a custom pin retai
   const pin = mapPoint(184.63, -23.92);
   const transfers = [
     { goal: destinations.find(place => place.kind === 'port').id, minimap: { size: 'large', zoom: 2 } },
-    { goal: savedMapGoal(pin), minimap: { size: 'mochi', zoom: .25 } },
+    { goal: savedMapGoal(pin), minimap: { size: 'mochi', zoom: .25, goalUp: true } },
   ];
   for (const { goal, minimap } of transfers) {
-    // Only the chosen size and scale travel. Restore following the new player position.
+    // The orientation preference travels, while a temporary pan is reset.
     const settings = { sound: true, yaw: .35, minimap: { ...minimap, centerX: 18, centerZ: -40 }, goal };
     const hash = new URL(transferURL(PAGES_ORIGIN, game.save(), settings)).hash;
     const incoming = decodeTransfer(WORKER_ORIGIN, hash, createGame);
     assert.deepEqual(incoming.settings.goal, goal);
-    assert.deepEqual(incoming.settings.minimap, minimap);
+    assert.deepEqual(incoming.settings.minimap, { goalUp: false, ...minimap });
   }
   assert.deepEqual(restoreMapGoal(savedMapGoal(pin), destinations), pin);
   for (const x of [Infinity, '30', null, BOUND + 1]) {

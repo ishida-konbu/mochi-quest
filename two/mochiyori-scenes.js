@@ -13,6 +13,7 @@ for (const ch of CHAPTERS) {
   register('end/'+ch.id,scores.CHAPTER_SCENES?.[ch.id],ch.verdictRegion,ch.verdictPlace,'結び',ch);
 }
 for (const s of SCENES) register('food/'+s.region,scores.FOOD_SCENES?.[s.region],s.region,null,'土地の餅');
+register('request/festival',scores.festivalLetters,'kyo',null,'頼まれごと',CHAPTERS.at(-1));
 for (const person of CAST) {
   register('talk/'+person.id,scores.AMBIENT_SCENES?.[person.id],person.region,null,'聞き込み');
   register('rest/'+person.id,scores.AMBIENT_SCENES?.[person.id]?.sites?.peach,'peach',null,'桃林での休養');

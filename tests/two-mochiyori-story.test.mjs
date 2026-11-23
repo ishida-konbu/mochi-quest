@@ -52,6 +52,7 @@ test('all seven mysteries and the festival remain solvable in opposite lead orde
     for (const chapter of CHAPTERS) {
       assert.equal(book.current(), chapter);
       assert.equal(book.finish(), false);
+      book.acceptRequest();
       for (const clue of chapter.clues.filter(clue => !book.leads().includes(clue)))
         assert.equal(book.record(clue.id), false, `A lead opened too soon: ${clue.id}`);
       gather(book, visitLast);

@@ -27,7 +27,7 @@ function meet(dialogue, lead) {
   listen(dialogue);
 }
 function investigate(dialogue, id) {
-  if (dialogue.frame?.choices.some(c => c.id === 'clue/' + id)) choose(dialogue, 'clue/' + id);
+  if (dialogue.frame?.choices.some(c => c.id === 'clue/' + id)) return choose(dialogue, 'clue/' + id);
   choose(dialogue, 'do');
 }
 
@@ -47,7 +47,7 @@ test('all exchanges and both hearings have authored speaker turns and replies', 
     }
     for (const i of chapter.proofs.keys()) {
       const spoken = PROOF_LINES[chapter.id][i];
-      assert.ok(spoken.question && spoken.reason && spoken.success);
+      assert.ok(spoken.conclusion && (spoken.kind === 'fact' || spoken.prompt));
     }
   }
 });
@@ -73,8 +73,8 @@ test('a refusal or a cancelled exchange gives no note, item or progress', () => 
   assert.equal(accepted.requested, true);
   const lead = talk.leads()[0];
   meet(talk, lead);
-  if (talk.frame.choices.some(c => c.id === 'clue/' + lead.id)) choose(talk, 'clue/' + lead.id);
-  talk.step('do');
+  const inspect = talk.frame.choices.some(c => c.id === 'clue/' + lead.id) ? 'clue/' + lead.id : 'do';
+  talk.step(inspect);
   assert.equal(talk.frame.action.key, 'clue/' + lead.id);
   talk.close();
   assert.equal(book.has(lead.id), false);
@@ -91,9 +91,9 @@ test('the traveller must carry the actual parcel and handovers survive interrupt
   meet(talk, opening);
   choose(talk, 'accept');
   meet(talk, opening);
-  choose(talk, 'clue/steam-test');
-  talk.step('do');
-  assert.ok(talk.frame.text);
+  talk.step('clue/steam-test');
+  assert.equal(talk.frame.text, CLUE_LINES['steam-test'].missing);
+  assert.deepEqual(talk.frame.choices, []);
   assert.equal(book.has('steam-test'), false);
   assert.equal(talk.frame.action, undefined);
   meet(talk, talk.leads().find(c => c.id === 'same-rice'));
@@ -147,21 +147,25 @@ test('a new traveller can reach the banquet through conversation alone in either
       assert.equal(verdict.id, 'verdict');
       meet(talk, verdict);
       choose(talk, 'verdict');
-      for (const [i, proof] of chapter.proofs.entries()) {
-        choose(talk, 'evidence/' + proof.evidence.find(id => id !== proof.answer));
+      let decisions = 0;
+      while (book.current() === chapter) {
+        const i = book.proofIndex, proof = chapter.proofs[i];
+        const {kind} = PROOF_LINES[chapter.id][i];
+        assert.ok(['reason', 'evidence'].includes(kind), 'Established facts should have been read back');
+        const wrong = kind === 'reason' ? (proof.correct + 1) % proof.choices.length : proof.evidence.find(id => id !== proof.answer);
+        const right = kind === 'reason' ? proof.correct : proof.answer;
+        choose(talk, kind + '/' + wrong);
         assert.equal(book.proofIndex, i);
-        choose(talk, 'evidence/' + proof.answer);
-        choose(talk, 'reason/' + ((proof.correct + 1) % proof.choices.length));
-        assert.equal(book.proofIndex, i);
-        choose(talk, 'reason/' + proof.correct);
-        while (talk.frame?.choices.some(c => c.id === 'interview')) choose(talk, 'interview');
-        if (i + 1 < chapter.proofs.length) {
-          assert.equal(book.proofIndex, i + 1);
+        choose(talk, kind + '/' + right);
+        decisions++;
+        if (book.current() === chapter) {
+          assert.ok(book.proofIndex > i);
           book = createNotebook(book.save());
           talk = createStoryDialogue(book);
           meet(talk, verdict); choose(talk, 'verdict');
         }
       }
+      assert.ok(decisions <= 2, 'A hearing should return the player to travel after at most two decisions');
       assert.notEqual(book.current(), chapter);
     }
     assert.equal(book.index, 8);
@@ -199,4 +203,32 @@ test('the recovered cargo reaches Matsubara in person, with older hearings kept 
     assert.equal(older.has('returned-tools'), true);
     assert.deepEqual(older.items(), []);
   }
+});
+
+test('a worktable offers only its own active pickup and commits it once after inspection', () => {
+  let book = createNotebook(), talk = createStoryDialogue(book);
+  const river = storySite('river'), market = storySite('market');
+  assert.equal(talk.pickupAt(river), null);
+  meet(talk, talk.leads()[0]); choose(talk, 'accept');
+  const leaf = talk.pickupAt(river);
+  assert.equal(leaf.person.name, 'おはな');
+  assert.equal(talk.inspect(leaf.id, market), null);
+  assert.equal(talk.inspect(leaf.id, river).action.key, 'clue/leaf-marks');
+  talk.close();
+  assert.equal(book.has(leaf.id), false);
+  talk.inspect(leaf.id, river); listen(talk);
+  assert.equal(talk.pickupAt(river), null);
+  assert.equal(book.has(leaf.id), true);
+
+  const previous = CHAPTERS[0].clues.map(c => c.id);
+  book = createNotebook({v:1, chapter:1, notes:[...previous, 'same-rice','steam-test'], proof:0});
+  talk = createStoryDialogue(book);
+  assert.equal(talk.pickupAt(market), null);
+  meet(talk, talk.leads().find(lead => lead.id === 'prototype'));
+  investigate(talk, 'prototype');
+  const bars = talk.pickupAt(market);
+  assert.equal(bars.id, 'packing-bars');
+  assert.equal(talk.inspect(bars.id, market).action.key, 'clue/packing-bars');
+  listen(talk);
+  assert.deepEqual(book.items(), ['蒸し箱の桟三本']);
 });

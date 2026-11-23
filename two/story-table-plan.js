@@ -19,6 +19,57 @@ const workshops=[null,
   ['敦賀の荷改め櫃','cargo',.92,2.72,1.16,'#4f5247','#8b8461'],
   ['堺の鉄板と焼締め煉瓦','kiln',.77,2.64,1.15,'#7e4934','#44413d'],
 ];
+// The same survey sets the live drawer's slide and the joiner's opening in
+// the resident's side of a solid counter.
+export const workDrawerSize=Object.freeze({width:1.16,height:.52,depth:.52,topInset:.045,edge:.015});
+
+export function counterLeaves(plan){
+  const width=.98,depth=.55;
+  const x=workDrawerSize.width*.5+.095+width*.5,z=-(plan.depth+depth)*.5+.004;
+  return [-1,1].map(side=>({x:x*side,z,width,depth,worktop:plan.top}));
+}
+
+export function hullStrake(half,side,board){
+  const row=board/3,run=half-.16+.095*row;
+  const gap=(workDrawerSize.width/2+.054)/run;
+  // The outside strakes remain continuous on the customer's side. A low
+  // sill and two full-height ends frame the opening on the artisan's side.
+  const spans=side>0?[[-1,1,1]]:[[-1,-gap,1],[gap,1,1]];
+  if(side<0 && board===0)spans.push([-gap,gap,.31]);
+  return {spans,point(t,v){
+    const flare=1-.21*t*t+.05*row;
+    return [t*run,.13+(board+v)*.164+.095*t*t,side*(.22+.086*(board+v))*flare];
+  }};
+}
+
+export function waveBracket(lx,side,face){
+  const hook=face<0?.48:1;
+  const nodes=[[0,.15,.24],[.07,.34,.30],[.28,.52,.33],[.41,.57,.33],[.47,.50,.33],[.42,.45,.33]];
+  return nodes.map(([inset,y,z])=>[side*(lx-.20-inset*hook),y,face*z]);
+}
+
+function cutDrawerBay(parts,top,front){
+  const {width,height,depth,topInset,edge}=workDrawerSize;
+  const bay={x:[-width/2-.044,width/2+.044],y:[top-topInset-height-.036,top-topInset+.022],
+    z:[-front-edge-.05,-front-edge+depth+.027]};
+  const result=[];
+  for(const part of parts){
+    if(part.type!=='box' || part.y+part.h/2>top-.004){result.push(part);continue;}
+    const x=[part.x-part.w/2,part.x+part.w/2],y=[part.y-part.h/2,part.y+part.h/2],z=[part.z-part.d/2,part.z+part.d/2];
+    const ix=[Math.max(x[0],bay.x[0]),Math.min(x[1],bay.x[1])],
+      iy=[Math.max(y[0],bay.y[0]),Math.min(y[1],bay.y[1])],
+      iz=[Math.max(z[0],bay.z[0]),Math.min(z[1],bay.z[1])];
+    if(ix[0]>=ix[1] || iy[0]>=iy[1] || iz[0]>=iz[1]){result.push(part);continue;}
+    function board(xlo,xhi,ylo,yhi,zlo,zhi){
+      const w=xhi-xlo,h=yhi-ylo,d=zhi-zlo;
+      if(Math.min(w,h,d)>.001)result.push({...part,x:(xlo+xhi)/2,y:(ylo+yhi)/2,z:(zlo+zhi)/2,w,h,d});
+    }
+    board(x[0],ix[0],...y,...z);board(ix[1],x[1],...y,...z);
+    board(...ix,y[0],iy[0],...z);board(...ix,iy[1],y[1],...z);
+    board(...ix,...iy,z[0],iz[0]);board(...ix,...iy,iz[1],z[1]);
+  }
+  return result;
+}
 const layouts=new Map();
 export function tablePlan(number=1,place) {
   const key=number+'-'+(place||'');
@@ -26,7 +77,7 @@ export function tablePlan(number=1,place) {
   const sub=place==='charcoal'?['炭窯の小仕事台','hearth',.75,2.47,.99,'#554537','#9e8868']:
     place==='court'?['白洲の文案','court',.75,2.64,1.11,'#403331','#5d473e']:null;
   const [name,style,top,width,depth,base,surface]=sub || workshops[number] || workshops[1];
-  const parts=[];
+  let parts=[];
   function box(x,y,z,w,h,d,tint,finish='wood') {parts.push({type:'box',x,y,z,w,h,d,tint,finish});}
   function pole(a,b,r,tint,finish='wood',round=true) {parts.push({type:'pole',a,b,r,tint,finish,round});}
   const half=width/2,front=depth/2,lx=half-.22,lz=front-.13,apron=top-.085;
@@ -75,7 +126,7 @@ export function tablePlan(number=1,place) {
     // Two keel runners support the beached plank; the gunwales flare away from them.
     for(const s of sides){
       box(0,.075,s*.26,width-.26,.15,.115,base);
-      for(const x of [-lx,0,lx])pole([x*.85,.11,s*.26],[x,apron,s*(front-.07)],.057,'#9a7c5c');
+      for(const x of [-lx,-.72,.72,lx])pole([x*.85,.11,s*.26],[x,apron,s*(front-.07)],.057,'#9a7c5c');
       box(0,apron-.028,s*(front-.05),width*.795,.10,.10,base);
     }
   }else{
@@ -97,17 +148,28 @@ export function tablePlan(number=1,place) {
     for(const s of sides)pole([s*lx,apron,-lz],[s*lx,top+.99,-lz],.032,base);
     pole([-lx-.10,top+.955,-lz],[lx+.10,top+.955,-lz],.027,'#8b775b');
   }
+  parts=cutDrawerBay(parts,top,front);
   // Solid details that are already carved in the joined decoration mesh.
   const contacts=[...parts];
+  // The join between two boards is only four millimetres wide. To a
+  // traveller it is one continuous surface, including when a changed scene
+  // places a table over an old save and the traveller needs to walk out.
+  if(boards>1 && style!=='hull'){
+    contacts.push({type:'box',x:0,y:top-.040,z:0,w:width,h:.080,d:depth-.004,minRadius:.015});
+  }
   const brace=(a,b,r)=>contacts.push({type:'pole',a,b,r});
   if(style==='hull'){
     for(const side of sides)for(let row=0;row<3;row++){
-      const at=t=>[t*(half-.16+.095*(row+.5)/3),.13+(row+.5)*.164+.095*t*t,side*(.22+.086*(row+.5))*(1-.21*t*t+.05*(row+.5)/3)];
-      for(let i=-4;i<4;i++)brace(at(i/4),at((i+1)/4),.077);
+      const strake=hullStrake(half,side,row);
+      for(const [lo,hi,height] of strake.spans){
+        const steps=Math.ceil((hi-lo)*4);
+        for(let i=0;i<steps;i++)brace(strake.point(lo+(hi-lo)*i/steps,height*.5),
+          strake.point(lo+(hi-lo)*(i+1)/steps,height*.5),height*.077);
+      }
     }
   }else if(style==='tide'){
     for(const side of sides)for(const face of sides){
-      const pts=[[side*(lx-.20),.15,face*.24],[side*(lx-.27),.34,face*.30],[side*(lx-.48),.52,face*.33],[side*(lx-.61),.57,face*.33],[side*(lx-.67),.50,face*.33]];
+      const pts=waveBracket(lx,side,face);
       for(let j=1;j<pts.length;j++)brace(pts[j-1],pts[j],j===4?.039:.069);
     }
   }else if(style==='dryer'){
@@ -115,7 +177,7 @@ export function tablePlan(number=1,place) {
   }else if(style==='branch'||number===8||number===15){
     for(const s of sides)brace([s*lx,.12,lz],[s*(lx-.38),top-.092,-lz],style==='branch'?.052:.032);
   }else if(number===5){
-    for(let j=-1;j<=1;j++)brace([j*.51-.085,.25,-.045],[j*.51+.085,.25,-.045],.17);
+    for(let j=-1;j<=1;j++)brace([j*.51-.085,.25,.225],[j*.51+.085,.25,.225],.17);
   }
   const plan={name,style,top,width,depth,lx,lz,base,surface,parts,contacts};
   layouts.set(key,plan);return plan;

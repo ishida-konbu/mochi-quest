@@ -8,7 +8,17 @@ export function normalizeMiniMap(saved) {
   return {
     size: sizes.includes(saved?.size) ? saved.size : 'medium',
     zoom: zoomLevels.includes(saved?.zoom) ? saved.zoom : 1,
+    goalUp: saved?.goalUp === true,
   };
+}
+
+export function waypointRotation(player, target, previous = 0) {
+  if (!target) return 0;
+  const east = wrapWorld(target.x - player.x);
+  const south = wrapWorld(target.z - player.z);
+  // Directly above or below a destination there is no horizontal bearing.
+  if (Math.hypot(east, south) < .01) return previous;
+  return -Math.atan2(east, -south);
 }
 
 export function createMiniMap(panel, saved, onChange, player, redraw) {
@@ -23,6 +33,7 @@ export function createMiniMap(panel, saved, onChange, player, redraw) {
   const scale = panel.querySelector('output');
   let displayWidth = 120, displayHeight = 120;
   let center = null, gesture = null, suppressPointerClick = false, frame = null;
+  let rotation = 0;
 
   function requestDraw() {
     if (frame !== null) return;
@@ -53,6 +64,7 @@ export function createMiniMap(panel, saved, onChange, player, redraw) {
       id: event.pointerId, startX: event.clientX, startY: event.clientY,
       x: center?.x ?? player.x, z: center?.z ?? player.z,
       metresPerPixel: miniMapWorldWidth / (settings.zoom * displayWidth),
+      rotation,
       threshold: event.pointerType === 'touch' ? 8 : 5, dragged: false,
     };
     open.setPointerCapture(event.pointerId);
@@ -63,8 +75,11 @@ export function createMiniMap(panel, saved, onChange, player, redraw) {
     if (!gesture.dragged && Math.hypot(dx, dy) < gesture.threshold) return;
     gesture.dragged = true;
     panel.setAttribute('data-dragging', '');
-    center = { x: wrapWorld(gesture.x - dx * gesture.metresPerPixel),
-      z: wrapWorld(gesture.z - dy * gesture.metresPerPixel) };
+    const cos = Math.cos(gesture.rotation), sin = Math.sin(gesture.rotation);
+    center = {
+      x: wrapWorld(gesture.x - (cos * dx + sin * dy) * gesture.metresPerPixel),
+      z: wrapWorld(gesture.z - (cos * dy - sin * dx) * gesture.metresPerPixel),
+    };
     showCenter();
   }
   function finish(event) {
@@ -127,13 +142,21 @@ export function createMiniMap(panel, saved, onChange, player, redraw) {
   return {
     canvas,
     settings,
-    projection() {
+    setGoalUp(enabled) {
+      settings.goalUp = enabled;
+      onChange();
+      requestDraw();
+    },
+    projection(destination) {
+      const navigationTarget = settings.goalUp ? destination : null;
+      // Keep the paper under the pointer until the drag is released.
+      rotation = navigationTarget ? (gesture?.rotation ?? waypointRotation(player, navigationTarget, rotation)) : 0;
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const width = Math.round(displayWidth * ratio), height = Math.round(displayHeight * ratio);
       if (canvas.width !== width) canvas.width = width;
       if (canvas.height !== height) canvas.height = height;
       // A small disc reduces its ink marks along with the available paper.
-      return { zoom: settings.zoom, pixelRatio: width / Math.max(132, displayWidth),
+      return { zoom: settings.zoom, pixelRatio: width / Math.max(132, displayWidth), rotation, navigationTarget,
         ...(center && { centerX: center.x, centerZ: center.z }) };
     },
   };

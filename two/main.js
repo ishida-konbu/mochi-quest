@@ -282,18 +282,34 @@ const performancePlayer = createPerformance({
     storyWorld.visible(true);actors.visible(true);
     sun.target.position.set(p.x,p.y,p.z);
     applyClimateLights(hemisphere,sun,bounce,p,state.time);
+    // A phone may have rotated while the notebook used its own inspection lens.
+    camera.fov=camera.aspect<1?65:57;
+    camera.updateProjectionMatrix();
     updateCamera(0,true);
     world.update(state.time,p,camera,state.time,state.bellStrike,state.inariWeather);
     meadow(state.time,p,camera);storyWorld.update(state.time,p);
     drawScene();previous=0;updateHUD();
   }
 });
+let carried = game.notebook.inventory();
 const dialogue = createStoryDialogue(game.notebook, {
-  onChange() { storyWorld.invalidate(); save(); updateHUD(); }
+  onChange() {
+    const next = game.notebook.inventory();
+    const given = carried.filter(item => !next.includes(item));
+    const received = next.filter(item => !carried.includes(item));
+    carried = next;
+    const receipt = [];
+    if (given.length) receipt.push(given.map(item => item.name).join('、') + 'を渡した');
+    if (received.length) receipt.push(received.map(item => item.name).join('、') + 'を風呂敷にしまった');
+    if (receipt.length) message(receipt.join('。'), 5);
+    storyLeads = dialogue.leads();
+    storyWorld.invalidate(receipt.length>0); save(); updateHUD();
+  }
 });
+let storyLeads = dialogue.leads();
 function pinnedStorySite() {
   const id = game.notebook.pin;
-  return id && dialogue.leads().find(lead => lead.id === id)?.site;
+  return id && storyLeads.find(lead => lead.id === id)?.site;
 }
 function applyAtlasGoal(destination) {
   game.notebook.track(null);
@@ -303,28 +319,48 @@ function applyAtlasGoal(destination) {
   save();
   updateHUD();
 }
-let conversationYaw = null;
-const conversationTarget = new THREE.Vector3();
-let framing = 0, examining = 0;
-const lastExhibit = new THREE.Vector3();
-const partnerFacing = new THREE.Vector3();
+let conversationShot = null, shotVisible = false, dissolvingFrame = null;
+// Cross a large change of viewpoint with a short dissolve. A flying camera
+// would carry the player through the other side of the table or through a wall.
+function dissolveView() {
+  if (!playable || contextLost || document.hidden) return;
+  dissolvingFrame?.remove();
+  const still = document.createElement('canvas');
+  const scale = Math.min(1, 1080 / Math.max(canvas.width, canvas.height));
+  still.width = Math.max(1,Math.round(canvas.width * scale));
+  still.height = Math.max(1,Math.round(canvas.height * scale));
+  const drawing = still.getContext('2d', {alpha:false});
+  if (!drawing) return;
+  drawScene();
+  drawing.drawImage(canvas, 0, 0, still.width, still.height);
+  still.className = 'conversation-dissolve';
+  still.setAttribute('aria-hidden','true');
+  canvas.after(still);
+  dissolvingFrame = still;
+  const fade = still.animate([{opacity:1},{opacity:0}], {duration:260,easing:'ease-in-out',fill:'forwards'});
+  fade.onfinish = () => {
+    still.remove();
+    if (dissolvingFrame === still) dissolvingFrame = null;
+  };
+}
 const speech = createSpeechView({
-  stage, canvas, camera, player: p, dialogue, world: () => storyWorld, activate: unlock,
-  approach(who) {
-    conversationTarget.copy(who.anchor);
-    conversationTarget.y -= .38;
-    const dx = p.x-who.anchor.x, dz = p.z-who.anchor.z;
-    // A three-quarter view keeps the larger mochi beside the work, with
-    // the resident's hands visible between them. Dragging releases the turn.
-    const bearing = Math.atan2(dx,dz);
-    who.actor.getWorldDirection(partnerFacing);
-    const faceAngle = Math.atan2(partnerFacing.x,partnerFacing.z);
-    const side = Math.sin(faceAngle-bearing) < 0 ? -1 : 1;
-    // The suspended bell striker crosses the monk at eye level. Stay on
-    // its open side from either bell-tower entrance.
-    conversationYaw = who.site.place === 'bell' ? (dx > .1 ? 3.89 : 1.74)
-      : bearing + side * (camera.aspect < .85 ? 1.09 : 1.25);
-    if (Math.hypot(dx,dz) > .3 && p.speed < .4 && !p.mount && !p.activity) p.heading = Math.atan2(-dx,-dz);
+  destination: () => game.notebook.pin ? storyLeads.find(lead => lead.id === game.notebook.pin)
+    : storyLeads.length === 1 ? storyLeads[0] : null,
+  stage, canvas, camera, player:p, dialogue, world:()=>storyWorld,
+  activate(){unlock();clearInput();},
+  approach() {
+    conversationShot = storyWorld.conversationShot(camera.aspect, yaw);
+  },
+  inspectHands(closeUp) {
+    const prior=conversationShot;
+    if (!prior) return false;
+    const next=closeUp ? storyWorld.conversationShot(camera.aspect,prior.yaw,true) : prior.wide;
+    if (!next) return false;
+    dissolveView();
+    if (closeUp) next.wide=prior;
+    conversationShot=next;
+    focus.copy(next.focus);
+    return true;
   }
 });
 const notebook = createBookView({
@@ -359,6 +395,8 @@ const audioSettings = createAudioSettings({
     world?.setSceneryQuality(value);
     persistSettings();
   },
+  goalUpEnabled: miniMap.settings.goalUp,
+  onGoalUpChange: miniMap.setGoalUp,
   travelCameraEnabled,
   onTravelCameraChange(enabled) {
     travelCameraEnabled = enabled;
@@ -492,8 +530,12 @@ $('download').onclick = () => {
   }, 'image/png');
 };
 function moveCamera(dx, dy) {
-  conversationYaw = null;
   const turn = -dx * .0055;
+  if (speech.active && conversationShot) {
+    conversationShot.yaw += turn;
+    conversationShot.pitch = clamp(conversationShot.pitch + dy * .004, .04, .92);
+    return;
+  }
   if (dx || dy) travelCamera.manualLook(turn);
   yaw += turn;
   pitch = clamp(pitch + dy * 0.004, photoMode ? -0.06 : -1.25, 1.08);
@@ -518,6 +560,11 @@ canvas.onlostpointercapture = (e) => {
 };
 canvas.onwheel = (e) => {
   e.preventDefault();
+  if(!speech.active)conversationShot=null;
+  if (speech.active && conversationShot) {
+    conversationShot.distance = clamp(conversationShot.distance * Math.exp(clamp(e.deltaY,-200,200)*.0015), 2.1, 9);
+    return;
+  }
   distance = clamp(
     distance * Math.exp(clamp(e.deltaY, -200, 200) * 0.0015),
     photoMode ? 2.25 : 4.0,
@@ -591,6 +638,7 @@ const bindings = new Set([
   'KeyZ',
   'KeyM',
   'KeyJ',
+  'KeyI',
   'KeyH',
   'KeyP',
   'Escape',
@@ -608,6 +656,12 @@ document.addEventListener('keydown', (e) => {
   if (!dialog.open && speech.handleKey(e)) return;
   if (!bindings.has(e.code)) return;
   if (dialog.open) {
+    if (dialogKind === 'story' && e.code === 'KeyI' && !e.repeat && !performancePlayer.active) {
+      e.preventDefault();
+      if ($('dialog-title').textContent === '旅の風呂敷') dialog.close();
+      else notebook.inventory();
+      return;
+    }
     if (
       !e.repeat &&
       ((dialogKind === 'story' && e.code === 'KeyJ') || (dialogKind === 'map' && e.code === 'KeyM') ||
@@ -632,6 +686,7 @@ document.addEventListener('keydown', (e) => {
     togglePhoto();
     return;
   }
+  if (e.code === 'KeyI' && !photoMode) { openDialog('inventory'); return; }
   if (e.code === 'KeyJ' && !photoMode) { openDialog('story'); return; }
   if (e.code === 'KeyM') {
     openDialog('map');
@@ -675,15 +730,32 @@ window.addEventListener('pagehide', event => {
   if (event.persisted === false && renderer && !renderer.getContext().isContextLost()) renderer.forceContextLoss();
 });
 function updateCamera(dt, snap = false) {
-  const blend = 1 - Math.exp(-dt * 6);
-  if (speech.active && conversationYaw !== null) {
-    if (keys.has('KeyQ') || keys.has('KeyR')) conversationYaw = null;
-    else yaw += Math.atan2(Math.sin(conversationYaw-yaw),Math.cos(conversationYaw-yaw))*blend;
+  // Staying by the counter keeps the same shot through the last set-down.
+  // Walking away, looking around, or opening the map immediately frees it.
+  const watching=storyWorld?.tidying && !photoMode && !dialog.open && !p.activity && !p.skiff &&
+    conversationShot && Math.hypot(p.x-conversationShot.focus.x,p.z-conversationShot.focus.z)<9;
+  if(!speech.active && !watching)conversationShot=null;
+  const action=speech.active && dialogue.frame?.action?.key;
+  if(action && conversationShot && !conversationShot.wide && conversationShot.action!==action){
+    const hand=storyWorld.actionFocus;
+    if(hand){
+      // The greeting can precede the choice of a dish or drawer. Once the
+      // worker reaches for it, reserve a view of that real working position.
+      const prior=conversationShot, next=storyWorld.conversationShot(camera.aspect,prior.yaw,false,hand);
+      if(next){
+        if(Math.cos(next.yaw-prior.yaw)<.94){
+          dissolveView();snap=true;conversationShot=next;
+        }
+        conversationShot.action=action;
+      }
+    }
   }
-  framing += ((speech.active ? 1 : 0)-framing)*blend;
-  const exhibit = speech.active && dialogue.frame?.action && storyWorld?.actionFocus;
-  if (exhibit) lastExhibit.copy(exhibit);
-  examining += ((exhibit ? 1 : 0)-examining)*blend;
+  const framed = !!conversationShot && (speech.active || watching);
+  if (shotVisible !== framed) {
+    dissolveView();
+    shotVisible = framed;
+    snap = true;
+  }
   const full = p.buffs.full > 0 ? 1.26 : 1,
     ride = p.mount === 'bike' ? 0.9 : p.mount === 'turtle' ? .99 : 0;
   // Let the body rise within the frame on takeoff. The camera catches up for
@@ -698,19 +770,33 @@ function updateCamera(dt, snap = false) {
   // berth sweeps the camera arm across low rims and roof posts during a soak.
   if (photoMode && bath) heroAt.set(bath.x, THREE.MathUtils.lerp(standingEye,bathEye,settle), bath.z);
   else heroAt.set(p.x, standingEye, p.z);
-  if (framing > .001) {
-    heroAt.lerp(conversationTarget, framing * .63);
-    if (examining > .001) heroAt.lerp(lastExhibit,examining*.95);
+  if (framed) {
+    const shot=conversationShot;
+    const subject=shot.wide && speech.active && storyWorld.actionFocus;
+    if (subject && dt>0 && !snap) {
+      // Hold the inspection lens still for a turn of the wrist. Follow only
+      // when the object is leaving the central area, as in a walking handoff.
+      projected.copy(subject).project(camera);
+      const overflow=Math.max(0,Math.abs(projected.x)-.42,Math.abs(projected.y)-.40);
+      if(overflow && projected.z<1){
+        heroAt.subVectors(subject,shot.focus);
+        const amount=Math.min(heroAt.length(),dt*Math.min(1.65,overflow*4.8));
+        shot.focus.addScaledVector(heroAt.normalize(),amount);
+      }
+    }
+    heroAt.copy(shot.focus);
   }
   if (snap || Math.abs(heroAt.x - focus.x) > BOUND || Math.abs(heroAt.z - focus.z) > BOUND) focus.copy(heroAt);
   else focus.lerp(heroAt, 1 - Math.exp(-dt * 13));
-  const sx = Math.sin(yaw),
-    sz = Math.cos(yaw),
+  const azimuth = framed ? conversationShot.yaw : yaw;
+  const sx = Math.sin(azimuth),
+    sz = Math.cos(azimuth),
     scenery = photoMode ? 0 : scrollCoverage(p.x,p.z),
-    d = distance * (1-.33*framing-.32*examining) * (full > 1 && photoMode ? 1.18 : 1) * (1+.14*scenery);
+    travelDistance=distance*(full > 1 && photoMode ? 1.18 : 1)*(1+.14*scenery),
+    d = framed ? conversationShot.distance : travelDistance;
   // At the horizon, hold the eye above ground and tilt up to follow an animal overhead.
-  const orbitPitch=photoMode ? pitch : Math.max(0,pitch);
-  const shoulder=scenery*Math.min(1,camera.aspect)*Math.min(1,d/5);
+  const orbitPitch = framed ? conversationShot.pitch : photoMode ? pitch : Math.max(0,pitch);
+  const shoulder = framed ? 0 : scenery*Math.min(1,camera.aspect)*Math.min(1,d/5);
   const dx = sx * Math.cos(orbitPitch) * d + sz*1.58*shoulder,
     dz = sz * Math.cos(orbitPitch) * d - sx*1.58*shoulder;
   let dy = Math.sin(orbitPitch) * d + (photoMode ? 0.1 : 0.62);
@@ -765,7 +851,7 @@ function updateCamera(dt, snap = false) {
   eye.y = Math.max(eye.y, eyeFloor + .2);
   camera.position.copy(eye);
   aim.copy(focus);
-  if (!photoMode) {
+  if (!photoMode && !framed) {
     if (bath) {
       aim.x += bath.x - p.x;
       aim.z += bath.z - p.z;
@@ -774,12 +860,12 @@ function updateCamera(dt, snap = false) {
     // Give the page to the animal directly ahead. An off-centre mochi keeps
     // the letter trajectory visible between the hero and its recipient.
     const lookAhead = 1.65 + .82*scenery + 1.9*travelCamera.lead*fraction;
-    aim.x += (sz*.4*shoulder-sx*lookAhead)*(1-settle)*(1-framing);
-    aim.z -= (sx*.4*shoulder+sz*lookAhead)*(1-settle)*(1-framing);
-    aim.y += (.53+.25*scenery)*(1-settle)*(1-framing*.6)*(1-examining)+(camera.aspect<.83 ? .27*settle : 0);
-  } else aim.y -= .13;
+    aim.x += (sz*.4*shoulder-sx*lookAhead)*(1-settle);
+    aim.z -= (sx*.4*shoulder+sz*lookAhead)*(1-settle);
+    aim.y += (.53+.25*scenery)*(1-settle)+(camera.aspect<.83 ? .27*settle : 0);
+  } else if (photoMode) aim.y -= .13;
   camera.lookAt(aim);
-  if (!photoMode && pitch < 0) camera.rotateX(-pitch*(1-settle));
+  if (!photoMode && !framed && pitch < 0) camera.rotateX(-pitch*(1-settle));
   camera.updateMatrixWorld();
 }
 const fullScore = new Intl.NumberFormat('ja-JP');
@@ -848,6 +934,7 @@ function updateHUD() {
     $('effects').textContent = effectsText;
     lastEffects = effectsText;
   }
+  $('parcel-count').textContent = carried.length + '品';
   const chapter = game.notebook.current();
   $('story-volume').textContent = chapter ? chapterLabel(game.notebook.index+1) + (game.notebook.index ? '　·　もち寄り帖' : '　·　旅控え') : '結び　·　もち寄り帖';
   $('story-title').textContent = chapter?.title || '祭のあとの一服';
@@ -885,20 +972,22 @@ function redrawMiniMap(targetSite) {
   if (photoMode) return;
   const region = goal?.kind === 'region' ? goal.id : null;
   const pin = goal && goal.kind !== 'region' ? goal : null;
-  drawMap(miniMap.canvas, state, yaw, region, false, pin, targetSite || trackedAnimal, '', miniMap.projection());
+  const tracked = targetSite || trackedAnimal;
+  drawMap(miniMap.canvas, state, yaw, region, false, pin, tracked, '', miniMap.projection(tracked || goal));
 }
 function openDialog(kind) {
   if (!renderer || dialog.open) return;
   speech.stop();
-  if (kind === 'story') unlock();
+  const folio = kind === 'story' || kind === 'inventory';
+  if (folio) unlock();
   clearInput();
   save();
   audioSettings.close();
   lastFocus = document.activeElement;
-  dialogKind = kind;
+  dialogKind = folio ? 'story' : kind;
   $('dialog-title').textContent = kind === 'map' ? '十七景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
   dialog.showModal();
-  if (kind === 'story') { notebook.open(); return; }
+  if (folio) { (kind === 'inventory' ? notebook.inventory : notebook.open)(); return; }
   if (kind === 'map') mapDialog();
   else if (kind === 'journal') journalDialog();
   else helpDialog('歩き方');
@@ -1021,6 +1110,7 @@ function helpDialog(tab) {
 }
 $('map').onclick = $('mini-button').onclick = () => openDialog('map');
 $('journal').onclick = () => openDialog('journal');
+$('parcel-bag').onclick = () => openDialog('inventory');
 $('guide').onclick = () => openDialog('guide');
 $('story-book').onclick = () => openDialog('story');
 $('dismiss').onclick = () => dialog.close();
@@ -1046,7 +1136,14 @@ function resize(force = false) {
   renderWidth = w;
   renderHeight = h;
   renderer.setDrawingBufferSize(w, h, pixelRatio);
-  camera.aspect = w / h;
+  const aspect = w / h;
+  if (conversationShot && shotVisible && camera.aspect !== aspect) {
+    const ratio=conversationShot.fit(aspect)/conversationShot.fit(camera.aspect);
+    const wide=conversationShot.wide;
+    if (wide) wide.distance *= wide.fit(aspect)/wide.fit(camera.aspect);
+    conversationShot.distance *= ratio;
+  }
+  camera.aspect = aspect;
   camera.fov = w < h ? 65 : 57;
   camera.updateProjectionMatrix();
   ink?.resize();
@@ -1101,7 +1198,8 @@ function frame(now) {
     Number(backward && !diveChord) -
     stick.y;
   const orbit = (Number(keys.has('KeyQ')) - Number(keys.has('KeyR'))) * delta * 1.65;
-  if (orbit) {
+  if (orbit && speech.active && conversationShot) conversationShot.yaw += orbit;
+  else if (orbit) {
     travelCamera.manualLook(orbit);
     yaw += orbit;
   }
@@ -1113,9 +1211,15 @@ function frame(now) {
       c = Math.cos(steering),
       s = Math.sin(steering),
       magnitude = following ? Math.max(1, Math.hypot(side, forward)) : 1;
+    if(Math.hypot(side,forward)>.14 || keys.has('Space') || jumpTouch){
+      if(speech.active)speech.stop();
+      conversationShot=null;
+    }
+    if(!speech.active && (orbit || look.id!==null))conversationShot=null;
+    const staging=speech.active && storyWorld.walkInput(p,delta);
     game.step(delta, {
-      x: (c * side - s * forward) / magnitude,
-      z: (-s * side - c * forward) / magnitude,
+      x: staging ? staging.x : (c * side - s * forward) / magnitude,
+      z: staging ? staging.z : (-s * side - c * forward) / magnitude,
       rightX: c,
       rightZ: -s,
       jump: (!swimming || p.diveDepth>0 || !p.grounded) && !diveChord && !diveTouch && (jumpTouch || keys.has('Space')),
@@ -1256,7 +1360,7 @@ async function boot() {
     const preparingWorld = prepareWorld(scene, camera, sceneryQuality);
     [world] = await Promise.all([finishInSlices(preparingWorld, preparation.signal), arrivalAssets]);
     world.setSceneryQuality(sceneryQuality);
-    storyWorld = createStoryWorld(scene, game.notebook, game.storyCollisions, () => actors?.hero);
+    storyWorld = createStoryWorld(scene, game.notebook, game.storyCollisions, () => actors?.hero, site => dialogue.pickupAt(site));
     storyWorld.update(state.time, p);
     meadow = createMeadow(scene, state.objects, coarse, state.npcs);
     wake = createWake(scene);

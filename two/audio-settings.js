@@ -23,7 +23,7 @@ function fillSoundtrack(table) {
 }
 
 export function createAudioSettings({
-  volumes, travelCameraEnabled, onTravelCameraChange, onChange, onOpen, onReset,
+  volumes, travelCameraEnabled, onTravelCameraChange, goalUpEnabled, onGoalUpChange, onChange, onOpen, onReset,
   sceneryQuality, onSceneryQualityChange,
 }) {
   const panel = document.getElementById('audio-settings');
@@ -36,6 +36,9 @@ export function createAudioSettings({
   const follow = document.getElementById('travel-camera');
   follow.checked = travelCameraEnabled;
   follow.addEventListener('change', () => onTravelCameraChange(follow.checked));
+  const goalUp = document.getElementById('mini-goal-up');
+  goalUp.checked = goalUpEnabled;
+  goalUp.addEventListener('change', () => onGoalUpChange(goalUp.checked));
   reset.addEventListener('click', () => {
     if (window.confirm('ほんとうにリセットしてもよいか？')) onReset();
   });

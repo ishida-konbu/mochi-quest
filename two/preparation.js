@@ -20,7 +20,7 @@ export async function finishInSlices(steps, signal) {
 // and costume dyes) are covered alongside the ordinary material maps.
 export function watchArrivalPaint(manager) {
   const { onStart, onProgress } = manager;
-  let loading = false, check;
+  let loading = false, check, idleCheck;
   manager.onStart = (...args) => {
     loading = true;
     onStart?.(...args);
@@ -53,13 +53,26 @@ export function watchArrivalPaint(manager) {
       if (complete()) return null;
       return new Promise((resolve, reject) => {
         check = () => {
-          if (complete()) resolve();
-          else if (!loading) reject(new Error('An image required for the opening view did not load'));
+          if (complete()) {
+            clearTimeout(idleCheck);
+            idleCheck = undefined;
+            resolve();
+          }
+          else if (!loading && idleCheck === undefined) {
+            // ImageLoader reports its last item before loadAsync consumers
+            // have copied the decoded image into their shared material.
+            idleCheck = setTimeout(() => {
+              idleCheck = undefined;
+              if (complete()) resolve();
+              else if (!loading) reject(new Error('An image required for the opening view did not load'));
+            }, 0);
+          }
         };
         check();
       });
     },
     close() {
+      clearTimeout(idleCheck);
       check = null;
       manager.onStart = onStart;
       manager.onProgress = onProgress;

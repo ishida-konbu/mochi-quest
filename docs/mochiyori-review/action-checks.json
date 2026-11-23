@@ -1,0 +1,4023 @@
+{
+  "date": "2026-11-24",
+  "description": "Mochi Quest 2 の制作時点における現地検証。配列は異なる二つの進入方向。演技と片付けはゲーム内秒、距離は掌の把持点から品の接触面まで。卓に置いている間は運搬距離の集計から除外した。cameraSamplesは横画面と縦画面で全景・寄りを合わせた観測数。",
+  "scenes": [
+    {
+      "id": "clue/leaf-marks",
+      "title": "舟形の敷き葉を拾う",
+      "chapterOrActivity": "十二個目の桜餅",
+      "place": "桜川の渡し場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        8.4,
+        9.1
+      ],
+      "fieldCleanupSeconds": [
+        8.5,
+        8.5
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/lunch-wrap",
+      "title": "桜の葉のことを聞く",
+      "chapterOrActivity": "十二個目の桜餅",
+      "place": "桜川の渡し場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        16.5,
+        15.0
+      ],
+      "fieldCleanupSeconds": [
+        10.6,
+        10.6
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ]
+    },
+    {
+      "id": "clue/joined-cake",
+      "title": "敷き葉を餅の裏に当てる",
+      "chapterOrActivity": "十二個目の桜餅",
+      "place": "桜川の渡し場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        7.6,
+        8.3
+      ],
+      "fieldCleanupSeconds": [
+        7.3,
+        7.3
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/warm-cakes",
+      "title": "今朝の支度を聞く",
+      "chapterOrActivity": "十二個目の桜餅",
+      "place": "桜川の渡し場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        18.1,
+        17.2
+      ],
+      "fieldCleanupSeconds": [
+        15.1,
+        14.5
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            2.28
+          ],
+          "receivingPalmGapCm": [
+            0.34,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proof/mystery_01/0",
+      "title": "ひとつの裏に、葉が二枚",
+      "chapterOrActivity": "十二個目の桜餅",
+      "place": "桜川の渡し場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        16.1,
+        16.8
+      ],
+      "fieldCleanupSeconds": [
+        12.2,
+        12.2
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ]
+    },
+    {
+      "id": "end/mystery_01",
+      "title": "桜川で受け取った帳面",
+      "chapterOrActivity": "十二個目の桜餅",
+      "place": "桜川の渡し場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        22.1,
+        21.1
+      ],
+      "fieldCleanupSeconds": [
+        20.5,
+        21.2
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            2.79,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/same-rice",
+      "title": "同じ袋から二包みもらう",
+      "chapterOrActivity": "穴のある蒸し箱",
+      "place": "棚田の米仕事場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        11.8,
+        14.2
+      ],
+      "fieldCleanupSeconds": [
+        10.9,
+        11.2
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/steam-test",
+      "title": "米を渡して蒸し比べる",
+      "chapterOrActivity": "穴のある蒸し箱",
+      "place": "峠の旅籠・蒸し場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        19.7,
+        18.7
+      ],
+      "fieldCleanupSeconds": [
+        10.8,
+        10.9
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/prototype",
+      "title": "上の段を外す",
+      "chapterOrActivity": "穴のある蒸し箱",
+      "place": "楓葉の湯・橋大工の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        7.1,
+        6.8
+      ],
+      "fieldCleanupSeconds": [
+        11.7,
+        10.0
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/packing-bars",
+      "title": "荷造り台で三本の桟を拾う",
+      "chapterOrActivity": "穴のある蒸し箱",
+      "place": "蔵町の市・荷造り場",
+      "beats": 5,
+      "fieldActionSeconds": [
+        15.1,
+        16.9
+      ],
+      "fieldCleanupSeconds": [
+        6.8,
+        8.4
+      ],
+      "cameraSamples": [
+        30,
+        30
+      ],
+      "handoffs": [
+        {
+          "beat": 5,
+          "carryingPalmGapCm": [
+            1.14,
+            0.64
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/steam-repair",
+      "title": "三本の桟を渡して段の間に挟む",
+      "chapterOrActivity": "穴のある蒸し箱",
+      "place": "峠の旅籠・蒸し場",
+      "beats": 6,
+      "fieldActionSeconds": [
+        23.2,
+        24.3
+      ],
+      "fieldCleanupSeconds": [
+        22.3,
+        22.4
+      ],
+      "cameraSamples": [
+        36,
+        36
+      ]
+    },
+    {
+      "id": "proof/mystery_02/0",
+      "title": "湯気の通り道",
+      "chapterOrActivity": "穴のある蒸し箱",
+      "place": "峠の旅籠・蒸し場",
+      "beats": 5,
+      "fieldActionSeconds": [
+        18.9,
+        19.2
+      ],
+      "fieldCleanupSeconds": [
+        16.7,
+        16.3
+      ],
+      "cameraSamples": [
+        30,
+        30
+      ]
+    },
+    {
+      "id": "end/mystery_02",
+      "title": "三本ひと組の合印",
+      "chapterOrActivity": "穴のある蒸し箱",
+      "place": "峠の旅籠・蒸し場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        24.2,
+        23.8
+      ],
+      "fieldCleanupSeconds": [
+        17.8,
+        18.0
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            3.1,
+            1.39
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/wedding-filling",
+      "title": "祝い餅を割り、底の模様を写す",
+      "chapterOrActivity": "花嫁の餅は誰のもの",
+      "place": "狐の嫁入り道の荷置き場",
+      "beats": 5,
+      "fieldActionSeconds": [
+        15.1,
+        15.4
+      ],
+      "fieldCleanupSeconds": [
+        20.6,
+        18.1
+      ],
+      "cameraSamples": [
+        30,
+        30
+      ]
+    },
+    {
+      "id": "clue/walnut-filling",
+      "title": "試作を割り、底の模様を写す",
+      "chapterOrActivity": "花嫁の餅は誰のもの",
+      "place": "薄野の小寺・供え台",
+      "beats": 5,
+      "fieldActionSeconds": [
+        19.6,
+        19.4
+      ],
+      "fieldCleanupSeconds": [
+        19.1,
+        18.6
+      ],
+      "cameraSamples": [
+        30,
+        30
+      ]
+    },
+    {
+      "id": "clue/mended-cloth",
+      "title": "二枚の写しを渡し、試し布を借りる",
+      "chapterOrActivity": "花嫁の餅は誰のもの",
+      "place": "羅生門の上階",
+      "beats": 4,
+      "fieldActionSeconds": [
+        15.1,
+        27.1
+      ],
+      "fieldCleanupSeconds": [
+        11.4,
+        11.6
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0,
+            0
+          ],
+          "receivingPalmGapCm": [
+            2.52,
+            0.86
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/cloth-test",
+      "title": "借りた布で二つの餅を試す",
+      "chapterOrActivity": "花嫁の餅は誰のもの",
+      "place": "大仏殿前の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        17.2,
+        18.0
+      ],
+      "fieldCleanupSeconds": [
+        16.2,
+        16.2
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/steaming-witness",
+      "title": "誰が白餡を包んだか聞く",
+      "chapterOrActivity": "花嫁の餅は誰のもの",
+      "place": "大仏殿前の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        20.2,
+        19.4
+      ],
+      "fieldCleanupSeconds": [
+        24.4,
+        24.8
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/wedding-tray",
+      "title": "盆をどこへ運んだか聞く",
+      "chapterOrActivity": "花嫁の餅は誰のもの",
+      "place": "大仏殿前の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        15.0,
+        13.7
+      ],
+      "fieldCleanupSeconds": [
+        9.3,
+        9.3
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/flute-witness",
+      "title": "目にした工程を聞く",
+      "chapterOrActivity": "花嫁の餅は誰のもの",
+      "place": "狐の嫁入り道の荷置き場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        10.3,
+        10.3
+      ],
+      "fieldCleanupSeconds": [
+        8.1,
+        8.1
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_03/0",
+      "title": "中身を見比べる",
+      "chapterOrActivity": "花嫁の餅は誰のもの",
+      "place": "大仏殿前の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        17.0,
+        17.7
+      ],
+      "fieldCleanupSeconds": [
+        15.6,
+        15.1
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_03/1",
+      "title": "蒸し場から婚礼の盆へ",
+      "chapterOrActivity": "花嫁の餅は誰のもの",
+      "place": "大仏殿前の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        32.2,
+        31.8
+      ],
+      "fieldCleanupSeconds": [
+        25.1,
+        25.2
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0.0,
+            1.07
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "end/mystery_03",
+      "title": "作り手札に二つの名前",
+      "chapterOrActivity": "花嫁の餅は誰のもの",
+      "place": "大仏殿前の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        23.4,
+        24.5
+      ],
+      "fieldCleanupSeconds": [
+        23.4,
+        23.0
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            2.96,
+            3.14
+          ],
+          "receivingPalmGapCm": [
+            0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/crescent-case",
+      "title": "両港の箱の見取図を重ねる",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "堺の陶器屋・積み場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        17.2,
+        15.5
+      ],
+      "fieldCleanupSeconds": [
+        14.5,
+        14.0
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/sakai-boards",
+      "title": "受け取った敷板を中敷きに合わせる",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "堺の陶器屋・積み場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        16.9,
+        17.0
+      ],
+      "fieldCleanupSeconds": [
+        15.4,
+        14.3
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/tsuruga-plates",
+      "title": "丸皿と復路の控えを合わせる",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "敦賀の昆布屋・積み場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        16.5,
+        16.5
+      ],
+      "fieldCleanupSeconds": [
+        14.9,
+        14.9
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/spare-case",
+      "title": "半端に空いた箱を尋ねる",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "敦賀の昆布屋・積み場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        15.4,
+        16.9
+      ],
+      "fieldCleanupSeconds": [
+        15.5,
+        15.6
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/terrace-letter",
+      "title": "米と道具を持参する便りを預かる",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "棚田の米仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        15.4,
+        123.8
+      ],
+      "fieldCleanupSeconds": [
+        8.3,
+        11.5
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/changed-day",
+      "title": "棚田の便りを手渡し、返事を受け取る",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "京の米屋・中央の蔵",
+      "beats": 5,
+      "fieldActionSeconds": [
+        55.2,
+        73.4
+      ],
+      "fieldCleanupSeconds": [
+        42.8,
+        29.0
+      ],
+      "cameraSamples": [
+        30,
+        30
+      ],
+      "handoffs": [
+        {
+          "beat": 1,
+          "carryingPalmGapCm": [
+            0,
+            0
+          ],
+          "receivingPalmGapCm": [
+            2.19,
+            0.0
+          ]
+        },
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            2.73,
+            1.36
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            1.05,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0
+          ]
+        },
+        {
+          "beat": 5,
+          "carryingPalmGapCm": [
+            0.0,
+            0.16
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/ship-instruction",
+      "title": "港へ八重の返事を届ける",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "堺の陶器屋・積み場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        26.2,
+        25.3
+      ],
+      "fieldCleanupSeconds": [
+        11.0,
+        15.4
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 1,
+          "carryingPalmGapCm": [
+            0.0,
+            0.93
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/dawn-delivery",
+      "title": "浦の餅つき場へ返事を運ぶ",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "初日の出の浦・餅つき場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        29.5,
+        30.5
+      ],
+      "fieldCleanupSeconds": [
+        14.7,
+        16.5
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0.71,
+            1.71
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/inari-delivery",
+      "title": "稲荷の陸荷へ新しい札を結ぶ",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "狐の嫁入り道の荷置き場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        17.9,
+        18.3
+      ],
+      "fieldCleanupSeconds": [
+        16.4,
+        15.6
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 1,
+          "carryingPalmGapCm": [
+            0,
+            0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            1.67
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proof/mystery_04/0",
+      "title": "箱の往路と復路",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "堺の陶器屋・積み場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        17.9,
+        17.6
+      ],
+      "fieldCleanupSeconds": [
+        19.8,
+        19.8
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_04/1",
+      "title": "消えた中身",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "堺の陶器屋・積み場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        17.4,
+        17.3
+      ],
+      "fieldCleanupSeconds": [
+        14.8,
+        14.8
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "end/mystery_04",
+      "title": "ゆく荷、かえる荷、海に残った荷",
+      "chapterOrActivity": "二つの港に着いた一つの荷",
+      "place": "堺の陶器屋・積み場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        16.6,
+        16.3
+      ],
+      "fieldCleanupSeconds": [
+        14.8,
+        14.3
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/entrusted-steamer",
+      "title": "工房の蒸籠と札を合わせる",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "笹舟の湯・竹細工の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        16.2,
+        15.4
+      ],
+      "fieldCleanupSeconds": [
+        16.5,
+        25.3
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/mountain-tea",
+      "title": "弥平への茶を竹筒に詰めてもらう",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "桃山の団子茶屋・旅人の休み場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        17.8,
+        20.8
+      ],
+      "fieldCleanupSeconds": [
+        14.0,
+        14.2
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.83,
+            1.02
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/rest-wish",
+      "title": "竹筒を開け、弥平と山茶を分ける",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "桃林の月門",
+      "beats": 9,
+      "fieldActionSeconds": [
+        29.0,
+        27.5
+      ],
+      "fieldCleanupSeconds": [
+        22.5,
+        21.4
+      ],
+      "cameraSamples": [
+        54,
+        54
+      ]
+    },
+    {
+      "id": "clue/broken-hinge",
+      "title": "浜の網と欠けた金具を調べる",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "松原沖を望む浜",
+      "beats": 3,
+      "fieldActionSeconds": [
+        11.8,
+        14.7
+      ],
+      "fieldCleanupSeconds": [
+        4.0,
+        5.2
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/palace-consent",
+      "title": "箱を捜す訳を話す",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "竜宮御殿一階・上陸段の板間",
+      "beats": 3,
+      "fieldActionSeconds": [
+        13.9,
+        12.0
+      ],
+      "fieldCleanupSeconds": [
+        7.3,
+        7.2
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/matched-hinge",
+      "title": "浜の金具を箱の割れ目に当てる",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "竜宮御殿一階・上陸段の板間",
+      "beats": 3,
+      "fieldActionSeconds": [
+        16.0,
+        15.1
+      ],
+      "fieldCleanupSeconds": [
+        14.1,
+        13.8
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/old-manifest",
+      "title": "内筒を開き、品と照合する",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "竜宮御殿一階・上陸段の板間",
+      "beats": 6,
+      "fieldActionSeconds": [
+        26.7,
+        32.2
+      ],
+      "fieldCleanupSeconds": [
+        26.9,
+        25.5
+      ],
+      "cameraSamples": [
+        36,
+        36
+      ],
+      "handoffs": [
+        {
+          "beat": 6,
+          "carryingPalmGapCm": [
+            0.0,
+            2.69
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            2.21
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/returned-tools",
+      "title": "海から戻った品を手渡す",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "松原の網仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        29.2,
+        31.6
+      ],
+      "fieldCleanupSeconds": [
+        19.2,
+        13.0
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 1,
+          "carryingPalmGapCm": [
+            1.42,
+            1.91
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proof/mystery_05/0",
+      "title": "山で休む人",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "笹舟の湯・竹細工の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        19.9,
+        18.4
+      ],
+      "fieldCleanupSeconds": [
+        12.3,
+        12.2
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_05/1",
+      "title": "海で預かった道具",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "笹舟の湯・竹細工の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        25.4,
+        27.9
+      ],
+      "fieldCleanupSeconds": [
+        20.8,
+        23.3
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0.0,
+            0.86
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "end/mystery_05",
+      "title": "品は戻り、人は休む",
+      "chapterOrActivity": "祭から消えた職人",
+      "place": "笹舟の湯・竹細工の仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        21.8,
+        20.2
+      ],
+      "fieldCleanupSeconds": [
+        13.9,
+        14.0
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/purchase-list",
+      "title": "豆蔵から買い物控えをもらう",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "蔵町の市・荷造り場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        30.4,
+        33.1
+      ],
+      "fieldCleanupSeconds": [
+        11.2,
+        11.2
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0,
+            0.92
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/old-tool-marks",
+      "title": "紙を当てて道具の墨拓を取る",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "桜川の渡し場",
+      "beats": 5,
+      "fieldActionSeconds": [
+        22.7,
+        22.3
+      ],
+      "fieldCleanupSeconds": [
+        18.1,
+        18.0
+      ],
+      "cameraSamples": [
+        30,
+        30
+      ]
+    },
+    {
+      "id": "clue/loaned-boards",
+      "title": "配膳板の貸出札の写しを預かる",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "大仏殿前の仕事場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        27.8,
+        21.8
+      ],
+      "fieldCleanupSeconds": [
+        17.2,
+        17.2
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0,
+            0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/regional-returns",
+      "title": "三つの品を照合帳に綴じる",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "評定所の白洲",
+      "beats": 4,
+      "fieldActionSeconds": [
+        28.0,
+        26.2
+      ],
+      "fieldCleanupSeconds": [
+        15.8,
+        16.0
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/kyoto-set",
+      "title": "京の印を確かめ、返却札を受け取る",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "大路の茶屋・配膳所",
+      "beats": 4,
+      "fieldActionSeconds": [
+        9.4,
+        11.4
+      ],
+      "fieldCleanupSeconds": [
+        5.3,
+        5.4
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            3.03,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/withdrawal-cover",
+      "title": "見出しをめくり、本文と比べる",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        14.2,
+        13.0
+      ],
+      "fieldCleanupSeconds": [
+        12.2,
+        11.6
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_06/0",
+      "title": "一組とは何か",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        17.4,
+        17.9
+      ],
+      "fieldCleanupSeconds": [
+        12.4,
+        12.4
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_06/1",
+      "title": "人の手にある品",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        18.8,
+        17.3
+      ],
+      "fieldCleanupSeconds": [
+        12.6,
+        12.7
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_06/2",
+      "title": "海の事故の後始末",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        17.8,
+        19.1
+      ],
+      "fieldCleanupSeconds": [
+        12.7,
+        12.5
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_06/3",
+      "title": "十五組目",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        17.7,
+        16.5
+      ],
+      "fieldCleanupSeconds": [
+        17.1,
+        16.1
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_06/4",
+      "title": "受け取りと辞退",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        30.1,
+        31.0
+      ],
+      "fieldCleanupSeconds": [
+        20.3,
+        14.2
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "end/mystery_06",
+      "title": "中止の沙汰を待つ",
+      "chapterOrActivity": "空っぽの蔵の裁き",
+      "place": "評定所の白洲",
+      "beats": 4,
+      "fieldActionSeconds": [
+        23.0,
+        21.9
+      ],
+      "fieldCleanupSeconds": [
+        15.3,
+        15.6
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ]
+    },
+    {
+      "id": "clue/dated-inquiry",
+      "title": "棚田の二通を日付順に並べる",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "棚田の米仕事場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        15.8,
+        17.2
+      ],
+      "fieldCleanupSeconds": [
+        13.3,
+        13.5
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/dawn-hearing",
+      "title": "朝吉とうめに聞き直す",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "初日の出の浦・餅つき場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        18.3,
+        16.9
+      ],
+      "fieldCleanupSeconds": [
+        12.2,
+        10.4
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/reversed-tags",
+      "title": "京に届いた箱の札を表に向ける",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "京の米屋・中央の蔵",
+      "beats": 3,
+      "fieldActionSeconds": [
+        21.1,
+        22.1
+      ],
+      "fieldCleanupSeconds": [
+        19.4,
+        19.4
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/paid-change",
+      "title": "荷積み順と支払い控えを照合する",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "敦賀の昆布屋・積み場",
+      "beats": 3,
+      "fieldActionSeconds": [
+        16.9,
+        16.5
+      ],
+      "fieldCleanupSeconds": [
+        12.3,
+        12.1
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "clue/joint-work",
+      "title": "お冬の花印を押した札を預かる",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "雪の宿の店先",
+      "beats": 3,
+      "fieldActionSeconds": [
+        12.9,
+        9.2
+      ],
+      "fieldCleanupSeconds": [
+        5.9,
+        6.7
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.64
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/continued-work",
+      "title": "花印の札を渡し、望にも印をもらう",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "薄野の小寺・供え台",
+      "beats": 3,
+      "fieldActionSeconds": [
+        33.7,
+        28.3
+      ],
+      "fieldCleanupSeconds": [
+        18.0,
+        21.6
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 1,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/submission-check",
+      "title": "受理記録の写しを預かる",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "評定所の白洲",
+      "beats": 4,
+      "fieldActionSeconds": [
+        24.5,
+        25.2
+      ],
+      "fieldCleanupSeconds": [
+        12.3,
+        12.4
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            2.68,
+            2.26
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/omission-copy",
+      "title": "受理記録と版元の注文控えを照らし合わせる",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        39.8,
+        50.5
+      ],
+      "fieldCleanupSeconds": [
+        17.2,
+        17.6
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 1,
+          "carryingPalmGapCm": [
+            2.43,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0,
+            0
+          ],
+          "receivingPalmGapCm": [
+            1.66,
+            0.41
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proof/mystery_07/0",
+      "title": "表紙の下の署名",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "評定所の白洲",
+      "beats": 2,
+      "fieldActionSeconds": [
+        13.7,
+        15.3
+      ],
+      "fieldCleanupSeconds": [
+        11.7,
+        11.7
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "proof/mystery_07/1",
+      "title": "受領の、そのあと",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        22.0,
+        20.3
+      ],
+      "fieldCleanupSeconds": [
+        15.3,
+        15.6
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_07/2",
+      "title": "八重に届いた言葉",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        17.7,
+        19.3
+      ],
+      "fieldCleanupSeconds": [
+        12.4,
+        12.4
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_07/3",
+      "title": "下書きか、実際の指示か",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        21.3,
+        18.9
+      ],
+      "fieldCleanupSeconds": [
+        9.7,
+        9.5
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            1.92,
+            3.09
+          ],
+          "receivingPalmGapCm": [
+            0,
+            0.83
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proof/mystery_07/4",
+      "title": "量を減らす返事",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        20.8,
+        22.5
+      ],
+      "fieldCleanupSeconds": [
+        15.6,
+        15.4
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "proof/mystery_07/5",
+      "title": "提出した人の手",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "評定所の白洲",
+      "beats": 3,
+      "fieldActionSeconds": [
+        22.9,
+        21.3
+      ],
+      "fieldCleanupSeconds": [
+        19.1,
+        19.1
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "end/mystery_07",
+      "title": "差配の札を置くとき",
+      "chapterOrActivity": "もち寄り祭を盗んだ人",
+      "place": "評定所の白洲",
+      "beats": 4,
+      "fieldActionSeconds": [
+        20.0,
+        21.8
+      ],
+      "fieldCleanupSeconds": [
+        15.9,
+        15.8
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ]
+    },
+    {
+      "id": "clue/port-wages",
+      "title": "大飾りの見積もりを開く",
+      "chapterOrActivity": "十七の土地が、同じ席につく",
+      "place": "京の米屋・中央の蔵",
+      "beats": 3,
+      "fieldActionSeconds": [
+        26.0,
+        25.2
+      ],
+      "fieldCleanupSeconds": [
+        8.9,
+        8.9
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.56,
+            1.45
+          ],
+          "receivingPalmGapCm": [
+            0.21,
+            1.11
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/peach-invitation",
+      "title": "桃林の招待状を手渡す",
+      "chapterOrActivity": "十七の土地が、同じ席につく",
+      "place": "桃林の月門",
+      "beats": 4,
+      "fieldActionSeconds": [
+        32.4,
+        33.3
+      ],
+      "fieldCleanupSeconds": [
+        24.4,
+        14.8
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 1,
+          "carryingPalmGapCm": [
+            0.0,
+            1.12
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/palace-invitation",
+      "title": "水際で招待を手渡す",
+      "chapterOrActivity": "十七の土地が、同じ席につく",
+      "place": "竜宮御殿一階・上陸段の板間",
+      "beats": 4,
+      "fieldActionSeconds": [
+        29.7,
+        29.1
+      ],
+      "fieldCleanupSeconds": [
+        12.3,
+        12.5
+      ],
+      "cameraSamples": [
+        24,
+        24
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            2.59,
+            2.96
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/lidded-bowl",
+      "title": "真珠餅を試し、蓋付きの水鉢を受け取る",
+      "chapterOrActivity": "十七の土地が、同じ席につく",
+      "place": "堺の陶器屋・積み場",
+      "beats": 6,
+      "fieldActionSeconds": [
+        21.5,
+        23.5
+      ],
+      "fieldCleanupSeconds": [
+        14.8,
+        14.6
+      ],
+      "cameraSamples": [
+        36,
+        36
+      ],
+      "handoffs": [
+        {
+          "beat": 6,
+          "carryingPalmGapCm": [
+            1.62,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            2.73,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clue/seats-for-crew",
+      "title": "配膳の交代と席を相談する",
+      "chapterOrActivity": "十七の土地が、同じ席につく",
+      "place": "大路の茶屋・配膳所",
+      "beats": 3,
+      "fieldActionSeconds": [
+        15.4,
+        17.5
+      ],
+      "fieldCleanupSeconds": [
+        8.4,
+        9.4
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "end/festival",
+      "title": "十七景が同じ卓につく",
+      "chapterOrActivity": "十七の土地が、同じ席につく",
+      "place": "京の米屋・中央の蔵",
+      "beats": 5,
+      "fieldActionSeconds": [
+        33.5,
+        34.6
+      ],
+      "fieldCleanupSeconds": [
+        22.3,
+        22.9
+      ],
+      "cameraSamples": [
+        30,
+        30
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0.15,
+            0.03
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/river",
+      "title": "舟に見立てた桜葉",
+      "chapterOrActivity": "土地の餅",
+      "place": "桜川の渡し場",
+      "beats": 5,
+      "fieldActionSeconds": [
+        17.5,
+        16.8
+      ],
+      "fieldCleanupSeconds": [
+        7.8,
+        7.8
+      ],
+      "cameraSamples": [
+        26,
+        26
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            1.97,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/shrine",
+      "title": "笹の留めをほどく",
+      "chapterOrActivity": "土地の餅",
+      "place": "笹舟の湯・竹細工の仕事場",
+      "beats": 5,
+      "fieldActionSeconds": [
+        16.2,
+        17.6
+      ],
+      "fieldCleanupSeconds": [
+        7.6,
+        8.0
+      ],
+      "cameraSamples": [
+        26,
+        26
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0.92,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/market",
+      "title": "角餅を割って炒り豆を見る",
+      "chapterOrActivity": "土地の餅",
+      "place": "蔵町の市・荷造り場",
+      "beats": 5,
+      "fieldActionSeconds": [
+        13.9,
+        10.9
+      ],
+      "fieldCleanupSeconds": [
+        2.5,
+        2.5
+      ],
+      "cameraSamples": [
+        26,
+        26
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0.0,
+            0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            3.2
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/spring",
+      "title": "湯気の中の胡桃味噌",
+      "chapterOrActivity": "土地の餅",
+      "place": "峠の旅籠・蒸し場",
+      "beats": 5,
+      "fieldActionSeconds": [
+        13.5,
+        14.9
+      ],
+      "fieldCleanupSeconds": [
+        3.8,
+        3.8
+      ],
+      "cameraSamples": [
+        26,
+        26
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            1.01,
+            1.01
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/terraces",
+      "title": "穂の花餅の米粒",
+      "chapterOrActivity": "土地の餅",
+      "place": "棚田の米仕事場",
+      "beats": 5,
+      "fieldActionSeconds": [
+        15.1,
+        13.6
+      ],
+      "fieldCleanupSeconds": [
+        2.5,
+        2.5
+      ],
+      "cameraSamples": [
+        26,
+        26
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0.89,
+            0.96
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/coast",
+      "title": "浜塩餅に海苔を巻く",
+      "chapterOrActivity": "土地の餅",
+      "place": "松原の網仕事場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        27.3,
+        14.0
+      ],
+      "fieldCleanupSeconds": [
+        10.0,
+        7.9
+      ],
+      "cameraSamples": [
+        20,
+        20
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/snow",
+      "title": "寒風の凍み餅を取り分ける",
+      "chapterOrActivity": "土地の餅",
+      "place": "雪の宿の店先",
+      "beats": 5,
+      "fieldActionSeconds": [
+        12.2,
+        12.4
+      ],
+      "fieldCleanupSeconds": [
+        3.9,
+        3.9
+      ],
+      "cameraSamples": [
+        26,
+        26
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            2.29,
+            1.96
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/autumn",
+      "title": "栗の焼き餅の焼き色",
+      "chapterOrActivity": "土地の餅",
+      "place": "楓葉の湯・橋大工の仕事場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        8.8,
+        11.7
+      ],
+      "fieldCleanupSeconds": [
+        6.1,
+        4.8
+      ],
+      "cameraSamples": [
+        20,
+        20
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            1.29,
+            1.29
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/moon",
+      "title": "薄野の月見あわ餅",
+      "chapterOrActivity": "土地の餅",
+      "place": "薄野の小寺・供え台",
+      "beats": 4,
+      "fieldActionSeconds": [
+        18.7,
+        15.4
+      ],
+      "fieldCleanupSeconds": [
+        22.0,
+        16.1
+      ],
+      "cameraSamples": [
+        20,
+        20
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/dawn",
+      "title": "紅白を一緒に配る",
+      "chapterOrActivity": "土地の餅",
+      "place": "初日の出の浦・餅つき場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        11.8,
+        13.0
+      ],
+      "fieldCleanupSeconds": [
+        6.5,
+        6.6
+      ],
+      "cameraSamples": [
+        20,
+        20
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/kyo",
+      "title": "重ね餅の薄い層",
+      "chapterOrActivity": "土地の餅",
+      "place": "京の米屋・中央の蔵",
+      "beats": 4,
+      "fieldActionSeconds": [
+        14.2,
+        11.2
+      ],
+      "fieldCleanupSeconds": [
+        9.0,
+        16.4
+      ],
+      "cameraSamples": [
+        20,
+        20
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0
+          ],
+          "receivingPalmGapCm": [
+            1.85,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/peach",
+      "title": "桃しずく餅を木陰で",
+      "chapterOrActivity": "土地の餅",
+      "place": "桃林の月門",
+      "beats": 5,
+      "fieldActionSeconds": [
+        12.6,
+        14.8
+      ],
+      "fieldCleanupSeconds": [
+        3.8,
+        3.8
+      ],
+      "cameraSamples": [
+        26,
+        26
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0.66,
+            0.46
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/ryugu",
+      "title": "水に揺れる真珠餅",
+      "chapterOrActivity": "土地の餅",
+      "place": "竜宮御殿一階・上陸段の板間",
+      "beats": 4,
+      "fieldActionSeconds": [
+        15.8,
+        10.8
+      ],
+      "fieldCleanupSeconds": [
+        5.4,
+        10.7
+      ],
+      "cameraSamples": [
+        20,
+        20
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            2.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            1.3,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/todaiji",
+      "title": "蓮のちぎり餅を分ける",
+      "chapterOrActivity": "土地の餅",
+      "place": "大仏殿前の仕事場",
+      "beats": 5,
+      "fieldActionSeconds": [
+        13.1,
+        15.0
+      ],
+      "fieldCleanupSeconds": [
+        3.8,
+        3.8
+      ],
+      "cameraSamples": [
+        26,
+        26
+      ],
+      "handoffs": [
+        {
+          "beat": 4,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/inari",
+      "title": "二つの角をそろえて",
+      "chapterOrActivity": "土地の餅",
+      "place": "狐の嫁入り道の荷置き場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        11.8,
+        9.8
+      ],
+      "fieldCleanupSeconds": [
+        10.0,
+        11.6
+      ],
+      "cameraSamples": [
+        20,
+        20
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/tsuruga",
+      "title": "昆布巻き餅の食べごろ",
+      "chapterOrActivity": "土地の餅",
+      "place": "敦賀の昆布屋・積み場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        25.5,
+        15.5
+      ],
+      "fieldCleanupSeconds": [
+        9.1,
+        8.5
+      ],
+      "cameraSamples": [
+        20,
+        20
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "food/sakai",
+      "title": "片面ずつの胡麻",
+      "chapterOrActivity": "土地の餅",
+      "place": "堺の陶器屋・積み場",
+      "beats": 4,
+      "fieldActionSeconds": [
+        15.1,
+        14.1
+      ],
+      "fieldCleanupSeconds": [
+        8.2,
+        8.4
+      ],
+      "cameraSamples": [
+        20,
+        20
+      ],
+      "handoffs": [
+        {
+          "beat": 3,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "request/festival",
+      "title": "祭の招待状を預かる",
+      "chapterOrActivity": "十七の土地が、同じ席につく",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        18.5,
+        23.6
+      ],
+      "fieldCleanupSeconds": [
+        10.8,
+        8.5
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 1,
+          "carryingPalmGapCm": [
+            3.03,
+            0.8
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            2.13,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_01_01",
+      "title": "櫂の釣り合い",
+      "chapterOrActivity": "聞き込み",
+      "place": "桜川の渡し場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        13.7,
+        12.2
+      ],
+      "fieldCleanupSeconds": [
+        12.4,
+        12.2
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_01_02",
+      "title": "店先の花筏",
+      "chapterOrActivity": "聞き込み",
+      "place": "桜川の渡し場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        16.9,
+        17.7
+      ],
+      "fieldCleanupSeconds": [
+        11.4,
+        11.4
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_01_03",
+      "title": "浅瀬を測る",
+      "chapterOrActivity": "聞き込み",
+      "place": "桜川の渡し場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        11.6,
+        11.0
+      ],
+      "fieldCleanupSeconds": [
+        7.3,
+        10.2
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_02_01",
+      "title": "曲げわっぱの縁",
+      "chapterOrActivity": "聞き込み",
+      "place": "笹舟の湯・竹細工の仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        20.0,
+        19.8
+      ],
+      "fieldCleanupSeconds": [
+        10.0,
+        9.9
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "rest/character_02_01",
+      "title": "木陰の湯呑み",
+      "chapterOrActivity": "桃林での休養",
+      "place": "桃林の月門",
+      "beats": 3,
+      "fieldActionSeconds": [
+        14.8,
+        13.3
+      ],
+      "fieldCleanupSeconds": [
+        10.5,
+        10.5
+      ],
+      "cameraSamples": [
+        18,
+        18
+      ]
+    },
+    {
+      "id": "guest/character_02_01",
+      "title": "仕事道具の代わりに",
+      "chapterOrActivity": "祭の客",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        16.9,
+        13.9
+      ],
+      "fieldCleanupSeconds": [
+        18.9,
+        9.2
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 1,
+          "carryingPalmGapCm": [
+            2.55,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_02_02",
+      "title": "笹を向かい合わせに",
+      "chapterOrActivity": "聞き込み",
+      "place": "笹舟の湯・竹細工の仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        14.5,
+        14.8
+      ],
+      "fieldCleanupSeconds": [
+        11.6,
+        11.6
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "guest/character_02_02",
+      "title": "今日は客の皿",
+      "chapterOrActivity": "祭の客",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.4,
+        17.4
+      ],
+      "fieldCleanupSeconds": [
+        10.5,
+        10.5
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 1,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_03_01",
+      "title": "勘定の分とおまけ",
+      "chapterOrActivity": "聞き込み",
+      "place": "蔵町の市・荷造り場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        21.3,
+        19.5
+      ],
+      "fieldCleanupSeconds": [
+        12.4,
+        16.9
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0,
+            0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_03_02",
+      "title": "反物の端の色",
+      "chapterOrActivity": "聞き込み",
+      "place": "蔵町の市・荷造り場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        16.6,
+        17.6
+      ],
+      "fieldCleanupSeconds": [
+        14.5,
+        14.5
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_03_03",
+      "title": "甕のひとすくい",
+      "chapterOrActivity": "聞き込み",
+      "place": "蔵町の市・荷造り場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.1,
+        14.0
+      ],
+      "fieldCleanupSeconds": [
+        11.1,
+        11.2
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_03_04",
+      "title": "旅荷の結び方",
+      "chapterOrActivity": "聞き込み",
+      "place": "蔵町の市・荷造り場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.0,
+        14.6
+      ],
+      "fieldCleanupSeconds": [
+        14.8,
+        15.1
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_04_01",
+      "title": "湯上がりの注文",
+      "chapterOrActivity": "聞き込み",
+      "place": "峠の旅籠・蒸し場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        14.2,
+        14.5
+      ],
+      "fieldCleanupSeconds": [
+        12.4,
+        12.4
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_04_02",
+      "title": "蒸し直した味噌餅",
+      "chapterOrActivity": "聞き込み",
+      "place": "峠の旅籠・蒸し場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.4,
+        16.5
+      ],
+      "fieldCleanupSeconds": [
+        8.3,
+        8.3
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_04_03",
+      "title": "湯口の掃除",
+      "chapterOrActivity": "聞き込み",
+      "place": "峠の旅籠・蒸し場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        12.7,
+        11.2
+      ],
+      "fieldCleanupSeconds": [
+        8.5,
+        8.6
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_05_01",
+      "title": "畦と米の分け前",
+      "chapterOrActivity": "聞き込み",
+      "place": "棚田の米仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        13.1,
+        14.6
+      ],
+      "fieldCleanupSeconds": [
+        10.7,
+        10.6
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_05_02",
+      "title": "俵を座らせる",
+      "chapterOrActivity": "聞き込み",
+      "place": "棚田の米仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        7.5,
+        7.2
+      ],
+      "fieldCleanupSeconds": [
+        6.0,
+        6.4
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_05_03",
+      "title": "半搗きのひと粒",
+      "chapterOrActivity": "聞き込み",
+      "place": "棚田の米仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        6.1,
+        7.0
+      ],
+      "fieldCleanupSeconds": [
+        4.6,
+        4.6
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_06_01",
+      "title": "浜に上がった網",
+      "chapterOrActivity": "聞き込み",
+      "place": "松原の網仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        18.5,
+        16.9
+      ],
+      "fieldCleanupSeconds": [
+        12.2,
+        12.4
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_06_02",
+      "title": "網を繕う手",
+      "chapterOrActivity": "聞き込み",
+      "place": "松原の網仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        17.0,
+        17.3
+      ],
+      "fieldCleanupSeconds": [
+        12.4,
+        12.4
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_06_03",
+      "title": "海へ出る前の一服",
+      "chapterOrActivity": "聞き込み",
+      "place": "松原の網仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        53.9,
+        67.6
+      ],
+      "fieldCleanupSeconds": [
+        15.0,
+        22.3
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            3.12,
+            0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            1.25
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_07_01",
+      "title": "寒風から戻した餅",
+      "chapterOrActivity": "聞き込み",
+      "place": "雪の宿の店先",
+      "beats": 2,
+      "fieldActionSeconds": [
+        14.8,
+        12.8
+      ],
+      "fieldCleanupSeconds": [
+        16.6,
+        12.7
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_07_02",
+      "title": "煤を落としてから",
+      "chapterOrActivity": "聞き込み",
+      "place": "雪の宿の店先",
+      "beats": 2,
+      "fieldActionSeconds": [
+        8.6,
+        7.4
+      ],
+      "fieldCleanupSeconds": [
+        14.1,
+        15.1
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_07_03",
+      "title": "宿に残すひと灯",
+      "chapterOrActivity": "聞き込み",
+      "place": "雪の宿の店先",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.3,
+        14.8
+      ],
+      "fieldCleanupSeconds": [
+        9.9,
+        10.0
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_07_04",
+      "title": "灯の骨組み",
+      "chapterOrActivity": "聞き込み",
+      "place": "雪の宿の店先",
+      "beats": 2,
+      "fieldActionSeconds": [
+        25.2,
+        23.4
+      ],
+      "fieldCleanupSeconds": [
+        11.3,
+        11.6
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_08_01",
+      "title": "石の上の焼き加減",
+      "chapterOrActivity": "聞き込み",
+      "place": "楓葉の湯・橋大工の仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        12.8,
+        14.3
+      ],
+      "fieldCleanupSeconds": [
+        10.3,
+        14.5
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_08_02",
+      "title": "板に指を走らせる",
+      "chapterOrActivity": "聞き込み",
+      "place": "楓葉の湯・橋大工の仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        10.5,
+        10.9
+      ],
+      "fieldCleanupSeconds": [
+        9.1,
+        9.6
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_09_01",
+      "title": "月見のひとつ",
+      "chapterOrActivity": "聞き込み",
+      "place": "薄野の小寺・供え台",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.8,
+        18.4
+      ],
+      "fieldCleanupSeconds": [
+        20.1,
+        18.6
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0.0,
+            2.97
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_09_02",
+      "title": "供え台の支度",
+      "chapterOrActivity": "聞き込み",
+      "place": "薄野の小寺・供え台",
+      "beats": 2,
+      "fieldActionSeconds": [
+        19.3,
+        17.0
+      ],
+      "fieldCleanupSeconds": [
+        12.4,
+        12.5
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_10_01",
+      "title": "杵を上げる拍子",
+      "chapterOrActivity": "聞き込み",
+      "place": "初日の出の浦・餅つき場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.3,
+        16.8
+      ],
+      "fieldCleanupSeconds": [
+        8.7,
+        9.0
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_10_02",
+      "title": "半拍早い返し手",
+      "chapterOrActivity": "聞き込み",
+      "place": "初日の出の浦・餅つき場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        14.0,
+        16.0
+      ],
+      "fieldCleanupSeconds": [
+        10.3,
+        10.8
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_10_03",
+      "title": "置いていい場所",
+      "chapterOrActivity": "聞き込み",
+      "place": "初日の出の浦・餅つき場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        21.7,
+        22.1
+      ],
+      "fieldCleanupSeconds": [
+        9.0,
+        9.1
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_11_01",
+      "title": "みんなで買う道具",
+      "chapterOrActivity": "聞き込み",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        23.0,
+        25.3
+      ],
+      "fieldCleanupSeconds": [
+        11.2,
+        11.2
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "guest/character_11_01",
+      "title": "札のない手で",
+      "chapterOrActivity": "祭の客",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        7.0,
+        7.0
+      ],
+      "fieldCleanupSeconds": [
+        5.9,
+        5.9
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_11_02",
+      "title": "支払うべき勘定",
+      "chapterOrActivity": "聞き込み",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        19.8,
+        18.7
+      ],
+      "fieldCleanupSeconds": [
+        11.0,
+        11.0
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_11_03",
+      "title": "聞き終わるまで",
+      "chapterOrActivity": "聞き込み",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        14.2,
+        16.9
+      ],
+      "fieldCleanupSeconds": [
+        14.3,
+        11.3
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            1.68,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_11_04",
+      "title": "かぎ裂きを繕う",
+      "chapterOrActivity": "聞き込み",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        12.5,
+        12.7
+      ],
+      "fieldCleanupSeconds": [
+        13.1,
+        13.1
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_11_05",
+      "title": "鐘を撞く前に",
+      "chapterOrActivity": "聞き込み",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        11.8,
+        13.0
+      ],
+      "fieldCleanupSeconds": [
+        11.7,
+        11.7
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_11_06",
+      "title": "同じ版のかすれ",
+      "chapterOrActivity": "聞き込み",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        8.5,
+        8.5
+      ],
+      "fieldCleanupSeconds": [
+        5.6,
+        5.8
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_11_07",
+      "title": "聞いたままに記す",
+      "chapterOrActivity": "聞き込み",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        14.3,
+        15.6
+      ],
+      "fieldCleanupSeconds": [
+        9.7,
+        9.6
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_11_08",
+      "title": "空いた盆を戻す",
+      "chapterOrActivity": "聞き込み",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        18.1,
+        16.6
+      ],
+      "fieldCleanupSeconds": [
+        15.3,
+        14.8
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_11_09",
+      "title": "次の辻に灯を渡す",
+      "chapterOrActivity": "聞き込み",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        17.5,
+        18.4
+      ],
+      "fieldCleanupSeconds": [
+        7.9,
+        6.6
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_12_01",
+      "title": "木陰で休む支度",
+      "chapterOrActivity": "聞き込み",
+      "place": "桃林の月門",
+      "beats": 2,
+      "fieldActionSeconds": [
+        18.1,
+        16.3
+      ],
+      "fieldCleanupSeconds": [
+        15.2,
+        17.2
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0,
+            0
+          ],
+          "receivingPalmGapCm": [
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "guest/character_12_01",
+      "title": "桃の葉を描いた包み",
+      "chapterOrActivity": "祭の客",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.5,
+        16.2
+      ],
+      "fieldCleanupSeconds": [
+        11.2,
+        11.2
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_12_02",
+      "title": "木陰の一席",
+      "chapterOrActivity": "聞き込み",
+      "place": "桃林の月門",
+      "beats": 2,
+      "fieldActionSeconds": [
+        19.6,
+        18.6
+      ],
+      "fieldCleanupSeconds": [
+        12.6,
+        12.7
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_12_03",
+      "title": "来客に合わせる",
+      "chapterOrActivity": "聞き込み",
+      "place": "桃林の月門",
+      "beats": 2,
+      "fieldActionSeconds": [
+        13.0,
+        13.4
+      ],
+      "fieldCleanupSeconds": [
+        9.5,
+        9.8
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_13_01",
+      "title": "八本の腕と一本の筆",
+      "chapterOrActivity": "聞き込み",
+      "place": "竜宮御殿一階・上陸段の板間",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.1,
+        13.1
+      ],
+      "fieldCleanupSeconds": [
+        10.0,
+        10.0
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "guest/character_13_01",
+      "title": "今日は筆を置いて",
+      "chapterOrActivity": "祭の客",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        4.5,
+        4.5
+      ],
+      "fieldCleanupSeconds": [
+        10.1,
+        10.1
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_13_02",
+      "title": "内海の小皿",
+      "chapterOrActivity": "聞き込み",
+      "place": "竜宮御殿一階・上陸段の板間",
+      "beats": 2,
+      "fieldActionSeconds": [
+        6.7,
+        5.5
+      ],
+      "fieldCleanupSeconds": [
+        7.7,
+        12.2
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_13_03",
+      "title": "話し始める前の一拍",
+      "chapterOrActivity": "聞き込み",
+      "place": "竜宮御殿一階・上陸段の板間",
+      "beats": 2,
+      "fieldActionSeconds": [
+        13.0,
+        14.5
+      ],
+      "fieldCleanupSeconds": [
+        9.5,
+        9.7
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_13_04",
+      "title": "水門の案内",
+      "chapterOrActivity": "聞き込み",
+      "place": "竜宮御殿一階・上陸段の板間",
+      "beats": 2,
+      "fieldActionSeconds": [
+        12.9,
+        13.8
+      ],
+      "fieldCleanupSeconds": [
+        9.8,
+        9.8
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_14_01",
+      "title": "配膳を最後まで",
+      "chapterOrActivity": "聞き込み",
+      "place": "大仏殿前の仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        17.1,
+        17.6
+      ],
+      "fieldCleanupSeconds": [
+        11.1,
+        9.3
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            2.76,
+            2.89
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            3.08
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_14_02",
+      "title": "二枚の紙を分ける",
+      "chapterOrActivity": "聞き込み",
+      "place": "大仏殿前の仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.1,
+        13.9
+      ],
+      "fieldCleanupSeconds": [
+        11.0,
+        11.0
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_14_03",
+      "title": "足元に置いた盆",
+      "chapterOrActivity": "聞き込み",
+      "place": "大仏殿前の仕事場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        11.5,
+        10.2
+      ],
+      "fieldCleanupSeconds": [
+        8.0,
+        7.9
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_15_01",
+      "title": "角を折らずに包む",
+      "chapterOrActivity": "聞き込み",
+      "place": "狐の嫁入り道の荷置き場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        10.3,
+        10.7
+      ],
+      "fieldCleanupSeconds": [
+        10.3,
+        10.3
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_15_02",
+      "title": "婚礼の受け渡し",
+      "chapterOrActivity": "聞き込み",
+      "place": "狐の嫁入り道の荷置き場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        10.6,
+        10.3
+      ],
+      "fieldCleanupSeconds": [
+        11.9,
+        9.8
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_15_03",
+      "title": "笛の穴をならす",
+      "chapterOrActivity": "聞き込み",
+      "place": "狐の嫁入り道の荷置き場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        11.8,
+        11.8
+      ],
+      "fieldCleanupSeconds": [
+        8.8,
+        8.8
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_16_01",
+      "title": "昆布を戻す水",
+      "chapterOrActivity": "聞き込み",
+      "place": "敦賀の昆布屋・積み場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        13.1,
+        13.0
+      ],
+      "fieldCleanupSeconds": [
+        16.6,
+        14.9
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_16_02",
+      "title": "結んでもう一度",
+      "chapterOrActivity": "聞き込み",
+      "place": "敦賀の昆布屋・積み場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        14.8,
+        13.3
+      ],
+      "fieldCleanupSeconds": [
+        11.2,
+        10.3
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_16_03",
+      "title": "絵を入れた旅包み",
+      "chapterOrActivity": "聞き込み",
+      "place": "敦賀の昆布屋・積み場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.6,
+        15.6
+      ],
+      "fieldCleanupSeconds": [
+        16.5,
+        16.5
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_16_04",
+      "title": "次に直す人のために",
+      "chapterOrActivity": "聞き込み",
+      "place": "敦賀の昆布屋・積み場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.9,
+        15.5
+      ],
+      "fieldCleanupSeconds": [
+        16.1,
+        16.1
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_17_01",
+      "title": "桟橋を行く札",
+      "chapterOrActivity": "聞き込み",
+      "place": "堺の陶器屋・積み場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        26.6,
+        21.4
+      ],
+      "fieldCleanupSeconds": [
+        14.1,
+        12.0
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            0.0,
+            0.0
+          ],
+          "receivingPalmGapCm": [
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "guest/character_17_01",
+      "title": "運び終えた人の番",
+      "chapterOrActivity": "祭の客",
+      "place": "京の米屋・中央の蔵",
+      "beats": 2,
+      "fieldActionSeconds": [
+        14.8,
+        14.2
+      ],
+      "fieldCleanupSeconds": [
+        17.8,
+        14.0
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ],
+      "handoffs": [
+        {
+          "beat": 2,
+          "carryingPalmGapCm": [
+            1.58,
+            1.09
+          ],
+          "receivingPalmGapCm": [
+            0.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "talk/character_17_02",
+      "title": "金具の当たり",
+      "chapterOrActivity": "聞き込み",
+      "place": "堺の陶器屋・積み場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        11.6,
+        12.1
+      ],
+      "fieldCleanupSeconds": [
+        7.4,
+        8.5
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_17_03",
+      "title": "縁の高い皿、浅い皿",
+      "chapterOrActivity": "聞き込み",
+      "place": "堺の陶器屋・積み場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        13.3,
+        13.2
+      ],
+      "fieldCleanupSeconds": [
+        12.2,
+        12.2
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    },
+    {
+      "id": "talk/character_17_04",
+      "title": "まず荷を見てから",
+      "chapterOrActivity": "聞き込み",
+      "place": "堺の陶器屋・積み場",
+      "beats": 2,
+      "fieldActionSeconds": [
+        15.6,
+        15.6
+      ],
+      "fieldCleanupSeconds": [
+        12.3,
+        12.3
+      ],
+      "cameraSamples": [
+        12,
+        12
+      ]
+    }
+  ]
+}
