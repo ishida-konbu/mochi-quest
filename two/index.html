@@ -284,6 +284,22 @@
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
     <link rel="modulepreload" href="./main.js?v=onsen-motion-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
+    <style>
+      #loading-tip {
+        max-inline-size: 38em;
+        margin: clamp(10px, 2.5vh, 24px) auto 0;
+        padding-inline: 8px;
+        font: 500 clamp(14px, 2vw, 17px)/1.65 var(--min);
+        text-wrap: pretty;
+      }
+      #loading-tip strong {
+        margin-inline-end: .7em;
+        color: var(--red);
+        white-space: nowrap;
+      }
+      #loading-tip + #loading-copy { margin-top: 8px; }
+      #loading:has(#load-actions:not([hidden])) #loading-tip { display: none; }
+    </style>
   </head>
   <body>
     <main id="stage">
@@ -408,7 +424,7 @@
           ><button id="leave-photo">旅に戻る</button>
         </div>
       </div>
-      <div id="loading" role="status">
+      <div id="loading">
         <div class="loading-folio">
           <div class="loading-scroll">
             <header class="loading-caption">
@@ -423,7 +439,35 @@
               alt="桜川の渡し。卯助が籠を載せた舟に竿をさし、岸のおはなが手を振る。"
             />
           </div>
-          <span id="loading-copy">絵巻をひらいています…</span>
+          <p id="loading-tip"><strong>旅の豆知識</strong><span id="loading-tip-copy"></span></p>
+          <span id="loading-copy" role="status">絵巻をひらいています…</span>
+          <script>
+            {
+              const tips = [
+                '電動自転車なら遠出もすいすい。返却はどのポートでも。乗り捨て厳禁！',
+                '木や岩に引っかかったら、草餅モード。すり抜けて道に戻ろう。',
+                '団子は転がり続けるほど速くなる。長い一本道は、絶好の転がりどころ。',
+                '羽二重餅でジャンプを長押しすると空へ。山の上から飛び立てば、もっと高くまで届くよ。',
+                '桜川の大きなカメには乗れる。のんびりした顔でも、進むほど速くなる。',
+                'MPが心細くなったら白餅に戻ろう。少しずつ力が戻ってくるよ。',
+                'きなこ餅の三条通知は一度に八方向。背脂ラーメンで満腹なら、なんと二十四方向！',
+                '漫画を読むと、しばらく足が速くなる。お餅の速足の秘訣は読書にあり。',
+                '地図の「茶」は団子茶屋。縁台で団子とお茶をいただけば、HPもMPも満タンに。',
+                '地図の朱色の「♨」はその土地の主湯。青墨の「湯」は道中にひっそり湧く脇湯。',
+                '桜川を行き来する高瀬舟には、舟べりから乗れる。今日は橋を下から眺めてみよう。',
+                '届け先を探すなら配達帳。動物を選ぶと、まだ通知を届けていない一匹の方角がわかるよ。',
+                '次に誰を訪ねるか迷ったら、帳面の「いまの頼まれごと」から道しるべを付けよう。',
+                '職人の手元をもう一度見たくなったら、帳面の「場面の回想」を開いてみよう。',
+                '清水寺の鐘は、三条通知でも鳴らせる。鐘楼の柱の間から、鐘をめがけて一投！',
+                '夕暮れの京で、松明を持った衛士を見かけたら後を追ってみよう。街角の篝火が順にともる。',
+                '桃源郷では、花桃の下で兎と蛙が相撲を取っている。旅の途中に一番、見物はいかが。',
+                '東大寺の参道には、鹿にお辞儀を返す兎がいる。二匹が顔を合わせたら足を止めてみよう。',
+                '桜川の餅屋の暖簾には、桜葉にのせた花筏餅をひとつ、そっと差し出す蛙がいるよ。',
+                'カメラを開くと、お餅の表情を選べる。湯上がりの一枚、今日はどんな顔にしよう？',
+              ];
+              document.getElementById('loading-tip-copy').textContent = tips[Math.floor(Math.random() * tips.length)];
+            }
+          </script>
         </div>
         <div id="load-actions" hidden>
           <button type="button" id="load-retry" class="choice">読み込み直す</button>
