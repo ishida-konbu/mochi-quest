@@ -21,7 +21,7 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=mochiyori-dialogue-1" />
+    <link rel="stylesheet" href="./game.css?v=wayfinding-1" />
     <script type="importmap">
       {
         "imports": {
@@ -137,7 +137,7 @@
           "./inari-rain.js": "./inari-rain.js?v=inari-rain-1",
           "./inari-weather.js": "./inari-weather.js?v=inari-rain-1",
           "./ink.js": "./ink.js?v=handscroll-arrival-1",
-          "./interface.js": "./interface.js?v=mochiyori-dialogue-1",
+          "./interface.js": "./interface.js?v=wayfinding-1",
           "./kagami-fern.js": "./kagami-fern.js?v=6.3",
           "./kagami-mochibana.js": "./kagami-mochibana.js?v=6.5",
           "./mochibana-rice.js": "./mochibana-rice.js?v=6.5",
@@ -145,9 +145,9 @@
           "./kagami-paper.js": "./kagami-paper.js?v=6.1",
           "./kagami-surfaces.js": "./kagami-surfaces.js?v=5.2",
           "./interiors.js": "./interiors.js?v=3.3",
-          "./journey-transfer.js": "./journey-transfer.js?v=audio-controls-1-reset1",
+          "./journey-transfer.js": "./journey-transfer.js?v=wayfinding-1",
           "./legend-flight.js": "./legend-flight.js?v=ryu-emaki-1",
-          "./map.js": "./map.js?v=kyoto-market-highways-1",
+          "./map.js": "./map.js?v=wayfinding-1",
           "./meadow-herbs.js": "./meadow-herbs.js?v=emaki-landscape-1",
           "./meadow-layout.js": "./meadow-layout.js?v=amimoto-yudono-1",
           "./meadow.js": "./meadow.js?v=emaki-landscape-1",
@@ -280,7 +280,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=mochiyori-dialogue-1" />
+    <link rel="modulepreload" href="./main.js?v=wayfinding-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -331,7 +331,16 @@
         <span class="book-stitch" aria-hidden="true"></span><small id="story-volume">第一話</small>
         <strong id="story-title">十二個目の桜餅</strong><span class="book-turn" aria-hidden="true">›</span>
       </button>
-      <div id="target" hidden></div>
+      <section id="target" aria-label="道しるべ" hidden>
+        <span class="guide-mochi" aria-hidden="true"></span>
+        <div class="guide-inscription">
+          <strong id="target-name"></strong>
+          <div class="guide-bearing">
+            <span id="target-mark" aria-hidden="true"></span><span id="target-direction"></span>
+            <span id="target-distance"></span><span id="target-elevation"></span>
+          </div>
+        </div>
+      </section>
       <div class="place">
         <span><i></i>現在地</span>
         <h1 id="region">桜川の渡し</h1>
@@ -370,9 +379,21 @@
         <div class="dock-label">変身</div>
         <div id="modes"></div>
       </div>
-      <button id="mini-button" aria-label="絵巻地図を開く">
-        <canvas id="minimap" width="180" height="180"></canvas>
-      </button>
+      <section id="mini-chart" aria-label="小地図">
+        <button id="mini-button" type="button" aria-label="絵巻地図を開く" aria-haspopup="dialog" title="絵巻地図を開く（M）">
+          <canvas id="minimap" width="180" height="180" aria-hidden="true"></canvas>
+        </button>
+        <div class="mini-tools">
+          <label class="mini-size">
+            <select aria-label="小地図の表示サイズ" title="小地図の表示サイズ">
+              <option value="small">小</option><option value="medium" selected>中</option><option value="large">大</option>
+            </select>
+          </label>
+          <button type="button" data-mini-zoom="out" aria-label="小地図を縮小" title="縮小">−</button>
+          <button type="button" data-mini-zoom="in" aria-label="小地図を拡大" title="拡大">＋</button>
+        </div>
+        <output class="mini-zoom" aria-label="小地図の拡大率">1×</output>
+      </section>
       <div class="keyline">
         <span><kbd>WASD</kbd> 移動</span><span><kbd>Space</kbd> <span id="space-hint">跳ぶ・連打で伸びる</span></span
         ><span><kbd>Z</kbd> 三条通知</span><span><kbd>E</kbd> 乗降・調べる</span
@@ -457,7 +478,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=mochiyori-dialogue-1').catch(error => {
+      import('./main.js?v=wayfinding-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'

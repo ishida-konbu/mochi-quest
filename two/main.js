@@ -24,16 +24,19 @@ import { SCROLL_FAUNA, faunaDrawing, FAUNA_SHEET } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { seaPortrait } from './ryugu-performers.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
-import { WAYSIDE_SITES } from './wayside-hut-layout.js';
-import { REGIONS, regionAt, canDiveAt, waterSurfaceAt, terrainHeight, terrainContactHeight, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
+import { openAtlas } from './atlas-dialog.js';
+import { REGIONS, canDiveAt, waterSurfaceAt, terrainHeight, terrainContactHeight, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
 import { palaceInteriorAt, palaceStoreyAt } from './ryugu-layout.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
 import { inariWeatherAt } from './inari-weather.js';
 import { createAudio, normalizeVolumes } from '../sound.js';
 import { createAudioSettings } from './audio-settings.js';
+import { createMiniMap } from './mini-map.js';
+import { atlasDestinations } from './atlas-destinations.js';
+import { guideBearing, restoreMapGoal, savedMapGoal } from './wayfinding.js';
 import { MODES, EMOTES, HELP, glyph, paintGlyphs, drawFace } from './interface.js';
-import { loadMapPaper, drawMap, mapHit, mapCoordinates, labels, regionPort, mappedBath } from './map.js';
+import { loadMapPaper, drawMap } from './map.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('scene'),
@@ -80,7 +83,7 @@ async function startJourney() {
   const hash = window.pendingMochiJourney;
   delete window.pendingMochiJourney;
   if (!hash || location.origin !== WORKER_ORIGIN) return local;
-  const incoming = decodeTransfer(location.origin, hash, createGame, REGIONS);
+  const incoming = decodeTransfer(location.origin, hash, createGame);
   if (!incoming) return { ...local, status: '引き継ぐ記録を読み取れませんでした。' };
   try {
     if (localStorage.getItem(saveKey) !== null && !await confirmJourney(local.game, incoming.game))
@@ -93,6 +96,7 @@ async function startJourney() {
 }
 paintGlyphs();
 const { game, settings: savedSettings, status: transferStatus } = await startJourney();
+const miniMap = createMiniMap($('mini-chart'), savedSettings.minimap, persistSettings);
 let hasJourney = game.restored;
 const state = game.state,
   p = state.player;
@@ -106,8 +110,9 @@ let pitch = 0.23,
   distance = 6.55,
   priorCamera = null,
   photoMode = false;
-let goal = REGIONS.some((r) => r.id === savedSettings.goal) ? savedSettings.goal : null;
-let trackedAnimal = null, trackedHabitat = null, jumpPin = null;
+const mapDestinations = atlasDestinations(state);
+let goal = restoreMapGoal(savedSettings.goal, mapDestinations);
+let trackedAnimal = null, trackedHabitat = null;
 const speciesNames = { frog:'蛙', rabbit:'兎', turtle:'ミツユビハコガメ',
   ...Object.fromEntries(Object.entries({...SPECIES,...SEA_SPECIES,...SCROLL_FAUNA}).map(([type,spec])=>[type,type==='bird'?'丹頂鶴':spec.label])) };
 function nearestUndelivered(type, habitat) {
@@ -122,8 +127,7 @@ function nearestUndelivered(type, habitat) {
 let photoTime = state.time,
   active = false,
   dialogKind = '',
-  lastFocus = null,
-  selectedPlace = state.regionId;
+  lastFocus = null;
 let speechExpires = 0,
   toastExpires = 0,
   nextHUD = 0,
@@ -187,7 +191,10 @@ window.addEventListener('storage', event => {
   if (event.key === settingsKey) canSaveJourney();
 });
 function journeySettings() {
-  return { sound: audible, volumes, yaw: photoMode ? priorCamera.yaw : yaw, goal, resetAt: savedSettings.resetAt };
+  return {
+    sound: audible, volumes, yaw: photoMode ? priorCamera.yaw : yaw,
+    goal: savedMapGoal(goal), minimap: miniMap.settings, resetAt: savedSettings.resetAt,
+  };
 }
 function persistSettings() {
   if (canSaveJourney()) store(settingsKey, journeySettings());
@@ -225,7 +232,7 @@ function dispatchEvents() {
     }
     if (e.type === 'message') message(e.text);
     if (e.type === 'score') message('三条通知が届いた　＋' + e.value, 1.1);
-    if (e.type === 'stamp' && goal === e.id) {
+    if (e.type === 'stamp' && goal?.id === e.id) {
       goal = null;
       persistSettings();
     }
@@ -278,6 +285,14 @@ const dialogue = createStoryDialogue(game.notebook, {
 function pinnedStorySite() {
   const id = game.notebook.pin;
   return id && dialogue.leads().find(lead => lead.id === id)?.site;
+}
+function applyAtlasGoal(destination) {
+  game.notebook.track(null);
+  trackedAnimal = trackedHabitat = null;
+  goal = destination;
+  unlock();
+  save();
+  updateHUD();
 }
 let conversationYaw = null;
 const conversationTarget = new THREE.Vector3();
@@ -336,7 +351,7 @@ const audioSettings = createAudioSettings({
   },
   onReset() {
     if (!canSaveJourney()) return;
-    const preferences = { sound: audible, volumes, yaw: 0, goal: null, resetAt: Date.now() };
+    const preferences = { sound: audible, volumes, yaw: 0, goal: null, minimap: miniMap.settings, resetAt: Date.now() };
     try {
       replaceJourney(localStorage, preferences, null);
     } catch {
@@ -831,21 +846,24 @@ function updateHUD() {
     el.firstElementChild.textContent = n % 3 === 0 ? directions[(((n / 3) % 8) + 8) % 8] : '';
   });
   const targetSite = pinnedStorySite();
-  const dest = targetSite || trackedAnimal || REGIONS.find(r => r.id === goal);
+  const dest = targetSite || trackedAnimal || goal;
   $('target').hidden = !dest;
   if (dest) {
-    const dx = wrapDelta(dest.x - p.x),
-      dz = wrapDelta(dest.z - p.z),
-      heading = Math.atan2(dx, -dz) + yaw;
-    const pointer = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'][
-      ((Math.round(heading / (Math.PI / 4)) % 8) + 8) % 8
-    ];
-    const name = targetSite ? targetSite.name : trackedAnimal ? speciesNames[dest.type] : dest.name;
-    const height = targetSite ? targetSite.y - p.y : trackedAnimal ? trackedAnimal.y - p.y : dest.id === 'ryugu' ? Math.min(0,terrainHeight(dest.x,dest.z)+1-p.y) : 0;
-    const elevation = Math.abs(height) > 2 ? '　' + (height > 0 ? '上 ' : '下 ') + Math.round(Math.abs(height)) + ' m' : '';
-    $('target').textContent = pointer + '　' + name + '　' + Math.round(Math.hypot(dx, dz)) + ' m' + elevation;
+    const height = Number.isFinite(dest.y) ? dest.y - p.y :
+      dest.id === 'ryugu' ? Math.min(0, terrainHeight(dest.x, dest.z) + 1 - p.y) : 0;
+    const cue = guideBearing(p, dest, yaw, height);
+    $('target').dataset.pose = cue.pose;
+    $('target-name').textContent = trackedAnimal && !targetSite ? speciesNames[dest.type] : dest.name;
+    $('target-mark').textContent = cue.mark;
+    $('target-direction').textContent = cue.label;
+    $('target-distance').textContent = cue.distance + ' m';
+    $('target-elevation').textContent = cue.elevation;
   }
-  if (!photoMode) drawMap($('minimap'), state, yaw, goal, false, null, targetSite || trackedAnimal);
+  if (!photoMode) {
+    const region = goal?.kind === 'region' ? goal.id : null;
+    const pin = goal && goal.kind !== 'region' ? goal : null;
+    drawMap(miniMap.canvas, state, yaw, region, false, pin, targetSite || trackedAnimal, '', miniMap.projection());
+  }
 }
 function openDialog(kind) {
   if (!renderer || dialog.open) return;
@@ -859,83 +877,32 @@ function openDialog(kind) {
   $('dialog-title').textContent = kind === 'map' ? '十七景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
   dialog.showModal();
   if (kind === 'story') { notebook.open(); return; }
-  if (kind === 'map') {
-    selectedPlace = pinnedStorySite()?.region || goal || state.regionId;
-    jumpPin = null;
-    mapDialog();
-  } else if (kind === 'journal') journalDialog();
+  if (kind === 'map') mapDialog();
+  else if (kind === 'journal') journalDialog();
   else helpDialog('歩き方');
 }
 function mapDialog() {
-  const body = $('dialog-content');
-  body.innerHTML =
-    '<div class="atlas-layout"><canvas class="map-canvas" id="atlas" width="540" height="540"></canvas><div class="map-caption"><div class="map-places"></div><p class="map-detail" aria-live="polite"></p><div class="actions"><button class="jump-link" id="set-goal">ここを道しるべにする</button><button class="choice" id="local-animal" hidden>この地の動物に届ける</button><button class="choice" id="clear-goal">道しるべを外す</button></div></div></div>';
-  for (const [i, r] of REGIONS.entries()) {
-    const b = document.createElement('button');
-    b.innerHTML = '<em>' + labels[i] + '</em> ' + r.name;
-    b.dataset.id = r.id;
-    b.onclick = () => selectMap(r.id);
-    body.querySelector('.map-places').append(b);
-  }
-  const caption = body.querySelector('.map-caption');
-  if (p.mode === 'kagami') {
-    const jump = document.createElement('button'); jump.className='jump-link'; jump.id='map-jump';
-    jump.textContent='この印へ瞬間移動';
-    const hint = document.createElement('p'); hint.className='map-hint';
-    hint.textContent='地図をタップして移動先を選べます。矢印キーでも印を動かせます。';
-    caption.append(hint); caption.querySelector('.actions').prepend(jump);
-    jump.onclick = () => {
-      const point = jumpPin || REGIONS.find(r=>r.id===selectedPlace);
-      if (!game.teleport(point.x,point.z)) { hint.textContent='近くに降りられる場所を選んでください。'; return; }
+  const story = pinnedStorySite();
+  openAtlas($('dialog-content'), {
+    state, yaw, destinations:mapDestinations, initialRegion:story?.region || trackedAnimal?.habitat || state.regionId,
+    goal, recipient:story || trackedAnimal,
+    recipientName:story?.name || (trackedAnimal ? speciesNames[trackedAnimal.type] : ''), coarse,
+    setGoal:applyAtlasGoal, close:()=>{ lastFocus=canvas; dialog.close(); },
+    canDeliver:id=>Boolean(nearestUndelivered(undefined,id)),
+    deliver:id=>trackDelivery(nearestUndelivered(undefined,id),id),
+    openBook:()=>{ dialogKind='journal'; $('dialog-title').textContent='三条通知の配達帳'; journalDialog(); },
+    teleport:point=>{
+      if (!game.teleport(point.x,point.z)) return false;
       lastFocus=canvas; dialog.close(); updateCamera(0,true); dispatchEvents(); updateHUD(); save();
-    };
-    $('atlas').tabIndex=0;
-    $('atlas').onkeydown = e => {
-      const delta={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
-      if (!delta) return;
-      e.preventDefault();
-      const point=jumpPin || REGIONS.find(r=>r.id===selectedPlace);
-      const step=e.shiftKey ? 1 : 8;
-      jumpPin={x:wrapDelta(point.x+delta[0]*step),z:wrapDelta(point.z+delta[1]*step)};
-      redrawAtlas();
-    };
-  }
-  $('atlas').onclick = e => {
-    const r = mapHit($('atlas'),e);
-    if (r) selectMap(r.id);
-    if (p.mode==='kagami') { jumpPin=mapCoordinates($('atlas'),e); redrawAtlas(); }
-  };
-  const bookLink=document.createElement('button');
-  bookLink.className='choice'; bookLink.textContent='配達帳を開く';
-  bookLink.onclick=()=>{dialogKind='journal';$('dialog-title').textContent='三条通知の配達帳';journalDialog();};
-  body.querySelector('.actions').append(bookLink);
-  $('set-goal').onclick = () => {
-    trackedAnimal = trackedHabitat = null;
-    game.notebook.track(null);
-    goal = selectedPlace;
-    lastFocus = canvas;
-    persistSettings();
-    dialog.close();
-    updateHUD();
-  };
-  $('local-animal').onclick=()=>trackDelivery(nearestUndelivered(undefined,selectedPlace),selectedPlace);
-  $('clear-goal').hidden = !goal && !trackedAnimal && !game.notebook.pin;
-  $('clear-goal').onclick = () => {
-    game.notebook.track(null);
-    trackedAnimal = trackedHabitat = null;
-    goal = null;
-    lastFocus = canvas;
-    persistSettings();
-    dialog.close();
-    updateHUD();
-  };
-  selectMap(selectedPlace);
+      return true;
+    },
+  });
 }
 function trackDelivery(animal, habitat=null) {
   if(!animal) return;
   game.notebook.track(null);
   trackedAnimal=animal; trackedHabitat=habitat; goal=null;
-  persistSettings();lastFocus=canvas;dialog.close();updateHUD();
+  unlock();save();lastFocus=canvas;dialog.close();updateHUD();
 }
 function journalDialog() {
   const body=$('dialog-content');
@@ -983,64 +950,6 @@ function journalDialog() {
     body.querySelector('.ledger-animals').append(row);
   }
   dialog.scrollTop=0;
-}
-function redrawAtlas() {
-  const point = jumpPin || (p.mode==='kagami' ? REGIONS.find(r=>r.id===selectedPlace) : null);
-  const storyTarget = pinnedStorySite();
-  const name = storyTarget?.name || (trackedAnimal ? speciesNames[trackedAnimal.type] : '');
-  const atlas = $('atlas');
-  atlas.setAttribute('aria-label', '十七の名所、主湯と脇湯、茶屋と小屋、お餅の現在地と選んだ名所の自転車ポート' + (storyTarget ? '、調査先の' + name : name ? '、配達先の' + name + 'の現在地' : ''));
-  drawMap(atlas,state,yaw,selectedPlace,true,point,storyTarget || trackedAnimal,name);
-}
-function directions(from,to,originLabel) {
-  const dx=wrapDelta(to.x-from.x),dz=wrapDelta(to.z-from.z);
-  const distance=Math.round(Math.hypot(dx,dz));
-  const bearing=['北','北東','東','南東','南','南西','西','北西'][(Math.round(Math.atan2(dx,-dz)/(Math.PI/4))+8)%8];
-  return distance<3 ? '足元' : originLabel+'から'+bearing+' '+distance+' m';
-}
-function selectMap(id) {
-  selectedPlace = id;
-  jumpPin = null;
-  const r = REGIONS.find((r) => r.id === id);
-  for (const b of document.querySelectorAll('.map-places button'))
-    b.setAttribute('aria-pressed', String(b.dataset.id === id));
-  $('local-animal').hidden=!nearestUndelivered(undefined,id);
-  const detail = document.querySelector('.map-detail');
-  detail.textContent =
-    r.name +
-    '　' +
-    Math.round(Math.hypot(wrapDelta(p.x - r.x), wrapDelta(p.z - r.z))) +
-    ' m　 ·　 ' +
-    (state.visited.includes(id) ? '御朱印を獲得済み' : '未訪問の名所');
-  const landmarks = {
-    snow: '花の京から北東の峠を越えると、雪灯りの街です。参道の五重塔に登り、北を向くと冬の海。御朱印所の東には雪見の大露天風呂があります。',
-    autumn: '楓の枝が重なる谷道。紅葉をくぐって峡へ。',
-    moon: '北の空には十五夜の月。薄のそばの三方に近づくと、月見団子を食べられます。',
-    dawn: '東の海から昇る初日。浜では臼を囲んで餅をつく。',
-    kyo: '南の石段を上り、羅生門をくぐって京へ。門の東脇の木階段は老婆が暮らす楼上へ、西の大路は評定所へ通じます。夕暮れには衛士が辻の篝火を灯し、軒の提灯と家々の行燈が浮かびます。大路から東を望めば「福」、北には「大」の送り火。都の南東、地図の「清」が清水寺です。舞台から西を望むと京が一望できます。鐘楼の梵鐘には三条通知が届きます。',
-    peach: '竹隠れの社から西へ、尾根の間を縫う谷道をたどってください。山あいを抜けると桃林が開けます。里には花桃の瓢湯が湧き、木陰の土俵では兎と蛙が相撲を取っています。',
-    ryugu: '海風の松原から西へ泳ぎ、'+(coarse?'「潜る」':'Space＋↓')+'を長押しして海底へ。真珠灯籠をたどり、楼門の先の御朱印所へ。御殿の水門をくぐると内海に出ます。正面の段から板間へ上がり、二つの階段をたどると三階の「栄螺の壺湯」です。',
-    todaiji: '回廊の先に、蓮の座に鎮まる大餅仏。参道で鹿が兎に一礼し、脇では猿と兎が筆を運びます。',
-    tsuruga: '京から北山の麓をたどった先、北の入り江に開いた敦賀の津。昆布や塩を扱う家の先に、大船をつなぐ桟橋があります。甲板の船梯子を下ると荷の積まれた船倉です。',
-    sakai: '京の南西の湊町。陶器や染布を荷造りする商家を抜けると、外洋をめぐる大船が出入りする波止場です。',
-    inari: '京から南の街道をたどり、朱塗りの千本鳥居をくぐって雲上の奥社へ。日が差す雨の参道には、狐の嫁入りの行列が現れます。'
-  };
-  if (landmarks[id]) detail.append(document.createElement('br'), landmarks[id]);
-  const baths=state.objects.map(mappedBath).filter(s=>s && s.region===id);
-  for(const bath of baths.sort((a,b)=>Number(b.rank==='main')-Number(a.rank==='main'))){
-    const rank=bath.rank==='main'?'♨ 主湯':'湯 脇湯';
-    detail.append(document.createElement('br'),rank+'　'+bath.name+'　'+directions(r,bath,'名所'));
-  }
-  const signs={chaya:'茶',fisher:'漁',charcoal:'炭'};
-  for(const site of WAYSIDE_SITES){
-    if(REGIONS[regionAt(site.x,site.z)].id===id)
-      detail.append(document.createElement('br'),signs[site.kind]+'　'+site.name+'　'+directions(r,site,'名所'));
-  }
-  const port = regionPort(state, id);
-  if (port) {
-    detail.append(document.createElement('br'), 'Ⓟ 電動自転車ポート　' + port.bikes + '台', document.createElement('br'), directions(p,port,'現在地'));
-  }
-  redrawAtlas();
 }
 function helpDialog(tab) {
   const body = $('dialog-content');

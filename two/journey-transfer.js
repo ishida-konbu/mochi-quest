@@ -1,4 +1,7 @@
 import { normalizeVolumes } from '../sound.js';
+import { atlasDestinations } from './atlas-destinations.js';
+import { normalizeMiniMap } from './mini-map.js';
+import { restoreMapGoal, savedMapGoal } from './wayfinding.js';
 
 // Only Mochi Quest 2's two local keys travel. The fragment never becomes
 // part of the HTTP request, and the destination URL is fixed in this module.
@@ -16,19 +19,23 @@ export function transferURL(origin, journey, settings) {
   return hash.length <= sizeLimit ? WORKER_ORIGIN + '/two/' + hash : null;
 }
 
-export function decodeTransfer(origin, hash, createGame, regions) {
+export function decodeTransfer(origin, hash, createGame) {
   if (origin !== WORKER_ORIGIN || typeof hash !== 'string' || !hash.startsWith(prefix) || hash.length > sizeLimit) return null;
   try {
     const data = JSON.parse(decodeURIComponent(hash.slice(prefix.length)));
     if (data?.format !== 1) return null;
     const settings = data.settings;
-    if (!settings || typeof settings.sound !== 'boolean' || !Number.isFinite(settings.yaw) ||
-        (settings.goal !== null && !regions.some(r => r.id === settings.goal))) return null;
+    if (!settings || typeof settings.sound !== 'boolean' || !Number.isFinite(settings.yaw)) return null;
     // The game accepts both historical save formats and normalizes the old
     // item/port layouts. It also strips fields that aren't part of the save.
     const game = createGame(data.journey);
     if (!game.restored) return null;
-    return { game, settings: { sound: settings.sound, volumes: normalizeVolumes(settings.volumes), yaw: settings.yaw, goal: settings.goal } };
+    const goal = restoreMapGoal(settings.goal, atlasDestinations(game.state));
+    if (settings.goal !== null && !goal) return null;
+    return { game, settings: {
+      sound: settings.sound, volumes: normalizeVolumes(settings.volumes), yaw: settings.yaw, goal: savedMapGoal(goal),
+      ...(settings.minimap ? { minimap: normalizeMiniMap(settings.minimap) } : {}),
+    } };
   } catch {
     return null;
   }

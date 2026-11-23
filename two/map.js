@@ -1,4 +1,7 @@
+import { drawAtlasMarks, drawAtlasFlag } from './atlas-marks.js';
+import { atlasDestinations } from './atlas-destinations.js';
 import { MOUNTAIN_STREAMS } from './mountain-streams.js';
+import { drawMapSurvey } from './map-survey.js';
 import { FOREST_LAKE, LAKE_HOKORA, isletPoint, lakePoint, lakeRadius } from './snow-country.js';
 import { isNishiyamaTree } from './mountain-woodland.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
@@ -14,7 +17,6 @@ import { HIGASHIYAMA, KITAYAMA, FIRE_TRAILS, westRidgeHeight } from './higashiya
 import { RASHOMON, GATE_STONE, GATE_STONE_APRONS, GATE_STONE_STEPS, GATE_WING } from './kyo-layout.js';
 import { KIYOMIZU_ROAD, REGIONS, SNOW_SPRING, terrainHeight, BRIDGES, ROADS, BOUND, WATER_Y, wrapDelta, seasonAt, regionAt, BUILDINGS, TREES, ROCKS, seeded } from './terrain.js';
 const SIZE = 2048, SPAN = 2 * BOUND, adj = SIZE / SPAN;
-export const labels = ['壱', '弐', '参', '肆', '伍', '陸', '漆', '捌', '玖', '拾', '十一', '十二', '十三', '十四', '十五', '十六', '十七'];
 const toX = (x) => SIZE / 2 + x * adj;
 const pigments = [
   ['snow', [226, 231, 229]], ['autumn', [213, 177, 133]],
@@ -26,7 +28,7 @@ let paper, paperRequest;
 export function loadMapPaper() {
   if (!paperRequest) {
     const image = new Image();
-    image.src = new URL('./assets/world/journey-map.webp?v=kyoto-market-highways-1', import.meta.url).href;
+    image.src = new URL('./assets/world/journey-map.webp?v=shore-wash-1', import.meta.url).href;
     paperRequest = image.decode().then(() => { paper = image; }, () => { paper = paintMapPaper(); });
   }
   return paperRequest;
@@ -38,9 +40,8 @@ export function regionPort(state, id) {
   return state.objects.find(o => o.type === 'port' && REGIONS[regionAt(o.x, o.z)].id === id);
 }
 
-function drawPort(g, x, y, bikes, large) {
-  const pinX = large ? x + 16 : x, pinY = large ? Math.max(10,y-19) : y-12;
-  const radius = large ? 8 : 9;
+function drawPort(g, x, y, bikes) {
+  const pinX = x, pinY = y-12, radius = 9;
   g.fillStyle = bikes > 0 ? '#295d50' : '#736c60';
   g.strokeStyle = '#faf0d8';
   g.lineWidth = 1.8;
@@ -57,7 +58,7 @@ function drawPort(g, x, y, bikes, large) {
   g.stroke();
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.font = 'bold ' + (large ? 12 : 15) + 'px sans-serif';
+  g.font = 'bold 15px sans-serif';
   g.fillStyle = '#fff8e9';
   g.fillText('P', pinX, pinY + .5);
 }
@@ -141,6 +142,36 @@ function paintLake(g) {
   g.restore();
 }
 
+function paintTidalWater(g, heights, stride) {
+  const sheet = g.getImageData(0, 0, SIZE, SIZE), data = sheet.data;
+  const cellsPerPixel = (stride - 1) / SIZE;
+  for (let py = 0; py < SIZE; py++) {
+    const row = (py + .5) * cellsPerPixel, j = Math.floor(row), v = row - j;
+    const z = (py + .5) / adj - BOUND;
+    for (let px = 0; px < SIZE; px++) {
+      const col = (px + .5) * cellsPerPixel, i = Math.floor(col), u = col - i;
+      const idx = j * stride + i;
+      const nw = heights[idx], ne = heights[idx + 1];
+      const sw = heights[idx + stride], se = heights[idx + stride + 1];
+      if (Math.min(nw, ne, sw, se) >= WATER_Y) continue;
+      const north = nw + u * (ne - nw), south = sw + u * (se - sw);
+      const height = north + v * (south - north);
+      // Estimate how much of this paper pixel lies below the tide. The
+      // slopes of the interpolated survey also antialias narrow river bends.
+      const across = (1 - v) * (ne - nw) + v * (se - sw);
+      const footprint = Math.max(.0001, cellsPerPixel * (Math.abs(across) + Math.abs(south - north)));
+      const wet = Math.min(1, Math.max(0, .5 + (WATER_Y - height) / footprint));
+      if (!wet || lakeRadius((px + .5) / adj - BOUND, z) <= 1.3) continue;
+      const depth = Math.min(1, Math.max(0, -height / 28));
+      const k = (py * SIZE + px) * 4;
+      data[k] += wet * (169 - 79 * depth - data[k]);
+      data[k + 1] += wet * (193 - 53 * depth - data[k + 1]);
+      data[k + 2] += wet * (183 - 40 * depth - data[k + 2]);
+    }
+  }
+  g.putImageData(sheet, 0, 0);
+}
+
 export function paintMapPaper() {
   const c = document.createElement('canvas');
   c.width = c.height = SIZE;
@@ -151,27 +182,25 @@ export function paintMapPaper() {
   for(let j=0;j<=cells;j++)for(let i=0;i<=cells;i++)
     heights[j*stride+i]=terrainHeight(i*step-BOUND,j*step-BOUND);
   const contours=new Path2D(),peach=PEACH_RANGE_BOUNDS;
+  g.fillStyle = '#e4debf';
+  g.fillRect(0, 0, SIZE, SIZE);
   for (let j=0;j<cells;j++) for (let i=0;i<cells;i++) {
     const x=i*step-BOUND,z=j*step-BOUND,idx=j*stride+i;
     const a=heights[idx], b=heights[idx+stride+1];
+    if (Math.max(a, b, heights[idx+1], heights[idx+stride]) < WATER_Y && lakeRadius(x,z)>1.3) continue;
     const inRanges=westRidgeHeight(x,z)>3 || (x>peach.west && x<peach.east && z>peach.north && z<peach.south) ||
       z<DISTRICTS.kyo.z+140 && (Math.abs(x-KITAYAMA.x)<380 && z<DISTRICTS.kyo.z-75 ||
       Math.abs(z-HIGASHIYAMA.z)<320 && x>DISTRICTS.kyo.x+115);
-    if (a < WATER_Y && lakeRadius(x,z)>1.3) {
-      const depth = Math.min(1, Math.max(0, -a / 28));
-      g.fillStyle = 'rgb('+[169-79*depth,193-53*depth,183-40*depth].map(Math.round).join(',')+')';
-    } else {
-      let r = 228, g1 = 222, blue = 191;
-      const weights = seasonAt(x, z);
-      for (const [key, rgb] of pigments) {
-        const k = weights[key];
-        r += (rgb[0] - r) * k; g1 += (rgb[1] - g1) * k; blue += (rgb[2] - blue) * k;
-      }
-      const relief = inRanges ? Math.min(24, a*.14) + Math.max(-12,Math.min(13,
-        (heights[idx+1]-a)*3+(heights[idx+stride]-a)*1.5)) :
-        Math.min(26, a * .48) + Math.max(-10, Math.min(10, (b-a)*2));
-      g.fillStyle = 'rgb(' + [r-relief,g1-relief*.85,blue-relief*.62].map(Math.round).join(',') + ')';
+    let r = 228, g1 = 222, blue = 191;
+    const weights = seasonAt(x, z);
+    for (const [key, rgb] of pigments) {
+      const k = weights[key];
+      r += (rgb[0] - r) * k; g1 += (rgb[1] - g1) * k; blue += (rgb[2] - blue) * k;
     }
+    const relief = inRanges ? Math.min(24, a*.14) + Math.max(-12,Math.min(13,
+      (heights[idx+1]-a)*3+(heights[idx+stride]-a)*1.5)) :
+      Math.min(26, a * .48) + Math.max(-10, Math.min(10, (b-a)*2));
+    g.fillStyle = 'rgb(' + [r-relief,g1-relief*.85,blue-relief*.62].map(Math.round).join(',') + ')';
     g.fillRect(toX(x), toX(z), step * adj + 1, step * adj + 1);
     if(inRanges && a>11) {
       const east=heights[idx+1],south=heights[idx+stride];
@@ -193,6 +222,7 @@ export function paintMapPaper() {
       g.fillRect(toX(x), toX(z), step * adj, 1);
     }
   }
+  paintTidalWater(g, heights, stride);
   g.lineWidth=.9;g.strokeStyle='#726d5275';g.stroke(contours);
   paintLake(g);
   // Tiny tapering ink strokes pick out real stands of trees at atlas scale.
@@ -328,17 +358,13 @@ export function paintMapPaper() {
   g.setLineDash([2.5,4]);g.strokeStyle='#537e80';g.lineWidth=1.6;g.stroke();g.setLineDash([]);
   stampOtowa(g);return c;
 }
-export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null, recipientName = '') {
-  const w = canvas.width,
-    h = canvas.height,
-    g = canvas.getContext('2d'),
-    p = state.player,
-    midX = large ? 0 : p.x,
-    midZ = large ? 0 : p.z;
-  const span = large ? SPAN : 118,
-    scale = large ? Math.min(w, h) / span : w / span;
-  const sx = (x) => w / 2 + (x - midX) * scale,
-    sy = (z) => h / 2 + (z - midZ) * scale;
+export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null, recipientName = '', options = {}) {
+  const ratio = options.pixelRatio || 1, zoom = options.zoom || 1;
+  const w = canvas.width/ratio, h = canvas.height/ratio, g = canvas.getContext('2d'), p = state.player;
+  const midX = large ? options.centerX || 0 : p.x, midZ = large ? options.centerZ || 0 : p.z;
+  const scale = large ? Math.min(w, h)*zoom/SPAN : w*zoom/118;
+  const sx = x => w/2 + (x-midX)*scale, sy = z => h/2 + (z-midZ)*scale;
+  g.setTransform(ratio,0,0,ratio,0,0);
   g.clearRect(0, 0, w, h);
   g.fillStyle = '#ece7d1';
   g.fillRect(0, 0, w, h);
@@ -349,6 +375,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     if (map && left < w && top < h && left + side > 0 && top + side > 0)
       g.drawImage(map, left, top, side, side);
   }
+  drawMapSurvey(g, midX, midZ, w, h, scale);
   for(const stream of MOUNTAIN_STREAMS){
     g.beginPath();
     for(const [i,point] of stream.stations.entries()){
@@ -369,87 +396,64 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     g.beginPath();g.moveTo(-5,0);g.lineTo(2,-7);g.quadraticCurveTo(1,-3,3,0);g.closePath();g.fill();g.stroke();
     g.beginPath();g.moveTo(-7,1);g.lineTo(7,1);g.lineTo(3,4);g.lineTo(-3,4);g.closePath();g.fillStyle='#705744';g.fill();g.restore();
   }
-  // Keep the fire characters at their surveyed summits at both map scales.
-  const marks=[[KIYOMIZU,large?'清':'清水寺'],[COURT,'裁'],[KITAYAMA,'大'],[HIGASHIYAMA,'福']];
-  for(const {fall} of MOUNTAIN_STREAMS)marks.push([fall.toe,'滝']);
-  const hutGlyph={chaya:'茶',charcoal:'炭',fisher:'漁'};
-  for(const site of WAYSIDE_SITES)marks.push([site,hutGlyph[site.kind]]);
-  for(const object of state.objects){
-    const bath=mappedBath(object);
-    if(bath)marks.push([bath,bath.rank==='main'?'♨':'湯']);
-  }
-  for(const [site,glyph] of marks){
-    const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
-    if(x<0||x>w||y<0||y>h)continue;
-    const mainBath=site.rank==='main', subBath=site.rank==='sub';
-    const highlighted=site.region===goal && (mainBath||subBath);
-    const size=large ? (subBath && !highlighted ? 10 : mainBath && highlighted ? 17 : 14) : subBath ? 14 : 17;
-    g.font='bold '+size+'px serif';g.textAlign='center';g.textBaseline='middle';
-    g.lineWidth=3;g.strokeStyle='#fff2d6';
-    g.fillStyle=glyph==='滝'?'#416b70':subBath?'#4f6961':mainBath?'#943c2f':site===COURT?'#685449':'#8c5140';
-    const labelX=site===COURT && large?x-4:x;
-    g.strokeText(glyph,labelX,y);g.fillText(glyph,labelX,y);
-  }
-  // With the original settlements close together on the full scroll, take
-  // their labels out into the margins on short callouts.
-  const callouts=[
-    [4,30,'center'],[-18,-3,'right'],[-7,-24,'right'],[4,-30,'center'],
-    [17,-10,'left'],[-15,9,'right'],[14,-20,'left'],[19,-2,'left'],
-    [-2,23,'center'],[17,9,'left'],
-    [14,-20,'left'],[-5,29,'center'],[0,22,'center'],[0,22,'center'],[17,0,'left'],[18,0,'left'],[-16,0,'right'],
-  ];
-  for (const [i, r] of REGIONS.entries()) {
-    const x = w / 2 + wrapDelta(r.x - midX) * scale,
-      y = h / 2 + wrapDelta(r.z - midZ) * scale,
-      on = state.visited.includes(r.id),
-      rad = large ? (i>=10 ? 12 : 10) : 6;
-    if (goal === r.id) {
-      g.strokeStyle = '#a14832';
-      g.lineWidth = 2;
+  let hits;
+  if (large) {
+    const places = options.destinations || atlasDestinations(state);
+    const selected = options.selection || places.find(place=>place.id===goal);
+    hits = drawAtlasMarks(g,places,selected,state.visited,{zoom},w,h,sx,sy);
+  } else {
+    // Keep the fire characters at their surveyed summits at both map scales.
+    const marks=[[KIYOMIZU,'清水寺'],[COURT,'裁'],[KITAYAMA,'大'],[HIGASHIYAMA,'福']];
+    for(const {fall} of MOUNTAIN_STREAMS)marks.push([fall.toe,'滝']);
+    const hutGlyph={chaya:'茶',charcoal:'炭',fisher:'漁'};
+    for(const site of WAYSIDE_SITES)marks.push([site,hutGlyph[site.kind]]);
+    for(const object of state.objects){
+      const bath=mappedBath(object);
+      if(bath)marks.push([bath,bath.rank==='main'?'♨':'湯']);
+    }
+    for(const [site,glyph] of marks){
+      const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
+      if(x<0||x>w||y<0||y>h)continue;
+      const mainBath=site.rank==='main', subBath=site.rank==='sub';
+      const size=subBath ? 14 : 17;
+      g.font='bold '+size+'px serif';g.textAlign='center';g.textBaseline='middle';
+      g.lineWidth=3;g.strokeStyle='#fff2d6';
+      g.fillStyle=glyph==='滝'?'#416b70':subBath?'#4f6961':mainBath?'#943c2f':site===COURT?'#685449':'#8c5140';
+      g.strokeText(glyph,x,y);g.fillText(glyph,x,y);
+    }
+    for (const r of REGIONS) {
+      const x = w / 2 + wrapDelta(r.x - midX) * scale,
+        y = h / 2 + wrapDelta(r.z - midZ) * scale,
+        on = state.visited.includes(r.id),
+        rad = 6;
+      if (goal === r.id) {
+        g.strokeStyle = '#a14832';
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(x, y, rad + 4, 0, Math.PI * 2);
+        g.stroke();
+      }
+      g.fillStyle = on ? '#a94e38' : '#f4eed8';
+      g.strokeStyle = on ? '#88462e' : '#87896b';
+      g.lineWidth = 1.5;
       g.beginPath();
-      g.arc(x, y, rad + 4, 0, Math.PI * 2);
+      g.arc(x, y, rad, 0, Math.PI * 2);
+      g.fill();
       g.stroke();
     }
-    g.fillStyle = on ? '#a94e38' : '#f4eed8';
-    g.strokeStyle = on ? '#88462e' : '#87896b';
-    g.lineWidth = 1.5;
-    g.beginPath();
-    g.arc(x, y, rad, 0, Math.PI * 2);
-    g.fill();
-    g.stroke();
-    if (large) {
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.font = 'bold 12px serif';
-      g.fillStyle = on ? '#fff5da' : '#665945';
-      g.fillText(labels[i], x, y);
-      g.font = 'bold 12px serif';
-      g.fillStyle = '#463d2c';
-      g.lineWidth = 3;
-      g.strokeStyle = '#f8f1db';
-      const [dx,dy,anchor]=callouts[i] || [0,22,'center'];
-      const lx=x+dx, ly=y+dy;
-      if(i<10 || i===10 || i>=14) {
-        const length=Math.hypot(dx,dy);
-        g.beginPath();g.moveTo(x+dx*rad/length,y+dy*rad/length);
-        g.lineTo(lx,ly);g.lineWidth=1;g.strokeStyle='#827966';g.stroke();
-      }
-      g.textAlign=anchor;g.lineWidth=3;g.strokeStyle='#f8f1db';
-      g.strokeText(r.name,lx,ly);g.fillText(r.name,lx,ly);
+    for (const o of state.objects) {
+      if (o.type !== 'port') continue;
+      const x = w / 2 + wrapDelta(o.x - midX) * scale;
+      const y = h / 2 + wrapDelta(o.z - midZ) * scale;
+      if (x >= 0 && x <= w && y >= 0 && y <= h) drawPort(g, x, y, o.bikes);
     }
-  }
-  const selectedPort = large && regionPort(state, goal);
-  for (const o of state.objects) {
-    if (o.type !== 'port' || (large && o !== selectedPort)) continue;
-    const x = w / 2 + wrapDelta(o.x - midX) * scale;
-    const y = h / 2 + wrapDelta(o.z - midZ) * scale;
-    if (x >= 0 && x <= w && y >= 0 && y <= h) drawPort(g, x, y, o.bikes, large);
   }
   if (recipient || pin) {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     for (const [point, tint] of [[recipient, '#435e62'], [pin, '#ae452c']]) {
       if (!point) continue;
       const x = w/2+wrapDelta(point.x-midX)*scale, y = h/2+wrapDelta(point.z-midZ)*scale;
+      if (x < -8 || x > w+8 || y < -8 || y > h+8) continue;
       g.save(); g.translate(x,y); g.rotate(Math.PI/4);
       g.strokeStyle = '#fff5db'; g.lineWidth=2; g.fillStyle=tint;
       g.fillRect(-6,-6,12,12); g.strokeRect(-6,-6,12,12);
@@ -481,26 +485,14 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
   g.fill();
   g.stroke();
   g.restore();
-  g.textAlign = 'center';
-  g.textBaseline = 'top';
-  g.font = 'bold ' + (large ? 13 : 17) + 'px "Hiragino Mincho ProN", "Yu Mincho", serif';
-  g.fillStyle = '#544231';
-  g.fillText('北', large ? w - 17 : w / 2, large ? 10 : 5);
-}
-export function mapHit(canvas, e) {
-  const b = canvas.getBoundingClientRect(),
-    x = ((e.clientX - b.left) / b.width) * canvas.width,
-    z = ((e.clientY - b.top) / b.height) * canvas.height;
-  const scale = Math.min(canvas.width, canvas.height) / SPAN;
-  let nearest=null, distance=25;
-  for(const r of REGIONS) {
-    const d=Math.hypot(canvas.width/2+r.x*scale-x,canvas.height/2+r.z*scale-z);
-    if(d<distance){distance=d;nearest=r;}
+  if (large && options.activeGoal) {
+    const point = options.activeGoal, x = sx(point.x), y = sy(point.z);
+    if (x >= 0 && x <= w && y >= 0 && y <= h) hits.unshift(drawAtlasFlag(g,point,x,y));
   }
-  return nearest;
-}
-
-export function mapCoordinates(canvas, event) {
-  const rect = canvas.getBoundingClientRect();
-  return { x: ((event.clientX-rect.left)/rect.width-.5)*SPAN, z: ((event.clientY-rect.top)/rect.height-.5)*SPAN };
+  if (!large) {
+    g.textAlign = 'center'; g.textBaseline = 'top';
+    g.font = 'bold 17px "Hiragino Mincho ProN", "Yu Mincho", serif';
+    g.fillStyle = '#544231'; g.fillText('北',w/2,5);
+  }
+  return hits;
 }
