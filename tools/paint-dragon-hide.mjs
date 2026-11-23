@@ -22,7 +22,7 @@ function stroke(g, color, x, y, cx, cy, ex, ey, pressure) {
   });
 }
 
-function flank(g, paint) {
+function flank(g, paint, width) {
   for (const [origin, sign] of [[64,1],[64,-1],[320,-1]]) {
     g.save();
     g.translate(0,origin);
@@ -35,7 +35,7 @@ function flank(g, paint) {
   }
 }
 
-function scales(g, random) {
+function scales(g, random, width) {
   const wash = g.createLinearGradient(0,0,0,128);
   for (const [where, color] of [[0,'#424e4a'],[.15,'#657773'],[.47,'#9ca89b'],
     [.69,'#b4b6a1'],[.84,'#cfccb5'],[1,'#ece3ce']]) wash.addColorStop(where,color);
@@ -129,10 +129,11 @@ export function paintDragonHide(g, part, seed) {
   // The generic painter uses a 768×384 drawing area. Give the long body
   // twice its resolution in the longitudinal direction.
   g.save();
-  g.scale(768/width,384/height);
+  const sheetWidth=part==='body' ? width*(1+2*.407) : width;
+  g.scale(768/sheetWidth,384/height);
   flank(g,()=>{
     if(part==='face') face(g);
-    else scales(g,seed(11037));
-  });
+    else scales(g,seed(11037),sheetWidth);
+  },sheetWidth);
   g.restore();
 }

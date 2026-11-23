@@ -29,10 +29,10 @@ export function beastDrawing(type, variant=0) {
 }
 export const VILLAGERS={poses:6,columns:42,rows:39,width:96,height:104,frameX:2.88,frameY:3.24,center:1.37};
 export const residentFrameX=craft=>craft==='fisher'?3.48:VILLAGERS.frameX;
-export const BEASTS={atlas:'beasts.webp?v=ryu-emaki-1',columns:24,rows:Math.ceil(poseCount/3),width:160,height:160};
+export const BEASTS={atlas:'beasts.webp?v=long-tail-1',columns:24,rows:Math.ceil(poseCount/3),width:160,height:160};
 // Three-quarter and broadside views need room for the full brush tail,
 // wingtips and dragon whiskers, including a gutter at the coarsest mip.
-const paddedFrames={bird:4,fox:3.3,tiger:3.8,dragon:11.5};
+const paddedFrames={bird:4,fox:3.3,tiger:3.8};
 export const beastFrame=type=>paddedFrames[type]??SPECIES[type].frame;
 export const clothGround='#999999';
 const base=new THREE.Color(clothGround);
@@ -163,6 +163,15 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   }
   function add(n,x,z,camera,time,fade) {
     if(count===0)warm();
+    const spec=SPECIES[n.type] || SCROLL_FAUNA[n.type], scale=n.stature||1;
+    let center=n.y+(costumes?costumeCentre(n.costume):spec?.center??VILLAGERS.center)*scale;
+    if(spec?.centerZ) {
+      // The new tail puts the centre of the ink plate well behind the feet.
+      // Pitch this offset around the same trunk origin as the live model.
+      const pitch=dragonPitch(n), forward=(spec.centerZ*Math.cos(pitch)+spec.center*Math.sin(pitch))*scale;
+      x+=Math.sin(n.heading)*forward;z+=Math.cos(n.heading)*forward;
+      center=n.y+(spec.center*Math.cos(pitch)-spec.centerZ*Math.sin(pitch))*scale;
+    }
     const vx=camera.position.x-x, vz=camera.position.z-z;
     const facing=Math.atan2(vx,vz);
     const handedness=n.room===undefined ? 1 : -1;
@@ -173,7 +182,6 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
     const drift=last===undefined ? Infinity : THREE.MathUtils.euclideanModulo(turn-last+4,8)-4;
     const direction=Math.abs(drift)>.58 ? THREE.MathUtils.euclideanModulo(Math.round(turn),8) : last;
     headings.set(n,direction);
-    const spec=SPECIES[n.type] || SCROLL_FAUNA[n.type];
     let start,poses,cycle;
     if(costumes){
       start=n.costume*8;poses=1;cycle=0;
@@ -196,8 +204,7 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
       Math.floor(tile/sheet.columns)-Math.floor(next/sheet.columns),mix);
     cells.setXYZ(count,tile%sheet.columns,sheet.rows-1-Math.floor(tile/sheet.columns),fade*handedness);
     if (cloth) figures.setColorAt(count,n.area ? dyes[n.dye] : white);
-    const scale=n.stature||1, build=n.build||1;
-    const center=n.y+(costumes?costumeCentre(n.costume):spec?.center??VILLAGERS.center)*scale;
+    const build=n.build||1;
     transform.position.set(x,center,z);
     transform.rotation.set(-Math.atan2(camera.position.y-center,Math.hypot(vx,vz)),facing,0,'YXZ');
     if(n.type==='dragon')transform.rotation.z=-dragonPitch(n)*Math.sin(n.heading-facing);

@@ -5,6 +5,17 @@ const smooth = value => {const t=clamp(value);return t*t*(3-2*t);};
 // The sculpt stretches lengthwise inside its pitched trunk. Delivery volumes
 // use this same ratio before applying world stature and pitch.
 export const dragonLengthScale = 1.5;
+// Centre, horizontal radius and vertical radius of each inked cross-section.
+export const dragonSpine=[[-.78,1.21,-2.95,.004,.004],[-.80,.98,-3.12,.061,.073],[-.65,.65,-3.16,.092,.108],
+  [-.35,.36,-2.92,.141,.15],[-.19,.26,-2.56,.182,.19],[-.29,.50,-2.12,.204,.214],
+  [-.28,.90,-1.76,.225,.25],[.02,1.06,-1.46,.249,.262],[.39,.96,-1.17,.258,.275],
+  [.54,.66,-.79,.279,.291],[.45,.50,-.35,.301,.318],[.10,.52,.04,.315,.323],
+  [-.24,.75,.40,.312,.32],[-.44,1.06,.70,.286,.301],[-.45,1.45,.87,.27,.284],
+  [-.35,1.74,1.08,.239,.264],[-.13,1.88,1.42,.214,.243]];
+// The hind claws spring from the seventh dorsal joint, at t=.407 on the sculpt's spine.
+export const dragonHindZ = -1.60347;
+export const dragonTailStretch = 3;
+export const dragonTailZ = z => z + (dragonTailStretch-1)*Math.min(0,z-dragonHindZ);
 
 // The crest travels from the head through the tail. Give the light tip a wider
 // sweep. Both the rendered transverse sections and the delivery volumes use it.

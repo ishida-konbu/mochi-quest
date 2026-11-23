@@ -24,7 +24,9 @@ export async function bakeBeasts() {
       animateNPC(actor,n,pose*Math.PI*2/(poses*gaitFrequency(type)));
       for(let angle=0;angle<8;angle++){
         const t=angle*Math.PI/4,distance=12;
-        camera.position.set(Math.sin(t)*distance,spec.center+1.8,Math.cos(t)*distance);camera.lookAt(0,spec.center,0);
+        const centerZ=spec.centerZ ?? 0;
+        camera.position.set(Math.sin(t)*distance,spec.center+1.8,centerZ+Math.cos(t)*distance);
+        camera.lookAt(0,spec.center,centerZ);
         const tile=start+pose*8+angle;
         renderer.render(scene,camera);
         ctx.drawImage(renderer.domElement,tile%columns*width,Math.floor(tile/columns)*height,width,height);

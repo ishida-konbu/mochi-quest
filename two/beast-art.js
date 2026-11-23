@@ -1,7 +1,7 @@
 // Scroll silhouettes are lofted through painted cross-sections. A single atlas per
 // pelt wraps continuously across both flanks; the mane, joints and toes retain volume.
 import { prepareDragon, poseDragon } from './dragon-flight.js';
-import { dragonLengthScale, craneWingbeat, kirinFrequency, hoofPhase, poseKirinLeg, poseKirinTrunk } from './animal-motion.js';
+import { dragonLengthScale, dragonSpine, dragonTailZ, dragonTailStretch, craneWingbeat, kirinFrequency, hoofPhase, poseKirinLeg, poseKirinTrunk } from './animal-motion.js';
 import * as THREE from './vendor/three.module.min.js';
 import { buildScrollBeast, buildQuadrupedTrunk, bindScrollSkin } from './handscroll-beasts.js';
 import { inkVolume, brushWash, brushContour, surfaceGrain } from './scroll-sculpt.js';
@@ -53,7 +53,7 @@ function coat(type, detail) {
     coats.set(key, material);
   }
   if (!coatLoads.has(key)) {
-    const file=key+'.webp'+(type==='dragon'?'?v=ink-dragon-1':'');
+    const file=key+'.webp'+(key==='dragon-body'?'?v=long-tail-1':type==='dragon'?'?v=ink-dragon-1':'');
     const url = new URL('./assets/bestiary/' + file, import.meta.url).href;
     const request = demandPaint(() => coatLoader.loadAsync(url).then(image => {
       image.colorSpace = THREE.SRGBColorSpace;
@@ -97,22 +97,26 @@ export function refreshBeastCoats(type) {
 function pelt(parent,type,sections,mask=false) {
   const line=new THREE.CatmullRomCurve3(sections.map(s=>new THREE.Vector3(...s.slice(0,3))));
   const dims=new THREE.CatmullRomCurve3(sections.map(s=>new THREE.Vector3(s[3],s[4],0)));
-  const rows=sections.length*4,sides=32,positions=[],indices=[],uv=[];
+  const dragonBody=type==='dragon' && !mask;
+  const rows=sections.length*(dragonBody?6:4),sides=32,positions=[],indices=[],uv=[];
   const tangent=new THREE.Vector3(),across=new THREE.Vector3(),up=new THREE.Vector3(),point=new THREE.Vector3();
   for(let j=0;j<=rows;j++){
     const t=j/rows, center=line.getPoint(t),r=dims.getPoint(t);
+    // A longer sheet preserves the density of the overlapping scales behind the hips.
+    const u=dragonBody?(t+(dragonTailStretch-1)*Math.min(t,.407))/(1+(dragonTailStretch-1)*.407):t;
     line.getTangent(t,tangent);across.set(1,0,0).addScaledVector(tangent,-tangent.x).normalize();up.crossVectors(tangent,across).normalize();
     for(let k=0;k<=sides;k++) {
       const a=k*TAU/sides;
       const angular=Math.sin(a);
       // Broad ventral shields and a narrow dorsal spine give the dragon a
       // keeled section. A circular tube catches a hard, plastic highlight.
-      const dragonBody=type==='dragon'&&!mask;
       const keel=dragonBody ? .17*Math.max(0,angular)**12-.075*Math.max(0,-angular)**4 : 0;
       const flank=dragonBody ? 1+.026*Math.cos(t*TAU*19+a*.72)*Math.cos(a)**2 : 1;
       point.copy(center).addScaledVector(across,Math.cos(a)*Math.max(.002,r.x)*flank)
         .addScaledVector(up,(angular+keel)*Math.max(.002,r.y));
-      positions.push(...point.toArray());uv.push(t,1-k/sides);
+      if(dragonBody)point.z=dragonTailZ(point.z);
+      positions.push(...point.toArray());
+      uv.push(u,1-k/sides);
       if(j<rows&&k<sides){const n=j*(sides+1)+k;indices.push(n,n+1,n+sides+1,n+1,n+sides+2,n+sides+1);}
     }
   }
@@ -788,12 +792,7 @@ function crane(root,{group,batch}) {
   }
 }
 
-const dragonSpine=[[-.78,1.21,-2.95,.004,.004],[-.80,.98,-3.12,.061,.073],[-.65,.65,-3.16,.092,.108],
-  [-.35,.36,-2.92,.141,.15],[-.19,.26,-2.56,.182,.19],[-.29,.50,-2.12,.204,.214],
-  [-.28,.90,-1.76,.225,.25],[.02,1.06,-1.46,.249,.262],[.39,.96,-1.17,.258,.275],
-  [.54,.66,-.79,.279,.291],[.45,.50,-.35,.301,.318],[.10,.52,.04,.315,.323],
-  [-.24,.75,.40,.312,.32],[-.44,1.06,.70,.286,.301],[-.45,1.45,.87,.27,.284],
-  [-.35,1.74,1.08,.239,.264],[-.13,1.88,1.42,.214,.243]];
+
 // Taper the long strokes into swept silhouettes. The exposed reverse of a
 // lock carries dense ink, while the ridge catches the light like bare paper.
 const maneInk=['#3d4945','#798277','#242e2b'];
@@ -826,7 +825,8 @@ function maneLock(b,path,width,normal,colors) {
   }
 }
 function dragonTail(parent,group,batch) {
-  const tip=dragonSpine[0],tassel=group(parent,'tailBrush',...tip.slice(0,3));
+  const [x,y,z]=dragonSpine[0],tassel=group(parent,'tailBrush',x,y,dragonTailZ(z));
+  tassel.scale.z=dragonTailStretch;
   batch(tassel,b=>{
     for(let i=0;i<6;i++) {
       const t=i/5, side=(t-.5)*2, curl=.12*Math.sin(i*1.5);
@@ -872,10 +872,13 @@ function dragon(root,{group,batch}){
   const skin=pelt(body,'dragon',dragonSpine);
   skin.name='龍の胴';
   const curve=new THREE.CatmullRomCurve3(dragonSpine.map(s=>new THREE.Vector3(...s.slice(0,3))));
-  for(let i=0;i<18;i++){
+  // Extra crests articulate the new tail. The two claw joints keep their original stations.
+  for(let step=0;step<32;step++){
+    const i=step<21?step/3:step-14;
     const t=.05+i*.051,pt=curve.getPoint(t),r=dragonSpine[Math.round(t*(dragonSpine.length-1))][4];
-    const joint=group(body,'spine'+i,pt.x,pt.y,pt.z);
+    const joint=group(body,'spine'+i,pt.x,pt.y,dragonTailZ(pt.z));
     const tangent=curve.getTangent(t),across=new THREE.Vector3(1,0,0);
+    if(i<7) {tangent.z*=dragonTailStretch;tangent.normalize();}
     across.addScaledVector(tangent,-tangent.x).normalize();
     joint.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(across,tangent.clone().cross(across),tangent));
     batch(joint,b=>{

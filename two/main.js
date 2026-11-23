@@ -26,6 +26,7 @@ import { SCROLL_FAUNA, faunaDrawing, FAUNA_SHEET } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { seaPortrait } from './ryugu-performers.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
+import { openAnimalScale } from './animal-scale-book.js';
 import { openAtlas } from './atlas-dialog.js';
 import { REGIONS, canDiveAt, waterSurfaceAt, terrainHeight, terrainContactHeight, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
 import { palaceInteriorAt, palaceStoreyAt } from './ryugu-layout.js';
@@ -921,14 +922,16 @@ function journalDialog() {
   const body=$('dialog-content');
   body.innerHTML=`<div id="delivery-book">
     <div class="ledger-head"><p id="ledger-note"></p><span id="ledger-count"></span></div>
-    <details class="ledger-scale">
-      <summary>龍・麒麟と白餅の大きさを比べる</summary>
-      <figure>
-        <img src="./assets/bestiary/legend-size.webp" width="1800" height="967" loading="lazy" alt="白餅・麒麟・龍を同じ縮尺で並べた大きさの比較図">
-        <figcaption><span>白餅の高さ 約1.64 m ／ 麒麟の高さ 約15.5 m ／ 龍の前後幅 約110 m</span><a href="./assets/bestiary/legend-size.webp" target="_blank" rel="noopener">図を拡大して見る</a></figcaption>
-      </figure>
-    </details>
+    <button type="button" class="ledger-scale-open">動物の大きさを比べる</button>
     <div class="ledger-animals"></div></div>`;
+  body.querySelector('.ledger-scale-open').onclick = () => {
+    $('dialog-title').textContent = '動物の大きさ比べ';
+    openAnimalScale(body, () => {
+      $('dialog-title').textContent = '三条通知の配達帳';
+      journalDialog();
+      body.querySelector('.ledger-scale-open').focus();
+    });
+  };
   const count=state.delivered.size, total=state.recipientTotal;
   $('ledger-count').textContent=count+' / '+total;
   $('ledger-note').textContent=count===total ? '全員に配達しました。鏡餅で十七景の旅をどうぞ。' : state.kagamiUnlocked ? '鏡餅が使えます。新しく加わった動物にも通知を届けてみましょう。' : '動物を選ぶと、まだ届いていない一匹へご案内します。全員に届けると鏡餅が開きます。';

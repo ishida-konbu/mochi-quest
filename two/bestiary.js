@@ -5,14 +5,14 @@ import { SCROLL_FAUNA } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { canopyHeight, walkCircuit } from './village-paths.js';
 import { legendary, legendPath } from './legend-flight.js';
-import { craneWingbeat, dragonWave, dragonPhase, dragonPitch, dragonLengthScale, maxDragonPitch, walkingScore } from './animal-motion.js';
+import { craneWingbeat, dragonWave, dragonPhase, dragonPitch, dragonLengthScale, dragonSpine, dragonTailZ, maxDragonPitch, walkingScore } from './animal-motion.js';
 
 export const SPECIES = Object.freeze({
   monkey: { count:90, points:30, label:'猿', stature:1, frame:2.7, center:.88 },
   bird:   { count:40, points:30, label:'丹頂', stature:1, frame:3.5, center:.13 },
   fox:    { count:40, points:50, label:'狐', stature:1, frame:2.7, center:.72 },
   tiger:  { count:10, points:100, label:'虎', stature:2.44, frame:3.6, center:.84 },
-  dragon: { count:1, points:1000, label:'龍', stature:12.6, frame:9.3, center:1.18, skyRange:1200, rigNear:280 },
+  dragon: { count:1, points:1000, label:'龍', stature:8.4, frame:16.4, center:1.18, centerZ:-3.1, skyRange:1200, rigNear:280 },
   kirin:  { count:1, points:1000, label:'麒麟', stature:5.25, frame:4.9, center:1.72, skyRange:384, rigNear:195 },
   deer:   { count:32, points:60, label:'鹿', stature:1.16, frame:3.8, center:1.24 },
   boar:   { count:18, points:60, label:'猪', stature:1.08, frame:3.4, center:.8 },
@@ -88,7 +88,7 @@ function requiredHeight(n,time) {
     const scale=n.stature || SPECIES[n.type].stature, sine=Math.sin(heading),cosine=Math.cos(heading);
     // The full silhouette can cross a different ridge or grove from its origin.
     // Bound the rotated footprint, then consider only the squares it crosses.
-    const aft=dragon?3.55*scale*dragonLengthScale:1.65*scale;
+    const aft=dragon?-dragonTailZ(-3.34)*scale*dragonLengthScale:1.65*scale;
     const fore=dragon?2.65*scale*dragonLengthScale:1.45*scale;
     const halfWidth=(dragon?1.8:.58)*scale, along=Math.max(aft,fore);
     const reachX=along*Math.abs(sine)+halfWidth*Math.abs(cosine);
@@ -104,7 +104,7 @@ function requiredHeight(n,time) {
         // Forehead and whiskers sit above the belly. The tail rises again
         // beyond the last bend. Clearance includes their motion on a steep dive.
         const localZ=forward/(scale*dragonLengthScale);
-        const underside=localZ>1.05 ? .85 : localZ< -2.75 ? .03 : -.25;
+        const underside=localZ>1.05 ? .85 : localZ<dragonTailZ(-2.75) ? .03 : -.25;
         const pitchDrop=dragon ? (Math.min(along,Math.abs(forward)+surveyPad)*maxDragonSlope-underside*scale) : 0;
         required=Math.max(required,top+1.8+pitchDrop);
       }
@@ -184,13 +184,13 @@ export function moveWildlife(n,time) {
 
 // Hit volumes are in each drawing's local coordinates (X across, Z toward the face).
 // Separate ellipsoids follow the crane wings and the dragon's curved body.
+const dragonTorso=[.27,.54,-.14,.51,.42,.7];
 const bodyVolumes = {
   monkey:[[0,.9,0,.45,.88,.39]], fox:[[0,.68,.1,.29,.48,.63],[0,1.05,.56,.22,.26,.34]],
   bird:[[0,.11,0,.21,.19,.63],[0,.32,.74,.12,.13,.43]],
   tiger:[[0,.81,.04,.39,.49,.9],[0,1.13,.74,.33,.34,.36]],
   kirin:[[0,1.16,-.07,.35,.53,.95],[0,1.8,.60,.28,.65,.39],[0,2.34,.82,.26,.3,.41]],
-  dragon:[[-.59,.60,-2.86,.32,.55,.53],[-.25,.35,-2.27,.33,.39,.64],[-.09,.92,-1.66,.41,.38,.59],
-          [.43,.79,-.97,.44,.48,.75],[.27,.54,-.14,.51,.42,.7],[-.28,.88,.51,.42,.53,.55],
+  dragon:[[.43,.79,-.97,.44,.48,.75],dragonTorso,[-.28,.88,.51,.42,.53,.55],
           [-.43,1.46,.90,.39,.56,.49],[-.14,1.91,1.62,.49,.45,.83]],
   deer:[[0,.88,0,.31,.53,.79],[0,1.39,.56,.23,.44,.31],[0,1.73,.72,.24,.23,.34]],
   boar:[[0,.72,-.05,.4,.49,.83],[0,.58,.72,.28,.30,.44]],
@@ -201,11 +201,23 @@ const bodyVolumes = {
     [-.28,1.82,-.26,.16,.16,.33],[.28,1.87,-.25,.16,.19,.33]],
   frog:[[0,.29,-.04,.40,.28,.32],[0,.79,.01,.35,.48,.29],[0,1.27,.13,.33,.22,.36]],
 };
+// A chain of short volumes follows the long, sinuous tail. Each has its own wave
+// phase, so a letter aimed between two bends can pass through the empty sky.
+for(let i=0;i<8;i++) {
+  const a=dragonSpine[i], b=dragonSpine[i+1], za=dragonTailZ(a[2]), zb=dragonTailZ(b[2]);
+  const steps=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1],zb-za)/.105);
+  for(let j=0;j<steps;j++) {
+    const f=j/steps, lerp=(x,y)=>x+(y-x)*f;
+    const w=lerp(a[3],b[3]),h=lerp(a[4],b[4]);
+    bodyVolumes.dragon.push([lerp(a[0],b[0]),lerp(a[1],b[1]),lerp(za,zb),
+      w+.04,h+.05,Math.abs(zb-za)/(2*steps)+Math.max(.06,w,h)]);
+  }
+}
 // The delivery guide points into the same painted torso that accepts the letter.
 // Follow the dragon's lateral wave and pitch rather than the clear air at its origin.
 export function legendDeliveryPoint(n,out) {
   const dragon=n.type==='dragon';
-  const [cx,cy,cz]=bodyVolumes[n.type][dragon?4:0];
+  const [cx,cy,cz]=dragon?dragonTorso:bodyVolumes.kirin[0];
   if(dragon)dragonWave(cz,n.wavePhase||0,wave);
   const scale=n.stature, side=(cx+(dragon?wave.x:0))*scale, up=(cy+(dragon?wave.y:0))*scale;
   const pitch=dragon?dragonPitch(n):0,along=cz*scale*(dragon?dragonLengthScale:1);
