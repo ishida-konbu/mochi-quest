@@ -3,7 +3,8 @@ import { MOUNTAIN_STREAMS, mountainStreamWaterAt } from './mountain-streams.js';
 import { DISTRICTS, TERRAIN_TILES, TERRAIN_SUBDIVISIONS } from './geography.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { scrollCoverage } from './scroll-paper.js';
-import { kyoRidgeHeight } from './higashiyama.js';
+import { KYO_HILL_SHEET, kyoRidgeHeight } from './higashiyama.js';
+import { DEFAULT_SCENERY_QUALITY, SCENERY_PROFILES } from './scenery-quality.js';
 import { FOREST_LAKE, LAKE_ISLET, lakeRadius, isletRadius } from './snow-country.js';
 import { BOUND, TREES, wrapDelta, terrainHeight as h, regionAt, shoreDistance, riverZ,
   riverHalfWidth, riverMouthFlare, seasonAt, springGround } from './terrain.js';
@@ -59,7 +60,11 @@ function horizonIndex(grid){
     for(let i=endX;i>x;i-=z===0?1:step)rim.push(z*stride+i);
     for(let k=0;k<rim.length;k++)index.push(centre,rim[k],rim[(k+1)%rim.length]);
   }
-  return new THREE.Uint16BufferAttribute(index,1);
+  // A distant arrival samples only the vertices used by this topology.
+  // Both indices describe precisely the same triangles in survey coordinates.
+  const samples=[...new Set(index)], compact=new Map(samples.map((v,i)=>[v,i]));
+  return { full:new THREE.Uint16BufferAttribute(index,1), samples,
+    sparse:new THREE.Uint16BufferAttribute(index.map(v=>compact.get(v)),1) };
 }
 export function createTerrainTiles(scene, mat) {
   const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
@@ -76,17 +81,19 @@ export function createTerrainTiles(scene, mat) {
       }
   }
   const farIndices=horizonIndex(TERRAIN_SUBDIVISIONS);
-  function build({row,column,x:midX,z:midZ}) {
+  function build({row,column,x:midX,z:midZ,peachTile}, sparse) {
     // Deep ocean is a level shelf. Keep the fine lattice for shores, roads,
     // palace and cliffs, without allocating a million detailed sea vertices.
     const deep=shoreDistance(midX,midZ)<-span*1.6 &&
       Math.hypot(midX-DISTRICTS.ryugu.x,midZ-DISTRICTS.ryugu.z)>span*1.8;
+    if(deep)sparse=false;
     const grid=deep ? 1 : TERRAIN_SUBDIVISIONS;
-    const range=PEACH_RANGE_BOUNDS;
-    const peachTile=midX+span/2>range.west && midX-span/2<range.east && midZ+span/2>range.north && midZ-span/2<range.south;
+    const samples=sparse?farIndices.samples.length:(grid+1)**2;
     const p=[], ix=[], uv=[], col=[], surface=[], seasons=[], scroll=[], ridges=[];
     let ridgeTile=false;
-    for (let j=0; j<=grid; j++) for (let i=0; i<=grid; i++) {
+    for (let slot=0; slot<samples; slot++) {
+      const vertex=sparse?farIndices.samples[slot]:slot;
+      const i=vertex%(grid+1),j=Math.floor(vertex/(grid+1));
       const x=(column+i/grid)*span-BOUND, z=(row+j/grid)*span-BOUND, y=h(x,z);
       p.push(x,y,z);
       uv.push(x/3.7,z/3.7);
@@ -112,12 +119,12 @@ export function createTerrainTiles(scene, mat) {
       seasonAt(x,z,season);
       seasons.push(season.snow,season.autumn,season.moon, season.dawn*max(0,min(1,(30-coast)/23)));
       col.push(c.r,c.g,c.b);
-      if (i<grid && j<grid) {
+      if (!sparse && i<grid && j<grid) {
         const k=j*(grid+1)+i,l=k+grid+1;
         ix.push(k,l,k+1,k+1,l,l+1);
       }
     }
-    if(!deep)springGround.refineTile(column,row,p,ix,[[uv,2],[col,3],[ridges,1],[surface,3],[scroll,1],[seasons,4]],h);
+    if(!deep && !sparse)springGround.refineTile(column,row,p,ix,[[uv,2],[col,3],[ridges,1],[surface,3],[scroll,1],[seasons,4]],h);
     // Sample after local refinement so the wet pigment stays on the same
     // narrow, sloping channel triangles that support the swimmer.
     if(tributaryBounds.some(b=>midX+span/2>b.west && midX-span/2<b.east &&
@@ -128,38 +135,44 @@ export function createTerrainTiles(scene, mat) {
     ground.setAttribute('position',new THREE.Float32BufferAttribute(p,3));
     ground.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
     ground.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
-    ground.setIndex(ix);
-    ground.computeVertexNormals();
+    ground.setIndex(sparse?farIndices.sparse:ix);
+    if(sparse)ground.setAttribute('normal',new THREE.Float32BufferAttribute(p.length,3));
+    else ground.computeVertexNormals();
     ground.setAttribute('ridgeRelief',new THREE.Float32BufferAttribute(ridges,1));
     ground.setAttribute('terrainMix',new THREE.Float32BufferAttribute(surface,3));
     ground.setAttribute('scrollAmount',new THREE.Float32BufferAttribute(scroll,1));
     ground.setAttribute('seasons',new THREE.Float32BufferAttribute(seasons,4));
     // Adjacent tiles compute their own normals. Sample both sides at the
     // join so a sunlit rock face stays continuous across the tile boundary.
-    if((peachTile || ridgeTile) && !deep){
+    if(!deep && (sparse || peachTile || ridgeTile)){
       const step=span/grid,normals=ground.attributes.normal;
-      function seamNormal(i,j){
-        const v=j*(grid+1)+i,x=p[v*3],z=p[v*3+2];
+      function surveyNormal(v){
+        const x=p[v*3],z=p[v*3+2];
         const nx=h(x-step,z)-h(x+step,z),nz=h(x,z-step)-h(x,z+step),ny=2*step;
         const length=Math.hypot(nx,ny,nz);
         normals.setXYZ(v,nx/length,ny/length,nz/length);
       }
-      for(let i=0;i<=grid;i++){seamNormal(i,0);seamNormal(i,grid);}
-      for(let j=1;j<grid;j++){seamNormal(0,j);seamNormal(grid,j);}
+      if(sparse) {
+        for(let v=0;v<samples;v++)surveyNormal(v);
+      } else {
+        for(let i=0;i<=grid;i++){surveyNormal(i);surveyNormal(grid*(grid+1)+i);}
+        for(let j=1;j<grid;j++){surveyNormal(j*(grid+1));surveyNormal(j*(grid+1)+grid);}
+      }
     }
     const land=new THREE.Mesh(ground,mat);
-    if(!deep){
+    if(!deep && !sparse){
       const skyline=new THREE.BufferGeometry();
       for(const [name,attr] of Object.entries(ground.attributes))skyline.setAttribute(name,attr);
-      skyline.setIndex(farIndices);
+      skyline.setIndex(farIndices.full);
       land.userData.skylineGeometry=skyline;
       land.userData.nearGeometry=ground;
     }
-    if(ridgeTile && !deep){
+    if(ridgeTile && !deep && !sparse){
       land.userData.farGeometry=distantHillSurface(ground,grid);
     }
     land.receiveShadow=true;
-    land.userData.range=peachTile || ridgeTile?710:475;
+    land.userData.sparse=sparse;
+    land.userData.highlands=peachTile || ridgeTile;
     ground.computeBoundingSphere();
     return land;
   }
@@ -170,7 +183,12 @@ export function createTerrainTiles(scene, mat) {
   const maxRadius=Math.hypot(half,half,(ceiling-floor)/2);
   const tiles=[];
   for(let row=0;row<TERRAIN_TILES;row++)for(let column=0;column<TERRAIN_TILES;column++) {
-    tiles.push({row,column,x:(column+.5)*span-BOUND,z:(row+.5)*span-BOUND,mesh:null});
+    const x=(column+.5)*span-BOUND,z=(row+.5)*span-BOUND;
+    const peach=PEACH_RANGE_BOUNDS,kyo=KYO_HILL_SHEET;
+    const peachTile=x+half>peach.west && x-half<peach.east && z+half>peach.north && z-half<peach.south;
+    const kyoTile=x+half>=kyo.x && x-half<=kyo.x+kyo.width && z+half>=kyo.z && z-half<=kyo.z+kyo.depth;
+    // Both surveys can require close terrain detail farther out than the plain.
+    tiles.push({row,column,x,z,peachTile,detailRange:peachTile || kyoTile?710:475,mesh:null});
   }
   const frustum=new THREE.Frustum(), matrix=new THREE.Matrix4(), box=new THREE.Box3();
   function survey(camera) {
@@ -181,8 +199,10 @@ export function createTerrainTiles(scene, mat) {
     box.max.set(x+half,ceiling,z+half);
     return frustum.intersectsBox(box);
   }
-  function load(tile) {
-    tile.mesh=build(tile);
+  function load(tile,sparse) {
+    const next=build(tile,sparse);
+    if(tile.mesh)unload(tile);
+    tile.mesh=next;
     tile.mesh.visible=false;
     tile.mesh.matrixAutoUpdate=false;
     scene.add(tile.mesh);
@@ -196,37 +216,42 @@ export function createTerrainTiles(scene, mat) {
       data.skylineGeometry.setIndex(null);
       data.skylineGeometry.dispose();
     }
+    if(data.sparse)mesh.geometry.setIndex(null);
     data.farGeometry?.dispose();
     (data.nearGeometry || mesh.geometry).dispose();
     tile.mesh=null;
   }
-  function* prepare(camera) {
+  function* prepare(camera,profile=SCENERY_PROFILES[DEFAULT_SCENERY_QUALITY]) {
     if(camera)survey(camera);
+    const eye=camera?.position;
+    const summit=eye && eye.y>10 && Math.hypot(eye.x-DISTRICTS.kyo.x,eye.z-DISTRICTS.kyo.z)<710;
+    const range=summit?1350:profile.terrainRange;
     for(const tile of tiles) {
+      let sparse=false;
       if(camera) {
-        const {x,y,z}=camera.position;
+        const {x,z}=camera.position;
         const dx=wrapDelta(tile.x-x), dz=wrapDelta(tile.z-z);
-        // The existing summit view can reach the far slopes above Kyoto.
-        const range=y>10 && Math.hypot(x-DISTRICTS.kyo.x,z-DISTRICTS.kyo.z)<710 ? 1350 : 710;
-        if(dx*dx+dz*dz>(range+maxRadius)**2 || !intersectsView(x+dx,z+dz))continue;
+        const squared=dx*dx+dz*dz;
+        if(squared>(range+maxRadius)**2 || !intersectsView(x+dx,z+dz))continue;
+        sparse=squared>(tile.detailRange+maxRadius)**2;
       }
-      load(tile);
+      load(tile,sparse);
       if(!camera)tile.mesh.visible=true;
       yield;
     }
   }
-  let nextTile=null, idlePending=false;
+  let nextTile=null, nextSparse=false, idlePending=false;
   function warmNeighbour(deadline) {
     idlePending=false;
     if (!nextTile || nextTile.mesh || document.hidden || deadline && deadline.timeRemaining()<8) return;
-    load(nextTile);
+    load(nextTile,nextSparse);
     nextTile=null;
   }
-  function update(camera,valleyView) {
+  function update(camera,valleyView,profile=SCENERY_PROFILES[DEFAULT_SCENERY_QUALITY]) {
     survey(camera);
     const {x,z}=camera.position, skyline=valleyView>.015;
     const extension=skyline?Math.min(1,valleyView*3):0;
-    const maxRange=710+(1350-710)*extension;
+    const maxRange=THREE.MathUtils.lerp(profile.terrainRange,1350,extension);
     nextTile=null;
     let nextDistance=Infinity;
     for(const tile of tiles) {
@@ -235,17 +260,20 @@ export function createTerrainTiles(scene, mat) {
         unload(tile);
         continue;
       }
-      if(!tile.mesh) {
+      const sparse=squared>((skyline?385:tile.detailRange)+maxRadius)**2;
+      // Promote before a coarse tile can enter the detail band. Keep the survey
+      // until normal eviction, so a turn or a step back cannot rebuild it twice.
+      if(!tile.mesh || (tile.mesh.userData.sparse && !sparse)) {
         if(squared>(maxRange+maxRadius)**2)continue;
-        if(intersectsView(x+dx,z+dz))load(tile);
-        else {
-          if(squared<nextDistance) { nextTile=tile; nextDistance=squared; }
+        if(intersectsView(x+dx,z+dz))load(tile,sparse);
+        else if(!tile.mesh) {
+          if(squared<nextDistance) { nextTile=tile; nextDistance=squared; nextSparse=sparse; }
           continue;
         }
       }
       const mesh=tile.mesh, data=mesh.userData, near=data.nearGeometry || mesh.geometry;
       const bounds=near.boundingSphere;
-      const range=data.range+(data.skylineGeometry?(1350-data.range)*extension:0);
+      const range=data.skylineGeometry || data.sparse?maxRange:profile.terrainRange;
       const cx=bounds.center.x, cz=bounds.center.z;
       const bx=wrapDelta(cx-x), bz=wrapDelta(cz-z), distanceSq=bx*bx+bz*bz;
       const offsetX=Math.round((x+bx-cx)/(2*BOUND))*2*BOUND;
@@ -256,7 +284,9 @@ export function createTerrainTiles(scene, mat) {
       }
       mesh.visible=distanceSq<(range+bounds.radius)**2;
       if(data.nearGeometry) {
-        if(skyline && distanceSq>(385+bounds.radius)**2)mesh.geometry=data.skylineGeometry;
+        // Render the additional horizon with the shared, edge-matched summit index.
+        const skylineDistance=skyline?385:data.highlands?710:475;
+        if(distanceSq>(skylineDistance+bounds.radius)**2)mesh.geometry=data.skylineGeometry;
         else mesh.geometry=data.farGeometry && distanceSq>(73+bounds.radius)**2?data.farGeometry:near;
       }
     }

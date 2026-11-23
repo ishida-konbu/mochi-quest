@@ -422,8 +422,8 @@ export function pilgrimageLife(scene){
   const cloud=banks(scene,map,clouds,'#f0ece3',.64);
   const orchard=createPeachOrchard(scene),gate=gateBlossoms(scene);
   const foxes=foxParties(scene), rain=createInariRain(scene), petals=fallingPetals(scene);
-  return (time,player,camera,weather)=>{
-    orchard(camera);gate(camera);
+  return (time,player,camera,weather,profile)=>{
+    orchard(camera,profile);gate(camera);
     const nearInari=abs(wrapDelta(player.x-DISTRICTS.inari.x+60))<260 && abs(wrapDelta(player.z-DISTRICTS.inari.z-82))<217;
     cloud(time,player,nearInari);foxes(time,player,nearInari,camera);
     rain(time,player,camera,weather);petals(time,player);

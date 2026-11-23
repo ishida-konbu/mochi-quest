@@ -34,6 +34,7 @@ import { tradeFacade } from './workshops.js';
 import { roofShell, atticWalls, timberLining } from './roof-shell.js';
 import { wetStone } from './stone-water.js';
 import { prepareForest } from './forest.js';
+import { DEFAULT_SCENERY_QUALITY, SCENERY_PROFILES, sceneryQualityPreference } from './scenery-quality.js';
 import { furnishRoom } from './interiors.js';
 import { FOREST_LAKE, LAKE_ISLET, SNOW_PASS, lakeRadiusGLSL, isletRadiusGLSL } from './snow-country.js';
 import * as THREE from './vendor/three.module.min.js';
@@ -945,6 +946,7 @@ class Painter {
         m.setColorAt(index++, this.color.fromArray(instances,i*19+16));
       }
       if(stride>1) m.userData.foliageCount=count;
+      if(mat.userData.landmarkStem)m.userData.landmarkStem=true;
       m.matrixAutoUpdate=false;
       m.userData.range=skyline?690:mat.userData.range || geo.userData.range || Math.min(300,72+extent*24);
       m.computeBoundingSphere();
@@ -959,12 +961,16 @@ class Painter {
 }
 function* woodland(p, art, boughs) {
   yield* plantInkTrees(p, art, boughs);
+  // Keep the landmark bamboo stalks with their crowns when small fittings
+  // and node rings have left the view. Other wooden poles keep their own range.
+  const bambooStems=p.solid.clone();
+  bambooStems.userData.landmarkStem=true;
   for (const tree of LANDMARK_TREES) {
     const {x,z,kind}=tree, y=h(x,z)-.02;
     if(kind==='bamboo') {
       const {angle:a,stems}=landmarkCulms(tree,seeded(tree.seed));
       for(const {x:bx,z:bz,high,lean} of stems){
-        p.link(V(bx, y, bz), V(bx + lean, y + high, bz + 0.12), 0.075, '#788458', false, true, true);
+        p.link(V(bx, y, bz), V(bx + lean, y + high, bz + 0.12), 0.075, '#788458', false, true, true,bambooStems);
         for (let k = 1; k < 7; k++)
           p.part(
             'round',
@@ -1901,7 +1907,8 @@ function createWaysideHuts(scene,clock) {
   };
 }
 
-export function* prepareWorld(scene, initialCamera) {
+export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCENERY_QUALITY) {
+  let profile = SCENERY_PROFILES[sceneryQualityPreference(initialQuality) ?? DEFAULT_SCENERY_QUALITY];
   const atmosphere = createAtmosphere(scene);
   const paper = grain(),
     art = loadPigments();
@@ -1910,7 +1917,7 @@ export function* prepareWorld(scene, initialCamera) {
   scene.add(terrainGroup,landGroup);
   const bottomContacts=waterbedContacts();
   const terrain=createTerrainTiles(terrainGroup,meadowMaterial(art,scene.userData.waterClock ??= {value:0},bottomContacts));
-  yield* terrain.prepare(initialCamera);
+  yield* terrain.prepare(initialCamera, profile);
   const kaedePaths=buildRoads(landGroup, art);
   const water = makeWater(scene, art, atmosphere.panorama, atmosphere.winterWash);
   const painter = new Painter(landGroup, paper, art);
@@ -1965,12 +1972,43 @@ export function* prepareWorld(scene, initialCamera) {
   // Each spatial batch lives in its nearest image of the repeating island.
   // Perspective and populated shorelines are preserved on crossing the ocean.
   const close = new Set(painter.closeDetails);
+  const treeMaterials=new Set(),treeHorizon={value:profile.treeRange};
   const batches = landGroup.children.map(mesh => {
     if (mesh.isInstancedMesh) { if (!mesh.boundingSphere) mesh.computeBoundingSphere(); }
     else if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
     const bounds = mesh.isInstancedMesh ? mesh.boundingSphere : mesh.geometry.boundingSphere;
-    return {mesh, x:bounds.center.x, z:bounds.center.z, radius:bounds.radius, range:close.has(mesh)?94:(mesh.userData.range||328)};
+    const baseRange=close.has(mesh)?94:(mesh.userData.range||328);
+    const tree=Boolean(mesh.userData.foliageCount || mesh.userData.farGeometry || mesh.userData.landmarkStem);
+    if(tree)treeMaterials.add(mesh.material);
+    return {mesh, x:bounds.center.x, z:bounds.center.z, radius:bounds.radius, baseRange, tree, limitSq:0};
   });
+  for(const material of treeMaterials) {
+    const shade=material.onBeforeCompile,key=material.customProgramCacheKey();
+    material.customProgramCacheKey=()=>key+'-tree-horizon';
+    material.onBeforeCompile=(shader,renderer)=>{
+      shade.call(material,shader,renderer);
+      // The seasonal washes compile their source spray before applying snow or dye.
+      if(shader.uniforms.treeHorizon===treeHorizon)return;
+      shader.uniforms.treeHorizon=treeHorizon;
+      shader.vertexShader='uniform float treeHorizon; varying float treeFade;\n'+shader.vertexShader.replace(
+        '#include <project_vertex>',`#include <project_vertex>
+        treeFade=smoothstep(.9*treeHorizon,treeHorizon,length(mvPosition.xyz));`);
+      shader.fragmentShader='varying float treeFade;\n'+shader.fragmentShader.replace(
+        '#include <alphatest_fragment>',`#include <alphatest_fragment>
+        if(treeFade>0. && treeFade>fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715)))))discard;`);
+    };
+  }
+  function setBatchRanges() {
+    treeHorizon.value=profile.treeRange;
+    for(const b of batches) {
+      // Sprays and low-poly trunks must both carry a landmark tree's silhouette.
+      // Leave ground cover and small fittings inside their existing local budgets.
+      const range=b.tree ? profile.treeRange
+        : b.baseRange>=240 ? b.baseRange*profile.sceneryScale : b.baseRange;
+      b.limitSq=(range+b.radius)**2;
+    }
+  }
+  setBatchRanges();
   const powder = seasonalWeather(scene), festival=createMochiPounding(scene);
   yield;
   festival.root.position.set(POUNDING.x,h(POUNDING.x,POUNDING.z)+.012,POUNDING.z);
@@ -1979,17 +2017,23 @@ export function* prepareWorld(scene, initialCamera) {
   const leaves = driftingLeaves(scene,boughs);
   return {
     textures: [...Object.values(art), atmosphere.panorama, atmosphere.winterWash],
+    setSceneryQuality(value) {
+      const next=SCENERY_PROFILES[sceneryQualityPreference(value) ?? DEFAULT_SCENERY_QUALITY];
+      if(next===profile)return;
+      profile=next;
+      setBatchRanges();
+    },
     update(time, player, camera, voyageTime=time, bellStrike=null, inariWeather=null) {
       water.update(time,player,voyageTime);
       painter.sway.value = time;
       if (camera) {
-        const valleyView=atmosphere.update(time, player, camera);
-        terrain.update(camera,valleyView);
+        const valleyView=atmosphere.update(time, player, camera, profile);
+        terrain.update(camera,valleyView,profile);
         updateKyo(time,player,camera);
         updateKiyomizu(voyageTime,player,bellStrike);
         updateLamps(time,player);
         updateCourt(time,player);
-        updateShrines(time,player,camera,inariWeather);
+        updateShrines(time,player,camera,inariWeather,profile);
         updateTrade(time,player,camera,voyageTime);
         updateHuts(player);
         updateBathTableaux(player,time);
@@ -1999,7 +2043,7 @@ export function* prepareWorld(scene, initialCamera) {
         updateWaterbed(camera);
         updateOcean(voyageTime,player);
         updatePalace(time,player,camera,voyageTime);
-        updateForest(camera, player);
+        updateForest(camera, player, profile);
         for (const b of batches) {
           const dx=wrapDelta(b.x-camera.position.x), dz=wrapDelta(b.z-camera.position.z);
           const x=Math.round((camera.position.x+dx-b.x)/(2*BOUND))*2*BOUND;
@@ -2010,9 +2054,18 @@ export function* prepareWorld(scene, initialCamera) {
           }
           const squared=dx*dx+dz*dz;
           const data=b.mesh.userData;
-          b.mesh.visible=squared<(b.range+b.radius)**2;
+          b.mesh.visible=squared<b.limitSq;
           if(data.nearGeometry) b.mesh.geometry=data.farGeometry && squared>(73+b.radius)**2?data.farGeometry:data.nearGeometry;
-          if(data.foliageCount) b.mesh.count=squared>(105+b.radius)**2?Math.ceil(data.foliageCount*.40):data.foliageCount;
+          if(data.foliageCount && b.mesh.visible) {
+            // Thin the interleaved sprays a few at a time as the grove recedes.
+            const distance=Math.sqrt(squared)-b.radius;
+            const fade=THREE.MathUtils.smoothstep(distance,85,135);
+            // Retain a distributed fifth of the original sprays in the outer
+            // band. Their painted colour, shape and position stay on the bough.
+            const middle=Math.max(135,b.baseRange,profile.landmarkDetailRange);
+            const outer=THREE.MathUtils.smoothstep(distance,middle,middle+65);
+            b.mesh.count=Math.ceil(data.foliageCount*(1-.60*fade-.20*outer));
+          }
         }
         powder(time,camera,atmosphere.climate.value.x);
       }

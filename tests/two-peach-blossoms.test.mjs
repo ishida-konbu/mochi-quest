@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DoubleSide, Texture, TextureLoader } from '../two/vendor/three.module.min.js';
-import { peachModel } from '../two/flowering-peaches.js';
+import { DoubleSide, PerspectiveCamera, Scene, Texture, TextureLoader } from '../two/vendor/three.module.min.js';
+import { createPeachOrchard, peachModel } from '../two/flowering-peaches.js';
+import { DISTRICTS } from '../two/geography.js';
+import { SCENERY_PROFILES } from '../two/scenery-quality.js';
 
 test('each peach crown carries the inked boughs and blossom washes around its trunk',t=>{
   const files=new Map();
@@ -26,4 +28,20 @@ test('each peach crown carries the inked boughs and blossom washes around its tr
       assert.ok(max.x-min.x>2 && max.z-min.z>2,'flower sprays spread around both sides of the crown');
     }
   }
+});
+
+test('changing scenery in place repaints the far orchard without growing its close models',t=>{
+  t.mock.method(TextureLoader.prototype,'load',()=>new Texture());
+  const scene=new Scene(),update=createPeachOrchard(scene),camera=new PerspectiveCamera(57,1.6,.09,1500);
+  const {x,z}=DISTRICTS.peach;
+  camera.position.set(x+730,50,z);camera.lookAt(x,10,z);camera.updateMatrixWorld();
+  const batches=scene.getObjectByName('桃源郷の桃の林').children,far=batches.at(-1);
+  function painted(profile){
+    update(camera,profile);
+    assert.ok(batches.slice(0,-1).every(m=>m.count===0));
+    return far.count;
+  }
+  const light=painted(SCENERY_PROFILES.light), normal=painted(SCENERY_PROFILES.normal), beautiful=painted(SCENERY_PROFILES.beautiful);
+  assert.ok(light<normal && normal<beautiful);
+  assert.equal(painted(SCENERY_PROFILES.light),light);
 });

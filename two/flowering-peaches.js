@@ -4,6 +4,7 @@ import { PEACH_TREES } from './pilgrimage-layout.js';
 import { terrainMeshHeight, seeded, wrapDelta } from './terrain.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { brushWash } from './scroll-sculpt.js';
+import { DEFAULT_SCENERY_QUALITY, SCENERY_PROFILES } from './scenery-quality.js';
 const {sin,cos,PI}=Math;
 export const CROWN_SPAN=10,CROWN_MID=3.3;
 // Each model has four azimuths at each elevation. Upper and lower slopes
@@ -105,23 +106,30 @@ export function createPeachOrchard(scene) {
   // The crown impressions already contain directional light and twig shadows.
   const mat=new T.MeshBasicMaterial({map,alphaTest:.29});
   // Four bearings at four elevations preserve each leaning crown above the gorge.
-  const plane=new T.PlaneGeometry(1,1),cells=new T.InstancedBufferAttribute(new Float32Array(2*N),2);
+  const plane=new T.PlaneGeometry(1,1),cells=new T.InstancedBufferAttribute(new Float32Array(3*N),3);
   plane.setAttribute('crownCell',cells.setUsage(T.DynamicDrawUsage));
   mat.onBeforeCompile=shader=>{
-    shader.vertexShader='attribute vec2 crownCell;\n'+shader.vertexShader.replace('#include <uv_vertex>',`
+    shader.vertexShader='attribute vec3 crownCell; varying float horizonFade;\n'+shader.vertexShader.replace('#include <uv_vertex>',`
       #include <uv_vertex>
-      vMapUv=(crownCell+clamp(uv,.004,.996))/vec2(8.,10.);
+      vMapUv=(crownCell.xy+clamp(uv,.004,.996))/vec2(8.,10.);
+      horizonFade=crownCell.z;
+    `);
+    shader.fragmentShader='varying float horizonFade;\n'+shader.fragmentShader.replace('#include <alphatest_fragment>',`
+      #include <alphatest_fragment>
+      float grain=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715))));
+      if(grain<horizonFade)discard;
     `);
   };
   const distant=batch(plane,mat,N,false),dummy=new T.Object3D(),colour=new T.Color(),up=new T.Vector3();
   const tints=['#ffffff','#fff3f3','#ffe5eb','#fff3e0','#f7d5e4','#fff8f2'];
   const frustum=new T.Frustum(),projection=new T.Matrix4(),lastProjection=new T.Matrix4(),lastRotation=new T.Quaternion(),bounds=new T.Sphere();
-  let lastX=Infinity,lastZ=Infinity,lastY=Infinity;
-  return camera=>{
+  let lastX=Infinity,lastZ=Infinity,lastY=Infinity,lastRange=0;
+  return (camera,profile=SCENERY_PROFILES[DEFAULT_SCENERY_QUALITY])=>{
     if(!camera)return;
-    const {x,y,z}=camera.position;
+    const {x,y,z}=camera.position,range=profile.treeRange;
     if(Math.hypot(x-lastX,y-lastY,z-lastZ)<.38 && Math.abs(lastRotation.dot(camera.quaternion))>.99995 &&
-      lastProjection.equals(camera.projectionMatrix))return;
+      lastProjection.equals(camera.projectionMatrix) && range===lastRange)return;
+    lastRange=range;
     lastX=x;lastY=y;lastZ=z;lastRotation.copy(camera.quaternion);lastProjection.copy(camera.projectionMatrix);
     camera.updateWorldMatrix(true,false);
     frustum.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
@@ -129,12 +137,12 @@ export function createPeachOrchard(scene) {
     for(const stand of stands.values()){
       bounds.copy(stand.sphere);
       const sx=wrapDelta(bounds.center.x-x),sz=wrapDelta(bounds.center.z-z);
-      if(sx*sx+sz*sz>(630+bounds.radius)**2)continue;
+      if(sx*sx+sz*sz>(range+bounds.radius)**2)continue;
       bounds.center.x=x+sx;bounds.center.z=z+sz;
       if(!frustum.intersectsSphere(bounds))continue;
       for(const tree of stand.trees){
         const dx=wrapDelta(tree.x-x),dz=wrapDelta(tree.z-z),dist=Math.hypot(dx,dz,y-tree.y-CROWN_MID*tree.size);
-        if(dist>630)continue;
+        if(dist>range)continue;
         colour.set(tints[tree.seed%tints.length]);
         if(dist<(60+tree.size*8)){
           bounds.center.set(x+dx,tree.y+CROWN_MID*tree.size,z+dz);bounds.radius=CROWN_SPAN*.58*tree.size;
@@ -159,7 +167,7 @@ export function createPeachOrchard(scene) {
           dummy.position.set(x+dx,tree.y,z+dz).add(up);
           dummy.scale.set(CROWN_SPAN*tree.size,CROWN_SPAN*vertical,1);dummy.updateMatrix();
           distant.setMatrixAt(index,dummy.matrix);distant.setColorAt(index,colour);
-          cells.setXY(index,view+4*(band%2),9-tree.form*2-Math.floor(band/2));
+          cells.setXYZ(index,view+4*(band%2),9-tree.form*2-Math.floor(band/2),T.MathUtils.smoothstep(dist,.9*range,range));
         }
       }
     }

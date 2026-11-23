@@ -6,8 +6,9 @@ import { isNishiyamaTree } from './mountain-woodland.js';
 import { bambooFootGLSL, markCulms, prepareBambooCulms } from './bamboo-culms.js';
 import { TREE_FORM_COUNT } from './forest-forms.js';
 import { forestGeometry, forestMaterial, forestTexture } from './forest-mesh.js';
+import { DEFAULT_SCENERY_QUALITY, SCENERY_PROFILES } from './scenery-quality.js';
 
-const FAR = 42, RANGE = 314, STEP = 3;
+const FAR = 42, STEP = 3;
 // Retain the full branch mesh while the crown still subtends a large angle.
 // Bamboo's narrow profile needs a shorter distance on the densely planted western slope.
 const fadeStart = 2/3, hillFadeStart=.80;
@@ -41,7 +42,7 @@ function fade(shader, far) {
       float threshold=mix(mix(corners.x,corners.y,f.x),mix(corners.z,corners.w,f.x),f.y);
       baked=step(threshold,baked);
     } else if(baked>0. && baked<1.) baked=step(screenSeed,baked);
-    ${far?'if(baked<.5) discard;':'if(solidCulm>.5 ? forestFade>=1. : baked>.5) discard;'}`);
+    ${far?'if(baked<.5 || screenSeed<horizonFade) discard;':'if(solidCulm>.5 ? forestFade>=1. : baked>.5) discard;'}`);
 }
 // A row pair gives the ink of bare wood and leaves for one form and aspect.
 // Both representations use the same palette in the changeover.
@@ -67,7 +68,7 @@ export function* prepareForest(scene, clock, boughs) {
   for(const t of trees){
     const col=cellAt(t.x),row=cellAt(t.z),k=key(col,row);
     if(!groves.has(k))groves.set(k,{x:(col+.5)*width-BOUND,z:(row+.5)*width-BOUND,
-      floor:Infinity,top:-Infinity,reach:0,range:0,trees:[]});
+      floor:Infinity,top:-Infinity,reach:0,trees:[]});
     const grove=groves.get(k), relief=kyoRidgeHeight(t.x,t.z);
     const wash=THREE.MathUtils.smoothstep(relief,0,3);
     const bamboo=t.kind==='moso';
@@ -75,7 +76,6 @@ export function* prepareForest(scene, clock, boughs) {
     const reach=THREE.MathUtils.lerp(FAR,hillReach,wash);
     const detailStart=THREE.MathUtils.lerp(fadeStart,hillFadeStart,wash)*reach;
     const nearRadius=reach+STEP+1;
-    const range=relief>.5?640:RANGE;
     const ground=treeGround(t);
     grove.floor=Math.min(grove.floor,ground);
     grove.top=Math.max(grove.top,ground+t.h);
@@ -86,15 +86,18 @@ export function* prepareForest(scene, clock, boughs) {
     const tint=THREE.MathUtils.lerp(.86+variation*.0019,.83+variation*.0010,wash);
     const rotation=t.seed*2.39996323;
     const dye=t.kind==='maple'&&kaedeTrees.has(t)?seasonAt(t.x,t.z).autumn:0;
-    const record={tree:t,ground,rotation,range,wash,dye,bambooWash:bamboo?wash:0,detailStart,reach,tint};
+    const record={tree:t,ground,rotation,wash,dye,bambooWash:bamboo?wash:0,detailStart,reach,tint};
     if(bamboo && isNishiyamaTree(t)){
       record.bambooRow=bambooStands.length;
       record.cos=Math.cos(rotation);record.sin=Math.sin(rotation);
       record.bambooWash=-record.bambooRow-1;
+      // Beyond this distance a complete painted crown includes the stems.
+      // Stagger the handover between clumps before the last foliage fades.
+      const stemRange=relief>.5?640:314;
+      record.stemRangeSq=(stemRange*(.86+.04*(t.seed%97)/96))**2;
       bambooStands.push(record);
     }
     grove.trees.push(record);
-    grove.range=Math.max(grove.range,range);
     for(let i=cellAt(t.x-nearRadius);i<=cellAt(t.x+nearRadius);i++)
       for(let j=cellAt(t.z-nearRadius);j<=cellAt(t.z+nearRadius);j++){
         const cell=key(i,j);
@@ -106,7 +109,7 @@ export function* prepareForest(scene, clock, boughs) {
   for(const grove of groves.values()){
     grove.centreY=(grove.floor+grove.top)*.5;
     grove.radius=Math.hypot(width*Math.SQRT1_2,(grove.top-grove.floor)*.5)
-      +grove.reach+STEP+1+grove.range*.031;
+      +grove.reach+STEP+1;
   }
   const loader=new THREE.TextureLoader();
   function read(name) {
@@ -232,7 +235,7 @@ export function* prepareForest(scene, clock, boughs) {
   const plane = new THREE.PlaneGeometry(1,1);
   geo.index=plane.index;geo.attributes={...plane.attributes};
   const roots = new THREE.InstancedBufferAttribute(new Float32Array(trees.length*4),4);
-  const forms = new THREE.InstancedBufferAttribute(new Float32Array(trees.length*3),3);
+  const forms = new THREE.InstancedBufferAttribute(new Float32Array(trees.length*4),4);
   const styles = new THREE.InstancedBufferAttribute(new Float32Array(trees.length*3),3);
   const dyes = new THREE.InstancedBufferAttribute(new Float32Array(trees.length),1);
   for(const attribute of [roots,forms,styles,dyes]) attribute.setUsage(THREE.DynamicDrawUsage);
@@ -243,10 +246,11 @@ export function* prepareForest(scene, clock, boughs) {
   const farMaterial=new THREE.MeshLambertMaterial({map:read('forest-crowns'),alphaTest:.30,side:THREE.FrontSide});
   farMaterial.onBeforeCompile=shader=>{
     shader.uniforms.crownWashes={value:washes};
-    shader.vertexShader=phaseDeclaration+'attribute float leafDye; attribute vec4 rootHeight; attribute vec3 treeForm,crownStyle; varying float forestTint,washRow;\n'+
+    shader.vertexShader=phaseDeclaration+'attribute float leafDye; attribute vec4 rootHeight,treeForm; attribute vec3 crownStyle; varying float forestTint,washRow,horizonFade;\n'+
       shader.vertexShader.replace('#include <beginnormal_vertex>','#include <beginnormal_vertex>\nobjectNormal=vec3(0.,1.,0.);').replace('#include <begin_vertex>',`
         vec3 root=rootHeight.xyz;
         ${crownVertex}
+        horizonFade=smoothstep(treeForm.w*.90,treeForm.w,forestDistance);
         vec2 ray=normalize(cameraPosition.xz-root.xz+vec2(.0001));
         vec3 right=vec3(ray.y,0.,-ray.x);
         vec3 transformed=root+(right*(position.x*1.8)+vec3(0.,position.y*1.50+.58,0.))*rootHeight.w;
@@ -259,7 +263,7 @@ export function* prepareForest(scene, clock, boughs) {
         forestTint=treeForm.z;
         washRow=(treeForm.x+aspect*${TREE_FORM_COUNT}.)*2.;
       `).replace('#include <project_vertex>',brushProjection('rootHeight.w'));
-    shader.fragmentShader=crownPalette+'\nvarying float forestTint,washRow;\n'+
+    shader.fragmentShader=crownPalette+'\nvarying float forestTint,washRow,horizonFade;\n'+
       shader.fragmentShader.replace('#include <map_fragment>', `
         vec4 crown=texture2D(map,vMapUv);
         if(kaedeInk!=0.) {
@@ -289,8 +293,8 @@ export function* prepareForest(scene, clock, boughs) {
   const transform=new THREE.Object3D(), tint=new THREE.Color();
   const view=new THREE.Frustum(),projection=new THREE.Matrix4(),crown=new THREE.Sphere();
   const lastRotation=new THREE.Quaternion();
-  let lastX=Infinity,lastY=Infinity,lastZ=Infinity,lastZoom=0,lastAspect=0;
-  return function updateForest(camera, player) {
+  let lastX=Infinity,lastY=Infinity,lastZ=Infinity,lastZoom=0,lastAspect=0,lastProfile;
+  return function updateForest(camera, player, profile=SCENERY_PROFILES[DEFAULT_SCENERY_QUALITY]) {
     const eye=camera.position;
     const scale=player.buffs.full>0 ? 1.28 : 1;
     const ride=player.mount==='bike' ? .9 : player.mount==='turtle' ? .52 : 0;
@@ -302,27 +306,29 @@ export function* prepareForest(scene, clock, boughs) {
     heroRadius.value.set(scale*(1.17-.18*pull),height+.29);
     const zoom=camera.projectionMatrix.elements[5],aspect=camera.projectionMatrix.elements[0];
     if ((eye.x-lastX)**2+(eye.y-lastY)**2+(eye.z-lastZ)**2<STEP*STEP &&
-        Math.abs(lastRotation.dot(camera.quaternion))>.9999 && zoom===lastZoom && aspect===lastAspect)return;
+        Math.abs(lastRotation.dot(camera.quaternion))>.9999 && zoom===lastZoom && aspect===lastAspect && profile===lastProfile)return;
+    lastProfile=profile;
     lastZoom=zoom;lastAspect=aspect;lastRotation.copy(camera.quaternion);
     view.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
     lastX=eye.x;lastY=eye.y;lastZ=eye.z;
     for (const mesh of near) mesh.count=0;
     bambooCulms.reset();
     let used=0;
+    const range=profile.treeRange,rangeSq=range*range;
     for(const grove of groves.values()){
       const gx=wrapDelta(grove.x-eye.x),gz=wrapDelta(grove.z-eye.z);
       const edgeX=Math.max(0,Math.abs(gx)-width/2),edgeZ=Math.max(0,Math.abs(gz)-width/2);
-      if(edgeX*edgeX+edgeZ*edgeZ>grove.range*grove.range)continue;
+      if(edgeX*edgeX+edgeZ*edgeZ>rangeSq)continue;
       // Reject whole hillside stands before checking thousands of individual
       // crowns. Include the same movement/rotation tolerance as the leaf test.
       crown.center.set(eye.x+gx,grove.centreY,eye.z+gz);
-      crown.radius=grove.radius;
+      crown.radius=grove.radius+range*.031;
       if(!view.intersectsSphere(crown))continue;
       for(const record of grove.trees) {
-        const {tree,ground,rotation,range,wash,dye,bambooWash,detailStart,reach,tint:brightness}=record;
+        const {tree,ground,rotation,wash,dye,bambooWash,detailStart,reach,tint:brightness}=record;
         const dx=wrapDelta(tree.x-eye.x), dz=wrapDelta(tree.z-eye.z);
         const d2=dx*dx+dz*dz+(ground-eye.y)**2;
-        if(d2>range*range) continue;
+        if(d2>rangeSq) continue;
         const x=eye.x+dx,z=eye.z+dz;
         crown.center.set(x,ground+.58*tree.h,z);
         // Include the whole baked crown, a camera stride, and the permitted
@@ -338,10 +344,14 @@ export function* prepareForest(scene, clock, boughs) {
           mesh.geometry.attributes.leafDye.setX(idx,dye);
         }
         if(d2>(detailStart-STEP-1)**2) {
-          if(bambooWash<0)bambooCulms.add(record,x,z);
+          let farBambooWash=bambooWash;
+          if(bambooWash<0){
+            if(d2<record.stemRangeSq)bambooCulms.add(record,x,z);
+            else farBambooWash=1;
+          }
           roots.setXYZW(used,x,ground,z,tree.h);
-          forms.setXYZ(used,tree.form,rotation%(Math.PI*2),brightness);
-          styles.setXYZ(used,wash,bambooWash,reach);dyes.setX(used,dye);used++;
+          forms.setXYZW(used,tree.form,rotation%(Math.PI*2),brightness,range);
+          styles.setXYZ(used,wash,farBambooWash,reach);dyes.setX(used,dye);used++;
         }
       }
     }

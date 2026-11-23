@@ -1,6 +1,7 @@
 import { normalizeVolumes } from '../sound.js';
 import { atlasDestinations } from './atlas-destinations.js';
 import { normalizeMiniMap } from './mini-map.js';
+import { sceneryQualityPreference } from './scenery-quality.js';
 import { restoreMapGoal, savedMapGoal } from './wayfinding.js';
 
 // Only Mochi Quest 2's two local keys travel. The fragment never becomes
@@ -38,9 +39,11 @@ export function decodeTransfer(origin, hash, createGame) {
     const goal = restoreMapGoal(settings.goal, atlasDestinations(game.state));
     if (settings.goal !== null && !goal) return null;
     const travelCamera = travelCameraPreference(settings);
+    const sceneryQuality = sceneryQualityPreference(settings.sceneryQuality);
     return { game, settings: {
       sound: settings.sound, volumes: normalizeVolumes(settings.volumes), yaw: settings.yaw, goal: savedMapGoal(goal),
       ...(travelCamera !== undefined ? { travelCamera } : {}),
+      ...(sceneryQuality !== undefined ? { sceneryQuality } : {}),
       ...(settings.minimap ? { minimap: normalizeMiniMap(settings.minimap) } : {}),
     } };
   } catch {

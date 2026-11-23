@@ -117,8 +117,16 @@ class BarkBrush {
       geo.computeBoundingSphere();
       const tree = new THREE.Mesh(geo, this.wood);
       const distant=new THREE.BufferGeometry();
-      for (const [name,attribute] of Object.entries(geo.attributes)) distant.setAttribute(name,attribute);
-      distant.setIndex(b.distant);
+      // A first glimpse across the island only uploads the retained trunk
+      // rings. Keep their original normals, inks and UVs for a matching outline.
+      const vertices=[...new Set(b.distant)];
+      const compact=new Map(vertices.map((original,index)=>[original,index]));
+      for(const [name,source] of Object.entries(geo.attributes)){
+        const attr=new THREE.BufferAttribute(new Float32Array(vertices.length*source.itemSize),source.itemSize);
+        for(let i=0;i<vertices.length;i++)attr.copyAt(i,source,vertices[i]);
+        distant.setAttribute(name,attr);
+      }
+      distant.setIndex(b.distant.map(original=>compact.get(original)));
       distant.boundingSphere=geo.boundingSphere;
       tree.userData.nearGeometry=geo;
       tree.userData.farGeometry=distant;

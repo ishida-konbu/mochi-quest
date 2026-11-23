@@ -50,6 +50,19 @@ test('local and transferred camera preferences preserve explicit choices across 
   }
 });
 
+test('journey transfers keep each scenery preset and accept legacy or unrecognized preferences', () => {
+  const save = createGame().save();
+  for (const sceneryQuality of ['beautiful', 'normal', 'light']) {
+    const incoming = decode(encode(save, { ...settings, sceneryQuality }).hash);
+    assert.equal(incoming.settings.sceneryQuality, sceneryQuality);
+  }
+  for (const sceneryQuality of [undefined, null, 'auto', 'constructor', 1]) {
+    const incoming = decode(encode(save, { ...settings, sceneryQuality }).hash);
+    assert.equal(incoming.game.restored, true);
+    assert.ok(!Object.hasOwn(incoming.settings, 'sceneryQuality'));
+  }
+});
+
 test('historical six-district saves retain their stamps and acquire stocked new bike ports',()=>{
   const old=createGame().save();
   old.version=2; old.items.length=36;old.bikes.length=6;old.visited.push('market');

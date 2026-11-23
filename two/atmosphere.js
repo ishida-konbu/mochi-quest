@@ -192,7 +192,7 @@ export function createAtmosphere(scene) {
   return {
     panorama, winterWash,
     climate: dome.material.uniforms.climate,
-    update(time, player, camera) {
+    update(time, player, camera, profile) {
       const s = climateAtTime(player,time,region);
       dome.position.copy(camera.position);
       dome.material.uniforms.clock.value = time;
@@ -231,7 +231,8 @@ export function createAtmosphere(scene) {
       dome.material.uniforms.valleyHaze.value=Math.max(valleyView,peachAir);
       dome.material.uniforms.valleyMist.value.copy(scene.fog.color);
       dome.material.uniforms.horizonInk.value=1-Math.max(.70*peachAir,.42*clearAir,.42*hillView);
-      const openAir=.0057-Math.max(.0025*clearAir,.00415*hillView);
+      const clearing=Math.max((.0025/.00415)*clearAir,hillView);
+      const openAir=THREE.MathUtils.lerp(profile.openFogDensity,.00155,clearing);
       const valleyAir=.0062-.0016*THREE.MathUtils.smoothstep(player.y,28,90);
       // Clear salt air leaves the fishing sail and ink-coloured reefs legible
       // from the pagoda. Snow is still visible on the inland approach.

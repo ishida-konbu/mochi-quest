@@ -22,11 +22,17 @@ function fillSoundtrack(table) {
   }
 }
 
-export function createAudioSettings({ volumes, travelCameraEnabled, onTravelCameraChange, onChange, onOpen, onReset }) {
+export function createAudioSettings({
+  volumes, travelCameraEnabled, onTravelCameraChange, onChange, onOpen, onReset,
+  sceneryQuality, onSceneryQualityChange,
+}) {
   const panel = document.getElementById('audio-settings');
   const toggle = document.getElementById('audio-settings-toggle');
   const dismiss = document.getElementById('audio-settings-close');
   const reset = document.getElementById('reset-journey');
+  const scenery = document.getElementById('scenery-quality');
+  scenery.value = sceneryQuality;
+  scenery.addEventListener('change', () => onSceneryQualityChange(scenery.value));
   const follow = document.getElementById('travel-camera');
   follow.checked = travelCameraEnabled;
   follow.addEventListener('change', () => onTravelCameraChange(follow.checked));

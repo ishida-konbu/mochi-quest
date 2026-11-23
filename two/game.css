@@ -1200,7 +1200,7 @@ dialog {border:2px solid #526761;border-radius:2px;}
   font: 600 12px var(--sans);
   font-variant-numeric: tabular-nums;
 }
-.camera-option {
+.settings-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1211,11 +1211,22 @@ dialog {border:2px solid #526761;border-radius:2px;}
   font: 700 14px/1.5 var(--min);
   cursor: pointer;
 }
-.camera-option input {
+.settings-option input {
   width: 18px;
   height: 18px;
   margin: 0;
   accent-color: var(--sage);
+  cursor: pointer;
+}
+.settings-option select {
+  min-width: 7em;
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 1px solid #afa181;
+  border-radius: 2px;
+  background: #fff6e2;
+  color: var(--ink);
+  font: inherit;
   cursor: pointer;
 }
 .journey-reset {
@@ -1267,7 +1278,7 @@ dialog {border:2px solid #526761;border-radius:2px;}
   margin-top: 2px;
   color: #675d4c;
 }
-#soundtrack summary:focus-visible, .volume-row input:focus-visible, .camera-option input:focus-visible {
+#soundtrack summary:focus-visible, .volume-row input:focus-visible, .settings-option input:focus-visible, .settings-option select:focus-visible {
   outline: 2px solid var(--red);
   outline-offset: 2px;
 }

@@ -3,6 +3,7 @@ import { applyClimateLights } from './atmosphere.js';
 import { createWake } from './wake.js';
 import { canFollowTravel, createTravelCamera } from './travel-camera.js';
 import { prepareWorld } from './world.js';
+import { DEFAULT_SCENERY_QUALITY, sceneryQualityPreference } from './scenery-quality.js';
 import { finishInSlices, watchArrivalPaint } from './preparation.js';
 import { setRiverStones } from './scanned-stone.js';
 import { bathPosture,seatedFeet } from './bath-gestures.js';
@@ -108,6 +109,7 @@ state.inariWeather = inariWeatherAt(p.x, p.z, state.time, state.flightSeed);
 const audio = createAudio(createSoundscape);
 let audible = savedSettings.sound !== false;
 let volumes = normalizeVolumes(savedSettings.volumes);
+let sceneryQuality = sceneryQualityPreference(savedSettings.sceneryQuality) ?? DEFAULT_SCENERY_QUALITY;
 let travelCameraEnabled = travelCameraPreference(savedSettings) ?? true;
 audio.setVolumes(volumes);
 let yaw = Number.isFinite(savedSettings.yaw) ? savedSettings.yaw : 0;
@@ -199,7 +201,7 @@ window.addEventListener('storage', event => {
 });
 function journeySettings() {
   return {
-    sound: audible, volumes, travelCamera: travelCameraEnabled, yaw: photoMode ? priorCamera.yaw : yaw,
+    sound: audible, volumes, sceneryQuality, travelCamera: travelCameraEnabled, yaw: photoMode ? priorCamera.yaw : yaw,
     goal: savedMapGoal(goal), minimap: miniMap.settings, resetAt: savedSettings.resetAt,
   };
 }
@@ -351,6 +353,12 @@ function action(name) {
 }
 const audioSettings = createAudioSettings({
   volumes,
+  sceneryQuality,
+  onSceneryQualityChange(value) {
+    sceneryQuality = value;
+    world?.setSceneryQuality(value);
+    persistSettings();
+  },
   travelCameraEnabled,
   onTravelCameraChange(enabled) {
     travelCameraEnabled = enabled;
@@ -1245,7 +1253,9 @@ async function boot() {
     updateCamera(1, true);
     setLoadingCaption(state.region + 'の景色をひらいています…');
     const arrivalAssets = Promise.all([loadRiceModel(), loadMapPaper(), setRiverStones(scene, state.objects)]);
-    [world] = await Promise.all([finishInSlices(prepareWorld(scene, camera), preparation.signal), arrivalAssets]);
+    const preparingWorld = prepareWorld(scene, camera, sceneryQuality);
+    [world] = await Promise.all([finishInSlices(preparingWorld, preparation.signal), arrivalAssets]);
+    world.setSceneryQuality(sceneryQuality);
     storyWorld = createStoryWorld(scene, game.notebook, game.storyCollisions, () => actors?.hero);
     storyWorld.update(state.time, p);
     meadow = createMeadow(scene, state.objects, coarse, state.npcs);
