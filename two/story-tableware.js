@@ -6,7 +6,7 @@ import { brushWash } from './scroll-sculpt.js';
 const wares=[null,
   ['桜川の舟皿','boat',.37,.209,.039,.085,'#925a45','#e8c7a4',0,'wood'],
   ['笹編みの長目皿','leaf',.355,.19,.028,.072,'#739043','#d4c693',1,'bamboo'],
-  ['藍鉄釉の厚手角皿','chamfer',.310,.247,.045,.092,'#385e69','#ad9c7f',2,'stoneware'],
+  ['鉄釉の厚手角皿','chamfer',.310,.247,.045,.092,'#f0eae0','#ffdfbd',null,'stoneware'],
   ['峠の鉄絵鉢','round',.303,.269,.062,.162,'#864531','#d5a867',5,'glaze'],
   ['稲穂色の浅箕','leaf',.319,.245,.032,.077,'#a2783b','#dfbf82',1,'bamboo'],
   ['浜千鳥の長皿','round',.350,.232,.047,.103,'#246376','#f1e3ba',2,'glaze'],
@@ -48,6 +48,31 @@ function outline(type,a){
   }
 }
 const colour=(s)=>new T.Color(s);
+function marketStoneware(){
+  const loader=new T.TextureLoader();
+  const clay=loader.load(new URL('./assets/world/market-ironware.webp',import.meta.url).href);
+  const surface=loader.load(new URL('./assets/world/market-ironware-surface.webp',import.meta.url).href);
+  clay.colorSpace=T.SRGBColorSpace;
+  for(const map of [clay,surface]){
+    map.wrapS=map.wrapT=T.MirroredRepeatWrapping;
+    map.anisotropy=4;
+  }
+  // Red encodes small pits and mineral grains; green carries the dry-to-burnished finish.
+  return brushWash(new T.MeshStandardMaterial({map:clay,bumpMap:surface,bumpScale:.00065,
+    roughnessMap:surface,roughness:1,vertexColors:true,side:T.DoubleSide}),.045);
+}
+function slabTextureRadii(levels,span){
+  // Lay the clay surface flat from the well, over the lip and down the wall.
+  // Arc length keeps the grain visible on the nearly vertical edge.
+  const radii=levels.map(([r])=>r);
+  const foot=4;
+  for(let j=levels.length-2;j>=foot;j--){
+    const [r,y]=levels[j],[nextR,nextY]=levels[j+1];
+    radii[j]=radii[j+1]+Math.hypot(nextR-r,(nextY-y)/span);
+  }
+  for(let j=0;j<foot;j++)radii[j]*=radii[foot]/levels[foot][0];
+  return radii;
+}
 function splitBamboo(w,d,floor,h,form,n){
   const positions=[],cols=[],faces=[],angle=n===2?.08:.58,cs=Math.cos(angle),sn=Math.sin(angle);
   const shades=(n===2?['#b8b77b','#969c5f','#cab078']:['#d6b570','#b29455','#dec78b']).map(colour);
@@ -82,7 +107,7 @@ function splitBamboo(w,d,floor,h,form,n){
 function build(n){
   const [name,form,w,d,floor,h,coat,lip,row,kind]=wares[n], g=new T.Group(); g.name=name;g.userData.floor=floor;
   const stoneware=kind==='stoneware';
-  const pigment=colour(coat), trim=colour(lip), biscuit=stoneware?colour('#79624d'):kind==='glaze'?colour('#bda883'):pigment.clone().multiplyScalar(.72);
+  const pigment=colour(coat), trim=colour(lip), biscuit=stoneware?colour('#f4d5b4'):kind==='glaze'?colour('#bda883'):pigment.clone().multiplyScalar(.72);
   const glossy=kind==='shell'||kind==='lacquer'||kind==='glaze';
   // The market dish is pressed from a slab. Its broad foot, nearly upright
   // outside wall and thumb-wide rim are visible even below the painted band.
@@ -90,6 +115,7 @@ function build(n){
     ? [[0,.009],[.52,.009],[.57,.002],[.71,.002],[.74,.016],[.89,.027],[.98,.047],[1,.066],[1,h-.005],[.99,h],[.91,h],[.89,h-.006],[.79,floor+.012],[.68,floor+.001],[.01,floor]]
     : [[.00,.006],[.29,.006],[.32,.002],[.43,.002],[.445,floor*.62],[.65,floor*.67],[.87,h*.57],[.97,h*.82],[1,h*.99],[.994,h+.006],[.967,h+.010],[.939,h*.94],[.77,floor+.017],[.57,floor+.002],[.01,floor]];
   const pos=[],normalColours=[],uv=[],indices=[],sideCount=100;
+  const slabRadii=stoneware && slabTextureRadii(levels,(w+d)/2);
   for(let j=0;j<levels.length;j++){
     const [r,y]=levels[j];for(let i=0;i<=sideCount;i++){
       const u=i/sideCount,a=u*tau,c=Math.cos(a),s=Math.sin(a),R=r*outline(form,a);
@@ -100,21 +126,36 @@ function build(n){
       if(form==='shell')col.lerp(colour(c>0?'#bcd9ad':'#b8a0c4'),.31+.22*Math.cos(12*a+.5));
       if(j===12||j===13)col.lerp(trim,kind==='lacquer'?.06:.22);
       const hand=1+.021*Math.sin(13*a+r*7)+.008*Math.sin(a*43+3*r);
-      normalColours.push(col.r*hand,col.g*hand,col.b*hand);uv.push(u,Math.min(1,Math.max(0,j>=11?(13-j)/2:(j-5)/3)));
+      let exposure=hand;
+      if(stoneware){
+        // The thinner slip on a rubbed lip and the exposed foot reveal warmer clay.
+        const rim=j===9||j===10;
+        const wear=rim?1.50+.48*s*c+.20*Math.cos(3*a+.5):j<=4?1.64:j===11?1.02:1.24;
+        exposure*=wear;
+        const reach=slabRadii[j]*outline(form,a)/.73;
+        uv.push(.5+w*c*reach,.5+d*s*reach);
+      }else uv.push(u,Math.min(1,Math.max(0,j>=11?(13-j)/2:(j-5)/3)));
+      normalColours.push(col.r*exposure,col.g*exposure,col.b*exposure);
     }
   }
   const geometry=new T.BufferGeometry();
   for(let j=0;j<levels.length-1;j++){
     const start=indices.length;
     for(let i=0;i<sideCount;i++){const a=j*(sideCount+1)+i;indices.push(a,a+sideCount+1,a+1,a+1,a+sideCount+1,a+sideCount+2);}
-    geometry.addGroup(start,indices.length-start,((j>=5&&j<8)||(j>=11&&j<13))&&kind!=='bamboo'?1:0);
+    if(!stoneware)geometry.addGroup(start,indices.length-start,((j>=5&&j<8)||(j>=11&&j<13))&&kind!=='bamboo'?1:0);
   }
   // Merge adjacent strips using the same finish to keep the number of draw calls independent of the profile resolution.
   const groups=[];for(const strip of geometry.groups){const last=groups.at(-1);if(last?.materialIndex===strip.materialIndex)last.count+=strip.count;else groups.push({...strip});}geometry.groups=groups;
   geometry.setAttribute('position',new T.Float32BufferAttribute(pos,3));geometry.setAttribute('color',new T.Float32BufferAttribute(normalColours,3));geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));geometry.setIndex(indices);geometry.computeVertexNormals();
-  const enamel=brushWash(new T.MeshPhysicalMaterial({vertexColors:true,side:T.DoubleSide,roughness:glossy?.32:.81,clearcoat:glossy?.53:.06,clearcoatRoughness:.29,metalness:kind==='shell'?.16:0}),.075);
-  const frieze=brushWash(new T.MeshPhysicalMaterial({map:paint(row),side:T.DoubleSide,roughness:.48,clearcoat:.28}),.07);
-  const body=new T.Mesh(geometry,[enamel,frieze]);body.castShadow=body.receiveShadow=true;g.add(body);
+  let finish;
+  if(stoneware){
+    finish=marketStoneware();
+  }else{
+    const enamel=brushWash(new T.MeshPhysicalMaterial({vertexColors:true,side:T.DoubleSide,roughness:glossy?.32:.81,clearcoat:glossy?.53:.06,clearcoatRoughness:.29,metalness:kind==='shell'?.16:0}),.075);
+    const frieze=brushWash(new T.MeshPhysicalMaterial({map:paint(row),side:T.DoubleSide,roughness:.48,clearcoat:.28}),.07);
+    finish=[enamel,frieze];
+  }
+  const body=new T.Mesh(geometry,finish);body.castShadow=body.receiveShadow=true;g.add(body);
   if(kind==='bamboo')g.add(splitBamboo(w,d,floor,h,form,n));
   if(kind==='shell'){
     const rim=new T.Shape(),level=floor+.013;
