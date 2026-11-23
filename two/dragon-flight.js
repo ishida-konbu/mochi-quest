@@ -41,7 +41,7 @@ function dragonSkin(mesh) {
   const contour=mesh.getObjectByName('墨の輪郭');
   if(contour)contour.geometry=geometry;
   geometry.computeBoundingSphere();geometry.boundingSphere.radius+=1.2;
-  return {rest,normals,pos,normal};
+  return {geometry,rest,normals,pos,normal};
 }
 const tangent=new T.Vector3(),bent=new T.Vector3(),vector=new T.Vector3(),second=new T.Vector3();
 const orientation=new T.Quaternion(), physical=new T.Matrix4().makeScale(1,1,dragonLengthScale);
@@ -83,7 +83,12 @@ export function prepareDragon(mesh,joints) {
     return {piece,bind:piece.matrix.clone(),ring:nearestSection(piece.position)};
   });
   const frames=dragonRings.map(()=>({matrix:new T.Matrix4(),normal:new T.Matrix3(),offset:{}}));
-  joints.flight={skin,plume,hair,ornaments,frames};
+  joints.flight={skin,plume,hair,ornaments,frames,dispose() {
+    // These two deformed buffers belong to this rig. Its contour shares the
+    // skin buffer, while the rest shape and all paint are shared by other rigs.
+    skin.geometry.dispose();
+    plume.geometry.dispose();
+  }};
 }
 
 function updateFrames(frames,phase) {

@@ -1873,7 +1873,7 @@ export function createActors(scene, renderer) {
     if (restingNpcs.size>40) {
       const oldest=restingNpcs.keys().next().value;
       const evicted=restingNpcs.get(oldest);
-      evicted.limbs.flight?.geometry.dispose();
+      evicted.limbs.flight?.dispose();
       evicted.mesh.getObjectByName('絵巻の一枚皮')?.skeleton?.dispose();
       restingNpcs.delete(oldest);
     }
