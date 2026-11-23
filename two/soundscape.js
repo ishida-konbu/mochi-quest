@@ -11,7 +11,7 @@ import { createTempleBell } from './kiyomizu-bell.js';
 import { palaceInteriorAt } from './ryugu-layout.js';
 import { journeyMusicCue } from './journey-music.js';
 import { createJourneyPlayer } from './journey-player.js';
-import { isGroundedDango } from './dango-camera.js';
+import { isGroundedDango } from './dango-roll.js';
 
 const places = Object.fromEntries(REGIONS.map(place => [place.id, place]));
 const loops = { bamboo: 27, river: 24, wind: 23, crickets: 25, shore: 29, paddy: 21,

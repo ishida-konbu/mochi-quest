@@ -1,7 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { applyClimateLights } from './atmosphere.js';
 import { createWake } from './wake.js';
-import { createDangoCamera, onDangoCourse } from './dango-camera.js';
+import { canFollowTravel, createTravelCamera } from './travel-camera.js';
 import { prepareWorld } from './world.js';
 import { finishInSlices, watchArrivalPaint } from './preparation.js';
 import { setRiverStones } from './scanned-stone.js';
@@ -12,7 +12,7 @@ import { createInkPass } from './ink.js';
 import { createActors, getExpression } from './actors.js';
 import { loadRiceModel } from './mochi-model.js';
 import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS_KEY as settingsKey,
-  transferURL, decodeTransfer, storeTransfer, replaceJourney } from './journey-transfer.js';
+  travelCameraPreference, transferURL, decodeTransfer, storeTransfer, replaceJourney } from './journey-transfer.js';
 import { createGame, canUseModeOnMount } from './game.js';
 import { createStoryWorld } from './mochiyori-world.js';
 import { createPerformance } from './mochiyori-performance.js';
@@ -106,12 +106,10 @@ state.inariWeather = inariWeatherAt(p.x, p.z, state.time, state.flightSeed);
 const audio = createAudio(createSoundscape);
 let audible = savedSettings.sound !== false;
 let volumes = normalizeVolumes(savedSettings.volumes);
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-let dangoCameraPreference = typeof savedSettings.dangoCamera === 'boolean' ? savedSettings.dangoCamera : undefined;
-let dangoCameraEnabled = dangoCameraPreference ?? !reducedMotion.matches;
+let travelCameraEnabled = travelCameraPreference(savedSettings) ?? true;
 audio.setVolumes(volumes);
 let yaw = Number.isFinite(savedSettings.yaw) ? savedSettings.yaw : 0;
-const dangoCamera = createDangoCamera();
+const travelCamera = createTravelCamera();
 let pitch = 0.23,
   distance = 6.55,
   priorCamera = null,
@@ -198,7 +196,7 @@ window.addEventListener('storage', event => {
 });
 function journeySettings() {
   return {
-    sound: audible, volumes, dangoCamera: dangoCameraPreference, yaw: photoMode ? priorCamera.yaw : yaw,
+    sound: audible, volumes, travelCamera: travelCameraEnabled, yaw: photoMode ? priorCamera.yaw : yaw,
     goal: savedMapGoal(goal), minimap: miniMap.settings, resetAt: savedSettings.resetAt,
   };
 }
@@ -350,9 +348,9 @@ function action(name) {
 }
 const audioSettings = createAudioSettings({
   volumes,
-  dangoCameraEnabled,
-  onDangoCameraChange(enabled) {
-    dangoCameraPreference = dangoCameraEnabled = enabled;
+  travelCameraEnabled,
+  onTravelCameraChange(enabled) {
+    travelCameraEnabled = enabled;
     persistSettings();
   },
   onOpen() {
@@ -376,11 +374,6 @@ const audioSettings = createAudioSettings({
     audio.setVolumes(volumes);
     persistSettings();
   },
-});
-reducedMotion.addEventListener('change', () => {
-  if (dangoCameraPreference !== undefined) return;
-  dangoCameraEnabled = !reducedMotion.matches;
-  audioSettings.setDangoCamera(dangoCameraEnabled);
 });
 setAudio(audible);
 $('audio').onclick = () => {
@@ -427,7 +420,7 @@ function updateEmotes() {
 }
 function clearInput() {
   keys.clear();
-  dangoCamera.reset();
+  travelCamera.reset();
   surfaceJumpAt = Infinity;
   jumpTouch = diveTouch = false;
   stick.id = null;
@@ -490,7 +483,7 @@ $('download').onclick = () => {
 function moveCamera(dx, dy) {
   conversationYaw = null;
   const turn = -dx * .0055;
-  if (dx || dy) dangoCamera.manualLook(turn);
+  if (dx || dy) travelCamera.manualLook(turn);
   yaw += turn;
   pitch = clamp(pitch + dy * 0.004, photoMode ? -0.06 : -1.25, 1.08);
 }
@@ -769,7 +762,7 @@ function updateCamera(dt, snap = false) {
     }
     // Give the page to the animal directly ahead. An off-centre mochi keeps
     // the letter trajectory visible between the hero and its recipient.
-    const lookAhead = 1.65 + .82*scenery + 1.9*dangoCamera.lead*fraction;
+    const lookAhead = 1.65 + .82*scenery + 1.9*travelCamera.lead*fraction;
     aim.x += (sz*.4*shoulder-sx*lookAhead)*(1-settle)*(1-framing);
     aim.z -= (sx*.4*shoulder+sz*lookAhead)*(1-settle)*(1-framing);
     aim.y += (.53+.25*scenery)*(1-settle)*(1-framing*.6)*(1-examining)+(camera.aspect<.83 ? .27*settle : 0);
@@ -1086,17 +1079,17 @@ function frame(now) {
     stick.y;
   const orbit = (Number(keys.has('KeyQ')) - Number(keys.has('KeyR'))) * delta * 1.65;
   if (orbit) {
-    dangoCamera.manualLook(orbit);
+    travelCamera.manualLook(orbit);
     yaw += orbit;
   }
   if (!photoMode) {
     const side = right - left + stick.x,
-      assist = dangoCameraEnabled && !speech.active,
-      rolling = assist && onDangoCourse(p),
-      steering = dangoCamera.movementYaw(yaw, side, forward, rolling),
+      assist = travelCameraEnabled && !speech.active,
+      following = assist && canFollowTravel(p),
+      steering = travelCamera.movementYaw(yaw, side, forward, following),
       c = Math.cos(steering),
       s = Math.sin(steering),
-      magnitude = rolling ? Math.max(1, Math.hypot(side, forward)) : 1;
+      magnitude = following ? Math.max(1, Math.hypot(side, forward)) : 1;
     game.step(delta, {
       x: (c * side - s * forward) / magnitude,
       z: (-s * side - c * forward) / magnitude,
@@ -1105,7 +1098,7 @@ function frame(now) {
       jump: (!swimming || p.diveDepth>0 || !p.grounded) && !diveChord && !diveTouch && (jumpTouch || keys.has('Space')),
       dive: diveTouch || diveChord,
     });
-    yaw = dangoCamera.follow(yaw, p, delta, assist, look.id !== null || keys.has('KeyQ') || keys.has('KeyR'));
+    yaw = travelCamera.follow(yaw, p, delta, assist, look.id !== null || keys.has('KeyQ') || keys.has('KeyR'));
     dispatchEvents();
   } else photoTime += delta;
   updateCamera(delta);

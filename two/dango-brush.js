@@ -1,5 +1,5 @@
 import * as T from './vendor/three.module.min.js';
-import { onDangoCourse } from './dango-camera.js';
+import { onDangoCourse } from './dango-roll.js';
 import { wrapWorld } from './geography.js';
 
 // Three sweeps of the brush describe a little plume of road dust. The paper

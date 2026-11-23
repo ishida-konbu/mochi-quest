@@ -5,16 +5,13 @@ const ramp = (value, low, high) => {
   return t * t * (3 - 2 * t);
 };
 
-export function onDangoCourse(player) {
-  return player.mode === 'dango' && !player.inWater &&
-    !player.mount && !player.skiff && !player.activity;
+// A skiff carries its seated passenger. Walking on a ship's deck supplies
+// its own velocity after the ship has transported the player for the frame.
+export function canFollowTravel(player) {
+  return !player.activity && !player.skiff;
 }
 
-export function isGroundedDango(player) {
-  return player.grounded && onDangoCourse(player);
-}
-
-export function createDangoCamera() {
+export function createTravelCamera() {
   let steeringYaw = null, inputAngle = 0;
   let turnRate = 0, manualHold = 0, lead = 0;
 
@@ -55,17 +52,20 @@ export function createDangoCamera() {
   function follow(yaw, player, dt, enabled, looking = false) {
     if (looking) manualLook();
     else manualHold = Math.max(0, manualHold - dt);
-    const rolling = enabled && isGroundedDango(player) && !looking && manualHold === 0;
-    const speed = rolling ? Math.hypot(player.vx, player.vz) : 0;
+    const following = enabled && canFollowTravel(player) && !looking && manualHold === 0;
+    const speed = following ? Math.hypot(player.vx, player.vz) : 0;
     let ahead = 0;
-    if (speed > 3) {
-      // The camera sits on the opposite side of the actual ground velocity.
-      // Contact sliding and the world's wrapped seam are resolved by physics.
+    if (speed > .25) {
+      // Post-contact horizontal velocity follows a sliding wall, a dive or a
+      // flight across the map seam. A vertical jump has no bearing to chase.
       let turn = angleBetween(Math.atan2(-player.vx, -player.vz), yaw);
       if (Math.abs(turn) > Math.PI - .12 && turnRate !== 0) {
         turn = Math.sign(turnRate) * Math.abs(turn);
       }
-      const targetRate = clamp(turn * 2.8, -1.45, 1.45) * ramp(speed, 3, 12);
+      // Start gently at the edge of the thumbstick and allow faster turns
+      // when rolling or riding at speed. Both limits are in radians/second.
+      const maxRate = 1.12 + .33 * ramp(speed, 6.4, 20);
+      const targetRate = clamp(turn * 2.8, -maxRate, maxRate) * ramp(speed, .25, 1.35);
       turnRate += (targetRate - turnRate) * (1 - Math.exp(-5 * dt));
       const step = turnRate * dt;
       if (Math.sign(step) === Math.sign(turn) && Math.abs(step) >= Math.abs(turn)) {

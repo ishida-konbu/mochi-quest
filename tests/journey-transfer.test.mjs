@@ -5,7 +5,7 @@ import { canOccupy, BUILDINGS, REGIONS, SNOW_SPRING, groundHeight, terrainHeight
 import { fromHokora, HOKORA_LANTERN, HOKORA_ROOM } from '../two/lake-hokora-layout.js';
 import { FOREST_LAKE, isletPoint, snowPoint } from '../two/snow-country.js';
 import { COURT } from '../two/retreat-layout.js';
-import { PAGES_ORIGIN, WORKER_ORIGIN, SAVE_KEY, SETTINGS_KEY, decodeTransfer, replaceJourney, storeTransfer, transferURL } from '../two/journey-transfer.js';
+import { PAGES_ORIGIN, WORKER_ORIGIN, SAVE_KEY, SETTINGS_KEY, decodeTransfer, replaceJourney, storeTransfer, transferURL, travelCameraPreference } from '../two/journey-transfer.js';
 
 const settings = { sound:false, yaw:-1.27, goal:'moon' };
 function decode(hash) { return decodeTransfer(WORKER_ORIGIN,hash,createGame,REGIONS); }
@@ -26,11 +26,28 @@ test('a transfer carries only a normalized Mochi Quest 2 save and settings in th
   assert.equal(incoming.game.save().player.unknown,undefined);
   assert.equal(incoming.game.save().unknown,undefined);
   assert.deepEqual(incoming.settings,{...settings,volumes:{effects:1,ambient:1,music:1}});
-  const mixed=decode(encode(save,{...settings,dangoCamera:false,volumes:{effects:0,ambient:.6,music:.25}}).hash);
-  assert.equal(mixed.settings.dangoCamera,false);
-  assert.equal(decode(encode(save,{...settings,dangoCamera:true}).hash).settings.dangoCamera,true);
-  assert.equal(decode(encode(save,{...settings,dangoCamera:'false'}).hash).settings.dangoCamera,undefined);
+  const mixed=decode(encode(save,{...settings,volumes:{effects:0,ambient:.6,music:.25}}).hash);
   assert.deepEqual(mixed.settings.volumes,{effects:0,ambient:.6,music:.25});
+});
+
+test('local and transferred camera preferences preserve explicit choices across the rename', () => {
+  const save = createGame().save();
+  for (const [fields, expected] of [
+    [{}, undefined],
+    [{ dangoCamera: false }, false],
+    [{ dangoCamera: true }, true],
+    [{ travelCamera: false }, false],
+    [{ travelCamera: true }, true],
+    [{ travelCamera: true, dangoCamera: false }, true],
+    [{ travelCamera: false, dangoCamera: true }, false],
+    [{ travelCamera: null, dangoCamera: false }, false],
+    [{ travelCamera: 'false', dangoCamera: 'true' }, undefined],
+  ]) {
+    assert.equal(travelCameraPreference(fields), expected);
+    const incoming = decode(encode(save, { ...settings, ...fields }).hash);
+    assert.equal(incoming.settings.travelCamera, expected);
+    assert.ok(!Object.hasOwn(incoming.settings, 'dangoCamera'));
+  }
 });
 
 test('historical six-district saves retain their stamps and acquire stocked new bike ports',()=>{

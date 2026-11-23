@@ -27,7 +27,7 @@ import { dressArtisan, poseArtisan } from './trade-tools.js';
 import { seatedFeet } from './bath-gestures.js';
 import { makeRiceModel, poseRice, gripChayaServing, gripRinsingLadle } from './mochi-model.js';
 import { createDangoBrush } from './dango-brush.js';
-import { isGroundedDango } from './dango-camera.js';
+import { isGroundedDango } from './dango-roll.js';
 
 const PI = Math.PI,
   TAU = PI * 2;

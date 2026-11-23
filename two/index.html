@@ -25,8 +25,9 @@
     <script type="importmap">
       {
         "imports": {
-          "./dango-camera.js": "./dango-camera.js?v=dango-roll-1",
-          "./dango-brush.js": "./dango-brush.js?v=dango-roll-1",
+          "./travel-camera.js": "./travel-camera.js?v=travel-camera-1",
+          "./dango-roll.js": "./dango-roll.js?v=travel-camera-1",
+          "./dango-brush.js": "./dango-brush.js?v=travel-camera-1",
           "./ferry-curtain.js": "./ferry-curtain.js?v=handscroll-arrival-1",
           "./landscape-tiles.js": "./landscape-tiles.js?v=handscroll-arrival-1",
           "./travel-paint.js": "./travel-paint.js?v=handscroll-arrival-1",
@@ -119,7 +120,7 @@
           "./bath-enclosures.js": "./bath-enclosures.js?v=amimoto-yudono-1",
           "./bath-pavilion-art.js": "./bath-pavilion-art.js?v=amimoto-yudono-1",
           "./regional-bath-carpentry.js": "./regional-bath-carpentry.js?v=amimoto-yudono-1",
-          "./actors.js": "./actors.js?v=onsen-motion-1",
+          "./actors.js": "./actors.js?v=travel-camera-1",
           "./animal-motion.js": "./animal-motion.js?v=ryu-emaki-1",
           "./roof-shell.js": "./roof-shell.js?v=emaki-landscape-1-otowa-1",
           "./architecture.js": "./architecture.js?v=emaki-landscape-1-otowa-1",
@@ -139,7 +140,7 @@
           "./inari-rain.js": "./inari-rain.js?v=inari-rain-1",
           "./inari-weather.js": "./inari-weather.js?v=inari-rain-1",
           "./ink.js": "./ink.js?v=handscroll-arrival-1",
-          "./interface.js": "./interface.js?v=dango-roll-1-mochi-map-1",
+          "./interface.js": "./interface.js?v=travel-camera-1",
           "./kagami-fern.js": "./kagami-fern.js?v=6.3",
           "./kagami-mochibana.js": "./kagami-mochibana.js?v=6.5",
           "./mochibana-rice.js": "./mochibana-rice.js?v=6.5",
@@ -147,7 +148,7 @@
           "./kagami-paper.js": "./kagami-paper.js?v=6.1",
           "./kagami-surfaces.js": "./kagami-surfaces.js?v=5.2",
           "./interiors.js": "./interiors.js?v=3.3",
-          "./journey-transfer.js": "./journey-transfer.js?v=dango-roll-1",
+          "./journey-transfer.js": "./journey-transfer.js?v=travel-camera-1",
           "./legend-flight.js": "./legend-flight.js?v=ryu-emaki-1",
           "./map.js": "./map.js?v=mochi-map-1",
           "./mini-map.js": "./mini-map.js?v=mochi-map-1",
@@ -181,8 +182,8 @@
           "./lake-shore.js": "./lake-shore.js?v=islet-escarpment-1",
           "./snow-bath.js": "./snow-bath.js?v=yuya-emaki-1",
           "./snow-daruma.js": "./snow-daruma.js?v=3.3",
-          "./audio-settings.js": "./audio-settings.js?v=dango-roll-1",
-          "./soundscape.js": "./soundscape.js?v=dango-roll-1",
+          "./audio-settings.js": "./audio-settings.js?v=travel-camera-1",
+          "./soundscape.js": "./soundscape.js?v=travel-camera-1",
           "./journey-music.js": "./journey-music.js?v=boat-audio-1",
           "./journey-player.js": "./journey-player.js?v=region-tracks-2",
           "./spring-water.js": "./spring-water.js?v=suzuri-roji-1",
@@ -283,7 +284,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=onsen-motion-1-mochi-map-1" />
+    <link rel="modulepreload" href="./main.js?v=travel-camera-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -500,8 +501,8 @@
         </table>
       </details>
       <label class="camera-option">
-        <span>団子の進行方向にカメラを合わせる</span>
-        <input id="dango-camera" type="checkbox">
+        <span>餅の進行方向にカメラを合わせる</span>
+        <input id="travel-camera" type="checkbox" checked>
       </label>
       <div class="journey-reset">
         <p id="reset-description">旅の記録と手帖を消して、桜川の渡しから始めます。</p>
@@ -524,7 +525,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=onsen-motion-1-mochi-map-1').catch(error => {
+      import('./main.js?v=travel-camera-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'

@@ -13,6 +13,11 @@ export const SETTINGS_KEY = 'mochi-quest.two.settings.v1';
 const prefix = '#mochi2=';
 const sizeLimit = 24000;
 
+export function travelCameraPreference(settings) {
+  if (typeof settings.travelCamera === 'boolean') return settings.travelCamera;
+  if (typeof settings.dangoCamera === 'boolean') return settings.dangoCamera;
+}
+
 export function transferURL(origin, journey, settings) {
   if (origin !== PAGES_ORIGIN || !journey) return null;
   const hash = prefix + encodeURIComponent(JSON.stringify({ format: 1, journey, settings }));
@@ -32,9 +37,10 @@ export function decodeTransfer(origin, hash, createGame) {
     if (!game.restored) return null;
     const goal = restoreMapGoal(settings.goal, atlasDestinations(game.state));
     if (settings.goal !== null && !goal) return null;
+    const travelCamera = travelCameraPreference(settings);
     return { game, settings: {
       sound: settings.sound, volumes: normalizeVolumes(settings.volumes), yaw: settings.yaw, goal: savedMapGoal(goal),
-      ...(typeof settings.dangoCamera === 'boolean' ? { dangoCamera: settings.dangoCamera } : {}),
+      ...(travelCamera !== undefined ? { travelCamera } : {}),
       ...(settings.minimap ? { minimap: normalizeMiniMap(settings.minimap) } : {}),
     } };
   } catch {
