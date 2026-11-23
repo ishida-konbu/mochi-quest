@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {dragonHipRing, dragonRings} from '../two/dragon-anatomy.js';
 import {circuitTime} from '../two/legend-flight.js';
 import {createGame} from '../two/game.js';
 import {moveWildlife, legendFlight} from '../two/bestiary.js';
 import {canopyHeight} from '../two/village-paths.js';
-import {dragonLengthScale, dragonTailZ, dragonPhase, dragonPitch, dragonWave, walkingScore} from '../two/animal-motion.js';
+import {dragonLengthScale, dragonPhase, dragonPitch, dragonWave, walkingScore} from '../two/animal-motion.js';
 import {terrainHeight, groundHeight, WATER_Y, REGIONS, ORIGINAL_REGIONS, BOUND, wrapDelta, regionAt, waterDepth, solidHeightAt} from '../two/terrain.js';
 
 test('flight strata span each district and a distant crane moves on every tick',()=>{
@@ -127,26 +128,34 @@ test('the flight velocity follows the drawn curve across route and altitude samp
       assert.ok(Math.hypot(vx(a)-vx(c),vz(a)-vz(c))<.025);
     }
   }
-  // Follow the pitch and wave at both ends of the enlarged body. Its tail
-  // may still be crossing a canopy when the head is already in the clear.
-  const dragon=game.state.npcs.find(n=>n.type==='dragon');
-  const sections=[[-.65,.50,-3.16],[-.35,.03,-2.92],[.42,-.12,-.35],[-.45,.42,.70],[-.13,1.50,1.60]];
-  let crossings=0;
-  for(let time=0;time<circuitTime(dragon);time+=.25) {
-    const p=legendFlight(dragon,time,{}), pitch=dragonPitch(p), scale=dragon.stature;
-    for(const [x,y,z] of sections) {
-      const tailZ=dragonTailZ(z), sway=dragonWave(tailZ,dragonPhase(time,dragon),{});
-      const along=tailZ*scale*dragonLengthScale, across=(x+sway.x)*scale, up=(y+sway.y)*scale;
-      const forward=along*Math.cos(pitch)+up*Math.sin(pitch);
-      const px=wrapDelta(p.x+Math.sin(p.heading)*forward+Math.cos(p.heading)*across);
-      const pz=wrapDelta(p.z+Math.cos(p.heading)*forward-Math.sin(p.heading)*across);
-      const crown=canopyHeight(px,pz,2), top=Math.max(crown,solidHeightAt(px,pz,2),terrainHeight(px,pz));
-      const belly=p.y+up*Math.cos(pitch)-along*Math.sin(pitch);
-      if(pitch<-.3 && z< -2 && Number.isFinite(crown))crossings++;
-      assert.ok(belly>top+.5,'pitched body clears the terrain, roofs and crowns at '+time);
+});
+
+test('the pitched tail clears terrain, roofs and tree crowns across different world tours',()=>{
+  const snapshot=createGame().save();
+  const posterior=[0,.15,.32,.50,.70,.85,1].map(f=>{
+    const r=dragonRings[Math.round(f*dragonHipRing)];
+    return [r.x,r.y-1.18*Math.max(r.rx,r.ry),r.z,r.rx,r.waveZ];
+  });
+  const sections=[...posterior,[.42,-.12,-.35,.30],[-.45,.42,.70,.30],[-.13,1.50,1.60,.30]];
+  for(const flightSeed of [7,32495,3816266512]) {
+    const game=createGame({...snapshot,flightSeed}), dragon=game.state.npcs.find(n=>n.type==='dragon');
+    let crossings=0;
+    for(let time=0;time<circuitTime(dragon);time+=.75) {
+      const p=legendFlight(dragon,time,{}), pitch=dragonPitch(p), scale=dragon.stature;
+      for(const [x,y,z,radius,waveZ=z] of sections) {
+        const sway=dragonWave(waveZ,dragonPhase(time,dragon),{});
+        const along=z*scale*dragonLengthScale, across=(x+sway.x)*scale, up=(y+sway.y)*scale;
+        const forward=along*Math.cos(pitch)+up*Math.sin(pitch);
+        const px=wrapDelta(p.x+Math.sin(p.heading)*forward+Math.cos(p.heading)*across);
+        const pz=wrapDelta(p.z+Math.cos(p.heading)*forward-Math.sin(p.heading)*across);
+        const crown=canopyHeight(px,pz,radius*scale), top=Math.max(WATER_Y,crown,solidHeightAt(px,pz,radius*scale),terrainHeight(px,pz));
+        const belly=p.y+up*Math.cos(pitch)-along*Math.sin(pitch);
+        if(pitch<-.3 && z<dragonRings[dragonHipRing].z && Number.isFinite(crown))crossings++;
+        assert.ok(belly>top+.5,'clearance at '+time+' seconds in tour '+flightSeed);
+      }
     }
+    assert.ok(crossings>15,'a low tail crosses woodland on tour '+flightSeed);
   }
-  assert.ok(crossings>15);
 });
 
 test('wing flight can reach the high route and the dragon’s tail sweeps with its body',()=>{
@@ -160,7 +169,7 @@ test('wing flight can reach the high route and the dragon’s tail sweeps with i
   assert.ok(p.h>=98 && p.mode==='habutae' && p.mp>0);
   let sweep=0;
   for(let phase=0;phase<2*Math.PI;phase+=.1){
-    const nose=dragonWave(1.42,phase,{}),tail=dragonWave(dragonTailZ(-2.95),phase,{});
+    const nose=dragonWave(1.42,phase,{}),tail=dragonWave(dragonRings[0].waveZ,phase,{});
     sweep=Math.max(sweep,Math.hypot(tail.x-nose.x,tail.y-nose.y));
   }
   assert.ok(sweep>.65);

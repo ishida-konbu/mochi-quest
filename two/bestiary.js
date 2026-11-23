@@ -1,18 +1,19 @@
 // The illustrated menagerie ranges through the same ten districts as the procession.
 import { BOUND, ORIGINAL_REGIONS as REGIONS, groundHeight, waterDepth, solidHeightAt, terrainHeight, WATER_Y, seeded, wrapCoord, wrapDelta } from './terrain.js';
 
+import { dragonRings, dragonHipRing } from './dragon-anatomy.js';
 import { SCROLL_FAUNA } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { canopyHeight, walkCircuit } from './village-paths.js';
 import { legendary, legendPath } from './legend-flight.js';
-import { craneWingbeat, dragonWave, dragonPhase, dragonPitch, dragonLengthScale, dragonSpine, dragonTailZ, maxDragonPitch, walkingScore } from './animal-motion.js';
+import { craneWingbeat, dragonWave, dragonPhase, dragonPitch, dragonLengthScale, maxDragonPitch, walkingScore } from './animal-motion.js';
 
 export const SPECIES = Object.freeze({
   monkey: { count:90, points:30, label:'猿', stature:1, frame:2.7, center:.88 },
   bird:   { count:40, points:30, label:'丹頂', stature:1, frame:3.5, center:.13 },
   fox:    { count:40, points:50, label:'狐', stature:1, frame:2.7, center:.72 },
   tiger:  { count:10, points:100, label:'虎', stature:2.44, frame:3.6, center:.84 },
-  dragon: { count:1, points:1000, label:'龍', stature:8.4, frame:16.4, center:1.18, centerZ:-3.1, skyRange:1200, rigNear:280 },
+  dragon: { count:1, points:1000, label:'龍', stature:8.4, frame:12.4, center:1.37, centerZ:-1.61, skyRange:1200, rigNear:280 },
   kirin:  { count:1, points:1000, label:'麒麟', stature:5.25, frame:4.9, center:1.72, skyRange:384, rigNear:195 },
   deer:   { count:32, points:60, label:'鹿', stature:1.16, frame:3.8, center:1.24 },
   boar:   { count:18, points:60, label:'猪', stature:1.08, frame:3.4, center:.8 },
@@ -80,6 +81,12 @@ function squareTop(i,j) {
   return clearanceSurvey[index];
 }
 const maxDragonSlope=Math.sin(maxDragonPitch);
+const rearRings=dragonRings.slice(0,dragonHipRing+1);
+// The flight survey follows the full rest footprint, including the sideways
+// wave and the keel under each painted ring. These bounds are in body units.
+const rearReach=Math.max(...rearRings.map(r=>-r.z*dragonLengthScale+Math.max(r.rx,r.ry)))+.25;
+const dragonHalfWidth=Math.max(1.8,...rearRings.map(r=>Math.abs(r.x)+r.rx+.9));
+const rearUnderside=Math.min(-.25,...rearRings.map(r=>r.y-1.18*Math.max(r.rx,r.ry)-.33));
 function requiredHeight(n,time) {
   if(legendary(n.type)) {
     legendPath(n,time,samplePath);
@@ -88,9 +95,9 @@ function requiredHeight(n,time) {
     const scale=n.stature || SPECIES[n.type].stature, sine=Math.sin(heading),cosine=Math.cos(heading);
     // The full silhouette can cross a different ridge or grove from its origin.
     // Bound the rotated footprint, then consider only the squares it crosses.
-    const aft=dragon?-dragonTailZ(-3.34)*scale*dragonLengthScale:1.65*scale;
+    const aft=(dragon?rearReach:1.65)*scale;
     const fore=dragon?2.65*scale*dragonLengthScale:1.45*scale;
-    const halfWidth=(dragon?1.8:.58)*scale, along=Math.max(aft,fore);
+    const halfWidth=(dragon?dragonHalfWidth:.58)*scale, along=Math.max(aft,fore);
     const reachX=along*Math.abs(sine)+halfWidth*Math.abs(cosine);
     const reachZ=along*Math.abs(cosine)+halfWidth*Math.abs(sine);
     let required=dragon?Math.max(ground+20,WATER_Y+clearance+.34*(ground-WATER_Y)):ground+clearance;
@@ -101,10 +108,10 @@ function requiredHeight(n,time) {
         const dx=(i+.5)*surveyStep-BOUND-x,forward=dx*sine+dz*cosine;
         if(forward < -aft-surveyPad || forward>fore+surveyPad || Math.abs(dx*cosine-dz*sine)>halfWidth+surveyPad)continue;
         const top=squareTop(i,j);
-        // Forehead and whiskers sit above the belly. The tail rises again
-        // beyond the last bend. Clearance includes their motion on a steep dive.
+        // Forehead and whiskers sit above the belly. Include the lowest
+        // posterior bend during the wave and the drop on a steep climb.
         const localZ=forward/(scale*dragonLengthScale);
-        const underside=localZ>1.05 ? .85 : localZ<dragonTailZ(-2.75) ? .03 : -.25;
+        const underside=localZ>1.05 ? .85 : rearUnderside;
         const pitchDrop=dragon ? (Math.min(along,Math.abs(forward)+surveyPad)*maxDragonSlope-underside*scale) : 0;
         required=Math.max(required,top+1.8+pitchDrop);
       }
@@ -201,16 +208,34 @@ const bodyVolumes = {
     [-.28,1.82,-.26,.16,.16,.33],[.28,1.87,-.25,.16,.19,.33]],
   frog:[[0,.29,-.04,.40,.28,.32],[0,.79,.01,.35,.48,.29],[0,1.27,.13,.33,.22,.36]],
 };
-// A chain of short volumes follows the long, sinuous tail. Each has its own wave
-// phase, so a letter aimed between two bends can pass through the empty sky.
-for(let i=0;i<8;i++) {
-  const a=dragonSpine[i], b=dragonSpine[i+1], za=dragonTailZ(a[2]), zb=dragonTailZ(b[2]);
-  const steps=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1],zb-za)/.105);
+// Enclose each keeled cross-section in its physical plane. The old torso
+// section under the claws is tilted inside a length-scaled trunk. Its two
+// transverse axes in world space can therefore be oblique.
+function dragonSectionRadius(r) {
+  const a=r.across, b=r.up, az=a.z*dragonLengthScale, bz=b.z*dragonLengthScale;
+  const width=r.rx*1.026, height=r.ry*1.17;
+  const aa=width**2*(a.x*a.x+a.y*a.y+az*az), bb=height**2*(b.x*b.x+b.y*b.y+bz*bz);
+  const ab=width*height*(a.x*b.x+a.y*b.y+az*bz);
+  const hide=Math.sqrt((aa+bb+Math.hypot(aa-bb,2*ab))/2);
+  // The five brush locks fan across the final .9 body units. Their envelope
+  // peaks at the middle of the plume and closes again at its fine point.
+  const plume=Math.min(.17,.006+1.75*r.distance,.66*(.96-r.distance));
+  return Math.max(hide,plume);
+}
+// Follow the physical radius around each bend. Subdivide the last few
+// narrower spans so there is still a continuous target at the fine brush tip.
+for(let i=0;i<dragonRings.length-1;i++) {
+  const a=dragonRings[i], b=dragonRings[i+1];
+  if(i>dragonHipRing && a.z>=-.97)break; // the first torso volume overlaps here
+  const distance=Math.hypot(b.x-a.x,b.y-a.y,(b.z-a.z)*dragonLengthScale);
+  const radiusA=dragonSectionRadius(a), radiusB=dragonSectionRadius(b);
+  const spacing=Math.max(.015,Math.min(a.rx,a.ry,b.rx,b.ry));
+  const steps=Math.max(1,Math.ceil(distance/spacing));
   for(let j=0;j<steps;j++) {
-    const f=j/steps, lerp=(x,y)=>x+(y-x)*f;
-    const w=lerp(a[3],b[3]),h=lerp(a[4],b[4]);
-    bodyVolumes.dragon.push([lerp(a[0],b[0]),lerp(a[1],b[1]),lerp(za,zb),
-      w+.04,h+.05,Math.abs(zb-za)/(2*steps)+Math.max(.06,w,h)]);
+    const f=j/steps;
+    const x=a.x+(b.x-a.x)*f, y=a.y+(b.y-a.y)*f, z=a.z+(b.z-a.z)*f;
+    const radius=radiusA+(radiusB-radiusA)*f+.007, waveZ=a.waveZ+(b.waveZ-a.waveZ)*f;
+    bodyVolumes.dragon.push([x,y,z,radius,radius,radius/dragonLengthScale,waveZ]);
   }
 }
 // The delivery guide points into the same painted torso that accepts the letter.
@@ -299,7 +324,7 @@ export function sweepResident(n, origin, dx, dy, dz, radius, halfHeight, moving 
       cy=1.015-.07*graze+height*c-forward*s;cz=.31+.035*graze+height*s+forward*c;
       const tall=Math.hypot(h*c,d*s);d=Math.hypot(d*c,h*s);h=tall;
     }
-    if(dragon) dragonWave(cz,n.wavePhase||0,wave);
+    if(dragon) dragonWave(volume[6]??cz,n.wavePhase||0,wave);
     const a=w*width+radius,b=h*scale+halfHeight,e=d*lengthScale+radius;
     const xx=(x-(cx+(dragon?wave.x:0))*width)/a;
     const yy=(y-(cy+(dragon?wave.y:0))*scale)/b, zz=(z-cz*lengthScale)/e;

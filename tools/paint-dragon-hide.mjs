@@ -1,3 +1,5 @@
+import { dragonRings } from '../two/dragon-anatomy.js';
+
 // Sumi on warm paper, laid out in the sculpt's cylindrical UVs. The first
 // quarter-turn is the backbone, the third the belly. Each flank meets its
 // neighbour at the extremities, including across the texture seam.
@@ -35,67 +37,84 @@ function flank(g, paint, width) {
   }
 }
 
-function scales(g, random, width) {
+// A plate spans one angular row and about one and a half row heights along
+// the spine. Put ink at that physical pitch on the arc-length UV, including
+// the closely spaced, fine plates of the whiplash immediately before the tuft.
+function plateColumns(width) {
+  const last=dragonRings.at(-1), pixelsPerUnit=width/last.distance, columns=[];
+  let ring=0;
+  for (let x=0; x<width+48;) {
+    const distance=Math.min(last.distance,x/pixelsPerUnit);
+    while (ring<dragonRings.length-2 && dragonRings[ring+1].distance<distance) ring++;
+    const a=dragonRings[ring], b=dragonRings[ring+1];
+    const f=(distance-a.distance)/(b.distance-a.distance);
+    const radius=(Math.hypot(a.rx,a.ry)*(1-f)+Math.hypot(b.rx,b.ry)*f)/Math.SQRT2;
+    const rowHeight=2*Math.PI*radius*17/height;
+    const step=Math.max(2.5,1.40*rowHeight*pixelsPerUnit);
+    columns.push({x,step}); x+=step;
+  }
+  return columns;
+}
+
+function scales(g, random, width, columns) {
   const wash = g.createLinearGradient(0,0,0,128);
   for (const [where, color] of [[0,'#424e4a'],[.15,'#657773'],[.47,'#9ca89b'],
     [.69,'#b4b6a1'],[.84,'#cfccb5'],[1,'#ece3ce']]) wash.addColorStop(where,color);
   g.fillStyle = wash;
   g.fillRect(0,0,width,128);
 
-  // The rear lip of each scale overlaps the preceding column. Their size
-  // grows into the shoulder and contracts round the slender tip of the tail.
-  let x=-22;
-  for (let col=0; x<width+40; col++) {
-    const step=21+13*Math.sin(Math.PI*Math.max(0,x)/width*.82);
-    for (let row=-1; row<6; row++) {
-      const y=7+row*17+(col%2)*8.5+1.5*Math.sin(col*.82+row*.7);
-      const a=x+(random()-.5)*2.8, tilt=1.5*Math.sin(col*.53);
+  // Follow the overlapping lips from the tail toward the neck. Each outlined
+  // shell has a darker root and a broken, reserved-paper highlight near its rim.
+  for (const [col,{x,step}] of columns.entries()) {
+    g.save();g.translate(x,0);g.scale(step/24,1);
+    for (let row=-1;row<6;row++) {
+      const y=7+row*17+(col%2)*8.5+1.3*Math.sin(col*.82+row*.7);
+      const a=(random()-.5)*1.8, tilt=1.2*Math.sin(col*.53);
       const tone=random();
-      const pigment=tone>.79?'#a9b2a0':tone<.25?'#697b74':'#879a8c';
       g.globalAlpha=.30+tone*.16;
-      fillPath(g,pigment,()=>{
-        g.moveTo(a+step*.38,y-9);
-        g.bezierCurveTo(a-1,y-5,a-step*.31,y+tilt-4,a-step*.29,y+tilt);
-        g.bezierCurveTo(a-step*.29,y+tilt+4,a+step*.25,y+10,a+step*.42,y+10);
-        g.quadraticCurveTo(a+step*.60,y,a+step*.38,y-9);
+      fillPath(g,tone>.79?'#b2b9a6':tone<.25?'#66796e':'#879a8c',()=>{
+        g.moveTo(a+9,y-9);
+        g.bezierCurveTo(a+4,y-7,a-8,y-3+tilt,a-7.5,y+tilt);
+        g.bezierCurveTo(a-7.6,y+4+tilt,a+6,y+10,a+10,y+10);
+        g.quadraticCurveTo(a+14,y,a+9,y-9);
       });
       g.globalAlpha=.78+random()*.21;
-      fillPath(g,tone<.21?'#4f5a51':'#35453f',()=>{
-        g.moveTo(a+step*.39,y-8.7);
-        g.bezierCurveTo(a+step*.08,y-7.8,a-step*.30,y-4.2+tilt,a-step*.31,y+tilt);
-        g.bezierCurveTo(a-step*.30,y+3.8+tilt,a+step*.10,y+8.6,a+step*.38,y+9.4);
-        g.bezierCurveTo(a+step*.07,y+6.7,a-step*.18,y+2.8+tilt,a-step*.21,y+tilt);
-        g.quadraticCurveTo(a-step*.20,y-2.3+tilt,a+step*.39,y-8.7);
+      fillPath(g,tone<.21?'#50604f':'#35453f',()=>{
+        g.moveTo(a+9.4,y-8.7);
+        g.bezierCurveTo(a+1.9,y-7.8,a-7.2,y-4.2+tilt,a-7.5,y+tilt);
+        g.bezierCurveTo(a-7.2,y+3.8+tilt,a+2.4,y+8.6,a+9.2,y+9.4);
+        g.bezierCurveTo(a+1.7,y+6.5,a-4.4,y+2.9+tilt,a-4.9,y+tilt);
+        g.quadraticCurveTo(a-4.8,y-2.4+tilt,a+9.4,y-8.7);
       });
       if(tone>.30) {
-        g.globalAlpha=.58;
-        stroke(g,'#e2ddc2',a-step*.12,y+tilt+1,a,y+4,a+step*.22,y+6,1.4);
+        g.globalAlpha=.62;
+        stroke(g,'#e2ddc2',a-3,y+tilt+1,a,y+4,a+5.3,y+6,1.4);
       }
-      if(tone>.79) {
-        g.globalAlpha=.52;
-        stroke(g,'#53665b',a+1,y-2,a+3,y-4,a+step*.22,y-4,.85);
+      if(tone>.75) {
+        g.globalAlpha=.48;
+        stroke(g,'#50665a',a+.4,y-1.4,a+2.7,y-3.4,a+6.4,y-4,.9);
       }
     }
-    x+=step;
+    g.restore();
   }
   g.globalAlpha=1;
 
-  // One pale run of articulated belly shields crosses both flanks. A narrow
-  // double contour and the heavier, shorter creases read from the ground.
-  const bellyY=x=>88+5*Math.sin(x*.010+.7)+2*Math.sin(x*.021);
+  // The creases of the wide abdominal scutes pivot toward the midline. They
+  // close in at the same cadence as the flank plates and meet under the tail.
+  const bellyY=x=>89+3.1*Math.sin(x/width*28+.7)+1.3*Math.sin(x/width*59);
   fillPath(g,wash,()=>{
     g.moveTo(-1,132);
     for(let x=-1;x<=width+4;x+=4) g.lineTo(x,bellyY(x));
     g.lineTo(width+4,132);
   });
-  for(let x=-4;x<width;x+=48) {
-    stroke(g,'#4a554b',x,bellyY(x),x+23,bellyY(x+23)-1.2,x+49,bellyY(x+49),3.5);
-    stroke(g,'#e2d9bf',x,bellyY(x)+3,x+30,bellyY(x+30)+4,x+47,bellyY(x+47)+3,1.3);
-  }
-  for(let x=-26; x<width+25; x+=27+7*Math.sin(Math.PI*Math.max(0,x)/width)) {
+  for (const {x,step} of columns) {
     const y=bellyY(x);
-    stroke(g,'#595a4c',x+8,y+.8,x-9,y+14,x-8,133,3.6);
-    stroke(g,'#c4bd9f',x+11,y+2,x-6,y+20,x-5,130,3);
+    g.save();g.translate(x,0);g.scale(step/24,1);
+    stroke(g,'#4a554b',-1,y,12,bellyY(x+step*.5)-1.1,24.8,bellyY(x+step),3.2);
+    stroke(g,'#e2d9bf',.4,y+2.6,12,bellyY(x+step*.5)+3.8,22.5,bellyY(x+step)+2.8,1.2);
+    stroke(g,'#585c50',7.1,y+.6,-5.9,y+13,-6.7,131,3.2);
+    stroke(g,'#c1bda5',9.1,y+2,-3.2,y+18,-4,130,2.6);
+    g.restore();
   }
 }
 
@@ -129,11 +148,12 @@ export function paintDragonHide(g, part, seed) {
   // The generic painter uses a 768×384 drawing area. Give the long body
   // twice its resolution in the longitudinal direction.
   g.save();
-  const sheetWidth=part==='body' ? width*(1+2*.407) : width;
+  const sheetWidth=part==='body' ? 2048 : width;
+  const columns=part==='body' ? plateColumns(sheetWidth) : null;
   g.scale(768/sheetWidth,384/height);
   flank(g,()=>{
     if(part==='face') face(g);
-    else scales(g,seed(11037),sheetWidth);
+    else scales(g,seed(11037),sheetWidth,columns);
   },sheetWidth);
   g.restore();
 }

@@ -29,7 +29,7 @@ export function beastDrawing(type, variant=0) {
 }
 export const VILLAGERS={poses:6,columns:42,rows:39,width:96,height:104,frameX:2.88,frameY:3.24,center:1.37};
 export const residentFrameX=craft=>craft==='fisher'?3.48:VILLAGERS.frameX;
-export const BEASTS={atlas:'beasts.webp?v=long-tail-1',columns:24,rows:Math.ceil(poseCount/3),width:160,height:160};
+export const BEASTS={atlas:'beasts.webp?v=anatomic-tail-1',columns:24,rows:Math.ceil(poseCount/3),width:160,height:160};
 // Three-quarter and broadside views need room for the full brush tail,
 // wingtips and dragon whiskers, including a gutter at the coarsest mip.
 const paddedFrames={bird:4,fox:3.3,tiger:3.8};

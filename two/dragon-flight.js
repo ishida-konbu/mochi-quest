@@ -1,7 +1,9 @@
 // Transport every cross-section, its ink normals and the ornaments on its
 // spine together. Geometry also deforms in the shadow pass and atlas baker.
 import * as T from './vendor/three.module.min.js';
-import { dragonWave, dragonPhase, dragonPitch } from './animal-motion.js';
+import { dragonWave, dragonPhase, dragonPitch, dragonLengthScale } from './animal-motion.js';
+
+import { dragonRings } from './dragon-anatomy.js';
 
 // Thin high-altitude haze lets the ink silhouette carry across a valley.
 // Use the same depth response on the articulated rig and its distant print.
@@ -39,61 +41,92 @@ function dragonSkin(mesh) {
   const contour=mesh.getObjectByName('墨の輪郭');
   if(contour)contour.geometry=geometry;
   geometry.computeBoundingSphere();geometry.boundingSphere.radius+=1.2;
-  const rings=[], width=33;
-  for(let k=0;k<rest.count;k+=width){
-    const center=new T.Vector3();
-    // All but the seam copy are evenly spaced on this ring.
-    for(let j=k;j<k+width-1;j++) center.add(new T.Vector3().fromBufferAttribute(rest,j));
-    center.divideScalar(width-1);
-    rings.push(center);
+  return {rest,normals,pos,normal};
+}
+const tangent=new T.Vector3(),bent=new T.Vector3(),vector=new T.Vector3(),second=new T.Vector3();
+const orientation=new T.Quaternion(), physical=new T.Matrix4().makeScale(1,1,dragonLengthScale);
+const local=new T.Matrix4().makeScale(1,1,1/dragonLengthScale);
+
+function nearestSection(p) {
+  let closest=0,best=Infinity;
+  for(let i=0;i<dragonRings.length;i++) {
+    const r=dragonRings[i],s=(r.x-p.x)**2+(r.y-p.y)**2+((r.z-p.z)*dragonLengthScale)**2;
+    if(s<best){closest=i;best=s;}
   }
-  return {geometry,rest,normals,pos,normal,rings,width};
+  return closest;
 }
-const left={}, right={}, offset={}, tangent=new T.Vector3(), bent=new T.Vector3();
-const orientation=new T.Quaternion(), vector=new T.Vector3();
-function rotation(next, previous, phase) {
-  tangent.subVectors(next,previous);
-  dragonWave(previous.z,phase,left);dragonWave(next.z,phase,right);
-  bent.copy(tangent);bent.x+=right.x-left.x;bent.y+=right.y-left.y;
-  return orientation.setFromUnitVectors(tangent.normalize(),bent.normalize());
+
+// Project each hair vertex on a vertebral interval. The brush has several
+// diverging strands, so their roots and tips must follow different sections.
+function plumeBinding(p) {
+  const r=nearestSection(p);
+  let closest=r,weight=0,best=Infinity;
+  for(let i=Math.max(0,r-1);i<=Math.min(r,dragonRings.length-2);i++) {
+    const a=dragonRings[i],b=dragonRings[i+1];
+    tangent.subVectors(b,a);tangent.z*=dragonLengthScale;
+    bent.subVectors(p,a);bent.z*=dragonLengthScale;
+    const t=Math.max(0,Math.min(1,bent.dot(tangent)/tangent.lengthSq()));
+    const d=bent.addScaledVector(tangent,-t).lengthSq();
+    if(d<best){closest=i;weight=t;best=d;}
+  }
+  return {ring:closest,weight};
 }
+
 export function prepareDragon(mesh,joints) {
   mesh.traverse(part=>{if(part.isMesh)part.material=skyMaterial(part.material);});
-  const hide=dragonSkin(mesh.getObjectByName('龍の胴'));
-  joints.flight=hide;
-  // Bind every spine ornament, including the brush at the tail tip, to
-  // its transverse section. Keep the sculptor's local frame on the curve.
-  hide.ornaments=joints.trunk.children.filter(piece=>piece.isGroup).map(piece=>{
-    const bind=piece.position.clone();
-    let closest=0;
-    for(let j=1;j<hide.rings.length;j++)
-      if(bind.distanceToSquared(hide.rings[j])<bind.distanceToSquared(hide.rings[closest]))closest=j;
-    return {piece,bind,rotation:piece.quaternion.clone(),ring:closest};
+  const skin=dragonSkin(mesh.getObjectByName('龍の胴'));
+  const plume=dragonSkin(mesh.getObjectByName('尾先の筆毛'));
+  const hair=Array.from({length:plume.rest.count},(_,i)=>plumeBinding(vector.fromBufferAttribute(plume.rest,i)));
+  const ornaments=joints.trunk.children.filter(piece=>piece.isGroup).map(piece=>{
+    piece.updateMatrix();
+    piece.matrixAutoUpdate=false;
+    return {piece,bind:piece.matrix.clone(),ring:nearestSection(piece.position)};
   });
+  const frames=dragonRings.map(()=>({matrix:new T.Matrix4(),normal:new T.Matrix3(),offset:{}}));
+  joints.flight={skin,plume,hair,ornaments,frames};
 }
-export function poseDragon(j,n,time) {
-  j.trunk.rotation.x = dragonPitch(n);
-  const phase=dragonPhase(time,n), {rings,width,rest,normals,pos,normal}=j.flight;
-  const last=rings.length-1;
-  for(let r=0;r<=last;r++){
-    const center=rings[r];
-    const q=rotation(rings[Math.min(last,r+1)],rings[Math.max(0,r-1)],phase);
-    dragonWave(center.z,phase,offset);
-    for(let k=r*width;k<(r+1)*width;k++){
-      vector.fromBufferAttribute(rest,k).sub(center).applyQuaternion(q).add(center);
-      pos.setXYZ(k,vector.x+offset.x,vector.y+offset.y,vector.z);
-      vector.fromBufferAttribute(normals,k).applyQuaternion(q);
-      normal.setXYZ(k,vector.x,vector.y,vector.z);
-    }
+
+function updateFrames(frames,phase) {
+  const last=frames.length-1;
+  for(let i=0;i<=last;i++)dragonWave(dragonRings[i].waveZ,phase,frames[i].offset);
+  for(let i=0;i<=last;i++) {
+    const prev=Math.max(0,i-1),next=Math.min(last,i+1),r=dragonRings[i];
+    const {matrix,normal,offset}=frames[i],a=frames[prev].offset,b=frames[next].offset;
+    tangent.subVectors(dragonRings[next],dragonRings[prev]);tangent.z*=dragonLengthScale;
+    bent.copy(tangent);bent.x+=b.x-a.x;bent.y+=b.y-a.y;
+    orientation.setFromUnitVectors(tangent.normalize(),bent.normalize());
+    // S⁻¹ R S rotates a section in real space inside the pitched, elongated trunk.
+    matrix.makeRotationFromQuaternion(orientation).premultiply(local).multiply(physical);
+    vector.copy(r).applyMatrix4(matrix);
+    matrix.setPosition(r.x+offset.x-vector.x,r.y+offset.y-vector.y,r.z-vector.z);
+    normal.getNormalMatrix(matrix);
+  }
+}
+
+function poseSurface(surface,frames,hair) {
+  const {rest,normals,pos,normal}=surface;
+  for(let i=0;i<rest.count;i++) {
+    const binding=hair?.[i], index=binding?binding.ring:Math.floor(i/33), frame=frames[index];
+    vector.fromBufferAttribute(rest,i).applyMatrix4(frame.matrix);
+    if(binding)vector.lerp(second.fromBufferAttribute(rest,i).applyMatrix4(frames[index+1].matrix),binding.weight);
+    pos.setXYZ(i,vector.x,vector.y,vector.z);
+    vector.fromBufferAttribute(normals,i).applyMatrix3(frame.normal);
+    if(binding)vector.lerp(second.fromBufferAttribute(normals,i).applyMatrix3(frames[index+1].normal),binding.weight);
+    vector.normalize();
+    normal.setXYZ(i,vector.x,vector.y,vector.z);
   }
   pos.needsUpdate=true;normal.needsUpdate=true;
-  for(const {piece:part,bind,rotation:restRotation,ring:r} of j.flight.ornaments) {
-    const center=rings[r];
-    const q=rotation(rings[Math.min(last,r+1)],rings[Math.max(0,r-1)],phase);
-    dragonWave(center.z,phase,offset);
-    part.quaternion.copy(q).multiply(restRotation);
-    part.position.copy(bind).sub(center).applyQuaternion(q).add(center);
-    part.position.x+=offset.x;part.position.y+=offset.y;
+}
+
+export function poseDragon(j,n,time) {
+  j.trunk.rotation.x=dragonPitch(n);
+  const phase=dragonPhase(time,n),{skin,plume,hair,ornaments,frames}=j.flight;
+  updateFrames(frames,phase);
+  poseSurface(skin,frames);
+  poseSurface(plume,frames,hair);
+  for(const {piece,bind,ring} of ornaments) {
+    piece.matrix.multiplyMatrices(frames[ring].matrix,bind);
+    piece.matrixWorldNeedsUpdate=true;
   }
   // Retain the root of each fine stroke as the wind lifts its tip. The
   // dragon occasionally draws a breath, separating the lower tusks in profile.

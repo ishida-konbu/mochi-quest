@@ -4,8 +4,10 @@ import { createGame } from '../two/game.js';
 import { SPECIES, legendDeliveryPoint, recipientContact } from '../two/bestiary.js';
 import { BUILDINGS, GATES, nearRoad, groundHeight } from '../two/terrain.js';
 import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
-import { Euler, Vector3 } from '../two/vendor/three.module.min.js';
-import { dragonLengthScale, dragonHindZ, dragonTailZ, dragonPitch, dragonWave } from '../two/animal-motion.js';
+import { batchActorParts } from '../two/actors.js';
+import { buildBeast, beastRig, poseBeast } from '../two/beast-art.js';
+import { Euler, Group, MeshBasicMaterial, Vector3 } from '../two/vendor/three.module.min.js';
+import { dragonLengthScale, dragonPhase, dragonPitch, dragonWave } from '../two/animal-motion.js';
 
 test('the expanded recipient ledger preserves the original 691 entries and the two legends’ hundredfold score',()=>{
   const {state}=createGame();
@@ -163,26 +165,107 @@ test('the ten tigers and two shishi patrol clear wild ranges away from roads, ho
   assert.deepEqual([...createGame(old).state.delivered],historicIds);
 });
 
-test('a letter crosses the tilted dragon tail at its drawn height during a climb and a dive', () => {
-  const n = { type:'dragon', x:415.2, y:38, z:91, heading:.97, stature:SPECIES.dragon.stature, speed:5, wavePhase:1.7 };
-  const z=dragonTailZ(-2.92), sway=dragonWave(z,n.wavePhase,{});
-  assert.equal(dragonTailZ(1.42),1.42);
-  assert.equal(dragonTailZ(dragonHindZ),dragonHindZ);
-  assert.ok(Math.abs((z-dragonHindZ)/(-2.92-dragonHindZ)-3)<1e-12);
-  for (const rise of [-4, 4]) {
-    n.verticalSpeed = rise;
-    const pitch = dragonPitch(n);
-    assert.ok(pitch * rise < 0);
-    assert.equal(dragonLengthScale,1.5);
-    const tail = new Vector3(-.35+sway.x, .36+sway.y, z*dragonLengthScale)
-      .multiplyScalar(n.stature).applyEuler(new Euler(pitch, n.heading, 0, 'YXZ'));
-    const target = { x:n.x+tail.x, y:n.y+tail.y, z:n.z+tail.z };
-    for (const aim of [n.heading, n.heading+Math.PI/2]) {
-      const dx=Math.sin(aim), dz=Math.cos(aim);
-      const shot={x:target.x-3*dx, y:target.y, z:target.z-3*dz};
-      assert.ok(recipientContact(n,shot,dx,dz,3) <= 3);
+// Measure the same loft, ornamental brushes and articulated joints as the game.
+function sculptedDragon(n) {
+  const mesh=new Group(),ink=new MeshBasicMaterial();
+  buildBeast(mesh,'dragon',{
+    group(parent,name,x=0,y=0,z=0) {
+      const joint=new Group();
+      joint.name=name;joint.position.set(x,y,z);parent.add(joint);
+      return joint;
+    },
+    batch(...args) {
+      const part=batchActorParts(...args);
+      part.material=ink; // the geometry measurement needs no browser texture loader
+      return part;
+    },
+  });
+  const joints=beastRig(mesh,n), skin=mesh.getObjectByName('龍の胴');
+  mesh.updateMatrixWorld(true);
+  return {mesh,joints,skin};
+}
+
+function drawnRings(skin) {
+  const vertices=skin.geometry.attributes.position, rings=[];
+  for(let start=0;start<vertices.count;start+=33) {
+    const surface=Array.from({length:32},(_,k)=>skin.localToWorld(new Vector3().fromBufferAttribute(vertices,start+k)));
+    const center=surface.reduce((sum,p)=>sum.add(p),new Vector3()).divideScalar(surface.length);
+    const radius=Math.max(...surface.map(p=>p.distanceTo(center)));
+    rings.push({center,radius,surface});
+  }
+  return rings;
+}
+
+function hindRing(joints,rings) {
+  const hip=joints['hindClaw-1'].getWorldPosition(new Vector3());
+  return rings.reduce((best,r,i)=>r.center.distanceTo(hip)<rings[best].center.distanceTo(hip)?i:best,0);
+}
+
+test('the modeled hide tapers smoothly over two thirds of the published hip-to-tip arc',()=>{
+  const {joints,skin}=sculptedDragon({type:'dragon',stature:SPECIES.dragon.stature});
+  const rings=drawnRings(skin), hip=hindRing(joints,rings), attachment=joints['hindClaw-1'].getWorldPosition(new Vector3());
+  // Published hind attachment and centerline length, sampled in world metres
+  // on the preceding production sculpt at t=.407. Measure the actual new mesh.
+  assert.ok(attachment.distanceTo(new Vector3(-1.23575,8.48580,-20.20372))<.02);
+  assert.ok(rings[hip].center.distanceTo(attachment)<.18);
+  const uv=skin.geometry.attributes.uv;
+  let length=0, previous, minInkSpacing=Infinity, maxInkSpacing=0;
+  for(let i=1;i<=hip;i++) {
+    const span=rings[i].center.clone().sub(rings[i-1].center), step=span.length();
+    assert.ok(step>.01 && step<1.1,'distance between adjacent transverse sections: '+step);
+    length+=step;
+    const inkSpacing=(uv.getX(i*33)-uv.getX((i-1)*33))/step;
+    minInkSpacing=Math.min(minInkSpacing,inkSpacing);maxInkSpacing=Math.max(maxInkSpacing,inkSpacing);
+    if(i>3 && i<hip-12) {
+      const tangent=rings[i+1].center.clone().sub(rings[i-1].center).normalize();
+      for(const p of rings[i].surface) {
+        const spoke=p.clone().sub(rings[i].center).normalize();
+        assert.ok(Math.abs(tangent.dot(spoke))<.12,'the physical cross-section follows the curved spine');
+      }
     }
-    const level = { ...n, verticalSpeed:0 };
-    assert.equal(recipientContact(level,target,1,0,0),Infinity);
+    if(previous)assert.ok(previous.angleTo(span)<.5,'the bend must meet its neighbour smoothly');
+    previous=span;
+  }
+  assert.ok(Math.abs(length-71.1844543*2/3)<.20,'rendered hip-to-tip arc in metres: '+length);
+  assert.ok(minInkSpacing>0 && maxInkSpacing/minInkSpacing<1.08,'ink rows keep their spacing through the bend');
+  assert.ok(rings[0].radius<.14 && rings[hip].radius>1.9);
+  for(const [a,b] of [[0,.25],[.25,.5],[.5,.75],[.75,1]])
+    assert.ok(rings[Math.round(hip*a)].radius<rings[Math.round(hip*b)].radius,'the posterior narrows toward the brush tip');
+  const hipTangent=rings[hip].center.clone().sub(rings[hip-1].center);
+  assert.ok(hipTangent.angleTo(rings[hip+1].center.clone().sub(rings[hip].center))<.3,'smooth join under the claws');
+});
+
+test('letters reach the moving hide up to its fine tip with clear air beyond the new tail',()=>{
+  const n={type:'dragon',x:415.2,y:38,z:91,heading:.97,stature:SPECIES.dragon.stature,speed:5,phase:.23};
+  const {mesh,joints,skin}=sculptedDragon(n), hip=hindRing(joints,drawnRings(skin));
+  mesh.position.set(n.x,n.y,n.z);mesh.rotation.y=n.heading;
+  const heading=n.heading+Math.PI/2, dx=Math.sin(heading), dz=Math.cos(heading);
+  for(const rise of [-4,0,4]) for(const time of [0,1.37,2.9,4.4]) {
+    n.verticalSpeed=rise;n.wavePhase=dragonPhase(time,n);
+    poseBeast(joints,n,time);mesh.updateMatrixWorld(true);
+    const rings=drawnRings(skin);
+    const plume=mesh.getObjectByName('尾先の筆毛'), hairs=plume.geometry.attributes.position;
+    for(let j=0;j<hairs.count;j+=11) {
+      const point=plume.localToWorld(new Vector3().fromBufferAttribute(hairs,j));
+      assert.equal(recipientContact(n,point,dx,dz,0),0,'the painted terminal brush accepts the letter');
+    }
+    for(let i=0;i<=hip;i++) {
+      const {center,surface}=rings[i];
+      for(let j=0;j<surface.length;j+=4)
+        assert.equal(recipientContact(n,surface[j],dx,dz,0),0,'the outer scales accept a letter');
+      const shot={x:center.x-2*dx,y:center.y,z:center.z-2*dz};
+      assert.ok(recipientContact(n,shot,dx,dz,2)<=2,'a letter reaches drawn ring '+i);
+      if(i) {
+        const between=center.clone().lerp(rings[i-1].center,.5);
+        assert.equal(recipientContact(n,between,dx,dz,0),0,'no gap between transverse sections');
+      }
+    }
+    const end=rings[0].center, beyond=end.clone().sub(rings[1].center).normalize().multiplyScalar(1.5).add(end);
+    assert.equal(recipientContact(n,beyond,dx,dz,0),Infinity,'a letter beyond the fine point misses');
+    // The lowest turn of the previous long tail was at (-.65,.65,-6.27306).
+    const oldZ=-6.27306, oldWave=dragonWave(oldZ,n.wavePhase,{});
+    const former=new Vector3(-.65+oldWave.x,.65+oldWave.y,oldZ*dragonLengthScale)
+      .multiplyScalar(n.stature).applyEuler(new Euler(dragonPitch(n),n.heading,0,'YXZ')).add(mesh.position);
+    assert.equal(recipientContact(n,former,dx,dz,0),Infinity,'the old bend is empty sky');
   }
 });
