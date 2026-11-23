@@ -23,3 +23,22 @@ test('the dragon shrine seats in the dry bank with a solid chamber, curved roof 
     assert.ok(y>waterSurfaceAt(...p) && canOccupy(...p,y,.32));
   }
 });
+
+test('the fitted shrine pieces carry continuous UVs and one material finish per triangle',async()=>{
+  const {buildKaedeDragonShrine}=await import('../two/kaede-dragon-shrine.js');
+  const geometry=buildKaedeDragonShrine().geometry;
+  const {position,normal,uv,finishId}=geometry.attributes;
+  for(const attr of [normal,uv,finishId]){
+    assert.equal(attr.count,position.count);
+    assert.ok(attr.array.every(Number.isFinite));
+  }
+  assert.equal(new Set(finishId.array).size,6);
+  for(let i=0;i<geometry.index.count;i+=3){
+    const [a,b,c]=geometry.index.array.subarray(i,i+3);
+    assert.equal(finishId.getX(a),finishId.getX(b));
+    assert.equal(finishId.getX(a),finishId.getX(c));
+  }
+  geometry.computeBoundingBox();
+  assert.ok(Math.abs(geometry.boundingBox.max.x-DRAGON_ROOF.width/2)<.02);
+  assert.ok(geometry.boundingBox.min.y<=DRAGON_PLINTH.bottom);
+});
