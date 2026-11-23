@@ -1,4 +1,4 @@
-import { makeSteam, makeAccessories } from './mochiyori-hand-props.js';
+import { makeSteam, makeAccessories, poseStorySteam } from './mochiyori-hand-props.js';
 import * as T from './vendor/three.module.min.js';
 import { CAST, SCENES } from './mochiyori-story.js';
 import { createStoryCharacter, poseStoryCharacter, storyGrip, storyTool, poseStoryHands, createStoryTool } from './story-models.js';
@@ -301,8 +301,6 @@ export function createPerformance({scene,camera,dialog,enter,leave,draw}) {
     if(g==='pass' && receiver) end.x+=receiver.group.position.x>center.x?.32:-.32;
     duration=['turn','pass','fit','open','stack','write','divide','pour','tie'].includes(g)?1.8:1.4;
     elapsed=reduced.matches?duration:0; last=0;
-    steam.visible=Boolean(beat.pose && ['single','spaced'].includes(beat.pose) && item.spec.code==='steamer');
-    steam.position.set(center.x,topY+.19,center.z);
   }
   function go(i) {
     if(!score || i<0 || i>=score.beats.length)return;
@@ -398,11 +396,7 @@ export function createPerformance({scene,camera,dialog,enter,leave,draw}) {
       receiver.working?.(true);
       receiver.grasp(reachHand(receiver,'right',left,smooth((r-.46)/.53)),null);
     }
-    if(steam.visible) for(const [j,w] of steam.children.entries()){
-      const phase=(age*.60+j*.29)%1;
-      w.position.set(Math.sin(phase*4+j)*.045+(j-1)*.068,phase*.34,0);
-      w.material.opacity=.50*Math.sin(phase*Math.PI)*r;
-    }
+    poseStorySteam(steam,stage,beat,items[beat.prop],node,handle,size,age,r);
 
   }
   function redraw(){
@@ -434,7 +428,7 @@ export function createPerformance({scene,camera,dialog,enter,leave,draw}) {
     const done=callback;
     parkHandle();for(const item of items)crafts.releaseStoryEvidence(item.o);for(const a of participants)a.working?.(false);
     accessory.traverse(n=>{if(n.isMesh){n.geometry.dispose();n.material.dispose();}});
-    for(const w of steam.children)w.material.dispose();steam.children[0].geometry.dispose();
+    steam.material.dispose();steam.geometry.dispose();
     stage.clear();stage.visible=false;score=null;items=participants=[];steam=null;
     overlay.remove();delete dialog.dataset.performance;dialog.setAttribute('aria-labelledby','dialog-title');
     document.getElementById('stage').classList.remove('performing');

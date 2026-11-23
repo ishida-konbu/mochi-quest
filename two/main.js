@@ -1121,7 +1121,6 @@ function frame(now) {
   const sceneTime = photoMode ? photoTime : state.time;
   inariWeatherAt(p.x, p.z, sceneTime, state.flightSeed, state.inariWeather);
   applyClimateLights(hemisphere, sun, bounce, p, sceneTime);
-  wake(p, sceneTime);
   audio.updateWorld(state, sceneTime, yaw, photoMode);
   storyWorld.update(sceneTime, p);
   world.update(sceneTime, p, camera, state.time, state.bellStrike, state.inariWeather);
@@ -1136,6 +1135,7 @@ function frame(now) {
       state.time = playTime;
     }
   } else actors.update(state, delta, camera);
+  wake(p, sceneTime, actors.riceBody);
   speech.update(photoMode);
   drawScene();
   if (now >= nextHUD) {

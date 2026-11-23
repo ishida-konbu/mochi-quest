@@ -1,11 +1,37 @@
+import { createSteam, steamSource } from './steam.js';
 import * as T from './vendor/three.module.min.js';
 const vec=(x,y,z)=>new T.Vector3(x,y,z);
 
 export function makeSteam(){
-  const g=new T.Group(), curve=new T.CatmullRomCurve3([vec(0,0,0),vec(.025,.044,0),vec(-.014,.105,.008),vec(.018,.17,.012)]);
-  const geometry=new T.TubeGeometry(curve,12,.008,4,false);
-  for(let i=0;i<3;i++)g.add(new T.Mesh(geometry,new T.MeshBasicMaterial({color:0xfff4dc,transparent:true,depthWrite:false})));
-  return g;
+  return createSteam([steamSource('steamer',0,0,0)]);
+}
+
+export function steamingBeat(spec,beat){
+  return spec.code==='steamer' && ['single','stacked','spaced'].includes(beat.pose) ||
+    spec.code==='food' && (spec.region==='spring'||spec.region==='snow') && beat.gesture==='divide';
+}
+
+// A lifted tier releases the steam from the remaining rice. Splitting a
+// hot cake releases a smaller thread from the freshly exposed filling.
+export function poseStorySteam(steam,stage,beat,item,node,grip,size,time,progress){
+  const food=item.spec.code==='food';
+  const strength=beat.pose==='stacked' ? 1-T.MathUtils.smoothstep(progress,.12,.72) :
+    T.MathUtils.smoothstep(progress,.12,.54);
+  steam.visible=steamingBeat(item.spec,beat) && strength>.001;
+  if(!steam.visible)return;
+  if(food){
+    const cut=grip.localToWorld(steam.position.set(0,size.y*.44,0));
+    stage.worldToLocal(cut);
+    steam.scale.setScalar(.44);
+  }else{
+    const model=item.model || item.o;
+    const tier=beat.pose==='spaced' && node.name==='蒸し箱の上段' ? node :
+      model.getObjectByName('蒸し箱の下段') || model;
+    stage.worldToLocal(tier.localToWorld(steam.position.set(0,.14,0)));
+    steam.scale.setScalar(1);
+  }
+  steam.material.uniforms.steamTime.value=time;
+  steam.material.uniforms.warmth.value=strength;
 }
 
 export function makeAccessories(group){

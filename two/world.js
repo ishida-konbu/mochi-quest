@@ -14,7 +14,10 @@ import { createMountainWaterfalls } from './mountain-waterfalls.js';
 import { MOUNTAIN_STREAMS } from './mountain-streams.js';
 import { createAutumnWaterLeaves } from './autumn-water-leaves.js';
 import { kaedeWaterRafts, kaedeRaftGLSL } from './kaede-water-pigment.js';
+import { waterbedContacts } from './waterbed-pigment.js';
+import { createWaterbedGarden } from './waterbed-garden.js';
 import { createLakeShore } from './lake-shore.js';
+import { createDepthSurvey, waterColumnGLSL } from './water-optics.js';
 import { dressOutcrops } from './outcrops.js';
 import { createKiyomizu } from './kiyomizu.js';
 import { createKyo, kyoPavingMaterial } from './kyo.js';
@@ -186,13 +189,14 @@ function buildRoads(scene, art) {
   return kaedePaths;
 }
 function makeWater(scene, art, panorama, winterWash) {
+  const survey=createDepthSurvey();
   const basin=MOUNTAIN_STREAMS.find(s=>s.riverPool);
   const outlet=basin.stations.slice(basin.toeIndex), toe=outlet[0];
   const widest=outlet.reduce((a,b)=>a.width>b.width?a:b);
   const section=p=>`vec3(${p.x.toFixed(4)},${p.z.toFixed(4)},${p.width.toFixed(4)})`;
   const mat = new THREE.ShaderMaterial({
     fog: true, transparent: true, depthWrite: true,
-    side: THREE.DoubleSide,
+    side: THREE.DoubleSide, forceSinglePass:true,
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.fog,
       {
@@ -222,6 +226,7 @@ function makeWater(scene, art, panorama, winterWash) {
       uniform vec4 skiffPlacement[${RIVER_SKIFFS.length}];
       varying vec3 vWorld;
       ${hullWaterGLSL}
+      ${waterColumnGLSL}
       ${lakeRadiusGLSL}
       ${isletRadiusGLSL}
       ${kaedeRaftGLSL}
@@ -291,7 +296,12 @@ function makeWater(scene, art, panorama, winterWash) {
         float slow=sin(uv.x*.46+uv.y*.17-t*.72);
         float sidle=sin(uv.y*1.91+slow*.72+t*.83);
         float fine=sin(uv.y*4.3+sin(uv.x*1.1-t)*.72+t*.73);
-        vec3 n=normalize(vec3(.041*slow+.019*fine,1.,.084*sidle+.027*fine));
+        // The long slope follows the displaced mesh. Short capillary crests
+        // break up the sky ink as the camera turns across the current.
+        float seaSlope=.014+.086*max(smoothstep(175.,275.,-p.x),max(smoothstep(312.,383.,p.x),smoothstep(350.,410.,abs(p.y))));
+        float swellSlope=seaSlope*cos(p.x*.54+p.y*.31-t*1.23);
+        vec3 n=normalize(vec3(.041*slow+.019*fine-.54*swellSlope,1.,
+          .084*sidle+.027*fine-.31*swellSlope-.244*seaSlope*cos(p.y*.84-t*1.42)));
         vec3 eye=normalize(vWorld-cameraPosition);
         vec3 reflection=reflect(eye,n);
         vec2 heading=normalize(reflection.xz+vec2(.0001));
@@ -305,6 +315,9 @@ function makeWater(scene, art, panorama, winterWash) {
         vec2 refractUV=p*.24+n.xz*.34;
         vec3 bed=texture2D(pebble,refractUV).rgb*vec3(.79,.94,.90);
         vec3 water=mix(jade,deep,depth*(.78+.15*slow));
+        float riverReach=smoothstep(-8.,8.,shoreDist)*(1.-smoothstep(halfBank,halfBank+2.,abs(p.y-river)));
+        water=mix(water,mix(vec3(.074,.168,.147),vec3(.125,.244,.198),.5+.5*slow),
+          riverReach*(.38+.25*depth));
         vec3 col=mix(bed,water,.34+depth*.66);
         col=mix(col,mirror,fresnel*.78);
         vec2 flow=uv+vec2(-t*.22, slow*.19+.12*sin(uv.x*.41-t*.22));
@@ -373,10 +386,9 @@ function makeWater(scene, art, panorama, winterWash) {
         float spark=.12+.65*smoothstep(.35,.90,choppy)+.51*glint+.23*hair;
         col+=vec3(1.55,.82,.33)*exp(-26.*length((reflection-sunDir)*vec3(1.,.63,1.)))*spark*climate.w;
         col+=vec3(.54,.69,.92)*exp(-24.*length((reflection-moonDir)*vec3(1.,.63,1.)))*spark*climate.z;
-        // A thin film reveals the actual stones and bank through the painted
-        // gravel. Deep channels and grazing-angle reflections close the wash.
-        float opacity=mix(.51,.995,smoothstep(-.8,5.3,inside));
-        opacity=mix(opacity,1.,clamp(fresnel*.79+glint*.24+shore*.20,0.,1.));
+        // Beyond the local ground survey, continue the cross section into
+        // the river mouth and across the continental shelf.
+        float column=mix(.12,1.95+1.3*tide,depth)+7.*smoothstep(1.,37.,-shoreDist);
         if(lake<1.06){
           // Freshwater retains the pale paper of the sky between wind lanes.
           // The shallow ochre shelf gives way to celadon and then blue ink.
@@ -403,8 +415,10 @@ function makeWater(scene, art, panorama, winterWash) {
             *smoothstep(-.1,.84,sin(p.x*.58+p.y*.33)+.35*slow);
           quiet*=1.-.16*rim;
           col=mix(quiet,foam,shore*.26);
-          opacity=mix(.10,.984,shoal)+.014*fresnel;
+          column=min(max(0.,inside)*.78,7.2*(1.-smoothstep(.17,1.,lake)));
         }
+        float opacity=filmOpacity(vWorld.xz,clamp(dot(-eye,n),0.,1.),column,
+          clamp(.07+.51*glint+.25*hair+.39*shore,0.,.91));
         if(gl_FrontFacing)col*=mix(vec3(1.),vec3(.48,.79,.87),gorgeWater*.80);
         if(gorge>0. && gl_FrontFacing){
           // The thalweg bends in world space while both leaf skeins travel
@@ -425,11 +439,29 @@ function makeWater(scene, art, panorama, winterWash) {
           opacity=mix(opacity,1.,cover);
         }
         if (!gl_FrontFacing) {
-          // From below, moving folds of light replace the reflected mountains.
-          float zenith=clamp(eye.y,0.,1.);
-          col=mix(vec3(.066,.215,.23),vec3(.47,.72,.65),pow(zenith,2.1));
-          col+=vec3(.18,.22,.14)*(glint*.8+hair*.32+.10*choppy)*zenith;
-          opacity=1.;
+          // Inside Snell's window the horizon contracts around the sky.
+          // Outside it the broken underside reflects darker underwater light.
+          float detail=1.-smoothstep(.13,.46,length(fwidth(p)));
+          vec2 crossWave=vec2(sin(dot(p,vec2(2.4,3.7))+1.5*sidle+t*1.56),
+            sin(dot(p,vec2(-3.2,2.1))+1.4*slow-t*1.21));
+          vec3 filmNormal=normalize(n+.034*detail*vec3(crossWave.x,0.,crossWave.y));
+          float incidence=clamp(dot(eye,filmNormal),0.,1.);
+          float windowLight=smoothstep(.59,.76,incidence);
+          vec3 skyRay=refract(eye,-filmNormal,1.3333);
+          float skyAngle=atan(skyRay.x,-skyRay.z+.00001);
+          float skyHeight=.20+(skyRay.y*680./max(.12,length(skyRay.xz)))/(215.+24.*sin(skyAngle*3.+.8));
+          vec3 farBank=texture2D(horizon,vec2(skyAngle/3.14159265+.095,clamp(skyHeight,.01,.99))).rgb;
+          vec2 reflectedBed=p+.55*min(column,7.)*eye.xz/max(.21,incidence)+n.xz*.64;
+          float bedValue=dot(texture2D(pebble,reflectedBed*.16).rgb,vec3(.28,.56,.16));
+          vec3 ceiling=mix(vec3(.061,.155,.146),vec3(.165,.294,.235),clamp(.34+.27*slow+.46*bedValue,0.,1.));
+          float ridge=smoothstep(.13,.76,1.-dot(farBank,vec3(.28,.56,.16))/.61)
+            *(1.-smoothstep(.73,1.,skyHeight));
+          vec3 daylight=mix(vec3(.39,.56,.49),vec3(.47,.69,.69),smoothstep(.09,.72,skyRay.y));
+          daylight=mix(daylight,vec3(.13,.26,.22),ridge*.58);
+          col=mix(ceiling,daylight,windowLight);
+          col+=vec3(.15,.17,.12)*(glint*.64+hair*.24+.11*choppy)*(1.-.6*windowLight);
+          col=mix(col,col*vec3(.16,.25,.38),climate.z);
+          opacity=1.-.51*windowLight*smoothstep(.65,.94,incidence);
         }
         gl_FragColor=vec4(col,opacity);
         #include <fog_fragment>
@@ -439,6 +471,8 @@ function makeWater(scene, art, panorama, winterWash) {
   });
   // Keep the live asynchronously loaded sources in the merged fog/water uniforms.
   mat.uniforms.clock = scene.userData.waterClock ??= {value:0};
+  mat.uniforms.depthSurvey = {value:survey.plate};
+  mat.uniforms.surveyCentre = {value:survey.centre};
   mat.uniforms.winterWash = {value:winterWash};
   mat.uniforms.pebble.value = art.gravel;
   mat.uniforms.kaedeRafts = {value:kaedeWaterRafts()};
@@ -455,6 +489,7 @@ function makeWater(scene, art, panorama, winterWash) {
   m.position.y = WATER_Y;
   scene.add(m);
   return {uniforms:mat.uniforms,update(time,player,voyageTime){
+    survey.update(player.x,player.z);
     mat.uniforms.clock.value=time;
     RIVER_SKIFFS.forEach((_,i)=>{
       const q=merchantPose(2+i,voyageTime);
@@ -1840,7 +1875,7 @@ function driftingLeaves(scene, boughs) {
   };
 }
 
-function createWaysideHuts(scene) {
+function createWaysideHuts(scene,clock) {
   const models=new Map();
   return player=>{
     for(const s of WAYSIDE_SITES){
@@ -1848,7 +1883,7 @@ function createWaysideHuts(scene) {
       let root=models.get(s);
       if(dx*dx+dz*dz>190**2){if(root)root.visible=false;continue;}
       if(!root){
-        if(s.kind==='chaya')root=buildDangoChaya(s.variant,s.dye);
+        if(s.kind==='chaya')root=buildDangoChaya(s.variant,s.dye,clock);
         else{
           root=buildWaysideHut(s.kind,s.variant,s.bank);
           if(s.bath){
@@ -1873,7 +1908,8 @@ export function* prepareWorld(scene, initialCamera) {
   const landGroup = new THREE.Group();
   const terrainGroup=new THREE.Group();
   scene.add(terrainGroup,landGroup);
-  const terrain=createTerrainTiles(terrainGroup,meadowMaterial(art));
+  const bottomContacts=waterbedContacts();
+  const terrain=createTerrainTiles(terrainGroup,meadowMaterial(art,scene.userData.waterClock ??= {value:0},bottomContacts));
   yield* terrain.prepare(initialCamera);
   const kaedePaths=buildRoads(landGroup, art);
   const water = makeWater(scene, art, atmosphere.panorama, atmosphere.winterWash);
@@ -1920,8 +1956,9 @@ export function* prepareWorld(scene, initialCamera) {
   const updateWaterfalls=createMountainWaterfalls(scene);
   const updateWaterLeaves=createAutumnWaterLeaves(scene);
   const updateLake=createLakeShore(scene,art);
+  const updateWaterbed=createWaterbedGarden(scene,scene.userData.waterClock,art,bottomContacts);
   const updateShrines=pilgrimageLife(scene), updatePalace=createRyuguLife(scene);
-  const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene), updateHuts=createWaysideHuts(scene);
+  const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene), updateHuts=createWaysideHuts(scene,painter.sway);
   const updateBathTableaux=createBathTableaux(scene);
   const updateLamps=painter.lamps.finish(scene,landGroup);
   yield* painter.finish();
@@ -1959,6 +1996,7 @@ export function* prepareWorld(scene, initialCamera) {
         updateWaterfalls(time,player,camera);
         updateWaterLeaves(time,player,camera);
         updateLake(time,player);
+        updateWaterbed(camera);
         updateOcean(voyageTime,player);
         updatePalace(time,player,camera,voyageTime);
         updateForest(camera, player);

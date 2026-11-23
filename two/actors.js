@@ -1,3 +1,4 @@
+import { createSteam, steamSource } from './steam.js';
 import { tideRise } from './pilgrim-bathing-plan.js';
 import { bathPools } from './bath-places.js';
 import { goemonWaterWash } from './goemon-bath-art.js';
@@ -361,10 +362,17 @@ function makeHero() {
   rice.hands[0].add(receivingPalm);
   const leaves = batch(rolling, mugwortSprig, 'leaves');
   const vertices = rice.body.geometry.attributes.position;
-  let crown = 0;
-  for (let i = 1; i < vertices.count; i++) {
-    if (vertices.getY(i) > vertices.getY(crown)) crown = i;
+  const skinTips = [];
+  for (const axis of ['getX','getY','getZ']) {
+    let low=0, high=0;
+    for(let i=1;i<vertices.count;i++){
+      const value=vertices[axis](i);
+      if(value<vertices[axis](low))low=i;
+      if(value>vertices[axis](high))high=i;
+    }
+    skinTips.push(low,high);
   }
+  const crown = skinTips[3];
   const wingParts = [];
   for (const s of [-1, 1]) {
     const wing = group(rolling, 'wing', s * 0.65, 0.66, -0.01);
@@ -416,7 +424,7 @@ function makeHero() {
     wingParts,
     wrap,
     leaves,
-    crown,
+    crown, skinTips,
   };
 }
 
@@ -1324,31 +1332,19 @@ function shadow(parent, w, d) {
   parent.add(m);
   return m;
 }
-function particles(type, count) {
-  const colors = { steam: '#fffcdf', dust: '#d9b674', stars: '#fff1ae' };
+function dustParticles(count) {
   const mat = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    uniforms: {
-      tint: { value: new THREE.Color(colors[type]) },
-      opacity: { value: type === 'steam' ? 0.22 : 0.82 },
-      size: { value: type === 'steam' ? 178 : 30 },
-    },
-    vertexShader:
-      'attribute float fade; varying float alpha; uniform float size; void main(){vec4 p=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*p; gl_PointSize=clamp(size/max(1.,-p.z),1.5,43.); alpha=fade;}',
-    fragmentShader: type === 'steam' ? `
-      uniform vec3 tint; uniform float opacity; varying float alpha;
-      void main() {
-        vec2 q=gl_PointCoord-.5;
-        float curl=.095*sin(q.y*10.+alpha*6.)+.052*sin(q.y*19.-alpha*4.);
-        vec2 strand=vec2((q.x-curl)*6.4,(q.x+curl+.08)*9.);
-        float ribbon=exp(-strand.x*strand.x)+.33*exp(-strand.y*strand.y);
-        float a=opacity*alpha*ribbon*(1.-smoothstep(.20,.50,abs(q.y)));
-        if(a<.006) discard;
-        gl_FragColor=vec4(tint,a);
-        #include <colorspace_fragment>
-      }` :
-      'uniform vec3 tint;uniform float opacity;varying float alpha;void main(){float d=length(gl_PointCoord-.5)*2.;float a=(1.-smoothstep(.1,1.,d))*opacity*alpha;if(a<.008)discard;gl_FragColor=vec4(tint,a);\n#include <colorspace_fragment>\n}',
+    transparent: true, depthWrite: false,
+    uniforms: { tint: {value:new THREE.Color('#d9b674')} },
+    vertexShader: `attribute float fade; varying float alpha; void main(){
+      vec4 p=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*p;
+      gl_PointSize=clamp(30./max(1.,-p.z),1.5,43.); alpha=fade;
+    }`,
+    fragmentShader: `uniform vec3 tint; varying float alpha; void main(){
+      float d=length(gl_PointCoord-.5)*2.;float a=(1.-smoothstep(.1,1.,d))*.82*alpha;
+      if(a<.008)discard;gl_FragColor=vec4(tint,a);
+      #include <colorspace_fragment>
+    }`,
   });
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3));
@@ -1359,22 +1355,16 @@ function particles(type, count) {
   p.visible = false;
   return p;
 }
-function mistAt(m, t, steam = true, spread = 1) {
-  const attr = m.geometry.getAttribute('position'),
-    fade = m.geometry.getAttribute('fade');
-  m.visible = true;
-  for (let i = 0; i < attr.count; i++) {
-    const age = (t * (steam ? 0.4 : 1.05) + i * 0.61803) % 1,
-      a = i * 2.4;
-    attr.setXYZ(
-      i,
-      Math.cos(a + age * 0.85) * spread * (steam ? 0.75 : 0.37),
-      steam ? 0.32 + age * 1.11 : 0.12 + Math.sin(age * PI) * (0.24 + (i % 3) * 0.08),
-      Math.sin(a + age * 0.65) * spread * (steam ? 0.56 : 0.23) - (steam ? 0 : age * 1.53),
-    );
-    fade.setX(i, Math.sin(age * PI) * (0.7 + 0.3 * Math.sin(i * 3.5)));
+function stirDust(m, t) {
+  const attr=m.geometry.attributes.position, fade=m.geometry.attributes.fade;
+  m.visible=true;
+  for(let i=0;i<attr.count;i++){
+    const age=(t*1.05+i*.61803)%1, a=i*2.4;
+    attr.setXYZ(i,Math.cos(a+age*.85)*.37,.12+Math.sin(age*PI)*(.24+(i%3)*.08),
+      Math.sin(a+age*.65)*.23-age*1.53);
+    fade.setX(i,Math.sin(age*PI)*(.7+.3*Math.sin(i*3.5)));
   }
-  attr.needsUpdate = fade.needsUpdate = true;
+  attr.needsUpdate=fade.needsUpdate=true;
 }
 function paperNotice() {
   return model('notice', (parent) => {
@@ -1558,12 +1548,26 @@ function gaitHero(h, p, t, dt, state) {
   h.shadow.visible = !p.inWater && !p.skiff && !bath;
   h.shadow.position.y = 0.036 - (p.h || 0);
   h.dust.visible = false;
-  if (p.mode === 'kinako' && speed > 0.12) mistAt(h.dust, t, false, 1);
-  h.warm.visible = false;
-  if (bath?.action!=='rinse' && (p.buffs?.warm > 0 || sit === 'bath')) {
-    h.warm.position.y = bath ? (bath.wet===false?seatedFeet(p,bath)+.21:p.bathWaterY+.06)-p.y : .56;
-    h.warm.scale.z = 1+(bath?.melt || 0);
-    mistAt(h.warm, t, true, 1.24);
+  if (p.mode === 'kinako' && speed > 0.12) stirDust(h.dust,t);
+  h.warm.visible = bath?.action!=='rinse' && (p.buffs?.warm>0 || sit==='bath');
+  if (h.warm.visible) {
+    // Sample the deformed skin, so the steam stays on the dough while it
+    // stretches, rolls, floats on its back or rides up on a turtle.
+    h.rolling.updateWorldMatrix(true,false);
+    h.rice.model.updateMatrixWorld(true);
+    const body=h.rice.body, bounds=h.warmBounds.makeEmpty();
+    h.skinToRoot.copy(h.root.matrixWorld).invert().multiply(body.matrixWorld);
+    for(const i of h.skinTips)bounds.expandByPoint(body.getVertexPosition(i,h.warmPoint).applyMatrix4(h.skinToRoot));
+    bounds.getCenter(h.warm.position);
+    h.warm.position.y=bounds.max.y-.10*g;
+    if(p.diveDepth>0 && h.warm.position.y<.57+p.diveDepth)h.warm.visible=false;
+    if(bath?.wet)h.warm.position.y=Math.max(h.warm.position.y,p.bathWaterY-p.y+.018);
+    h.warm.scale.set(g,g,g*(1+.65*(bath?.melt??0)));
+    const uniforms=h.warm.material.uniforms, drift=uniforms.drift.value;
+    const drag=.22/Math.max(1,speed*.17), ease=1-Math.exp(-dt*5);
+    drift.x+=(.085-(p.vx||0)*drag-drift.x)*ease;
+    drift.y+=(.035-(p.vz||0)*drag-drift.y)*ease;
+    uniforms.warmth.value=bath?1:THREE.MathUtils.smoothstep(p.buffs.warm,0,1.8);
   }
 }
 
@@ -1730,14 +1734,22 @@ export function animateNPC(record, n, t, passingDango) {
     limbs.head.rotation.z += 0.16;
   }
 }
-function makeObject(o, parent) {
-  let mesh, feature, steam, flumes, smallerMist;
+function makeObject(o, parent, clock) {
+  let mesh, feature, flumes;
+  const sources=[];
+  function poolSteam(x,y,z,rx,rz,heat=1){
+    const size=Math.sqrt(rx*rz);
+    sources.push(steamSource('bath',x,y+.012,z,{
+      rx:rx*.72, rz:rz*.72, count:Math.min(31,Math.max(3,Math.ceil(size*2.4*heat))),
+      height:(.93+.23*Math.min(size,5))*Math.sqrt(heat),
+      width:(.28+.095*Math.min(size,6))*Math.sqrt(heat),alpha:.33*Math.sqrt(heat)
+    }));
+  }
   if(o.goemon) {
     mesh=new THREE.Group();
     const line=KETTLE.water-KETTLE.board;
     addSpringSurface(mesh,KETTLE.widthScale,KETTLE.widthScale,line,null,goemonWaterWash());
-    steam=particles('steam',14);
-    steam.position.y=line;mesh.add(steam);
+    poolSteam(0,line,0,KETTLE.radius,KETTLE.radius);
   } else if(o.retreat) {
     mesh=new THREE.Group();
     const offset=o.retreat.level!=null?o.retreat.level-o.y:.52;
@@ -1745,27 +1757,15 @@ function makeObject(o, parent) {
     addSpringSurface(mesh,o.retreat.rx,o.retreat.rz,offset,o.retreat);
     const pools=bathPools(o.retreat);
     if(pools){
-      smallerMist=pools.map((q,i)=>{
-        const heat=q.mist??1;
-        const mist=particles('steam',Math.round((7+3*q.rx)*heat));
-        mist.position.set(q.u,offset+q.y,q.v);
-        mist.scale.set(1,.83*heat,q.rz/q.rx);
-        mesh.add(mist);
-        return {mist,spread:q.rx*.80,phase:i*.58};
-      });
+      for(const q of pools)poolSteam(q.u,offset+q.y,q.v,q.rx,q.rz,q.mist??1);
     }else if(o.retreat.shape!=='suzuri'){
-      steam=particles('steam',30);
-      steam.position.y=.51;
-      steam.scale.set(1,.9,o.retreat.rz/o.retreat.rx);
-      mesh.add(steam);
+      poolSteam(0,offset,0,o.retreat.rx,o.retreat.rz);
     }
   } else if(o.grand) {
     mesh=new THREE.Group();
-    addSpringSurface(mesh,SNOW_SPRING.rx,SNOW_SPRING.rz,SNOW_SPRING.level-o.y,SNOW_SPRING);
-    steam=particles('steam',87);
-    steam.position.y=.54;
-    steam.scale.y=1.55;
-    mesh.add(steam);
+    const level=SNOW_SPRING.level-o.y;
+    addSpringSurface(mesh,SNOW_SPRING.rx,SNOW_SPRING.rz,level,SNOW_SPRING);
+    poolSteam(0,level,0,SNOW_SPRING.rx,SNOW_SPRING.rz,1.24);
     flumes=addFlumes(mesh);
   } else if(o.type==='tsukimi' || o.type==='port') {
     mesh=accessory(o.type);
@@ -1775,9 +1775,11 @@ function makeObject(o, parent) {
     feature.position.y = 0.399;
     feature.scale.setScalar(o.type === 'sake' ? 1.28 : 1.08);
     mesh.add(feature);
+    if(o.type==='ramen')feature.add(createSteam([steamSource('food',0,.278,0)],clock,.013*o.x));
   }
+  if(sources.length)mesh.add(createSteam(sources,clock,.018*o.x+.009*o.z));
   parent.add(mesh);
-  return { mesh, feature, steam, flumes, smallerMist };
+  return { mesh, feature, flumes };
 }
 function within(entity, player, limit) {
   return wrapDelta(entity.x - player.x) ** 2 + wrapDelta(entity.z - player.z) ** 2 < limit * limit;
@@ -1785,7 +1787,7 @@ function within(entity, player, limit) {
 
 export function createActors(scene, renderer) {
   const root = group(scene, '旅の仲間');
-  const h = makeHero();
+  const h = makeHero(), steamClock={value:0};
   const dangoBrush = createDangoBrush(root);
   const skyLife = createSkyLife(root);
   const seaPerformers = createRyuguPerformers(root);
@@ -1811,6 +1813,9 @@ export function createActors(scene, renderer) {
     tsukimi: model('held-tsukimi', parent=>makeMoonCakes(parent,true)),
     eat: model('held-ramen', (parent) => ramen(parent, false)),
   };
+  h.held.tea.add(createSteam([steamSource('tea',0,.055,0)],steamClock));
+  h.held.mitarashi.add(createSteam([steamSource('food',.026,.11,0,{rx:.053,rz:.035,height:.34,width:.082,count:2})],steamClock));
+  h.held.eat.add(createSteam([steamSource('food',0,.278,0)],steamClock));
   h.spoon = model('ramen-spoon', ramenSpoon);
   h.spoon.visible = false;
   h.rolling.add(h.spoon);
@@ -1827,8 +1832,12 @@ export function createActors(scene, renderer) {
   h.root.add(h.bicycle, h.ridingTurtle);
   h.bicycle.visible = h.ridingTurtle.visible = false;
   h.shadow = shadow(h.root, 1.9, 1.6);
-  h.dust = particles('dust', 25);
-  h.warm = particles('steam', 11);
+  h.dust=dustParticles(25);
+  h.warm=createSteam([steamSource('rice',0,0,0)],steamClock,.81);
+  h.warmPoint=new THREE.Vector3();
+  h.warmBounds=new THREE.Box3();
+  h.skinToRoot=new THREE.Matrix4();
+  h.warm.visible=false;
   h.root.add(h.dust, h.warm);
   root.add(h.root);
   const npcs = new Map(),
@@ -1908,6 +1917,7 @@ export function createActors(scene, renderer) {
     const p = state.player,
       t = state.time;
     const passingDango = !state.photo && p.speed > 7 && isGroundedDango(p) ? p : null;
+    steamClock.value=t;
     gaitHero(h, p, t, dt, state);
     dangoBrush(p, t, state.photo);
     const reach = h.root.userData.storyReach;
@@ -2011,7 +2021,7 @@ export function createActors(scene, renderer) {
       let rec = objects.get(o.id);
       const near = o.active && within(o, p, o.type === 'port' || o.type === 'onsen' ? 101 : 67);
       if (near && !rec) {
-        rec = makeObject(o, root);
+        rec = makeObject(o, root, steamClock);
         objects.set(o.id, rec);
       }
       if (!rec) continue;
@@ -2023,8 +2033,6 @@ export function createActors(scene, renderer) {
         rec.feature.position.y = 0.395 + 0.011 * Math.sin(t * 2 + o.x);
         rec.feature.rotation.y = 0.15 * Math.sin(t * 0.8 + o.z);
       }
-      if (rec.steam) mistAt(rec.steam, t + 0.01 * o.x, true, o.goemon ? .63 : o.grand ? 12.5 : o.retreat ? o.retreat.rx*.78 : 1.65);
-      if(rec.smallerMist)for(const {mist,spread,phase} of rec.smallerMist)mistAt(mist,t+phase,true,spread);
       if (rec.flumes) rec.flumes(t);
       if (o.type === 'port') {
         rec.mesh.getObjectByName('park0').visible = o.bikes > 0;
@@ -2056,5 +2064,5 @@ export function createActors(scene, renderer) {
         else root.remove(m);
       }
   }
-  return { update, prepare, hero: h.root, visible(value) { root.visible=value; } };
+  return { update, prepare, hero: h.root, riceBody: h.rice.body, visible(value) { root.visible=value; } };
 }

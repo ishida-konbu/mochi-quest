@@ -1,4 +1,6 @@
+import { createSteam, steamSource } from './steam.js';
 import * as T from './vendor/three.module.min.js';
+import { registerFallingWater, jetContacts, interceptedJetGLSL } from './falling-water-contact.js';
 import { scrollPigment } from './kyo-scrollwork.js';
 import { skinGeometry } from './ryugu-sculpt.js';
 import { pilgrimInstallationGeometry,lockLeaf,snowSourceRim } from './pilgrim-bathing-craft.js';
@@ -8,23 +10,24 @@ import { brineGate,steamRoom,sluiceOpening } from './pilgrim-bathing-plan.js';
 const {PI,sin,cos}=Math;
 function wetStream(parent,clock,knots,width,style='fall'){
   const curve=new T.CatmullRomCurve3(knots.map(k=>new T.Vector3(...k)),false,'catmullrom',.3);
+  (parent.userData.fallingWater ??= []).push({points:curve.getPoints(38),width:width*.50});
   // Front and back of the thin sheet catch the reflected paper sky; the
   // painted white filaments follow the head-driven flow into the actual pool.
   const mat=new T.ShaderMaterial({
     transparent:true,depthWrite:false,side:T.DoubleSide,
-    uniforms:{tick:clock,narrow:{value:style==='seep'?.82:.53},brine:{value:style==='tide'?1:0}},
-    vertexShader:`uniform float tick; varying vec2 v; void main(){
+    uniforms:{jetContacts,tick:clock,narrow:{value:style==='seep'?.82:.53},brine:{value:style==='tide'?1:0}},
+    vertexShader:`uniform float tick; varying vec2 v; varying vec3 worldFlow; void main(){
       v=uv; vec3 p=position; p.z+=.018*sin(uv.x*31.+uv.y*12.-tick*6.)*sin(3.1416*uv.y);
-      gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
+      worldFlow=(modelMatrix*vec4(p,1.)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);
     }`,
-    fragmentShader:`uniform float tick,narrow,brine; varying vec2 v; void main(){
+    fragmentShader:interceptedJetGLSL+`uniform float tick,narrow,brine; varying vec2 v; varying vec3 worldFlow; void main(){
       float gust=.8+.2*cos(tick*.36);
       float filament=pow(.5+.5*sin(63.*v.x+3.*sin(13.*v.y-7.8*tick+15.*v.x)),5.);
       float breakUp=.7+.3*cos(30.*v.y-7.*tick+sin(23.*v.x));
       float fringe=smoothstep(0.,.15,min(v.x,1.-v.x));
       float phase=(.35+.65*(.50+.50*sin(tick*.36)))*brine+(1.-brine);
       float alpha=fringe*breakUp*(narrow+.38*filament)*(.61+.39*phase);
-      gl_FragColor=vec4(mix(vec3(.28,.48,.45),vec3(.91,.95,.86),.40+.52*filament),alpha*gust);
+      gl_FragColor=vec4(mix(vec3(.28,.48,.45),vec3(.91,.95,.86),.40+.52*filament),alpha*gust*fallingCoverage(worldFlow));
       #include <colorspace_fragment>
     }`,
   });
@@ -51,42 +54,11 @@ function eddies(parent,clock,x,z,y,w,d,mode){
   const m=new T.Mesh(new T.PlaneGeometry(w,d).rotateX(-PI/2),mat);m.position.set(x,y+.025,z);
   m.renderOrder=4;parent.add(m);
 }
-function vapour(parent,clock,origins,count,scale=1,roof=false){
-  const pos=[],uv=[],orig=[],params=[],idx=[];
-  // Each plume starts in an actual grate, fumarole or wet impact hollow.
-  // Camera-facing soft billows can overlap without writing to the depth map.
-  for(let j=0;j<count;j++){
-    const source=origins[j%origins.length],a=j*2.39996,r=.16*Math.sqrt((j%7)/7);
-    const code=[(j*.61803)%1,.71+.37*(.5+.5*cos(j*3.7)),scale*(.64+.31*sin(j*2.3)),a];
-    const pt=[source[0]+r*cos(a),source[1],source[2]+r*sin(a)];
-    for(const [u,v] of [[0,0],[1,0],[0,1],[1,1]]){
-      pos.push((u-.5)*2,(v-.5)*2,0);uv.push(u,v);orig.push(...pt);params.push(...code);
-    }
-    const i=j*4;idx.push(i,i+1,i+2,i+2,i+1,i+3);
-  }
-  const geo=new T.BufferGeometry();geo.setIndex(idx);
-  for(const [key,data,size] of [['position',pos,3],['uv',uv,2],['source',orig,3],['seed',params,4]])
-    geo.setAttribute(key,new T.Float32BufferAttribute(data,size));
-  const mat=new T.ShaderMaterial({
-    uniforms:{tick:clock,rise:{value:roof?2.17:1.62}},
-    transparent:true,depthWrite:false,side:T.DoubleSide,
-    vertexShader:`attribute vec3 source; attribute vec4 seed;uniform float tick,rise;varying vec2 v;
-      varying float age,noiseSeed;void main(){v=uv;age=fract(seed.x+tick*.23*seed.y);noiseSeed=seed.w;
-      vec3 c=source;c.y+=age*rise*seed.z;c.x+=.18*seed.z*age*sin(5.*age+seed.w);
-      c.z+=.17*seed.z*age*cos(age*4.+seed.w);
-      float sz=(.10+age*.56)*seed.z;vec4 eye=modelViewMatrix*vec4(c,1.);
-      eye.xy+=position.xy*vec2(sz,sz*1.07);gl_Position=projectionMatrix*eye;
-    }`,
-    fragmentShader:`varying vec2 v; varying float age,noiseSeed;void main(){
-      vec2 p=(v-.5)*2.;float ang=atan(p.y,p.x),r=length(p);
-      float outline=1.+.14*sin(ang*5.+noiseSeed+age*3.)+.09*cos(ang*3.-age*6.);
-      float fog=1.-smoothstep(.08,.90,r/outline);
-      float life=smoothstep(0.,.18,age)*(1.-smoothstep(.49,1.,age));
-      gl_FragColor=vec4(.85,.84,.74,fog*life*.17);
-      #include <colorspace_fragment>
-    }`,
-  });
-  const m=new T.Mesh(geo,mat);m.frustumCulled=false;m.renderOrder=5;parent.add(m);
+function ventSteam(parent,clock,origins,height,width){
+  const sources=origins.map(([x,y,z])=>steamSource('vent',x,y,z,{
+    height,width,count:2,rx:width*.32,rz:width*.25,
+  }));
+  parent.add(createSteam(sources,clock));
 }
 function saltMarsh(parent,clock){
   const x=brineGate.u,z=-1.72;
@@ -112,8 +84,8 @@ function saltMarsh(parent,clock){
 }
 function potterySteam(parent,clock){
   const z=steamRoom.v-steamRoom.d/2+.67;
-  vapour(parent,clock,[[-.44,1.32,z],[-1.95,1.04,z-.16],[.44,1.16,z],[1.95,1.04,z-.16],[.12,.08,-.46],[-1.03,.05,.14],[.97,.05,.23]],35,1.10);
-  vapour(parent,clock,[[.10,4.92,steamRoom.v-.64]],11,1.12,true);
+  ventSteam(parent,clock,[[-.44,1.32,z],[-1.95,1.04,z-.16],[.44,1.16,z],[1.95,1.04,z-.16],[.12,.08,-.46],[-1.03,.05,.14],[.97,.05,.23]],1.36,.36);
+  ventSteam(parent,clock,[[.10,4.92,steamRoom.v-.64]],1.86,.44);
   // Low, warm light reaches the slats through the kneeling-height stove.
   const glow=new T.PointLight(0xffba7a,3.1,4.9,1.8);glow.position.set(.11,1.28,z+.55);parent.add(glow);
 }
@@ -129,12 +101,12 @@ export function pilgrimBathInstallation(site){
       [.006,2.67,-.64],[.021,1.82,-.585],[.033,.85,-.56],[.037,.02,-.59]];
     wetStream(root,clock,points,.66);
     eddies(root,clock,.034,-.58,0,2.26,2.07,'fall');
-    vapour(root,clock,[[-.20,.04,-.57],[.21,.04,-.60]],10,.62);
+    ventSteam(root,clock,[[-.20,.04,-.57],[.21,.04,-.60]],.74,.21);
   }else if(site.kind==='peach'){
     wetStream(root,clock,[[-2.30,1.28,-2.02],[-2.23,1.22,-1.58],[-2.15,1.17,-1.21],[-2.13,1.10,-1.17],[-2.12,.54,-1.09]],.24);
     wetStream(root,clock,[[-.64,.66,-.19],[-.12,.65,-.16],[.36,.59,-.11],[.43,.53,-.11],[.48,.30,-.10]],.17,'seep');
     eddies(root,clock,-2.12,-1.09,.54,.86,.88,'seep');eddies(root,clock,.53,-.10,.30,.90,.85,'seep');
-    vapour(root,clock,[[-2.05,.57,-.96],[2.57,.33,-.78]],8,.62);
+    ventSteam(root,clock,[[-2.05,.57,-.96],[2.57,.33,-.78]],.86,.24);
   }else if(site.kind==='temple'){
     wetStream(root,clock,[[0,1.25,-2.66],[0,1.20,-2.22],[0,1.12,-2.14],[0,.71,-2.08],[0,.19,-2.01]],.18);
     eddies(root,clock,0,-1.94,.19,.83,.88,'seep');
@@ -154,7 +126,7 @@ export function pilgrimBathInstallation(site){
         [ex+.13,Math.max(.005,level),ez+.04]],.20+i*.056,'seep');
       if(i===2)eddies(root,clock,ex+.15,ez+.04,0,1.43,1.21,'seep');
     }
-    vapour(root,clock,[[x,y+.14,z],[-4.22,.69,1.03],[-3.51,.34,1.20]],19,.83);
+    ventSteam(root,clock,[[x,y+.14,z],[-4.22,.69,1.03],[-3.51,.34,1.20]],1.27,.32);
   }else if(site.kind==='dawn'){
     for(const x of [-2,0,2]){
       for(const side of [-1,1]){
@@ -164,6 +136,7 @@ export function pilgrimBathInstallation(site){
       eddies(root,clock,x,-1.19,0,1.34,.63,'seep');
     }
   }
+  if(root.userData.fallingWater)registerFallingWater(site,'pilgrim',root.userData.fallingWater);
   return {root,update(t,localU,localV){
     clock.value=t;if(move)move(t);
     // In third person the camera normally projects through the curved vault

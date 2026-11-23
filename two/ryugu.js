@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
-import { terrainHeight, WATER_Y, seeded, wrapDelta } from './terrain.js';
+import { terrainHeight, WATER_Y, waterSurfaceAt, shoreDistance, seeded, wrapDelta } from './terrain.js';
+import { createWaterMotes } from './underwater-light.js';
 import { InkForm, pigment } from './ryugu-ink.js';
 import { brushWash } from './scroll-sculpt.js';
 import { skin, profile, membrane, brush, eye } from './ryugu-sculpt.js';
@@ -298,26 +299,44 @@ export function createRyuguLife(scene) {
   }
   group.add(shafts);scene.add(group);
   const pool=palacePoolSurface(clock);scene.add(pool);
-  const waterFog=new THREE.Color('#8a9e91');
+  const silt=new THREE.Color('#839e87'), salt=new THREE.Color('#729b9a'), abyss=new THREE.Color('#466d76');
+  const courtWash=new THREE.Color('#8a9e91'), waterFog=new THREE.Color();
+  const updateMotes=createWaterMotes(scene);
+  const light=scene.userData.submergedLight={amount:0,sun:0,line:0,marine:0};
   return (time,player,camera,voyageTime=time)=>{
     updateFish(time,player,camera,voyageTime);
     const dx=wrapDelta(RYUGU.x-player.x),dz=wrapDelta(RYUGU.z-player.z);
     const localX=RYUGU.x+wrapDelta(camera.position.x-RYUGU.x);
     const localZ=RYUGU.z+wrapDelta(camera.position.z-RYUGU.z);
     const enclosed=palaceInteriorAt(localX,localZ,camera.position.y);
-    const waterline=enclosed?PALACE_BED+PALACE_POOL.h:WATER_Y;
     const inCourtView=dx*dx+dz*dz<110**2;
-    const immersion=player.diveDepth>0 || inCourtView
-      ? THREE.MathUtils.smoothstep(waterline-camera.position.y,0,enclosed ? .65 : 3.2):0;
+    const eye=camera.position;
+    light.amount=light.sun=0;
+    const waterline=player.inWater || player.diveDepth>0 || inCourtView
+      ? waterSurfaceAt(wrapDelta(eye.x),wrapDelta(eye.z),time,eye.y) : -Infinity;
+    const depth=waterline-eye.y, immersion=THREE.MathUtils.smoothstep(depth,0,.62);
     clock.value=time;
     pool.visible=dx*dx+dz*dz<95**2;
     if(pool.visible)pool.position.set(player.x+dx+PALACE_POOL.v,bed+PALACE_POOL.h,player.z+dz-PALACE_POOL.u);
     if(immersion>0) {
-      scene.fog.color.lerp(waterFog,immersion);
       const courtClarity=1-THREE.MathUtils.smoothstep(Math.hypot(dx+PALACE_POOL.v,dz),48,108);
-      scene.fog.density=THREE.MathUtils.lerp(scene.fog.density,.021-.011*courtClarity,immersion);
+      const marine=1-THREE.MathUtils.smoothstep(shoreDistance(wrapDelta(eye.x),wrapDelta(eye.z)),-15,4);
+      const deep=THREE.MathUtils.smoothstep(depth,4,28);
+      // The prevailing sky still lights the water in snowy and moonlit bays.
+      const daylight=THREE.MathUtils.smoothstep(scene.fog.color.g,.075,.49);
+      waterFog.copy(silt).lerp(salt,marine).lerp(abyss,deep).lerp(courtWash,courtClarity*.80);
+      waterFog.multiplyScalar(.27+.73*daylight);
+      scene.fog.color.lerp(waterFog,immersion);
+      scene.fog.density=THREE.MathUtils.lerp(scene.fog.density,.040-.011*marine-.018*courtClarity,immersion);
       scene.environmentIntensity*=1-.23*immersion;
+      light.line=waterline;
+      if(!enclosed){
+        light.amount=immersion*(1-.60*courtClarity);
+        light.sun=immersion*(.21+.79*daylight)*(1-.68*courtClarity);
+        light.marine=marine;
+      }
     }
+    updateMotes(time,waterline,light.sun);
     group.visible=immersion>0 && !enclosed && inCourtView;
     if(!group.visible)return;
     group.position.set(player.x+dx,bed,player.z+dz);

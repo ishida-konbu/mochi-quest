@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.min.js';
+import { registerFallingWater, jetContacts, interceptedJetGLSL } from './falling-water-contact.js';
 import { washCurtain } from './bath-pavilion-art.js';
 import { SNOW_SPRING as bath, SPRING_STONES, BATH_STEPS } from './terrain.js';
 
@@ -85,23 +86,26 @@ export function dressSnowBath(p,frame,light) {
 export function addFlumes(parent) {
   const time={value:0};
   const mat=new T.ShaderMaterial({
-    uniforms:{clock:time},transparent:true,side:T.DoubleSide,depthWrite:false,
-    vertexShader:'varying vec2 v;uniform float clock;void main(){v=uv;vec3 p=position;p.x+=.024*sin(p.y*12.+clock*4.6)*uv.y;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}',
-    fragmentShader:`varying vec2 v;uniform float clock;
+    uniforms:{clock:time,jetContacts},transparent:true,side:T.DoubleSide,depthWrite:false,
+    vertexShader:'varying vec2 v; varying vec3 worldFlow; uniform float clock;void main(){v=uv;vec3 p=position;p.x+=.024*sin(p.y*12.+clock*4.6)*uv.y;worldFlow=(modelMatrix*vec4(p,1.)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}',
+    fragmentShader:interceptedJetGLSL+`varying vec3 worldFlow; varying vec2 v;uniform float clock;
       void main(){float streak=sin(v.x*46.+3.*sin(v.y*7.+clock*6.)+clock*.8);
         float fade=smoothstep(0.,.18,v.x)*smoothstep(0.,.18,1.-v.x);
-        gl_FragColor=vec4(mix(vec3(.38,.59,.57),vec3(.90,.95,.87),.58+.35*streak),fade*.80);
+        gl_FragColor=vec4(mix(vec3(.38,.59,.57),vec3(.90,.95,.87),.58+.35*streak),fade*.80*fallingCoverage(worldFlow));
         #include <colorspace_fragment>
       }`,
   });
-  const rings=[],geo=new T.PlaneGeometry(.38,1.50,6,13),ring=new T.RingGeometry(.92,1,42);
+  const paths=[],rings=[],geo=new T.PlaneGeometry(.38,1.50,6,13),ring=new T.RingGeometry(.92,1,42);
   ring.rotateX(-Math.PI/2);
   for(let j=-1;j<=1;j++){
     const x=8.85+j*.67,z=-3.74;
     const spill=new T.Mesh(geo,mat);spill.position.set(x,1.33,z);spill.rotation.x=.07;parent.add(spill);
+    spill.updateMatrix();
+    paths.push({width:.19,points:[.75,-.75].map(y=>new T.Vector3(0,y,0).applyMatrix4(spill.matrix).add(new T.Vector3(0,-.61,0)))});
     const m=new T.MeshBasicMaterial({color:'#e0e9db',transparent:true,depthWrite:false});
     const swirl=new T.Mesh(ring,m);swirl.position.set(x,.626,z+.08);parent.add(swirl);rings.push(swirl);
   }
+  registerFallingWater(bath,'flumes',paths);
   return t=>{time.value=t;for(const [i,r] of rings.entries()) {
     const age=(t*1.05+i*.33)%1;r.scale.setScalar(.12+age*.61);r.material.opacity=(1-age)*.55;
   }};

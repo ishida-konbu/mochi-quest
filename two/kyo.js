@@ -1,3 +1,4 @@
+import { createSteam, steamSource } from './steam.js';
 import { groundPrintGLSL } from './ground-print.js';
 import { mountainFires } from './mountain-fires.js';
 import { HIGASHIYAMA, KITAYAMA, eastRidgeHeight, northRidgeHeight, fukuFirebeds, daiFirebeds, inFireMeadow, FIRE_TRAILS, fireTrailDistance } from './higashiyama.js';
@@ -210,14 +211,22 @@ function foodCounter(p,stand,light) {
   f.part('box',0,.68,.70,2.69,.33,.074,tea?'#73836a':'#a35f48');
   f.part('box',0,.38,-.29,2.44,.079,.6,timber,p.wood);
   lantern(f,-1.85,2.49,.12,.225,light);
+  const steam=[];
+  function hot(kind,u,y,v,options){
+    const at=f.pos(u,y,v);
+    steam.push(steamSource(kind,at.x,at.y,at.z,options));
+  }
   if(tea){
+    hot('spout',-1.096,1.345,.323);
     f.part('teaKettle',-.68,.969,.23,1,1,1,'#fff',p.stems);
     for(let j=0;j<5;j++){
       const x=.16+j%3*.32, z=.04+Math.floor(j/3)*.29;
       f.part('kyoCup',x,.974,z,.121,.139,.12,j%2?'#e3dbc1':'#9caca0');
+      hot('tea',x,1.101,z,{count:1});
       f.part('round',x,1.098,z,.098,.008,.097,'#829452');
     }
   } else {
+    hot('food',-.66,1.29,.16,{rx:.39,rz:.16});
     f.part('box',-.66,1.045,.20,.88,.165,.51,'#534c40');
     for(let i=0;i<5;i++)f.part('box',-.97+i*.15,1.132,.17,.115,.035,.34,'#ac6240');
     f.part('box',.52,1.008,.27,1.0,.079,.69,'#c4a878',p.deck);
@@ -231,6 +240,9 @@ function foodCounter(p,stand,light) {
       }
     }
   }
+  const rising=createSteam(steam,p.sway,stand.x*.21);
+  rising.userData.range=48;
+  p.scene.add(rising);
   // A vermilion felt-covered bench beside the shop.
   f.part('box',2.32,.42,-.19,.76,.12,1.62,'#a04f46');
   for(const z of [-.76,.37])f.part('box',2.32,.22,z,.55,.39,.13,timber,p.wood);

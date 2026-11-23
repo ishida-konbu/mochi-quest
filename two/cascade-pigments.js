@@ -1,4 +1,5 @@
 import * as T from './vendor/three.module.min.js';
+import { jetContacts, interceptedJetGLSL } from './falling-water-contact.js';
 import { KAEDE_SEEP } from './mountain-streams.js';
 import { kaedeWaterRafts, kaedeRaftGLSL } from './kaede-water-pigment.js';
 import { autumnLeafMaterial } from './autumn-leaf-art.js';
@@ -36,6 +37,7 @@ export function currentPigment(stream,clock,submerged){
   if(stream.id==='kaede-spring')water.defines.KAEDE_SHIMIZU=1;
   water.forceSinglePass=true;
   water.onBeforeCompile=shader=>{
+    shader.uniforms.jetContacts=jetContacts;
     shader.uniforms.streamClock=clock;
     shader.uniforms.submerged=submerged;
     shader.uniforms.brushPlate={value:plate};
@@ -50,7 +52,7 @@ export function currentPigment(stream,clock,submerged){
     shader.vertexShader=`
       attribute vec4 current;
       varying vec4 inkFlow;
-      varying vec3 waterPoint;
+      varying vec3 waterPoint,worldFlow;
       uniform float streamClock;
       #ifdef KAEDE_SHIMIZU
       uniform vec4 impact;
@@ -67,9 +69,10 @@ export function currentPigment(stream,clock,submerged){
         float travel=sqrt(down+.006)*9.-streamClock*4.2;
         transformed.xz+=impact.zw*loose*(.041*sin(travel*2.4+current.x*13.)+.028*sin(travel*4.3+current.x*23.));
       #endif
-      waterPoint=transformed;`);
+      worldFlow=(modelMatrix*vec4(transformed,1.)).xyz;waterPoint=transformed;`);
     shader.fragmentShader=`
-      varying vec4 inkFlow; varying vec3 waterPoint;
+      ${interceptedJetGLSL}
+      varying vec4 inkFlow; varying vec3 waterPoint,worldFlow;
       uniform float streamClock,impactWidth,dropHeight,submerged; uniform sampler2D brushPlate; uniform vec4 impact;
       #ifdef KAEDE_SHIMIZU
       uniform vec2 seep;
@@ -211,6 +214,7 @@ export function currentPigment(stream,clock,submerged){
           diffuseColor.a=mix(diffuseColor.a,.96*fade,leaves.a*clear);
         }
       #endif
+      if(fall>.32){diffuseColor.a*=fallingCoverage(worldFlow);if(diffuseColor.a<.025)discard;}
       #ifdef KAEDE_SHIMIZU
         if(diffuseColor.a<.055)discard;
       #endif

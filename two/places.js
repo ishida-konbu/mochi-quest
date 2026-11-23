@@ -1,3 +1,4 @@
+import { createSteam, steamSource } from './steam.js';
 import * as THREE from './vendor/three.module.min.js';
 import { visitMooredFittings } from './skiff-travel.js';
 import { BOATS, HULL_HEIGHT, HULL_DRAFT, halfBreadth, sheerHeight } from './shoreline.js';
@@ -578,60 +579,12 @@ function grove(p, a) {
   }
   emaRack(p, a);
 }
-function makeSteam(p, locations) {
-  const texMap = tex(128, 128, (ctx, w, h) => {
-    const g = ctx.createRadialGradient(w * 0.51, h * 0.48, 1, w * 0.5, h * 0.5, w * 0.5);
-    g.addColorStop(0, 'rgba(255,253,238,.81)');
-    g.addColorStop(0.32, 'rgba(255,255,247,.69)');
-    g.addColorStop(0.64, 'rgba(244,248,233,.29)');
-    g.addColorStop(1, 'rgba(252,253,238,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-  });
-  const geo = new THREE.BufferGeometry(),
-    positions = [],
-    phases = [],
-    layers = [];
-  for (const [x, z, spread, y0] of locations)
-    for (let i = 0; i < 12; i++) {
-      positions.push(
-        x + Math.sin(i * 5.1) * spread * 0.42,
-        y0 + 0.14,
-        z + Math.cos(i * 3.8) * spread * 0.29
-      );
-      phases.push((i * 0.618034) % 1);
-      layers.push(0.8 + (i % 4) * 0.13);
-    }
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('phase', new THREE.Float32BufferAttribute(phases, 1));
-  geo.setAttribute('layer', new THREE.Float32BufferAttribute(layers, 1));
-  const mat = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    uniforms: { clock: p.sway, mist: { value: texMap.map } },
-    vertexShader: `uniform float clock;attribute float phase;attribute float layer;varying float fade;void main(){
-      float t=fract(clock*.13+phase);vec3 pt=position;
-      pt.y+=t*4.9*layer;pt.x+=t*t*1.1+sin(phase*10.+clock*.29+t*3.)*t*.48;
-      pt.z+=cos(t*4.+phase*8.)*t*.41;vec4 mv=modelViewMatrix*vec4(pt,1.);
-      gl_Position=projectionMatrix*mv;gl_PointSize=clamp((560.+650.*t)*layer/max(1.,-mv.z),3.,180.);
-      fade=pow(sin(t*3.14159),.80)*(.54-.16*t);
-    }`,
-    fragmentShader: `uniform sampler2D mist;varying float fade;void main(){
-      vec4 c=texture2D(mist,gl_PointCoord);float a=c.a*fade;if(a<.012)discard;
-      gl_FragColor=vec4(vec3(.925,.946,.887),a);
-      #include <colorspace_fragment>
-    }`,
-  });
-  const dots = new THREE.Points(geo, mat);
-  geo.computeBoundingSphere();
-  geo.boundingSphere.radius += 8;
-  dots.renderOrder = 3;
-  p.scene.add(dots);
-}
 // The mineral vent is a natural feature above the pass. Bathing and the
 // changing bays take place at the surveyed pool farther up the hillside.
 function passVent(p) {
-  const vents = [[140.2, -118.3, .89, terrainHeight(140.2, -118.3) + .25]];
+  const vents=createSteam([steamSource('vent',140.2,terrainHeight(140.2,-118.3)+.27,-118.3,{
+    height:4.7,width:.93,count:7,rx:.37,rz:.26,
+  })],p.sway);
   for (let j = 0; j < 6; j++) {
     const a = (j * TAU) / 6,
       xx = 140.2 + cos(a) * 0.51,
@@ -653,7 +606,7 @@ function passVent(p) {
       true
     );
   }
-  makeSteam(p, vents);
+  p.scene.add(vents);
 }
 function sheaf(f, art, x, y, z, s, angle = 0) {
   for (const a of [angle, angle + PI * 0.45])

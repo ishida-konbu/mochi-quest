@@ -1,6 +1,7 @@
 // Working fixtures for the eight village springs. Each has its own plumbing:
 // the same local survey draws the vessels, their waterlines and their entry.
 import * as T from './vendor/three.module.min.js';
+import { registerFallingWater } from './falling-water-contact.js';
 import { matsuhamaWorks,matsuhamaApron } from './matsuhama-saltworks.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { surface,rod,dab,turning } from './village-bath-figures.js';
@@ -25,10 +26,12 @@ function basinFrame(pool,a){
 }
 function waterRibbon(flow,a,b,width,endWidth=width*.72,bow=.22){
   const [x,h,z]=a,dx=b[0]-x,dz=b[2]-z,len=Math.hypot(dx,dz),u=len?dz/len:1,v=len?-dx/len:0;
+  const center=t=>new T.Vector3(x+dx*t,h+(b[1]-h)*t*t+bow*sin(PI*t),z+dz*t);
+  flow.paths.push({width,points:Array.from({length:16},(_,i)=>center(i/15))});
   flow.add(surface(8,22,(i,t)=>{
-    const side=(i-.5)*2,w=width+(endWidth-width)*t,th=t*t;
+    const side=(i-.5)*2,w=width+(endWidth-width)*t;
     const fluting=.012*sin(17*i+.84*t)*sin(PI*t);
-    return [x+dx*t+u*w*side,h+(b[1]-h)*th+bow*sin(PI*t)+fluting,z+dz*t+v*w*side];
+    const c=center(t);return [c.x+u*w*side,c.y+fluting,c.z+v*w*side];
   }),'#a8bfaf');
   for(const side of [-.74,.20])stroke(flow,'#d9dfcc',t=>{
     const w=width+(endWidth-width)*t;
@@ -273,6 +276,7 @@ function moonBed(s,flow){
 const works={sakura:flowerInlet,bamboo:bambooJets,sulfur:cliffBath,paddy:sluices,maple:neckFalls,susuki:moonBed};
 export function villageTreatmentGeometry(site){
   const fittings=sculpture(),flow=sculpture(),pools=villagePools(site);
+  flow.paths=[];
   let timberwork;
   if(site.kind==='earthen'){
     for(const [i,p] of pools.entries()){jarBody(fittings,p);jarFeed(fittings,flow,p,i);}
@@ -283,7 +287,7 @@ export function villageTreatmentGeometry(site){
     for(let i=0;i<4;i++)stroke(fittings,silver,t=>[-2.47+t*.57,.99+.075*cos(PI*t),-3.83+i*.045],.015,10);
   }
   finishWaterworks(fittings,site.kind,pools);
-  return {fittings:fittings.finish(),flow:flow.finish(),timberwork};
+  return {fittings:fittings.finish(),flow:flow.finish(),paths:flow.paths,timberwork};
 }
 // A kiln yard drains between the vessels. Clip the old brick's actual top
 // faces where the jar shoulders emerge; water can never show through an aisle.
@@ -337,7 +341,8 @@ function pottersCourt(site){
 }
 export function dressVillageBath(p,f,site){
   if(!isVillageWorkshop(site))return;
-  const {fittings,flow,timberwork}=villageTreatmentGeometry(site);
+  const {fittings,flow,paths,timberwork}=villageTreatmentGeometry(site);
+  registerFallingWater(site,'workshop',paths);
   if(timberwork){
     p.shapes.harborTimbers=timberwork;
     f.put('harborTimbers',0,0,0,1,1,1,'#fff',bathFinish('cedar'));

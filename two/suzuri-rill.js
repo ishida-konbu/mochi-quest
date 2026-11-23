@@ -1,3 +1,4 @@
+import { createSteam, steamSource } from './steam.js';
 import * as T from './vendor/three.module.min.js';
 import { rillPoint } from './suzuri-basin-plan.js';
 
@@ -45,41 +46,9 @@ export function grindingRill(clock){
 }
 
 export function inkWellVapour(clock){
-  const cloud=new T.BufferGeometry(),idx=[],pos=[],uv=[],source=[],codes=[];
-  // Warm air rises from the three wet areas and drifts towards the open
-  // street. Its sources stay clear of the dry grinding field and apron.
+  // Only the wet wells and meander emit. The grinding field stays clear.
   const vents=[[-1.91,.276,-1.75,.48],[-.87,.032,-.73,.70],[1.78,.046,.08,1.22],[-3.3,.035,.56,.84]];
-  for(let i=0;i<26;i++){
-    const origin=vents[i%vents.length],phase=i*2.3999,r=.26*Math.sqrt((i%6)/6);
-    const x=origin[0]+r*cos(phase),z=origin[2]+r*sin(phase),n=i*4;
-    for(const [a,b] of [[0,0],[1,0],[0,1],[1,1]]){
-      pos.push(a-.5,b-.5,0);uv.push(a,b);source.push(x,origin[1],z);
-      codes.push((.38196*i)%1,origin[3],phase,.80+.24*(i%4)/3);
-    }
-    idx.push(n,n+1,n+2,n+2,n+1,n+3);
-  }
-  cloud.setIndex(idx);
-  for(const [name,v,size] of [['position',pos,3],['uv',uv,2],['source',source,3],['code',codes,4]])
-    cloud.setAttribute(name,new T.Float32BufferAttribute(v,size));
-  const m=new T.ShaderMaterial({
-    transparent:true,depthWrite:false,side:T.DoubleSide,uniforms:{springTime:clock},
-    vertexShader:`uniform float springTime;attribute vec3 source;attribute vec4 code;
-    varying vec2 vapourUv;varying float age,phase;void main(){
-      vapourUv=uv;age=fract(code.x+springTime*.184*code.w);phase=code.z;
-      vec3 p=source;p.y+=age*code.y*.96;p.x+=age*.22*sin(phase+age*3.3);
-      p.z+=age*(.18+.12*cos(phase+age*4.));
-      vec4 mv=modelViewMatrix*vec4(p,1.);
-      mv.xy+=position.xy*vec2(1.10,1.55)*(.14+age*.87)*code.y;
-      gl_Position=projectionMatrix*mv;
-    }`,
-    fragmentShader:`varying vec2 vapourUv;varying float age,phase;void main(){
-      vec2 p=vapourUv-.5;p.x+=.046*sin(phase+5.3*p.y+age*5.);
-      float plume=exp(-dot(p*vec2(4.2,3.3),p*vec2(4.2,3.3)));
-      float soft=(1.-smoothstep(.34,.49,abs(p.x)))*(1.-smoothstep(.34,.49,abs(p.y)));
-      float alive=smoothstep(.02,.28,age)*(1.-smoothstep(.40,1.,age));
-      gl_FragColor=vec4(.76,.78,.74,plume*soft*alive*.099);
-      #include <colorspace_fragment>
-    }`
-  });
-  const mist=new T.Mesh(cloud,m);mist.frustumCulled=false;mist.renderOrder=5;return mist;
+  return createSteam(vents.map(([x,y,z,h])=>steamSource('bath',x,y,z,{
+    height:1.22*h,width:.32*h,rx:.26*h,rz:.20*h,count:3,alpha:.26,
+  })),clock);
 }

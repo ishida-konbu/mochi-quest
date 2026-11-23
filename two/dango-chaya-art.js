@@ -1,3 +1,4 @@
+import { createSteam, steamSource } from './steam.js';
 import * as T from './vendor/three.module.min.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { paintedPanels, waysideMaterials, cedarPole, hippedThatch } from './wayside-hut-art.js';
@@ -233,7 +234,7 @@ function service(s,p,cloth){
 }
 
 const localDumplings=new Map();
-export function buildDangoChaya(variant=0,dye='#ffffff'){
+export function buildDangoChaya(variant=0,dye='#ffffff',clock){
   const seed=Math.abs(variant|0)%3;
   if(!cache.has(seed)){
     const s=paintedPanels(),p=sculpture(),cloth=paintedPanels();
@@ -255,5 +256,12 @@ export function buildDangoChaya(variant=0,dye='#ffffff'){
     const mesh=new T.Mesh(geometry,mats[i]);mesh.name=names[i];
     mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);
   }
+  const sources=[
+    steamSource('spout',-2.552,1.527,2.417),
+    steamSource('food',-1.33,1.26,2.23,{rx:.31,rz:.13}),
+    steamSource('tea',2.46,.634,2.53),
+  ];
+  for(const [x,z] of [[1.36,.35],[1.63,.23],[-.10,.32]])sources.push(steamSource('tea',x,.775,z,{count:1}));
+  root.add(createSteam(sources,clock,seed*.89));
   return root;
 }

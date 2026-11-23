@@ -7,7 +7,7 @@ import { performedScenes } from './mochiyori-scenes.js';
 import { SCENES } from './mochiyori-story.js';
 import { createStoryFood, createStoryEvidence, poseStoryFood, releaseStoryEvidence, setEvidencePose } from './story-crafts.js';
 import { createStoryTool, storyGrip, storyTool, poseStoryHands } from './story-models.js';
-import { makeSteam, makeAccessories } from './mochiyori-hand-props.js';
+import { makeSteam, makeAccessories, steamingBeat, poseStorySteam } from './mochiyori-hand-props.js';
 import { dividePastry } from './mochiyori-cut.js';
 import { batchActorParts } from './actors.js';
 
@@ -181,7 +181,7 @@ export function createFieldwork(scene){
       for(const {model} of [liner,freight]){model.position.multiplyScalar(unit/model.scale.x);model.scale.setScalar(unit);}
     }
     root.add(effects);
-    if (score.beats.some(b=>b.pose==='single' || b.pose==='spaced')){
+    if (score.beats.some(b=>steamingBeat(items[b.prop].spec,b))){
       steam ??= makeSteam();effects.add(steam);steam.visible=false;
     }
     root.updateWorldMatrix(true,true);
@@ -331,18 +331,7 @@ export function createFieldwork(scene){
     if(items[beat.prop].spec.code==='food')poseStoryFood(node,g,r);
     const radius=Math.min(.19,Math.max(.024,size.x*.39));
     const edge=s=>pivot.localToWorld(vec(s*radius,0,-size.z*.24));
-    if(steam && beat.pose && ['single','stacked','spaced'].includes(beat.pose)){
-      const base=items[beat.prop].model;
-      steam.visible=beat.pose==='stacked'?r<.7:r>.22;
-      if(steam.visible){
-        const upper=beat.pose==='spaced' && node.name==='蒸し箱の上段'?node:base.getObjectByName('蒸し箱の下段') || base;
-        steam.position.copy(root.worldToLocal(upper.localToWorld(vec(0,.13,0))));
-      }
-    }
-    if(steam?.visible)for(const [j,w] of steam.children.entries()){
-      const u=(lastTime*.68+j*.31)%1;
-      w.position.set((j-1)*.05+Math.sin(u*4+j)*.026,u*.24,0);w.material.opacity=.64*Math.sin(Math.PI*u);
-    }
+    if(steam)poseStorySteam(steam,root,beat,items[beat.prop],node,pivot,size,lastTime,r);
     if(tools?.stream.visible){
       tools.stream.position.copy(root.worldToLocal(edge(-sign)));tools.stream.scale.y=.01+.81*arc;
     }

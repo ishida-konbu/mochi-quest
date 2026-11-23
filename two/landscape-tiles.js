@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
+import { MOUNTAIN_STREAMS, mountainStreamWaterAt } from './mountain-streams.js';
 import { DISTRICTS, TERRAIN_TILES, TERRAIN_SUBDIVISIONS } from './geography.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { scrollCoverage } from './scroll-paper.js';
@@ -10,6 +11,10 @@ import { BOUND, TREES, wrapDelta, terrainHeight as h, regionAt, shoreDistance, r
 const {abs,min,max,cos,sin} = Math;
 const css = c => new THREE.Color(c);
 const span = 2*BOUND/TERRAIN_TILES;
+const tributaryBounds=MOUNTAIN_STREAMS.map(({stations})=>({
+  west:min(...stations.map(s=>s.x-s.width)),east:max(...stations.map(s=>s.x+s.width)),
+  north:min(...stations.map(s=>s.z-s.width)),south:max(...stations.map(s=>s.z+s.width)),
+}));
 
 // Keep the survey vertices along every tile edge. Inside each two-cell square
 // only omit a midpoint if its surveyed height is within 4 cm of the chord.
@@ -102,7 +107,7 @@ export function createTerrainTiles(scene, mat) {
       }
       const lakeBank=max(0,1-abs(lakeRadius(x,z)-1)*FOREST_LAKE.rz/4.8,
         1-abs(isletRadius(x,z)-1)*LAKE_ISLET.rz/2.1);
-      surface.push(canopy,max(lakeBank,max(0,1-abs(river-.2)/7.3),max(0,min(1,(7.6-coast)/8.2))));
+      surface.push(canopy,max(lakeBank,max(0,1-abs(river-.2)/7.3),max(0,min(1,(7.6-coast)/8.2))),-.8);
       scroll.push(scrollCoverage(x,z));
       seasonAt(x,z,season);
       seasons.push(season.snow,season.autumn,season.moon, season.dawn*max(0,min(1,(30-coast)/23)));
@@ -112,7 +117,13 @@ export function createTerrainTiles(scene, mat) {
         ix.push(k,l,k+1,k+1,l,l+1);
       }
     }
-    if(!deep)springGround.refineTile(column,row,p,ix,[[uv,2],[col,3],[ridges,1],[surface,2],[scroll,1],[seasons,4]],h);
+    if(!deep)springGround.refineTile(column,row,p,ix,[[uv,2],[col,3],[ridges,1],[surface,3],[scroll,1],[seasons,4]],h);
+    // Sample after local refinement so the wet pigment stays on the same
+    // narrow, sloping channel triangles that support the swimmer.
+    if(tributaryBounds.some(b=>midX+span/2>b.west && midX-span/2<b.east &&
+      midZ+span/2>b.north && midZ-span/2<b.south)){
+      for(let k=0;k<p.length;k+=3)surface[k+2]=max(-.8,mountainStreamWaterAt(p[k],p[k+2])-p[k+1]);
+    }
     const ground=new THREE.BufferGeometry();
     ground.setAttribute('position',new THREE.Float32BufferAttribute(p,3));
     ground.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
@@ -120,7 +131,7 @@ export function createTerrainTiles(scene, mat) {
     ground.setIndex(ix);
     ground.computeVertexNormals();
     ground.setAttribute('ridgeRelief',new THREE.Float32BufferAttribute(ridges,1));
-    ground.setAttribute('terrainMix',new THREE.Float32BufferAttribute(surface,2));
+    ground.setAttribute('terrainMix',new THREE.Float32BufferAttribute(surface,3));
     ground.setAttribute('scrollAmount',new THREE.Float32BufferAttribute(scroll,1));
     ground.setAttribute('seasons',new THREE.Float32BufferAttribute(seasons,4));
     // Adjacent tiles compute their own normals. Sample both sides at the

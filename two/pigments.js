@@ -1,6 +1,7 @@
 import { KYO_HILL_SHEET } from './higashiyama.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
 import { PEACH_BOUT } from './scroll-encounters.js';
+import { waterbedPigmentGLSL, waterbedContacts } from './waterbed-pigment.js';
 import { groundPrintGLSL } from './ground-print.js';
 import { LAKE_HOKORA, LAKE_ISLET } from './snow-country.js';
 import { groundImpressions } from './scroll-paper.js';
@@ -18,7 +19,11 @@ export function loadPigments() {
     if (repeat) tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     return tex;
   };
+  const bedPlate=read('waterbed-impressions');
+  // The channels hold independent ink densities.
+  bedPlate.colorSpace=THREE.NoColorSpace;
   return {
+    bedPlate,
     turf: read('turf'),
     fieldInk: read('field-ink', false),
     forest: read('forest-floor'),
@@ -34,26 +39,34 @@ export function loadPigments() {
   };
 }
 
-export function meadowMaterial(art) {
+export function meadowMaterial(art, clock={value:0}, contacts=waterbedContacts()) {
   const mat = new THREE.MeshLambertMaterial({ map: art.turf, vertexColors: true });
   const impressions=groundImpressions();
   const {west,east,north,south}=PEACH_RANGE_BOUNDS;
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.fieldInk = { value: art.fieldInk };
+    shader.uniforms.benthicPlate = { value: art.bedPlate };
+    shader.uniforms.bedTime = clock;
+    shader.uniforms.bedContacts = { value:contacts.map };
+    shader.uniforms.contactOrigin = { value:contacts.origin };
     shader.uniforms.impressions = { value: impressions };
     shader.uniforms.hillPainting = { value:art.hillPainting };
     shader.uniforms.woodFloor = { value: art.forest };
     shader.uniforms.bankStones = { value: art.gravel };
     shader.uniforms.escarpmentInk = { value: art.escarpment };
     shader.vertexShader =
-      'attribute float ridgeRelief; varying float vRidge; attribute float scrollAmount; varying float vScroll; varying vec3 inkPoint; attribute vec2 terrainMix; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
-      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRidge=ridgeRelief; vScroll=.76+.24*scrollAmount; inkPoint=position; vTerrainMix = terrainMix; vSeasons = seasons; incline=1.-abs(normal.y);');
+      'attribute float ridgeRelief; varying float vRidge; attribute float scrollAmount; varying float vScroll; varying vec3 inkPoint; attribute vec3 terrainMix; varying float streamDepth; attribute vec4 seasons; varying vec4 vSeasons; varying float incline; varying vec2 vTerrainMix;\n' +
+      shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRidge=ridgeRelief; vScroll=.76+.24*scrollAmount; inkPoint=position; vTerrainMix = terrainMix.xy; streamDepth=terrainMix.z; vSeasons = seasons; incline=1.-abs(normal.y);');
     shader.fragmentShader =
-      groundPrintGLSL + 'uniform sampler2D fieldInk, woodFloor, bankStones, impressions, hillPainting, escarpmentInk; varying float vRidge; varying float vScroll; varying vec3 inkPoint; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
+      groundPrintGLSL + waterbedPigmentGLSL + 'uniform sampler2D fieldInk, woodFloor, bankStones, impressions, hillPainting, escarpmentInk; varying float vRidge; varying float vScroll; varying vec3 inkPoint; varying vec2 vTerrainMix; varying vec4 vSeasons; varying float incline;\n' +
       shader.fragmentShader.replace(
         '#include <map_fragment>',
         `
         vec2 field=inkPoint.xz, plot=vMapUv;
+        float depth=max(.38-inkPoint.y,streamDepth);
+        vec2 bedDx=dFdx(field)*1.36,bedDy=dFdy(field)*1.36;
+        vec3 ground=vec3(0.);
+        if(depth < .22) {
         Impressions stamps=groundPrint(plot);
         vec2 dx=dFdx(plot), dy=dFdy(plot);
         float wash=.68*groundWash(field*.039)+.32*groundWash(field*.112+17.2);
@@ -71,7 +84,7 @@ export function meadowMaterial(art) {
         vec3 pigment=mix(mix(blades,understory,woodland),shingle,bank);
         float luma=dot(pigment,vec3(.27,.59,.14));
         pigment=mix(vec3(luma*.93,luma*1.05,luma*1.04),pigment,.63);
-        vec3 ground=pigment*vec3(.99,1.10,1.19)+vec3(.020,.029,.031);
+        ground=pigment*vec3(.99,1.10,1.19)+vec3(.020,.029,.031);
         vec3 openPaper=mix(vec3(.61,.56,.398),vec3(.295,.344,.211),wash);
         vec3 duff=mix(vec3(.35,.289,.195),vec3(.214,.240,.153),wash);
         ground=mix(ground,mix(openPaper,duff,woodland)*(.80+.52*luma),.57-.28*bank);
@@ -187,6 +200,10 @@ export function meadowMaterial(art) {
             }
             ground=mix(ground,slate*vec3(1.13,1.24,1.36)+vec3(.023,.028,.034),exposure);
           }
+        }
+        }
+        if(depth>0.){
+          ground=mix(ground,sediment(inkPoint,depth,bedDx,bedDy),smoothstep(0.,.22,depth));
         }
         diffuseColor.rgb *= ground;
       `,

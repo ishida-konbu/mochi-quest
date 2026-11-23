@@ -307,7 +307,8 @@ function kagamiLayers(r) {
   citrus.scale.setScalar(.91);
   stack.add(citrus);
   stack.visible=false;
-  return { stack, citrus, wands, upperSkin:riceFinish(r.plainSkin), wind:0, windPhase:0,
+  return { stack, citrus, wands, lowerSkin:bottom.material, lowerColor:bottom.material.color.clone(),
+    upperSkin:riceFinish(r.plainSkin), wind:0, windPhase:0,
     stroke:0, spread:0, toStack:new T.Matrix4(), palmBack:new T.Vector3() };
 }
 
@@ -440,12 +441,17 @@ export function poseRice(r,p,t,dt,mood,bath) {
   r.uniforms.riceSmile.value=r.smile;
   r.uniforms.riceCell.value=cell;
   r.uniforms.ricePull.value=pull;
-  r.uniforms.riceTint.value.copy(tints[p.mode]||tints.normal);
+  const tint=r.uniforms.riceTint.value.copy(tints[p.mode]||tints.normal);
+  // The faint sakura wash cools with the last wisps from the warm dough.
+  const warmth=smooth(p.buffs?.warm || 0,0,1.8);
+  tint.g*=1-.14*warmth;
+  tint.b*=1-.075*warmth;
   r.uniforms.mugwort.value=Number(p.mode==='kusa');
   const inFlight=stack && !grounded && !ride && !p.activity;
   const beat=inFlight ? clamp(p.flapBeat||0,0,1) : 0;
   if (stack) {
     r.kagami ??= kagamiLayers(r);
+    r.kagami.lowerSkin.color.copy(r.kagami.lowerColor).multiply(tint);
     const pulse=Math.sin(2*Math.PI*beat)*Math.sin(Math.PI*beat)**.55;
     r.kagami.stroke=T.MathUtils.damp(r.kagami.stroke,pulse,29,frame);
     r.kagami.spread=T.MathUtils.damp(r.kagami.spread,inFlight?1:0,12,frame);

@@ -71,6 +71,6 @@ GitHub Pages で遊んでいた場合は、同じブラウザで[旧版の手引
 
 第二作の遠景には描き下ろしの山水画を使用しています。お餅や水辺に映る朝の環境光には Greg Zaal の HDRI を軽量化して使用しました。[Spruit Sunrise](https://polyhaven.com/a/spruit_sunrise) ／ [CC0](https://polyhaven.com/license)
 
-桜川の浅瀬と海岸には Kless Gyzen の苔岩6種を配置しています。配信用モデルは元の色と凹凸のテクスチャを活かして約4千ポリゴンに軽量化しました。[Rock Moss Set 01](https://polyhaven.com/a/rock_moss_set_01) ／ [CC0](https://polyhaven.com/license)
+桜川の浅瀬と海岸には Kless Gyzen の苔岩6種を配置しています。配信用モデルは元の色と凹凸のテクスチャを活かして約4千ポリゴンに軽量化しました。川床の礫にも同じ6種を使い、真上から写し取った石の陰影を大きさの異なる三層に重ねています。[Rock Moss Set 01](https://polyhaven.com/a/rock_moss_set_01) ／ [CC0](https://polyhaven.com/license)
 
 足元の草花は20系統、それぞれに5通りの草姿を描き分けています。木陰には笹や薇、川辺には沢瀉、浜には浜昼顔が群生します。原画の生成コードと配信用アトラスを CC0 で公開しています。[植物画のソース](tools/paint-meadow.mjs) ／ [アトラス](two/assets/world/meadow-herbs.webp) ／ [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)

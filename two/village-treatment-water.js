@@ -1,6 +1,7 @@
 // Animated water stays in its own basin. The petals share a rigid transform
 // around each blossom; turning the head into a source increases its spray.
 import * as T from './vendor/three.module.min.js';
+import { jetContacts, interceptedJetGLSL } from './falling-water-contact.js';
 import { villagePools } from './village-bath-courses.js';
 
 const {PI,sin,cos}=Math,tau=2*PI,records=new Map();
@@ -10,15 +11,20 @@ export function registerWaterMotion(p,site){
   const flow=new T.MeshPhysicalMaterial({side:T.DoubleSide,vertexColors:true,transparent:true,opacity:.76,
     depthWrite:false,roughness:.22,clearcoat:.27});
   flow.onBeforeCompile=shader=>{
-    shader.uniforms.flowClock=p.sway;shader.uniforms.pressure=active;
-    shader.vertexShader='uniform float flowClock,pressure;varying vec3 currentPoint;\n'+shader.vertexShader.replace(
+    shader.uniforms.flowClock=p.sway;shader.uniforms.pressure=active;shader.uniforms.jetContacts=jetContacts;
+    shader.vertexShader='uniform float flowClock,pressure;varying vec3 currentPoint, worldFlow;\n'+shader.vertexShader.replace(
       '#include <begin_vertex>',`#include <begin_vertex>
       currentPoint=position;
+      vec4 wp=vec4(position,1.);
+      #ifdef USE_INSTANCING
+        wp=instanceMatrix*wp;
+      #endif
+      worldFlow=(modelMatrix*wp).xyz;
       transformed.x+=.008*sin(flowClock*6.+position.y*9.)*(1.+.85*pressure);`);
-    shader.fragmentShader='uniform float flowClock,pressure;varying vec3 currentPoint;\n'+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
+    shader.fragmentShader=interceptedJetGLSL+'uniform float flowClock,pressure;varying vec3 currentPoint,worldFlow;\n'+shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
       float crest=.5+.5*sin(currentPoint.y*31.+flowClock*(7.+pressure)+sin(currentPoint.x*44.+currentPoint.z*19.)*1.35);
       diffuseColor.rgb+=vec3(.26,.31,.26)*pow(crest,5.);
-      diffuseColor.a*=.69+.31*crest;`);
+      diffuseColor.a*=(.69+.31*crest)*fallingCoverage(worldFlow);`);
   };
   flow.customProgramCacheKey=()=> 'village-running-water';
   const values={site,clock:p.sway,flow,active,focus,direction};records.set(site.kind,values);return values;

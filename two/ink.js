@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { peachHazeShader, peachHazeUniforms, updatePeachHaze } from './peach-haze.js';
+import { submergedLightGLSL } from './underwater-light.js';
 
 // Work in linear light until the last pass, so a little reflected sun on the
 // wet dough can be brighter than flour without turning the whole face white.
@@ -32,6 +33,10 @@ export function createInkPass(renderer, camera) {
       focus: { value: 0 },
       scroll: { value: 0 },
       inkFogDensity: { value: 0 },
+      submergedWater: { value: new THREE.Vector3() },
+      submergedFog: { value: new THREE.Color() },
+      submergedEye: { value: new THREE.Vector4() },
+      waterBasis: { value: new THREE.Matrix3() },
     },
     vertexShader: `
       varying vec2 paperUV;
@@ -42,6 +47,7 @@ export function createInkPass(renderer, camera) {
       uniform vec2 pixel,lens,clip;
       uniform float focus,scroll,inkFogDensity,daylight;
       ${peachHazeShader}
+      ${submergedLightGLSL}
       float meters(vec2 uv) {
         float d = texture2D(depthMap,uv).r;
         return clip.x*clip.y / (clip.y-d*(clip.y-clip.x));
@@ -113,6 +119,7 @@ export function createInkPass(renderer, camera) {
           c=sum/count;
         }
         c=valleyMist(c,viewPoint(uv,1.),z);
+        c=underwaterLight(c,viewPoint(uv,1.),z);
         // Separate the drawing from the underlying wash. Reserved highlights
         // take the paper tone; only deep pools and contours carry dense ink.
         float paperLight = dot(c,vec3(.2126,.7152,.0722));
@@ -172,6 +179,14 @@ export function createInkPass(renderer, camera) {
       material.uniforms.clip.value.set(camera.near,camera.far);
       camera.updateWorldMatrix(true,false);
       updatePeachHaze(material.uniforms,camera,scene.fog,time);
+      const water=scene.userData.submergedLight;
+      material.uniforms.submergedWater.value.set(water?.amount || 0,water?.sun || 0,water?.marine || 0);
+      if(water?.amount) {
+        material.uniforms.submergedFog.value.copy(scene.fog.color);
+        material.uniforms.waterBasis.value.setFromMatrix4(camera.matrixWorld);
+        const eye=camera.position;
+        material.uniforms.submergedEye.value.set(eye.x,eye.y-water.line,eye.z,time);
+      }
       const light = scene.fog?.color;
       material.uniforms.daylight.value = light ? THREE.MathUtils.smoothstep(light.g, .085, .46) : 1;
       material.uniforms.scroll.value = scroll;
