@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MOUNTAIN_STREAMS,inMountainStreamClearing,mountainStreamWaterAt } from '../two/mountain-streams.js';
+import * as THREE from '../two/vendor/three.module.min.js';
+import { createMountainWaterfalls } from '../two/mountain-waterfalls.js';
 import { WATER_Y,ROADS,riverZ,shoreDistance,terrainHeight,terrainMeshHeight,groundHeight,waterSurfaceAt } from '../two/terrain.js';
 import { MAPLE_BRIDGE } from '../two/maple-crossing.js';
 import { createGame } from '../two/game.js';
@@ -47,6 +49,28 @@ test('Kaede Shimizu fills the former shop site and reaches the channel under the
     const z=-130+3.3*Math.sin((x-MAPLE_BRIDGE.x)/15);
     assert.ok(terrainMeshHeight(x,z)<WATER_Y);
   }
+});
+
+test('the downstream maple fall lands directly in the river sheet over a continuous submerged outlet',t=>{
+  t.mock.method(THREE.TextureLoader.prototype,'load',()=>new THREE.Texture());
+  const stream=MOUNTAIN_STREAMS.find(s=>s.id==='maple');
+  for(const p of stream.stations.slice(stream.toeIndex)){
+    assert.equal(mountainStreamWaterAt(p.x,p.z),WATER_Y);
+    assert.ok(terrainMeshHeight(p.x,p.z)<WATER_Y-.2);
+  }
+  const scene=new THREE.Scene();
+  createMountainWaterfalls(scene);
+  const site=scene.children.find(s=>s.userData.waterfallId==='maple');
+  const {position,current}=site.children.find(m=>m.userData.waterfallPart==='water').geometry.attributes;
+  let impactVertices=0;
+  for(let i=0;i<position.count;i++){
+    if(position.getY(i)+stream.fall.lip.y>WATER_Y+.07)continue;
+    // The crossing water here is drawn by the river. Only the ends of the
+    // falling ribbons may occupy these heights in the waterfall mesh.
+    assert.ok(current.getZ(i)>.95);
+    impactVertices++;
+  }
+  assert.ok(impactVertices>10);
 });
 
 test('the lip opens onto air and a mochi can fall into each real plunge pool and resume swimming',()=>{

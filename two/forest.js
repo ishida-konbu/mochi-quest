@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { kyoRidgeHeight } from './higashiyama.js';
-import { BOUND, TREES, treeGround, wrapDelta } from './terrain.js';
+import { kaedeTrees } from './kaede-grove.js';
+import { BOUND, TREES, seasonAt, treeGround, wrapDelta } from './terrain.js';
 import { isNishiyamaTree } from './mountain-woodland.js';
 import { bambooFootGLSL, markCulms, prepareBambooCulms } from './bamboo-culms.js';
 import { TREE_FORM_COUNT } from './forest-forms.js';
@@ -10,8 +11,8 @@ const FAR = 42, RANGE = 314, STEP = 3;
 // Retain the full branch mesh while the crown still subtends a large angle.
 // Bamboo's narrow profile needs a shorter distance on the densely planted western slope.
 const fadeStart = 2/3, hillFadeStart=.80;
-const phaseDeclaration = 'varying float forestDistance,forestFade,inkTree,inkBamboo; varying vec2 brushPoint;\n';
-const crownVertex = `forestDistance=distance(root,cameraPosition);
+const phaseDeclaration = 'varying float forestDistance,forestFade,inkTree,inkBamboo,kaedeInk; varying vec2 brushPoint;\n';
+const crownVertex = `kaedeInk=leafDye; forestDistance=distance(root,cameraPosition);
   inkTree=crownStyle.x; inkBamboo=crownStyle.y<0.?1.:crownStyle.y;
   forestFade=smoothstep(crownStyle.z*mix(${fadeStart},${hillFadeStart},inkTree),crownStyle.z,forestDistance);`;
 function brushProjection(height) {
@@ -45,12 +46,15 @@ function fade(shader, far) {
 // A row pair gives the ink of bare wood and leaves for one form and aspect.
 // Both representations use the same palette in the changeover.
 const crownPalette = `uniform sampler2D crownWashes;
+  vec3 kaedeWash(vec3 original,float dye,float coverage) {
+    return original*mix(vec3(1.),vec3(1.42,.81,.90),dye*coverage);
+  }
   vec3 crownWash(vec3 color,float leaf,float row){
     float tone=sqrt(clamp(dot(color,vec3(.28,.56,.16)),0.,1.));
     vec2 uv=vec2((.5+255.*tone)/256.,1.-(row+leaf+.5)/${TREE_FORM_COUNT*4}.);
     return texture2D(crownWashes,uv).rgb;
   }`;
-export function* prepareForest(scene, clock) {
+export function* prepareForest(scene, clock, boughs) {
   const trees = TREES.filter(t=>t.form!==undefined);
   // Count the largest group of near trees a camera cell can actually see.
   // The reserve includes neighbouring cells and the camera's update stride.
@@ -81,7 +85,8 @@ export function* prepareForest(scene, clock) {
     const variation=t.seed%131;
     const tint=THREE.MathUtils.lerp(.86+variation*.0019,.83+variation*.0010,wash);
     const rotation=t.seed*2.39996323;
-    const record={tree:t,ground,rotation,range,wash,bambooWash:bamboo?wash:0,detailStart,reach,tint};
+    const dye=t.kind==='maple'&&kaedeTrees.has(t)?seasonAt(t.x,t.z).autumn:0;
+    const record={tree:t,ground,rotation,range,wash,dye,bambooWash:bamboo?wash:0,detailStart,reach,tint};
     if(bamboo && isNishiyamaTree(t)){
       record.bambooRow=bambooStands.length;
       record.cos=Math.cos(rotation);record.sin=Math.sin(rotation);
@@ -127,7 +132,7 @@ export function* prepareForest(scene, clock) {
     shader.uniforms.heroView=heroView;
     shader.uniforms.heroRadius=heroRadius;
     shader.uniforms.crownWashes={value:washes};
-    shader.vertexShader=bambooFootGLSL+phaseDeclaration+'uniform float forestClock; attribute float bambooCulm; varying float solidCulm; attribute vec4 crownStyle; varying vec3 canopyView,nearWash;\n'+shader.vertexShader.replace('#include <begin_vertex>',
+    shader.vertexShader=bambooFootGLSL+phaseDeclaration+'uniform float forestClock; attribute float leafDye,bambooCulm; varying float solidCulm; attribute vec4 crownStyle; varying vec3 canopyView,nearWash;\n'+shader.vertexShader.replace('#include <begin_vertex>',
       `#include <begin_vertex>
        vec3 root=instanceMatrix[3].xyz;
        ${crownVertex}
@@ -165,6 +170,7 @@ export function* prepareForest(scene, clock) {
     // fragments in front of the body enter the softly feathered viewing cone.
     shader.fragmentShader=crownPalette+'\nvarying float solidCulm; uniform vec3 heroView; uniform vec2 heroRadius; varying vec3 canopyView,nearWash;\n'+
       shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        if(kaedeInk!=0.) diffuseColor.rgb=kaedeWash(diffuseColor.rgb,kaedeInk,treeLeaf);
         if(inkTree>0.) {
           // Near the footpath each folded spray carries a wash. Bark and the
           // broken margins of the foliage take the darkest brush pressure.
@@ -206,7 +212,8 @@ export function* prepareForest(scene, clock) {
   };
   const near = [];
   for (let i=0; i<TREE_FORM_COUNT; i++) {
-    const shape=forestGeometry(i);
+    const shape=forestGeometry(i,false,false,null,boughs?.get(i));
+    shape.setAttribute('leafDye',new THREE.InstancedBufferAttribute(new Float32Array(totals[i]),1).setUsage(THREE.DynamicDrawUsage));
     if(shape.userData.culms)markCulms(shape);
     shape.setAttribute('crownStyle',new THREE.InstancedBufferAttribute(new Float32Array(totals[i]*4),4)
       .setUsage(THREE.DynamicDrawUsage));
@@ -227,14 +234,16 @@ export function* prepareForest(scene, clock) {
   const roots = new THREE.InstancedBufferAttribute(new Float32Array(trees.length*4),4);
   const forms = new THREE.InstancedBufferAttribute(new Float32Array(trees.length*3),3);
   const styles = new THREE.InstancedBufferAttribute(new Float32Array(trees.length*3),3);
-  for(const attribute of [roots,forms,styles]) attribute.setUsage(THREE.DynamicDrawUsage);
+  const dyes = new THREE.InstancedBufferAttribute(new Float32Array(trees.length),1);
+  for(const attribute of [roots,forms,styles,dyes]) attribute.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('leafDye',dyes);
   geo.setAttribute('rootHeight',roots);
   geo.setAttribute('treeForm',forms);
   geo.setAttribute('crownStyle',styles);
   const farMaterial=new THREE.MeshLambertMaterial({map:read('forest-crowns'),alphaTest:.30,side:THREE.FrontSide});
   farMaterial.onBeforeCompile=shader=>{
     shader.uniforms.crownWashes={value:washes};
-    shader.vertexShader=phaseDeclaration+'attribute vec4 rootHeight; attribute vec3 treeForm,crownStyle; varying float forestTint,washRow;\n'+
+    shader.vertexShader=phaseDeclaration+'attribute float leafDye; attribute vec4 rootHeight; attribute vec3 treeForm,crownStyle; varying float forestTint,washRow;\n'+
       shader.vertexShader.replace('#include <beginnormal_vertex>','#include <beginnormal_vertex>\nobjectNormal=vec3(0.,1.,0.);').replace('#include <begin_vertex>',`
         vec3 root=rootHeight.xyz;
         ${crownVertex}
@@ -253,6 +262,11 @@ export function* prepareForest(scene, clock) {
     shader.fragmentShader=crownPalette+'\nvarying float forestTint,washRow;\n'+
       shader.fragmentShader.replace('#include <map_fragment>', `
         vec4 crown=texture2D(map,vMapUv);
+        if(kaedeInk!=0.) {
+          // Separate red blades from umber branches in the baked crown.
+          float chroma=1.-crown.g/max(.001,crown.r);
+          crown.rgb=kaedeWash(crown.rgb,kaedeInk,smoothstep(.49,.76,chroma));
+        }
         if(inkTree>0.) {
           float leaf=smoothstep(.82,.99,(crown.g+.0001)/(crown.r+.0001));
           vec3 wash=crownWash(crown.rgb,leaf,washRow);
@@ -305,7 +319,7 @@ export function* prepareForest(scene, clock) {
       crown.radius=grove.radius;
       if(!view.intersectsSphere(crown))continue;
       for(const record of grove.trees) {
-        const {tree,ground,rotation,range,wash,bambooWash,detailStart,reach,tint:brightness}=record;
+        const {tree,ground,rotation,range,wash,dye,bambooWash,detailStart,reach,tint:brightness}=record;
         const dx=wrapDelta(tree.x-eye.x), dz=wrapDelta(tree.z-eye.z);
         const d2=dx*dx+dz*dz+(ground-eye.y)**2;
         if(d2>range*range) continue;
@@ -321,12 +335,13 @@ export function* prepareForest(scene, clock) {
           transform.updateMatrix();mesh.setMatrixAt(idx,transform.matrix);
           mesh.setColorAt(idx,tint.setRGB(brightness,brightness,brightness));
           mesh.geometry.attributes.crownStyle.setXYZW(idx,wash,bambooWash,reach,tree.form);
+          mesh.geometry.attributes.leafDye.setX(idx,dye);
         }
         if(d2>(detailStart-STEP-1)**2) {
           if(bambooWash<0)bambooCulms.add(record,x,z);
           roots.setXYZW(used,x,ground,z,tree.h);
           forms.setXYZ(used,tree.form,rotation%(Math.PI*2),brightness);
-          styles.setXYZ(used,wash,bambooWash,reach);used++;
+          styles.setXYZ(used,wash,bambooWash,reach);dyes.setX(used,dye);used++;
         }
       }
     }
@@ -337,12 +352,13 @@ export function* prepareForest(scene, clock) {
       mesh.instanceMatrix.needsUpdate=true;
       mesh.instanceColor.clearUpdateRanges();mesh.instanceColor.addUpdateRange(0,3*mesh.count);
       mesh.instanceColor.needsUpdate=true;
-      const style=mesh.geometry.attributes.crownStyle;
-      style.clearUpdateRanges();style.addUpdateRange(0,4*mesh.count);style.needsUpdate=true;
+      for(const attr of [mesh.geometry.attributes.crownStyle,mesh.geometry.attributes.leafDye]){
+        attr.clearUpdateRanges();attr.addUpdateRange(0,attr.itemSize*mesh.count);attr.needsUpdate=true;
+      }
     }
     bambooCulms.flush();
     geo.instanceCount=used;
-    for(const attribute of [roots,forms,styles]){
+    for(const attribute of [roots,forms,styles,dyes]){
       attribute.clearUpdateRanges();attribute.addUpdateRange(0,attribute.itemSize*used);
       attribute.needsUpdate=true;
     }

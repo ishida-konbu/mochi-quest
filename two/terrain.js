@@ -8,6 +8,7 @@ import { pilgrimRoofContact,snowLamp } from './pilgrim-lodge-plan.js';
 import { SNOW_TOWN, FOREST_LAKE, SNOW_PASS, LAKE_ISLET, isletRadius, snowPoint, lakeRadius, lakePoint } from './snow-country.js';
 import { LAKE_WILLOWS, LAKE_ANIMALS } from './lake-grove-layout.js';
 import { lakeHokoraSolids } from './lake-hokora-layout.js';
+import { kaedeDragonShrineSolids } from './kaede-dragon-layout.js';
 import { WINTER_REEFS } from './winter-reefs.js';
 import { addSeasonalSolids } from './seasonal-fixtures.js';
 import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
@@ -21,7 +22,7 @@ import { KIYOMIZU_APPROACH, kiyomizuTerrain, kiyomizuSolids, kiyomizuClearing, k
 import { HIGASHIYAMA, KITAYAMA, NISHIYAMA, KYO_LOOKOUTS, FIRE_COAST, earlierFireRidgeHeight, earlierWestRidgeHeight, kyoRidgeHeight, eastRidgeHeight, northRidgeHeight, westRidgeHeight, inFireMeadow, createFireTreeCeiling, fireTrailDistance } from './higashiyama.js';
 import { offshoreReefs } from './tidal-reefs.js';
 import { portTerrain,portShore,portSolids,portReserved,SEAPORTS,portPoint } from './seaport-layout.js';
-import { DISTRICTS, districtPoint, WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
+import { DISTRICTS, districtPoint, WORLD_BOUND, WATER_Y, TERRAIN_TILES, TERRAIN_SUBDIVISIONS, wrapWorld } from './geography.js';
 import { snowBathLip } from './main-bath-outlines.js';
 import { springGroundSurvey } from './spring-ground-survey.js';
 import { COURT, RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
@@ -34,8 +35,8 @@ import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms
 import { roomPlan, pagodaPlan, roofForm, roofProfile, houseRoof, roofSkinDepth, roofWallContacts } from './architecture.js';
 // Coordinates and dimensions are metres. Positive Z is south.
 const ORIGINAL_BOUND = 416;
-export const BOUND = WORLD_BOUND,
-  WATER_Y = 0.38;
+export const BOUND = WORLD_BOUND;
+export { WATER_Y };
 export const wrapCoord = v => wrapWorld(v);
 export const wrapDelta = wrapCoord;
 export const ORIGINAL_REGIONS = [
@@ -246,7 +247,7 @@ function outerHeight(x,z,base) {
   }
   return passHeight(x,z,ground);
 }
-const mapleStreamZ = x => -130 + 3.3*sin((x-292)/15);
+export const mapleStreamZ = x => -130 + 3.3*sin((x-292)/15);
 function estuaryTerrain(x,z,native) {
   if ((x> -198 || x< -260) && (x<340 || x>402)) return native;
   const maple=x>340 && z < -110 && z > -152;
@@ -1502,6 +1503,7 @@ addSazaeBathSolids(putSolid);
 hutSolids(terrainHeight,putSolid);
 portSolids(putSolid);
 lakeHokoraSolids(putSolid);
+kaedeDragonShrineSolids(putSolid,terrainContactHeight);
 addSeasonalSolids(putSolid,terrainHeight,seeded,nearRoad,springRadius);
 for(const {x,z,rx,rz,yaw,top,rise} of SOURCE_STONES){
   putSolid(x,z,rx,rz,yaw,top,'springRock',true).roundHeight=rise;

@@ -1,3 +1,5 @@
+import { WATER_Y } from './geography.js';
+
 // Survey in world metres. Each cross-section records the surface height, half
 // width and thalweg depth. The last section meets an existing river or the sea.
 // Overlapping stone noses shelter the fissure at the head of Kaede Shimizu.
@@ -19,12 +21,12 @@ const surveys=[
     [283.8,-130.85,.65,2.03,1.64],[284.55,-130.97,.56,2.19,1.59],
     [285.45,-131.28,.45,1.30,1.24],[286.65,-131.40,.27,.30,1.18],
   ]},
-  {id:'maple',name:'楓渓の滝',lip:4,water:[
+  {id:'maple',name:'楓渓の滝',lip:4,riverPool:true,water:[
     [341.5,-146.0,26.92,.40,.19],[338.4,-146.1,26.64,1.50,.56],
     [333.8,-144.7,25.88,1.45,.56],[328.8,-143.2,23.58,1.48,.54],
-    [325.5,-140.1,22.00,1.89,.35],[324.0,-135.7,1.03,2.25,1.38],
-    [324.8,-133.5,.73,3.56,1.74],[328.2,-131.65,.43,2.67,1.19],
-    [332.6,-130.89,.34,1.80,1.07],[337.4,-129.76,.30,.28,.78],
+    [325.5,-140.1,22.00,1.89,.35],[324.0,-135.7,WATER_Y,2.25,1.38],
+    [324.8,-133.5,WATER_Y,3.56,1.74],[328.2,-131.65,WATER_Y,2.67,1.19],
+    [332.6,-130.89,WATER_Y,1.80,1.07],[337.4,-129.76,WATER_Y,.28,.78],
   ]},
   {id:'sakura',name:'白糸の滝',lip:5,water:[
     [-186.6,-64.0,13.97,.36,.15],[-185.0,-61.6,13.19,1.65,.58],
@@ -52,7 +54,7 @@ const surveys=[
 const clamp01=t=>Math.min(1,Math.max(0,t));
 const ease=t=>{t=clamp01(t);return t*t*(3-2*t);};
 const lerp=(a,b,t)=>a+(b-a)*t;
-function resample({id,name,lip,water}){
+function resample({id,name,lip,water,riverPool=false}){
   const stations=[];
   let lipIndex=0;
   for(let i=0;i<water.length-1;i++){
@@ -75,9 +77,24 @@ function resample({id,name,lip,water}){
     stations[i].nx=(b.z-a.z)/d;stations[i].nz=(a.x-b.x)/d;
   }
   const toeIndex=lipIndex+1;
-  return {id,name,stations,lipIndex,toeIndex,fall:{lip:stations[lipIndex],toe:stations[toeIndex]}};
+  const lipStation=stations[lipIndex],toe=stations[toeIndex];
+  const dx=toe.x-lipStation.x,dz=toe.z-lipStation.z,run=Math.hypot(dx,dz);
+  return {id,name,stations,lipIndex,toeIndex,riverPool,fall:{lip:lipStation,toe,run,fx:dx/run,fz:dz/run}};
 }
 export const MOUNTAIN_STREAMS=surveys.map(resample);
+
+// A streamline on the falling water, including the sheet's forward bow.
+// The painted veil and the leaves it carries share this profile from lip to toe.
+export function waterfallSurface(stream,u,v,out){
+  const {lip,toe,run,fx,fz}=stream.fall,bow=Math.sin(Math.PI*v);
+  out.nx=lerp(lip.nx,fz,v);out.nz=lerp(lip.nz,-fx,v);
+  const width=lerp(lip.width,Math.min(toe.width*.89,lip.width*1.16),v);
+  const across=width*u+bow*.11*Math.sin(1.28*v*Math.PI+5*u);
+  const reach=run*v+bow*(.46+.12*Math.sin(9*u+2.7*v)+.054*Math.cos(21*u+v*3.4));
+  out.x=lip.x+across*out.nx+fx*reach;out.z=lip.z+across*out.nz+fz*reach;
+  out.y=lip.y-(lip.y-toe.y)*v**(stream.id==='kaede-spring'?2:1.77)+.027;
+  return out;
+}
 
 // A sparse index keeps the common terrain and collision query independent of
 // the total length of the detailed banks. A query never allocates a vector.

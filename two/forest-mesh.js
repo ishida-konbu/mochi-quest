@@ -7,7 +7,7 @@ const UP = vec(0,1,0);
 export const forestTexture = name => new URL('./assets/world/'+name+'.webp'+
   (name==='forest-crowns'||name==='kyo-crown-washes'?'?v=jointed-bamboo-3':''),import.meta.url).href;
 
-export function forestGeometry(index, perchOnly = false, omitCulms = false, woodStroke = null) {
+export function forestGeometry(index, perchOnly = false, omitCulms = false, woodStroke = null, boughs = null) {
   const family = Math.floor(index/TREE_FORMS_PER_FAMILY), habit = index%TREE_FORMS_PER_FAMILY;
   const [,form,spray,spread,bole,leafColor,tipColor,barkColor] = TREE_FAMILIES[family];
   let state = (index+1)*139669;
@@ -43,6 +43,7 @@ export function forestGeometry(index, perchOnly = false, omitCulms = false, wood
   // normals point partly skyward so the underside reflects diffuse skylight.
   function tuft(center,yaw,w,h,slope,tint) {
     if(woodStroke)return;
+    if(boughs)boughs.push(center);
     const start=p.length/3, dx=Math.cos(yaw), dz=Math.sin(yaw);
     const face=vec(-dz*.54,.84,dx*.54).normalize();
     const tip=vec(-dz*slope*.72,h,dx*slope*.72);

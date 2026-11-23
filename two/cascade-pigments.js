@@ -1,5 +1,7 @@
 import * as T from './vendor/three.module.min.js';
 import { KAEDE_SEEP } from './mountain-streams.js';
+import { kaedeWaterRafts, kaedeRaftGLSL } from './kaede-water-pigment.js';
+import { autumnLeafMaterial } from './autumn-leaf-art.js';
 
 const paperNoise=`
   float hash21(vec2 p){
@@ -30,7 +32,8 @@ function fallingInk(){
 export function currentPigment(stream,clock,submerged){
   const {toe,lip}=stream.fall,plate=fallingInk();
   const water=new T.MeshLambertMaterial({color:0xffffff,side:T.DoubleSide,transparent:true,depthWrite:true});
-  if(stream.id==='kaede-spring')water.defines={KAEDE_SHIMIZU:1};
+  if(stream.id==='kaede-spring'||stream.id==='maple')water.defines={KAEDE_AUTUMN:1};
+  if(stream.id==='kaede-spring')water.defines.KAEDE_SHIMIZU=1;
   water.forceSinglePass=true;
   water.onBeforeCompile=shader=>{
     shader.uniforms.streamClock=clock;
@@ -39,6 +42,10 @@ export function currentPigment(stream,clock,submerged){
     shader.uniforms.dropHeight={value:lip.y-toe.y};
     shader.uniforms.impact={value:new T.Vector4(toe.x-lip.x,toe.z-lip.z,toe.nx,toe.nz)};
     shader.uniforms.impactWidth={value:lip.width};
+    if(water.defines?.KAEDE_AUTUMN){
+      shader.uniforms.kaedeRafts={value:kaedeWaterRafts()};
+      shader.uniforms.fallingBlades={value:autumnLeafMaterial().map};
+    }
     if(water.defines?.KAEDE_SHIMIZU)shader.uniforms.seep={value:new T.Vector2(KAEDE_SEEP.landX-lip.x,KAEDE_SEEP.landZ-lip.z)};
     shader.vertexShader=`
       attribute vec4 current;
@@ -67,7 +74,37 @@ export function currentPigment(stream,clock,submerged){
       #ifdef KAEDE_SHIMIZU
       uniform vec2 seep;
       #endif
+      #ifdef KAEDE_AUTUMN
+      ${kaedeRaftGLSL}
+      uniform sampler2D fallingBlades;
+      #endif
       ${paperNoise}
+      #ifdef KAEDE_AUTUMN
+      vec4 waterfallBlade(float across,float drop,float t){
+        // Each slender lane releases one leaf per pulse. Recover the nearest
+        // release time, then measure the blade in metres on the falling face.
+        float lane=floor(across/.55);
+        float period=.65+1.15*hash21(vec2(lane,7.25));
+        float elapsed=t-period*hash21(vec2(lane,11.32));
+        float pulse=floor((elapsed-sqrt(2.*drop/9.8))/period+.5);
+        float age=elapsed-pulse*period;
+        vec2 seed=vec2(lane,pulse);
+        float k=hash21(seed+.78);
+        float x=.55*(lane+.23+.54*k)+.035*sin(age*3.1+6.28*k);
+        float y=4.9*age*age;
+        vec2 delta=vec2(across-x,(drop-y)/1.15);
+        float angle=6.28*hash21(seed+3.1)+.68*sin(3.7*age+k);
+        vec2 cs=vec2(cos(angle),sin(angle));
+        vec2 blade=.5+vec2(dot(delta,cs),dot(delta,vec2(-cs.y,cs.x)))/(.13+.085*k);
+        float gold=step(.86,hash21(seed+5.6));
+        vec2 uv=clamp(blade,0.,1.);
+        vec4 leaf=texture2D(fallingBlades,vec2((gold+uv.x)*.5,uv.y));
+        float inside=step(max(abs(blade.x-.5),abs(blade.y-.5)),.5)*step(0.,age);
+        vec3 color=mix(mix(kaedeCarmine,kaedeVermilion,k*k),kaedeGold,gold);
+        float cover=inside*leaf.a;
+        return vec4(color*leaf.rgb*cover,cover);
+      }
+      #endif
     `+shader.fragmentShader.replace('#include <color_fragment>',`
       #include <color_fragment>
       float u=inkFlow.x,s=inkFlow.y,fall=min(1.,inkFlow.z),fade=inkFlow.w,t=streamClock;
@@ -150,6 +187,31 @@ export function currentPigment(stream,clock,submerged){
       diffuseColor.a=fade*mix(.79-.35*edge,veilAlpha,fall);
       #ifdef KAEDE_SHIMIZU
         diffuseColor.a*=1.-.44*pool*(1.-fall);
+      #endif
+      #ifdef KAEDE_AUTUMN
+        if(inkFlow.z<1.5 && gl_FrontFacing){
+          vec4 leaves=vec4(0.);
+          #ifdef KAEDE_SHIMIZU
+            // The signed stream distance is zero at the lip. Only the
+            // individual floating leaves cross the spring and its crest.
+            bool printRaft=s>0. && fall==0.;
+          #else
+            bool printRaft=fall<.96;
+          #endif
+          if(printRaft){
+            vec2 lane=vec2((s-.51*t)/10.6,.5+.52*u+.089*sin(s*.46)+.042*sin(s*.87));
+            leaves=leafImpression(lane);
+          }
+          if(fall>.23){
+            vec4 falling=waterfallBlade(u*impactWidth,down*dropHeight,t);
+            leaves=mix(leaves,falling,smoothstep(.23,.96,fall));
+          }
+          float clear=1.-.46*clamp(foam,0.,1.)*(1.-fall);
+          diffuseColor.rgb=printLeaves(diffuseColor.rgb,leaves,.94*clear);
+          diffuseColor.a=mix(diffuseColor.a,.96*fade,leaves.a*clear);
+        }
+      #endif
+      #ifdef KAEDE_SHIMIZU
         if(diffuseColor.a<.055)discard;
       #endif
     `).replace('#include <opaque_fragment>',`

@@ -1,5 +1,6 @@
 // Physical metres, shared by the land, navigation and wrapping sea routes.
 export const WORLD_BOUND = 1600;
+export const WATER_Y = .38;
 export const TERRAIN_TILES = 32, TERRAIN_SUBDIVISIONS = 40;
 export function wrapWorld(value, bound=WORLD_BOUND) {
   return value >= -bound && value < bound ? value : ((value+bound)%(2*bound)+2*bound)%(2*bound)-bound;

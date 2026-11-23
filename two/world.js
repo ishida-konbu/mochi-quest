@@ -1,3 +1,4 @@
+import { createKaedeLeafFall, kaedeBoughs, kaedeTrees } from './kaede-grove.js';
 import {landmarkCulms} from './landmark-tree.js';
 import { buildDangoChaya } from './dango-chaya-art.js';
 import { WAYSIDE_SITES, BATH_YARD, TEA_FOOTPATHS } from './wayside-hut-layout.js';
@@ -10,6 +11,9 @@ import { dressSeaports } from './seaports.js';
 import { createOceanShips } from './ocean-ship-art.js';
 import { dressWardShop } from './kyo-market.js';
 import { createMountainWaterfalls } from './mountain-waterfalls.js';
+import { MOUNTAIN_STREAMS } from './mountain-streams.js';
+import { createAutumnWaterLeaves } from './autumn-water-leaves.js';
+import { kaedeWaterRafts, kaedeRaftGLSL } from './kaede-water-pigment.js';
 import { createLakeShore } from './lake-shore.js';
 import { dressOutcrops } from './outcrops.js';
 import { createKiyomizu } from './kiyomizu.js';
@@ -30,7 +34,7 @@ import { prepareForest } from './forest.js';
 import { furnishRoom } from './interiors.js';
 import { FOREST_LAKE, LAKE_ISLET, SNOW_PASS, lakeRadiusGLSL, isletRadiusGLSL } from './snow-country.js';
 import * as THREE from './vendor/three.module.min.js';
-import { dressSeasonalPlaces, seasonalWeather } from './seasons.js';
+import { prepareSeasonalPlaces, seasonalWeather } from './seasons.js';
 import { winterSurfGLSL } from './winter-surf.js';
 import { winterPagodaRoof } from './winter-coast.js';
 import { POUNDING } from './festival.js';
@@ -144,6 +148,7 @@ function reserveMasonry(original) {
   return material;
 }
 function buildRoads(scene, art) {
+  const kaedePaths=[];
   const material = trailMaterial(art), paving=kyoPavingMaterial(art.rock), climate={};
   const approach=reserveMasonry(material),avenue=reserveMasonry(paving);
   for (const road of [...ROADS,...TEA_FOOTPATHS]) {
@@ -176,9 +181,15 @@ function buildRoads(scene, art) {
       MAPLE_FOOTINGS.thresholds.some(s=>abs(x-s.x)<4 && abs(z-s.z)<4));
     const mesh=new THREE.Mesh(geo,road.paved?(atEntrance?avenue:paving):(atEntrance?approach:material));
     mesh.receiveShadow=true;mesh.renderOrder=road.paved?2:1;scene.add(mesh);
+    if(road.points.some(([x,z])=>(x-285)**2+(z+115)**2<60**2))kaedePaths.push(mesh);
   }
+  return kaedePaths;
 }
 function makeWater(scene, art, panorama, winterWash) {
+  const basin=MOUNTAIN_STREAMS.find(s=>s.riverPool);
+  const outlet=basin.stations.slice(basin.toeIndex), toe=outlet[0];
+  const widest=outlet.reduce((a,b)=>a.width>b.width?a:b);
+  const section=p=>`vec3(${p.x.toFixed(4)},${p.z.toFixed(4)},${p.width.toFixed(4)})`;
   const mat = new THREE.ShaderMaterial({
     fog: true, transparent: true, depthWrite: true,
     side: THREE.DoubleSide,
@@ -213,8 +224,14 @@ function makeWater(scene, art, panorama, winterWash) {
       ${hullWaterGLSL}
       ${lakeRadiusGLSL}
       ${isletRadiusGLSL}
+      ${kaedeRaftGLSL}
       #include <fog_pars_fragment>
       float hash(vec2 v){return fract(sin(dot(v,vec2(41.23,73.11)))*21314.5);}
+      float channelMargin(vec2 p,vec3 a,vec3 b){
+        vec2 reach=b.xy-a.xy;
+        float t=clamp(dot(p-a.xy,reach)/dot(reach,reach),0.,1.);
+        return mix(a.z,b.z,t)-length(p-mix(a.xy,b.xy,t));
+      }
       float curl(vec2 at,float phase){
         vec2 cell=floor(at), p=fract(at)-.5;
         float k=hash(cell);
@@ -248,7 +265,19 @@ function makeWater(scene, art, panorama, winterWash) {
               float seam=max(0.,1.-abs(shoreDist-edge)/24.);shoreDist=max(shoreDist,edge)+6.*seam*seam;
             }}`).join('\n')}
         float inside=max(halfBank-abs(p.y-river),-shoreDist);
-        if (p.x>278. && p.y < -104. && p.y > -152.) inside=max(inside,3.1+3.8*tide-abs(p.y+130.-3.3*sin((p.x-292.)/15.)));
+        float gorge=0.,gorgeAcross=0.,basinWash=0.,impactRadius=0.;
+        if (p.x>278. && p.y < -104. && p.y > -152.) {
+          gorgeAcross=p.y+130.-3.3*sin((p.x-292.)/15.);
+          float channel=3.1+3.8*tide-abs(gorgeAcross);
+          inside=max(inside,channel);
+          gorge=smoothstep(-2.5,.6,channel)*smoothstep(-9.,2.,shoreDist)*smoothstep(278.,285.,p.x)*(1.-smoothstep(395.,406.,p.x));
+          // The open side pool shares this water, down to the base of the fall.
+          vec3 impact=${section(toe)},bend=${section(widest)};
+          float inlet=max(channelMargin(p,impact,bend),channelMargin(p,bend,${section(outlet.at(-1))}));
+          inside=max(inside,inlet);
+          basinWash=smoothstep(-1.2,1.1,inlet);
+          impactRadius=length(p-impact.xy);
+        }
         float lake=2.;
         if(all(lessThan(abs(p-vec2(${FOREST_LAKE.x}.,${FOREST_LAKE.z}.)),vec2(${FOREST_LAKE.rx*2}.,${FOREST_LAKE.rz*2}.)))){
           lake=lakeRadius(p);
@@ -291,6 +320,25 @@ function makeWater(scene, art, panorama, winterWash) {
         col+=vec3(.12,.155,.10)*caustic*(1.-depth)*.8;
         col=mix(col,col*vec3(.52,.67,.67),inkline*.6);
         col=mix(col,foam,glint*.46+hair*.20+shore*.48);
+        // Blue-green ink in the shaded gorge leaves the warm leaf rafts legible
+        // across the width of a bend. The same broken glints carry out to sea.
+        float gorgeWater=max(gorge,basinWash);
+        if(gorgeWater>0.) {
+          vec3 pool=mix(vec3(.078,.195,.168),vec3(.037,.119,.124),depth);
+          pool=mix(pool,bed,.18*(1.-depth));
+          pool=mix(pool,mirror,.42*fresnel);
+          vec2 current=vec2(p.x-t*.62,gorgeAcross+.16*slow);
+          float streak=curl(current*vec2(.42,1.63),t*.47);
+          pool=mix(pool,foam,streak*.34+hair*.12+shore*.38);
+          col=mix(col,pool,gorgeWater*.84);
+          if(basinWash>0.){
+            float ring=impactRadius*1.15-t*1.04+.10*slow+.05*fine;
+            float crest=abs(fract(ring)-.5);
+            float wake=(1.-smoothstep(.035,.09+min(.10,fwidth(ring)),crest))*(.55+.30*sidle);
+            wake*=1.-smoothstep(.9,4.5,impactRadius);
+            col=mix(col,foam,basinWash*wake*.60);
+          }
+        }
         // Two tapering brushstrokes leave the loaded bow, curl alongside its
         // planks, then break into a chain of short ripples astern.
         if(p.y> -5. && p.y<59. && p.x> -273. && p.x<421.){
@@ -357,6 +405,25 @@ function makeWater(scene, art, panorama, winterWash) {
           col=mix(quiet,foam,shore*.26);
           opacity=mix(.10,.984,shoal)+.014*fresnel;
         }
+        if(gl_FrontFacing)col*=mix(vec3(1.),vec3(.48,.79,.87),gorgeWater*.80);
+        if(gorge>0. && gl_FrontFacing){
+          // The thalweg bends in world space while both leaf skeins travel
+          // down it. A fork of golden fans collects at the outer edge.
+          float bend=1.2*sin((p.x-285.)*.145)+.48*sin((p.x-286.)*.31);
+          float drift=p.x-1.12*t;
+          vec2 rafts=vec2(drift/13.5+.043*sin(p.x*.19),
+            .5+(gorgeAcross-bend)/7.1+.027*sin(drift*.61));
+          // Keep small pockets of gold within the broad carmine skein. Both
+          // harmonics travel with the plate and meet at the repeating edges.
+          float phase=6.2831853*rafts.x;
+          float gold=smoothstep(.35,.70,sin(2.*phase+3.5*rafts.y)+.55*sin(3.*phase-5.7*rafts.y));
+          vec4 leaves=leafImpression(rafts,gold);
+          float cover=leaves.a*gorge;
+          vec3 light=mix(vec3(1.),vec3(.32,.38,.57),climate.z)*mix(vec3(1.),vec3(.94,.83,.80),climate.w);
+          leaves.rgb*=light;
+          col=printLeaves(col,leaves,gorge*.94);
+          opacity=mix(opacity,1.,cover);
+        }
         if (!gl_FrontFacing) {
           // From below, moving folds of light replace the reflected mountains.
           float zenith=clamp(eye.y,0.,1.);
@@ -374,6 +441,7 @@ function makeWater(scene, art, panorama, winterWash) {
   mat.uniforms.clock = scene.userData.waterClock ??= {value:0};
   mat.uniforms.winterWash = {value:winterWash};
   mat.uniforms.pebble.value = art.gravel;
+  mat.uniforms.kaedeRafts = {value:kaedeWaterRafts()};
   mat.uniforms.horizon.value = panorama || art.gravel;
   // Concentrate vertices at water level around the traveller. The outskirts
   // only carry long swells to the horizon, with no visible join between LODs.
@@ -768,12 +836,13 @@ class Painter {
     const skyline=this.cityShell && (shape==='roof'||shape==='hipRoof'||shape==='pagodaRoof'||
       shape==='pagodaCrown'||shape.endsWith('Walls')||shape==='round' && e[5]>4 ||shape==='box' && e[5]>1.02 &&
       (Math.hypot(e[0],e[2])>1.3 || Math.hypot(e[8],e[10])>1.3));
+    const cellSize=typeof chunk==='number'?chunk:chunk?104:144;
     const key =
       (skyline?'洛':'') + shape +
       '|' +
       mat.id +
       '|' +
-      Number(shadow) + '|' + Math.floor(x / (chunk ? 104 : 144)) + ',' + Math.floor(z / (chunk ? 104 : 144));
+      Number(shadow) + '|' + Math.floor(x / cellSize) + ',' + Math.floor(z / cellSize);
     let b = this.groups.get(key);
     if (!b) {
       b = {shape, geo:this.shapes[shape], mat, shadow, skyline, extent:0, count:0, instances:new Float32Array(4*19)};
@@ -853,8 +922,8 @@ class Painter {
     }
   }
 }
-function* woodland(p, art) {
-  yield* plantInkTrees(p, art);
+function* woodland(p, art, boughs) {
+  yield* plantInkTrees(p, art, boughs);
   for (const tree of LANDMARK_TREES) {
     const {x,z,kind}=tree, y=h(x,z)-.02;
     if(kind==='bamboo') {
@@ -1695,7 +1764,8 @@ function stampStations(p) {
   });
 }
 
-function driftingLeaves(scene) {
+function driftingLeaves(scene, boughs) {
+  const kaedeFall=createKaedeLeafFall(scene,boughs);
   const vertices = [0, 0, 0];
   const shape = [
     [-0.02, 0.63],
@@ -1731,7 +1801,7 @@ function driftingLeaves(scene) {
   leaves.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   scene.add(leaves);
   const d = new THREE.Object3D(),
-    maple = TREES.filter((t) => t.kind === 'maple'),
+    maple = TREES.filter((t) => t.kind === 'maple' && !kaedeTrees.has(t)),
     palette = ['#b45c3c', '#a94b36', '#cc7b49', '#c37a4b'];
   palette.forEach((_, i) => {
     for (let k = i; k < 16; k += 4) leaves.setColorAt(k, css(palette[i]));
@@ -1740,6 +1810,7 @@ function driftingLeaves(scene) {
     lastX = Infinity,
     lastZ = Infinity;
   return (time, player) => {
+    kaedeFall(time,player);
     if (abs(player.x - lastX) + abs(player.z - lastZ) > 7) {
       lastX = player.x;
       lastZ = player.z;
@@ -1804,7 +1875,7 @@ export function* prepareWorld(scene, initialCamera) {
   scene.add(terrainGroup,landGroup);
   const terrain=createTerrainTiles(terrainGroup,meadowMaterial(art));
   yield* terrain.prepare(initialCamera);
-  buildRoads(landGroup, art);
+  const kaedePaths=buildRoads(landGroup, art);
   const water = makeWater(scene, art, atmosphere.panorama, atmosphere.winterWash);
   const painter = new Painter(landGroup, paper, art);
   painter.lamps=createLampCollection(painter);
@@ -1825,13 +1896,14 @@ export function* prepareWorld(scene, initialCamera) {
   dressFerryShop(painter, terrainHeight);
   details(painter);
   yield;
-  yield* woodland(painter, art);
-  const updateForest = yield* prepareForest(scene, painter.sway);
+  const boughs=kaedeBoughs();
+  yield* woodland(painter, art, boughs);
+  const updateForest = yield* prepareForest(scene, painter.sway, boughs);
   plantUnderstory(painter, art);
   yield;
   dressPlaces(painter);
   yield;
-  dressSeasonalPlaces(painter);
+  yield* prepareSeasonalPlaces(painter,kaedePaths);
   yield;
   painter.cityShell=true;
   const updateCourt=dressCourt(painter,scene);
@@ -1846,6 +1918,7 @@ export function* prepareWorld(scene, initialCamera) {
   dressRyugu(painter);
   yield;
   const updateWaterfalls=createMountainWaterfalls(scene);
+  const updateWaterLeaves=createAutumnWaterLeaves(scene);
   const updateLake=createLakeShore(scene,art);
   const updateShrines=pilgrimageLife(scene), updatePalace=createRyuguLife(scene);
   const updateTrade=createTravellers(scene), updateOcean=createOceanShips(scene), updateHuts=createWaysideHuts(scene);
@@ -1866,7 +1939,7 @@ export function* prepareWorld(scene, initialCamera) {
   festival.root.position.set(POUNDING.x,h(POUNDING.x,POUNDING.z)+.012,POUNDING.z);
   festival.root.rotation.y=POUNDING.yaw;
   water.uniforms.climate=atmosphere.climate;
-  const leaves = driftingLeaves(scene);
+  const leaves = driftingLeaves(scene,boughs);
   return {
     textures: [...Object.values(art), atmosphere.panorama, atmosphere.winterWash],
     update(time, player, camera, voyageTime=time, bellStrike=null, inariWeather=null) {
@@ -1884,6 +1957,7 @@ export function* prepareWorld(scene, initialCamera) {
         updateHuts(player);
         updateBathTableaux(player,time);
         updateWaterfalls(time,player,camera);
+        updateWaterLeaves(time,player,camera);
         updateLake(time,player);
         updateOcean(voyageTime,player);
         updatePalace(time,player,camera,voyageTime);

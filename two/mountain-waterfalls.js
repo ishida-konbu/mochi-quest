@@ -1,5 +1,5 @@
 import * as T from './vendor/three.module.min.js';
-import { KAEDE_SEEP, MOUNTAIN_STREAMS, mountainStreamWaterAt } from './mountain-streams.js';
+import { KAEDE_SEEP, MOUNTAIN_STREAMS, mountainStreamWaterAt, waterfallSurface } from './mountain-streams.js';
 import { terrainMeshHeight, terrainHeight, seeded, wrapDelta } from './terrain.js';
 import { currentPigment, cragPigment, kaedeCragPigment, sprayPigment } from './cascade-pigments.js';
 import { carveKaedeRock } from './kaede-bedrock.js';
@@ -77,7 +77,7 @@ function surfaceGeometry(stream,style){
       }
     }
   }
-  const dx=toe.x-lip.x,dz=toe.z-lip.z,run=hypot(dx,dz),drop=lip.y-toe.y,nx=dz/run,nz=-dx/run;
+  const dx=toe.x-lip.x,dz=toe.z-lip.z,run=hypot(dx,dz),drop=lip.y-toe.y,face={};
   const rows=Math.ceil(drop*1.5)+9;
   // Each ribbon leaves the same rounded crest and peels away at its own seam.
   // In profile, the travelling sheet projects in front of the undercut scarp.
@@ -89,31 +89,29 @@ function surfaceGeometry(stream,style){
         const f=i/cols,opening=style.notch*bow**.72*(.56+.31*sin(v*11+k)+.13*cos(v*21-3*k));
         const seam=(u,j)=>u+bow*(.072*sin(v*8.2+j*2.21)+.023*sin(v*19+3*j));
         const u=mix(seam(left,k)+(k?opening:0),seam(right,k+1)-(k<style.splits.length-2?opening:0),f);
-        const xNormal=mix(lip.nx,nx,v),zNormal=mix(lip.nz,nz,v);
-        const width=mix(lip.width,Math.min(toe.width*.89,lip.width*1.16),v);
         const rag=sin(3*k+.92*i)+.54*sin(1.7*i+5.4*v+k);
-        const across=width*u+bow*(.11*sin(1.28*v*PI+5*u)+.027*rag);
-        const reach=run*v+bow*(.46+.12*sin(9*u+2.7*v)+.054*cos(21*u+v*3.4));
-        const h=lip.y-drop*v**(style.spring?2:1.77)+.027+.055*bow*sin(u*13+.32*j);
-        point(lip.x+across*xNormal+dx/run*reach,h,lip.z+across*zNormal+dz/run*reach,
+        waterfallSurface(stream,u,v,face);
+        point(face.x+bow*.027*rag*face.nx,face.y+.055*bow*sin(u*13+.32*j),face.z+bow*.027*rag*face.nz,
           u,mix(0,lengths[toeIndex]-lengths[lipIndex],v),.23+.77*Math.min(1,v*8),1);
       }
       if(j<rows)quad(row,cols);
     }
   }
-  // Across the back of the plunge pool, the overhanging shelf casts a
-  // shadow on still water. Its downstream edge shares the toe cross-section.
-  const cols=16,coveRows=6;
-  for(let j=0;j<=coveRows;j++){
-    const t=j/coveRows,row=xyz.length/3;
-    for(let i=0;i<=cols;i++){
-      const u=2*i/cols-1,dist=(1-t)*run*.46*Math.sqrt(Math.max(0,1-u*u));
-      point(toe.x+u*toe.width*toe.nx-dx/run*dist,toe.y+.021,
-        toe.z+u*toe.width*toe.nz-dz/run*dist,u,lengths[toeIndex]-lengths[lipIndex]-dist,0,smooth(t/.69)*smooth((1-Math.abs(u))/.21));
+  // A river-fed basin shares the receiving water sheet all the way to the
+  // falling curtain. Only elevated pools need their own surface and outlet.
+  if(!stream.riverPool){
+    const cols=16,coveRows=6;
+    for(let j=0;j<=coveRows;j++){
+      const t=j/coveRows,row=xyz.length/3;
+      for(let i=0;i<=cols;i++){
+        const u=2*i/cols-1,dist=(1-t)*run*.46*Math.sqrt(Math.max(0,1-u*u));
+        point(toe.x+u*toe.width*toe.nx-dx/run*dist,toe.y+.021,
+          toe.z+u*toe.width*toe.nz-dz/run*dist,u,lengths[toeIndex]-lengths[lipIndex]-dist,0,smooth(t/.69)*smooth((1-Math.abs(u))/.21));
+      }
+      if(j<coveRows)quad(row,cols);
     }
-    if(j<coveRows)quad(row,cols);
+    channel(toeIndex,stations.length-1);
   }
-  channel(toeIndex,stations.length-1);
   const geo=new T.BufferGeometry();
   geo.setAttribute('position',new T.Float32BufferAttribute(xyz,3));
   geo.setAttribute('current',new T.Float32BufferAttribute(flow,4));

@@ -3,7 +3,7 @@ const TAU=2*Math.PI,{cos,sin}=Math;
 const v=(x,y,z)=>new THREE.Vector3(x,y,z);
 
 // The painter and the contact survey run this same seeded branching pattern.
-export function inkTree(brush, p, t, random, h, elder, near, autumn) {
+export function inkTree(brush, p, t, random, h, elder, near, autumn, boughs) {
   const { x, z, h: height, kind, seed } = t,
     r = random,
     ground = h(x, z);
@@ -114,6 +114,7 @@ export function inkTree(brush, p, t, random, h, elder, near, autumn) {
       const yaw = a + (k - 1) * (0.74 + r() * 0.32),
         side = reach * (0.22 + r() * 0.21);
       const tuft = fork.clone().add(v(cos(yaw) * side, height * (pine ? 0.043 : 0.087), sin(yaw) * side));
+      if(boughs)boughs.push(tuft);
       if (near) {
         const knot = fork.clone().lerp(tuft, 0.57);
         knot.y -= height * 0.022;
@@ -135,8 +136,8 @@ export function inkTree(brush, p, t, random, h, elder, near, autumn) {
         let tint;
         if (pine) tint = ['#e0e5cf', '#c7d4bd', '#f1ecd5', '#c1cdb9'][face];
         else if(t.autumn>.45 && autumn) {
-          const palettes=[['#de6740','#b84236','#ed8849','#bd492c'],['#e9a441','#f2b451','#c78638','#e6a24c'],
-            ['#b94236','#db5342','#b84331','#da6142'],['#d27334','#d85e2b','#efa447','#cf7235']];
+          const palettes=[['#e95b32','#bb3431','#ef7436','#c83e27'],['#e9a441','#f2b451','#c78638','#e6a24c'],
+            ['#ba302e','#de3c35','#c52d26','#e65337'],['#d27334','#d85e2b','#efa447','#cf7235']];
           tint=palettes[seed%4][face];
         } else if (autumn) tint = ['#d7b4a0', '#f7d4b2', '#ebbb91', '#d8ba9e'][face];
         else tint = ['#dfe7c1', '#d2ddba', '#f3e4ad', '#bfccac'][face];

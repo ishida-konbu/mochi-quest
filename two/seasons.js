@@ -1,10 +1,13 @@
+import { buildKaedeDragonShrine } from './kaede-dragon-shrine.js';
+import { KAEDE_DRAGON_SHRINE } from './kaede-dragon-layout.js';
+import { prepareKaedeGround } from './kaede-grove.js';
 import { dressSnowBath } from './snow-bath.js';
 import * as THREE from './vendor/three.module.min.js';
 import { snowDaruma } from './snow-daruma.js';
 import { visitSnowFixtures,visitMoonFixtures,visitMapleFixtures,visitDawnFixtures } from './seasonal-fixtures.js';
 export { MAPLE_ROCK_GROUPS } from './seasonal-fixtures.js';
 import { dressWinterCoast } from './winter-coast.js';
-import { terrainHeight as height, seeded, TREES, BUILDINGS, nearRoad, TSUKIMI, springRadius } from './terrain.js';
+import { terrainHeight as height, terrainContactHeight, seeded, BUILDINGS, nearRoad, TSUKIMI, springRadius } from './terrain.js';
 
 const tau = 2 * Math.PI;
 const { sin, cos } = Math;
@@ -176,78 +179,10 @@ function moonField(p, light) {
   }
   visitMoonFixtures((...args)=>frame(p,...args),p,light,silverSilk);
 }
-function mapleLeaf() {
-  const radius = [0.08, 0.24, 0.14, 0.39, 0.21, 0.51, 0.25, 0.59, 0.24, 0.52, 0.2, 0.37, 0.13, 0.21, 0.07];
-  const pos = [0, 0.026, 0],
-    ix = [];
-  for (let j = 0; j < radius.length; j++) {
-    const a = -2.45 + j * 0.35;
-    pos.push(sin(a) * radius[j], 0.012 * sin(j * 1.5), cos(a) * radius[j]);
-    ix.push(0, j + 1, 1 + ((j + 1) % radius.length));
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(ix);
-  g.computeVertexNormals();
-  return g;
-}
-function mapleHollow(p) {
-  const rng = seeded(191434),
-    fall = ['#bd442d', '#cd6536', '#d98c41', '#9b4d32', '#df9f4f'];
-  for (const t of TREES.filter((t) => t.autumn > 0.65)) {
-    for (let i = 0; i < 14; i++) {
-      const a = rng() * tau,
-        r = rng() ** 0.7 * t.h * 0.63,
-        x = t.x + cos(a) * r,
-        z = t.z + sin(a) * r;
-      const s = 0.12 + 0.19 * rng();
-      p.part(
-        'fallenMaple',
-        x,
-        height(x, z) + 0.09,
-        z,
-        s,
-        1,
-        s,
-        fall[Math.floor(rng() * 5)],
-        rng() * tau,
-        0,
-        0,
-        p.fine,
-        false,
-        true,
-      );
-    }
-  }
-  for (let i = 0; i < 410; i++) {
-    const x = 285 + (rng() - 0.5) * 38,
-      z = -114 + (rng() - 0.5) * 30,
-      y = height(x, z);
-    if (y < 1 || (Math.abs(x - 292) < 2.4 && z < -117.6)) continue;
-    const s = 0.13 + 0.21 * rng();
-    p.part(
-      'fallenMaple',
-      x,
-      y + (nearRoad(x, z, 0.1) ? 0.112 : 0.075),
-      z,
-      s,
-      0.45,
-      s,
-      fall[i % 5],
-      rng() * tau,
-      0,
-      0,
-      p.fine,
-      false,
-      true,
-    );
-  }
-  visitMapleFixtures((...args)=>frame(p,...args),p);
-}
 function dawnShore(p) {
   visitDawnFixtures((...args)=>frame(p,...args),p);
 }
-export function dressSeasonalPlaces(p) {
+export function* prepareSeasonalPlaces(p,kaedePaths) {
   p.shapes.snowLump = new THREE.SphereGeometry(1, 22, 14);
   p.shapes.muffler = lathe(
     [
@@ -288,7 +223,6 @@ export function dressSeasonalPlaces(p) {
     ],
     26,
   );
-  p.shapes.fallenMaple = mapleLeaf();
   p.shapes.rush = bladeGeometry();
   p.shapes.plumes = plumesGeometry();
   const light = new THREE.MeshBasicMaterial();
@@ -296,7 +230,12 @@ export function dressSeasonalPlaces(p) {
   dressWinterCoast(p);
   dressSnowBath(p,frame,light);
   moonField(p, light);
-  mapleHollow(p);
+  yield* prepareKaedeGround(p,kaedePaths);
+  visitMapleFixtures((...args)=>frame(p,...args),p);
+  const shrine=buildKaedeDragonShrine();
+  const {x,z,yaw}=KAEDE_DRAGON_SHRINE;
+  p.shapes.kaedeDragonShrine=shrine.geometry;
+  p.part('kaedeDragonShrine',x,terrainContactHeight(x,z),z,1,1,1,'#ffffff',yaw,0,0,shrine.material,true,true);
   dawnShore(p);
 }
 export function seasonalWeather(scene) {

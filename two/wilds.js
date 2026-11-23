@@ -128,12 +128,12 @@ class BarkBrush {
     }
   }
 }
-export function* plantInkTrees(p, art) {
+export function* plantInkTrees(p, art, boughs) {
   const brush = new BarkBrush(p.scene, art);
   for (const tree of LANDMARK_TREES) {
     const elder=tree===TREES[0];
     const near=elder || REGIONS.some(q=>(q.x-tree.x)**2+(q.z-tree.z)**2<38**2);
-    if(tree.kind!=='bamboo')inkTree(brush,p,tree,seeded(tree.seed),h,elder,near,tree.kind==='maple' && hasAutumnLeaves(tree));
+    if(tree.kind!=='bamboo')inkTree(brush,p,tree,seeded(tree.seed),h,elder,near,tree.kind==='maple' && hasAutumnLeaves(tree),boughs?.get(tree));
     yield;
   }
   brush.finish();
