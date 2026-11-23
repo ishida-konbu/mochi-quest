@@ -5,6 +5,7 @@ import { SPECIES, legendDeliveryPoint, recipientContact } from '../two/bestiary.
 import { BUILDINGS, GATES, nearRoad, groundHeight } from '../two/terrain.js';
 import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { batchActorParts } from '../two/actors.js';
+import { kirinTouchdowns } from '../two/handscroll-beasts.js';
 import { buildBeast, beastRig, poseBeast } from '../two/beast-art.js';
 import { Euler, Group, MeshBasicMaterial, Vector3 } from '../two/vendor/three.module.min.js';
 import { dragonLengthScale, dragonPhase, dragonPitch, dragonWave } from '../two/animal-motion.js';
@@ -166,9 +167,9 @@ test('the ten tigers and two shishi patrol clear wild ranges away from roads, ho
 });
 
 // Measure the same loft, ornamental brushes and articulated joints as the game.
-function sculptedDragon(n) {
+function sculptedBeast(n) {
   const mesh=new Group(),ink=new MeshBasicMaterial();
-  buildBeast(mesh,'dragon',{
+  buildBeast(mesh,n.type,{
     group(parent,name,x=0,y=0,z=0) {
       const joint=new Group();
       joint.name=name;joint.position.set(x,y,z);parent.add(joint);
@@ -180,10 +181,18 @@ function sculptedDragon(n) {
       return part;
     },
   });
-  const joints=beastRig(mesh,n), skin=mesh.getObjectByName('龍の胴');
+  const joints=beastRig(mesh,n), skin=mesh.getObjectByName(n.type==='dragon'?'龍の胴':'絵巻の一枚皮');
   mesh.updateMatrixWorld(true);
   return {mesh,joints,skin};
 }
+
+test('the first distant kirin steps onto the same four clouds as its articulated hooves',()=>{
+  const distant=kirinTouchdowns.map(sole=>sole.clone());
+  assert.equal(distant.length,4);
+  sculptedBeast({type:'kirin',stature:SPECIES.kirin.stature});
+  for(let leg=0;leg<4;leg++)
+    assert.ok(distant[leg].distanceTo(kirinTouchdowns[leg])<1e-5,'touchdown of leg '+leg);
+});
 
 function drawnRings(skin) {
   const vertices=skin.geometry.attributes.position, rings=[];
@@ -202,7 +211,7 @@ function hindRing(joints,rings) {
 }
 
 test('the modeled hide tapers smoothly over two thirds of the published hip-to-tip arc',()=>{
-  const {joints,skin}=sculptedDragon({type:'dragon',stature:SPECIES.dragon.stature});
+  const {joints,skin}=sculptedBeast({type:'dragon',stature:SPECIES.dragon.stature});
   const rings=drawnRings(skin), hip=hindRing(joints,rings), attachment=joints['hindClaw-1'].getWorldPosition(new Vector3());
   // Published hind attachment and centerline length, sampled in world metres
   // on the preceding production sculpt at t=.407. Measure the actual new mesh.
@@ -237,7 +246,7 @@ test('the modeled hide tapers smoothly over two thirds of the published hip-to-t
 
 test('letters reach the moving hide up to its fine tip with clear air beyond the new tail',()=>{
   const n={type:'dragon',x:415.2,y:38,z:91,heading:.97,stature:SPECIES.dragon.stature,speed:5,phase:.23};
-  const {mesh,joints,skin}=sculptedDragon(n), hip=hindRing(joints,drawnRings(skin));
+  const {mesh,joints,skin}=sculptedBeast(n), hip=hindRing(joints,drawnRings(skin));
   mesh.position.set(n.x,n.y,n.z);mesh.rotation.y=n.heading;
   const heading=n.heading+Math.PI/2, dx=Math.sin(heading), dz=Math.cos(heading);
   for(const rise of [-4,0,4]) for(const time of [0,1.37,2.9,4.4]) {

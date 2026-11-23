@@ -563,7 +563,12 @@ export function buildScrollBeast(root,type,{group,batch},variant,coat){
 
 // At each touchdown, the cloven shell and its underlying weighted sole are rigid
 // relative to that leg. Sample their support patch once from the finished model.
-export const kirinTouchdowns=[];
+// The atlas can enter view before a near rig has ever been built. These are
+// the four support points measured on its sculpt, in gait order and body units.
+export const kirinTouchdowns=[
+  [-.231000,.054007,-.146569],[-.233391,.123235,.783678],
+  [.230585,.053987,-.146598],[.234424,.123230,.783745],
+].map(([x,y,z])=>new T.Vector3(x,y,z));
 function measureKirinSole(c,hoof,skin) {
   const leg=new T.Object3D(),trunk=new T.Object3D(),matrix=new T.Matrix4();
   leg.position.copy(c.group.position);

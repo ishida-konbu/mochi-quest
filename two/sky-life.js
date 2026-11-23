@@ -4,9 +4,9 @@ import { createAmbientFlocks } from './ambient-flocks.js';
 import { legendFlight, SPECIES } from './bestiary.js';
 import { kirinFrequency } from './animal-motion.js';
 import { kirinTouchdowns } from './handscroll-beasts.js';
+import { kirinCloudBrush } from './kirin-cloud-art.js';
 
 const TAU=Math.PI*2;
-const clamp=x=>Math.max(0,Math.min(1,x));
 
 export function migratoryBird(swift,distant=false,tern=false) {
   const points=[],colors=[],motion=[],indices=[];
@@ -217,86 +217,100 @@ export function createFlockFlights(scene) {
   };
 }
 
-function cloudBrush() {
-  const paper=document.createElement('canvas');paper.width=512;paper.height=216;
-  const g=paper.getContext('2d');
-  const body=new Path2D('M19 129 C55 132 70 103 107 102 C114 83 137 70 167 80 C186 41 231 37 258 64 C273 40 314 43 329 66 C351 54 382 64 389 85 C415 76 435 85 442 103 C468 114 485 103 499 99 C491 123 467 139 437 137 C425 159 391 162 369 150 C344 177 307 166 289 155 C272 183 235 187 211 167 C182 185 147 177 133 162 C105 172 82 159 72 155 C50 157 26 150 19 140 C38 145 53 144 66 138 C47 139 32 138 19 129Z');
-  const wash=g.createLinearGradient(0,42,0,188);wash.addColorStop(0,'#fff3d3');wash.addColorStop(.46,'#f9eacd');wash.addColorStop(1,'#c5beb2');
-  g.fillStyle=wash;g.fill(body);g.lineCap='round';g.lineJoin='round';g.lineWidth=3;g.strokeStyle='#94795e';g.stroke(body);
-  for(const path of [
-    'M67 138 Q98 133 118 115 Q140 95 162 113 C182 130 202 116 201 99 C201 89 188 87 184 97',
-    'M155 151 Q179 159 198 144 Q217 128 239 135 C256 139 269 131 272 119',
-    'M239 100 C251 79 275 78 289 95 C301 113 326 112 334 97 C340 87 327 80 319 88',
-    'M303 145 Q328 157 348 138 Q362 122 379 129 C397 135 409 128 417 119',
-    'M369 105 Q381 94 399 103 Q420 115 443 114'
-  ]) {g.strokeStyle='#b19a7d';g.lineWidth=2.6;g.stroke(new Path2D(path));}
-  const map=new T.CanvasTexture(paper);map.colorSpace=T.SRGBColorSpace;return map;
-}
-const flight={};
+// Each hoof leaves one suspended print. The contact point stays in place while
+// the foot bears weight; only after lift-off does the wake carry the wash away.
 function royalFootsteps(scene) {
-  // A footprint forms just ahead of touchdown, stays in its own place while
-  // the foot is bearing weight, then dissolves as the next hoof lifts.
-  const geometry=new T.PlaneGeometry(1,1), count=12;
-  const opacity=new T.InstancedBufferAttribute(new Float32Array(count),1);
-  opacity.setUsage(T.DynamicDrawUsage);geometry.setAttribute('cloudOpacity',opacity);
-  const material=new T.MeshBasicMaterial({map:cloudBrush(),transparent:true,depthWrite:false,side:T.DoubleSide});
+  const interval=Math.PI/(2*kirinFrequency), lead=.20, lifetime=2.62;
+  const count=Math.ceil((lifetime+lead)/interval);
+  const {texture,crests}=kirinCloudBrush();
+  const geometry=new T.PlaneGeometry(1,1);
+  const opacity=new T.InstancedBufferAttribute(new Float32Array(count),1).setUsage(T.DynamicDrawUsage);
+  const print=new T.InstancedBufferAttribute(new Float32Array(count*2),2).setUsage(T.DynamicDrawUsage);
+  geometry.setAttribute('cloudOpacity',opacity);
+  geometry.setAttribute('cloudPrint',print);
+  const material=new T.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false});
   material.onBeforeCompile=shader=>{
-    shader.vertexShader='attribute float cloudOpacity;varying float wisp;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nwisp=cloudOpacity;');
-    shader.fragmentShader='varying float wisp;\n'+shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.a*=wisp;');
+    shader.vertexShader='attribute float cloudOpacity; attribute vec2 cloudPrint; varying float wisp;\n'+
+      shader.vertexShader.replace('#include <uv_vertex>',`#include <uv_vertex>
+        wisp=cloudOpacity;
+        vMapUv.x=(cloudPrint.x+mix(vMapUv.x,1.-vMapUv.x,cloudPrint.y))/${crests.length}.0;`);
+    shader.fragmentShader='varying float wisp;\n'+shader.fragmentShader.replace('#include <color_fragment>',
+      `#include <color_fragment>
+        // Keep the pooled ink visible against the game's sunlit paper sky.
+        float inkDeposit=1.-smoothstep(.10,.84,dot(diffuseColor.rgb,vec3(.21,.72,.07)));
+        diffuseColor.rgb*=1.-.68*inkDeposit;
+        diffuseColor.a=mix(diffuseColor.a,sqrt(diffuseColor.a),inkDeposit);
+        diffuseColor.a*=wisp*mix(1.,diffuseColor.a,.35*(1.-wisp));`);
   };
   const clouds=new T.InstancedMesh(geometry,material,count);clouds.frustumCulled=false;clouds.name='麒麟の瑞雲';
   clouds.instanceMatrix.setUsage(T.DynamicDrawUsage);scene.add(clouds);
-  const dummy=new T.Object3D();dummy.rotation.order='YXZ';
-  // The left lobe of the painted cloud crests at pixel (217,47).
-  // Pin that spot of the tilted billboard beneath the sole for every view angle.
-  const crest=new T.Vector3(217/512-.5,.5-47/216,0),offset=new T.Vector3();
-  let lastStep, lastRoyal, trail=[];
-  return (t,royal,camera)=>{
-    clouds.count=0;
-    if(!royal || kirinTouchdowns.length!==4){clouds.visible=false;return;}
-    const range=SPECIES.kirin.rigNear;
-    const distance=Math.hypot(wrapDelta(royal.x-camera.position.x),wrapDelta(royal.z-camera.position.z));
-    if(distance>=range){clouds.visible=false;return;}
-    const presence=1-T.MathUtils.smoothstep(distance,range*.8,range);
+  const dummy=new T.Object3D(), offset=new T.Vector3(),flight={};
+  const trail=Array.from({length:count},()=>({}));
+  let lastRoyal,lastSeed;
+
+  return (t,royal,player,camera)=>{
+    clouds.count=0;clouds.visible=false;
+    if(!royal)return;
+    // Follow the same wrapped copy and fade as the distant kirin atlas.
+    const range=SPECIES.kirin.skyRange;
+    const distance=Math.hypot(wrapDelta(royal.x-player.x),wrapDelta(royal.z-player.z));
+    if(distance>=range)return;
+    const presence=Math.min(1,(range-distance)/(range*.20));
     const scale=royal.stature;
-    const phase=(t+royal.phase)*kirinFrequency,quarter=Math.PI*.5;
-    const step=Math.floor((phase+.42)/quarter);
-    if(step!==lastStep || royal!==lastRoyal) {
-      lastRoyal=royal;
-      lastStep=step;trail=[];
-      for(let k=step-5;k<=step;k++) {
-        const leg=((k%4)+4)%4, side=leg<2?-1:1;
-        const touch=(k*quarter)/kirinFrequency-royal.phase;
+    const step=Math.floor((t+royal.phase+lead)/interval);
+    if(royal!==lastRoyal || royal.flightSeed!==lastSeed) {
+      for(const stamp of trail)stamp.time=NaN;
+      lastRoyal=royal;lastSeed=royal.flightSeed;
+    }
+    for(let k=step-count+1;k<=step;k++) {
+      const touch=k*interval-royal.phase, age=t-touch;
+      if(age<=-lead || age>=lifetime)continue;
+      const stamp=trail[T.MathUtils.euclideanModulo(k,count)];
+      if(touch!==stamp.time) {
+        const leg=T.MathUtils.euclideanModulo(k,4), sole=kirinTouchdowns[leg];
         legendFlight(royal,touch,flight);
-        const sole=kirinTouchdowns[leg];
-        const x=sole.x*scale,y=sole.y*scale,z=sole.z*scale;
-        const c=Math.cos(flight.heading), s=Math.sin(flight.heading);
-        trail.push({time:touch,x:flight.x+c*x+s*z,y:flight.y+y,z:flight.z+c*z-s*x,side});
+        const c=Math.cos(flight.heading),s=Math.sin(flight.heading),side=leg<2?-1:1;
+        stamp.time=touch;stamp.side=side;
+        stamp.tile=T.MathUtils.euclideanModulo(k,crests.length);
+        stamp.mirror=side>0?1:0;
+        stamp.x=flight.x+scale*(c*sole.x+s*sole.z);
+        stamp.y=flight.y+scale*sole.y;
+        stamp.z=flight.z+scale*(c*sole.z-s*sole.x);
+        // The dying wash slips away from the belly and into the hoof's wake.
+        stamp.driftX=scale*(side*.14*c-.28*s);stamp.driftZ=scale*(-side*.14*s-.28*c);
       }
+      const form=T.MathUtils.smoothstep(age,-lead,0);
+      const release=T.MathUtils.smoothstep(age,.24,lifetime);
+      const fade=1-T.MathUtils.smoothstep(age,.60,lifetime);
+      const x=player.x+wrapDelta(stamp.x+release*stamp.driftX-player.x);
+      const z=player.z+wrapDelta(stamp.z+release*stamp.driftZ-player.z);
+      const y=stamp.y-.14*scale*release;
+      const dx=camera.position.x-x,dz=camera.position.z-z;
+      const tilt=Math.atan2(camera.position.y-y,Math.hypot(dx,dz));
+      dummy.rotation.set(-.12-.78*tilt,Math.atan2(dx,dz),stamp.side*(.045+.04*release),'YXZ');
+      // Three times the former 0.755 × 0.326 contact impression. It opens
+      // across the sole, then broadens and flattens as the wash thins.
+      dummy.scale.set(2.265*scale*(.44+.56*form)*(1+.18*release),
+        .978*scale*(.42+.58*form)*(1-.12*release),1);
+      const [u,v]=crests[stamp.tile];
+      offset.set(stamp.mirror ? .5-u : u-.5,v-.5,0).multiply(dummy.scale).applyQuaternion(dummy.quaternion);
+      dummy.position.set(x,y,z).sub(offset);dummy.updateMatrix();
+      clouds.setMatrixAt(clouds.count,dummy.matrix);
+      opacity.setX(clouds.count,form*fade*presence*.96);
+      print.setXY(clouds.count++,stamp.tile,stamp.mirror);
     }
-    for(const w of trail) {
-      const age=t-w.time;
-      if(age<-.21||age>2.62)continue;
-      const appear=clamp((age+.21)/.24), life=clamp((2.62-age)/1.39);
-      const stretch=.48+.52*Math.sin(appear*Math.PI*.5);
-      const x=camera.position.x+wrapDelta(w.x-camera.position.x);
-      const z=camera.position.z+wrapDelta(w.z-camera.position.z);
-      const tilt=Math.atan2(camera.position.y-w.y, Math.hypot(camera.position.x-x,camera.position.z-z));
-      dummy.rotation.set(-.16-.70*tilt,Math.atan2(camera.position.x-x,camera.position.z-z),w.side*.07,'YXZ');
-      dummy.scale.set((.755+.137*(1-life))*scale*stretch,.326*scale*stretch,1);
-      offset.copy(crest).multiply(dummy.scale).applyQuaternion(dummy.quaternion);
-      dummy.position.set(x,w.y-.097*scale*(1-life),z).sub(offset);dummy.updateMatrix();
-      clouds.setMatrixAt(clouds.count,dummy.matrix);opacity.setX(clouds.count++,appear*life*presence*.94);
-    }
-    clouds.visible=clouds.count>0;clouds.instanceMatrix.needsUpdate=true;opacity.needsUpdate=true;
+    clouds.visible=clouds.count>0;
+    clouds.instanceMatrix.needsUpdate=true;opacity.needsUpdate=true;print.needsUpdate=true;
   };
 }
 export function createSkyLife(scene) {
   const flock=createFlockFlights(scene), steps=royalFootsteps(scene);
-  let royal;
+  let roster,royal;
   return (time,state,camera,atPhotoTime)=>{
-    royal ??= state.npcs.find(n=>n.type==='kirin');
+    if(roster!==state.npcs) {
+      roster=state.npcs;royal=roster.find(n=>n.type==='kirin');
+    }
     flock(time,camera);
-    steps(time,royal && atPhotoTime ? atPhotoTime(royal,time) : royal,camera);
+    steps(time,royal && atPhotoTime ? atPhotoTime(royal,time) : royal,state.player,camera);
   };
 }

@@ -120,7 +120,7 @@
           "./bath-enclosures.js": "./bath-enclosures.js?v=amimoto-yudono-1",
           "./bath-pavilion-art.js": "./bath-pavilion-art.js?v=amimoto-yudono-1",
           "./regional-bath-carpentry.js": "./regional-bath-carpentry.js?v=amimoto-yudono-1",
-          "./actors.js": "./actors.js?v=giant-legends-1",
+          "./actors.js": "./actors.js?v=kirin-zuiun-1",
           "./animal-scale-book.js": "./animal-scale-book.js?v=sculpted-tail-1",
           "./animal-scale-residents.js": "./animal-scale-residents.js?v=sculpted-tail-1",
           "./animal-motion.js": "./animal-motion.js?v=sculpted-tail-1",
@@ -132,14 +132,14 @@
           "./craftwork.js": "./craftwork.js?v=sakuragawa-yumeguri",
           "./crane-flight.js": "./crane-flight.js?v=3.3",
           "./dragon-anatomy.js": "./dragon-anatomy.js?v=sculpted-tail-1",
-          "./dragon-flight.js": "./dragon-flight.js?v=sculpted-tail-1",
+          "./dragon-flight.js": "./dragon-flight.js?v=kirin-zuiun-1",
           "./festival.js": "./festival.js?v=mochiyori-2",
           "./forest-forms.js": "./forest-forms.js?v=3.3",
           "./forest-mesh.js": "./forest-mesh.js?v=kaede-nishiki-1",
           "./bamboo-culms.js": "./bamboo-culms.js?v=kyoto-groves-snow-1",
           "./forest.js": "./forest.js?v=karakurenai-1",
           "./game.js": "./game.js?v=onsen-motion-1",
-          "./handscroll-beasts.js": "./handscroll-beasts.js?v=3.3",
+          "./handscroll-beasts.js": "./handscroll-beasts.js?v=kirin-zuiun-1",
           "./inari-rain.js": "./inari-rain.js?v=inari-rain-1",
           "./inari-weather.js": "./inari-weather.js?v=inari-rain-1",
           "./ink.js": "./ink.js?v=handscroll-arrival-1",
@@ -173,7 +173,8 @@
           "./scroll-sculpt.js": "./scroll-sculpt.js?v=3.3",
           "./seasons.js": "./seasons.js?v=kaede-ryujin-1",
           "./shoreline.js": "./shoreline.js?v=winter-coast-1",
-          "./sky-life.js": "./sky-life.js?v=giant-legends-1",
+          "./kirin-cloud-art.js": "./kirin-cloud-art.js?v=kirin-zuiun-1",
+          "./sky-life.js": "./sky-life.js?v=kirin-zuiun-1",
           "./snow-country.js": "./snow-country.js?v=islet-escarpment-1",
           "./winter-coast.js": "./winter-coast.js?v=winter-coast-1",
           "./winter-reefs.js": "./winter-reefs.js?v=winter-coast-1",
@@ -297,7 +298,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=sculpted-tail-1" />
+    <link rel="modulepreload" href="./main.js?v=kirin-zuiun-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -538,7 +539,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=sculpted-tail-1').catch(error => {
+      import('./main.js?v=kirin-zuiun-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'
