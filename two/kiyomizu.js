@@ -2,8 +2,8 @@
 // lattice of the hillside stage, and a small vermilion tower above the gate.
 import * as T from './vendor/three.module.min.js';
 import { terrainHeight, wrapDelta, seeded } from './terrain.js';
-import { KIYOMIZU, KIYOMIZU_BELL as BELL, STAGE, STAGE_RAILS, STAGE_PILES,
-  visitStageTies, HALL_COLUMNS, BELL_COLUMNS, OTOWA_ROOFS, OTOWA_LANTERNS, OTOWA_WAYSTONE, PAGODA, GATE } from './kiyomizu-layout.js';
+import { KIYOMIZU, KIYOMIZU_BELL as BELL, STAGE, visitStageRails, visitExposedPiles,
+  visitDeckBeams, visitStageTies, HALL_COLUMNS, BELL_COLUMNS, OTOWA_ROOFS, OTOWA_LANTERNS, OTOWA_WAYSTONE, PAGODA, GATE } from './kiyomizu-layout.js';
 import { BELL_FIRST, BELL_INTERVAL } from './kiyomizu-bell.js';
 import { createTempleMonks } from './temple-monks.js';
 import { roofProfile, roofSkinDepth } from './architecture.js';
@@ -87,31 +87,19 @@ function hangingStage(p,f) {
   // Each round zelkova pile sits on a fieldstone at its own elevation.
   // Horizontal nuki run through the posts in two directions on each tier.
   visitStageTies(terrainHeight,(x,y,z,w,h,d)=>beam(x,y,z,w,h,d,weathered));
-  for(const [x,z] of STAGE_PILES){
-    const ground=terrainHeight(x,z);
-    if(ground>floor-.42)continue;
+  visitExposedPiles(terrainHeight,(x,z,ground)=>{
     put('rock',x,ground-.05,z,.84,.38,.77,'#8e9286',p.stone);
     post(x,z,ground-.55,floor-.30,.405,((z+729.15)/4.05|0)%3?wood:'#614b3c');
     if(ground<floor-1.8)beam(x,floor-1.02,z,1.06,.58,.86,'#61503d');
-  }
-  for(const z of [-729.15,-725.1,-721.05,-717,-712.95,-708.9,-704.85])
-    beam(506.5,floor-.64,z,31.05,.68,.44,wood);
-  for(const x of [491.38,496.5,500.8,505.1,509.4,513.7,518])
-    beam(x,floor-.83,-717,.49,.63,27.47,wood);
+  });
+  visitDeckBeams((x,y,z,w,h,d)=>beam(x,y,z,w,h,d,wood));
   beam((s.west+s.east)/2,floor-.245,-717,deckWidth,.29,deckDepth,ink);
   for(let i=0;i<76;i++){
     const w=deckWidth/76,tone=['#ad906b','#b29570','#ac8e68','#bba07a'][i%4];
     beam(s.west+(i+.5)*w,floor-.06,-717,w-.013,.12,deckDepth,tone,p.deck);
   }
-  for(const [x,z,w,d] of STAGE_RAILS){
-    const along=w>d, length=Math.max(w,d),count=Math.ceil(length/2.4);
-    for(const [y,height,width,color] of [[.24,.14,.12,wood],[.63,.10,.11,weathered],[.96,.13,.23,ink]])
-      beam(x,floor+y,z,along?length:width,height,along?width:length,color);
-    for(let j=0;j<=count;j++){
-      const at=length*(j/count-.5);
-      beam(x+(along?at:0),floor+.54,z+(along?0:at),.20,1.14,.20,wood);
-    }
-  }
+  const tones=[wood,weathered,ink];
+  visitStageRails((x,y,z,w,h,d,course)=>beam(x,y,z,w,h,d,tones[course]));
 }
 
 function barkRafters(p,r) {

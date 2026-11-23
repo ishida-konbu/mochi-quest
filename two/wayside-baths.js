@@ -107,10 +107,10 @@ export function dressWaysideBaths(p,gravel) {
     for(const q of retreatStones(s)) {
       if(!q.scanned){dressTrailStone(p,f,s,q);continue;}
       const scale=.64;
-      f.put('springCrag'+(q.i%3),q.u,.075,q.v,q.w*scale,q.h*scale,q.d*scale,tints[q.i%4],p.stone,q.angle,0,.13*sin(q.i));
+      f.rim(q.i,'springCrag'+(q.i%3),q.u,.075,q.v,q.w*scale,q.h*scale,q.d*scale,tints[q.i%4],p.stone,q.angle,0,.13*sin(q.i));
       if(q.i%4===1){
         // Thin deposits of pale travertine cap the wet ledge at its high side.
-        f.put('rock',q.u*.99,.077+.64*q.h,q.v*.99,q.w*.76,q.h*.37,q.d*.76,
+        f.rim(q.i,'rock',q.u*.99,.077+.64*q.h,q.v*.99,q.w*.76,q.h*.37,q.d*.76,
           s.kind==='maple'||s.kind==='cedar'?'#949b7d':'#b7b5a1',p.stone,q.angle,0,.13*sin(q.i));
       }
     }

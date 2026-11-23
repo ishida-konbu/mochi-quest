@@ -378,9 +378,9 @@ export function dressRegionalBath(p,f,s,level) {
     const scale=.64;
     const col=tint(c.base,q.i%3?'#b8ae93':'#606657',.09+.13*(.5+.5*sin(q.i*2.37+s.index)));
     const shape=c.rim==='cobble'?'springCrag'+(q.i%3):'regionalRim-'+c.rim;
-    f.put(shape,q.u,.075,q.v,q.w*scale,q.h*scale,q.d*scale,col,p.stone,q.angle);
+    f.rim(q.i,shape,q.u,.075,q.v,q.w*scale,q.h*scale,q.d*scale,col,p.stone,q.angle);
     if(s.kind==='snow'){
-      f.put('springCrag'+((q.i+1)%3),q.u,.085+.80*q.h,q.v,
+      f.rim(q.i,'springCrag'+((q.i+1)%3),q.u,.085+.80*q.h,q.v,
         q.w*.87,q.h*.215,q.d*.84,'#e5e7dd',p.fine,q.angle);
     }
   }

@@ -1,3 +1,4 @@
+import {landmarkCulms} from './landmark-tree.js';
 import { buildDangoChaya } from './dango-chaya-art.js';
 import { WAYSIDE_SITES, BATH_YARD, TEA_FOOTPATHS } from './wayside-hut-layout.js';
 import { buildWaysideHut } from './wayside-hut-art.js';
@@ -52,12 +53,12 @@ import {
   GATES, gateFooting,
   TREES,
   LANDMARK_TREES,
-  ROCKS,
+  ROCKS, riverbankStones,
   REGIONS,
   ROADS,
   BRIDGES, MAPLE_FOOTINGS,
   WATER_Y,
-  terrainHeight, terrainMeshHeight, springGround,
+  terrainHeight, terrainMeshHeight, terrainContactHeight, springGround,
   bridgeHeight,
   riverZ,
   riverHalfWidth,
@@ -304,7 +305,7 @@ function buildRoads(scene, art) {
       const underDeck=BRIDGES.some(b=>abs(x-b.x)<b.halfWidth+.5 && abs(z-b.z)<b.length*.5-.4);
       for(let j=0;j<=4;j++) {
         const across=(j/4-.5)*width, xx=x+(dz/l)*across, zz=z-(dx/l)*across;
-        p.push(xx,road.footpath?terrainMeshHeight(xx,zz)+.045:h(xx,zz)+.08,zz);
+        p.push(xx,terrainContactHeight(xx,zz)+(road.footpath ? .045 : .08),zz);
         if(road.paved) uv.push(xx,zz);
         else uv.push(j/4,endWeight);
         snow.push(snowAmount);
@@ -530,10 +531,10 @@ function makeWater(scene, art, panorama, winterWash) {
   m.name = '桜川と潮';
   m.position.y = WATER_Y;
   scene.add(m);
-  return {uniforms:mat.uniforms,update(time,player){
+  return {uniforms:mat.uniforms,update(time,player,voyageTime){
     mat.uniforms.clock.value=time;
     RIVER_SKIFFS.forEach((_,i)=>{
-      const q=merchantPose(2+i,time);
+      const q=merchantPose(2+i,voyageTime);
       const nearby=wrapDelta(q.x-player.x)**2+wrapDelta(q.z-player.z)**2<155**2;
       mat.uniforms.skiffPlacement.value[i].set(nearby?q.x:2*BOUND,q.z,cos(q.yaw),sin(q.yaw));
     });
@@ -949,6 +950,7 @@ class Painter {
     d.rotation.set(pitch, yaw, roll, 'YXZ');
     d.updateMatrix();
     this.record(shape, mat, color, d.matrix, x, z, shadow, chunk);
+    return d.matrix;
   }
   link(a, b, r, color, square = false, shadow = true, chunk = false, mat = this.solid) {
     const d = this.dummy,
@@ -988,16 +990,10 @@ class Painter {
 function* woodland(p, art) {
   yield* plantInkTrees(p, art);
   for (const tree of LANDMARK_TREES) {
-    const { x, z, h: ht, kind } = tree,
-      y = h(x, z) - 0.02,
-      r = seeded(tree.seed),
-      a = r() * TAU;
-    if (kind === 'bamboo') {
-      for (let j = 0; j < 5; j++) {
-        const bx = x + (r() - 0.5) * 2.3,
-          bz = z + (r() - 0.5) * 2.3,
-          high = ht * (0.7 + r() * 0.42);
-        const lean = (r() - 0.5) * 0.6;
+    const {x,z,kind}=tree, y=h(x,z)-.02;
+    if(kind==='bamboo') {
+      const {angle:a,stems}=landmarkCulms(tree,seeded(tree.seed));
+      for(const {x:bx,z:bz,high,lean} of stems){
         p.link(V(bx, y, bz), V(bx + lean, y + high, bz + 0.12), 0.075, '#788458', false, true, true);
         for (let k = 1; k < 7; k++)
           p.part(
@@ -1642,54 +1638,8 @@ function paddies(p) {
 function details(p) {
   const r = seeded(27158);
   dressOutcrops(p,ROCKS,h);
-  for (const rock of ROCKS) {
-    if(rock.stratum!==undefined)continue;
-    const y = h(rock.x, rock.z);
-    p.part(
-      'rock',
-      rock.x,
-      y + rock.h * 0.37,
-      rock.z,
-      rock.rx * 1.12,
-      rock.h * 0.74,
-      rock.rz * 1.16,
-      '#8c9081',
-      0.53,
-    );
-    p.part(
-      'rock',
-      rock.x + 0.11,
-      y + rock.h * 0.92,
-      rock.z,
-      rock.rx * 0.86,
-      0.13,
-      rock.rz * 0.81,
-      '#9eac79',
-      0.33,
-    );
-  }
-  for (let i = 0; i < 510; i++) {
-    const x = r() * 488 - 244,
-      z = riverZ(x) + (r() > 0.5 ? 1 : -1) * (riverHalfWidth(x) + r() * 5 - 1),
-      y = h(x, z);
-    if (abs(x) < 16 || BRIDGES.some((b) => abs(x - b.x) < b.halfWidth + 1.4)) continue;
-    const s = 0.19 + r() ** 2 * 1.1;
-    p.part(
-      'rock',
-      x,
-      y - s * .12,
-      z,
-      s * 1.33,
-      s * 0.67,
-      s,
-      '#9ba18b',
-      r() * TAU,
-      0.22,
-      r() * 0.25,
-      p.solid,
-      false,
-      true,
-    );
+  for(const {x,y,z,sx,sy,sz,yaw,pitch,roll} of riverbankStones(r)) {
+    p.part('rock',x,y,z,sx,sy,sz,'#9ba18b',yaw,pitch,roll,p.solid,false,true);
   }
   dressRoadGravel(p, r);
 }
@@ -2052,7 +2002,7 @@ export function* prepareWorld(scene) {
   return {
     textures: [...Object.values(art), atmosphere.panorama, atmosphere.winterWash],
     update(time, player, camera, voyageTime=time, bellStrike=null, inariWeather=null) {
-      water.update(time,player);
+      water.update(time,player,voyageTime);
       painter.sway.value = time;
       if (camera) {
         const valleyView=atmosphere.update(time, player, camera);
@@ -2061,7 +2011,7 @@ export function* prepareWorld(scene) {
         updateLamps(time,player);
         updateCourt(time,player);
         updateShrines(time,player,camera,inariWeather);
-        updateTrade(time,player,camera);
+        updateTrade(time,player,camera,voyageTime);
         updateHuts(player);
         updateBathTableaux(player,time);
         updateWaterfalls(time,player,camera);

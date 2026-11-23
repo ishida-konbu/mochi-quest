@@ -79,6 +79,11 @@ export function createInkPass(renderer, camera) {
         float a=meters(uv+vec2(pixel.x,0.)), b=meters(uv-vec2(pixel.x,0.));
         float d=meters(uv+vec2(0.,pixel.y)), e=meters(uv-vec2(0.,pixel.y));
         float ridge=smoothstep(.012,.085,max(a+b-2.*z,d+e-2.*z)/max(z,1.2));
+        // The lower, trailing side of a silhouette takes the belly of the
+        // brush. The opposite side just catches its tip. Use the already
+        // sampled depths so a fine twig costs the same as a broad roofline.
+        vec2 outside=vec2(a-b,d-e);
+        float drag=dot(outside,vec2(.52,-.85))/max(.04,length(outside));
         // The outline is applied after scene fog. Fade the ink along with
         // its tree so distant crowns do not draw dark wires over the haze.
         float inkVisibility=1.-peachHaze*smoothstep(22.,114.,z);
@@ -120,12 +125,19 @@ export function createInkPass(renderer, camera) {
         float closeDye = 1.-smoothstep(12.,78.,z);
         vec3 drawing = wash*stock + (c-vec3(paperLight))*(.16+.21*dye+.55*dye*closeDye);
         vec3 glaze = c * (1. + .22*(wash-paperLight)/max(.018,paperLight));
-        drawing=mix(drawing,glaze,.65*dye*closeDye);
+        drawing=mix(drawing,glaze,.54*dye*closeDye);
+        // A diluted wash exposes the sheet between distant trees and stones.
+        // Keep the interior inks in night scenes and the colours of nearby clues.
+        float reserve=smoothstep(13.,90.,z)*daylight*smoothstep(.09,.48,paperLight);
+        drawing=mix(drawing,vec3(.90,.86,.76),.19*reserve);
         float fibre = texture2D(paperFibre,uv/(224.*pixel)).a;
         float fogPath = inkFogDensity*z;
-        float stroke = max(ridge*.91,brush*.66) * (1.-smoothstep(36.,168.,z));
-        float pressure = (.73+.09*scroll)*stroke*inkVisibility*exp(-fogPath*fogPath);
-        drawing *= 1. - pressure + pressure*3.*fibre;
+        float stroke = max(ridge*(.86+.20*drag),brush*.72) * (1.-smoothstep(36.,168.,z));
+        // Dry hairs skip a few raised fibres on light turns. A pressed line
+        // remains full and tapers into those breaks as its direction changes.
+        float skip=smoothstep(.021,.052,fibre)*(.20-.10*drag);
+        float pressure=(.80+.08*scroll)*stroke*(1.-skip)*inkVisibility*exp(-fogPath*fogPath);
+        drawing *= vec3(1.)-vec3(.94,.97,1.)*pressure;
         c = drawing*(1.-.53*fibre);
         // A gentle photographic shoulder preserves warm highlights in bright silk
         // and water, while leaving ordinary paper and ink at their original values.

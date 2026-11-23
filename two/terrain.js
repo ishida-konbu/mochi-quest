@@ -1,3 +1,6 @@
+import { rockParts } from './rock-forms.js';
+import { mountRockContact, mountScannedContact, rockRange } from './rock-contact.js';
+import {groveWood,groundedCulms,landmarkWood,pilgrimageWood,woodContact} from './wood-contacts.js';
 import { onSuzuriLand,okaHeight,suzuriBedElevation } from './suzuri-basin-plan.js';
 import { bathPools,bathLocal,poolAt,stationRadius } from './bath-places.js';
 import { addPilgrimBathSolids,pilgrimStations,tideRise } from './pilgrim-bathing-plan.js';
@@ -6,8 +9,9 @@ import { SNOW_TOWN, FOREST_LAKE, SNOW_PASS, LAKE_ISLET, isletRadius, snowPoint, 
 import { LAKE_WILLOWS, LAKE_ANIMALS } from './lake-grove-layout.js';
 import { lakeHokoraSolids } from './lake-hokora-layout.js';
 import { WINTER_REEFS } from './winter-reefs.js';
+import { addSeasonalSolids } from './seasonal-fixtures.js';
 import { houseCandles,houseFrontLamps,COURT_CANDLES } from './lamp-layout.js';
-import { SOURCE_STONES, mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
+import { MOUNTAIN_STREAMS, SOURCE_STONES, mountainStreamTerrain, mountainStreamWaterAt, inMountainStreamClearing } from './mountain-streams.js';
 import { MAPLE_BRIDGE, mapleDeckHeight, mapleApproachHeight, mapleBridgeFootings } from './maple-crossing.js';
 import { nearbyHut, inHutYard, clearingWeight, hutSolids, KETTLE } from './wayside-hut-layout.js';
 import { plantMountainWoods, growNishiyamaBamboo, isNishiyamaTree } from './mountain-woodland.js';
@@ -369,15 +373,41 @@ export function terrainHeight(x,z) {
 // Root a plant on the actual painted triangle. Across the crease of a rocky
 // spur the analytic surface can differ visibly from its sampled vertices.
 const groundSpacing=2*BOUND/(TERRAIN_TILES*TERRAIN_SUBDIVISIONS);
-export const springGround=springGroundSurvey([...RETREATS.filter(s=>s.rank==='main'),SNOW_SPRING,LAKE_ISLET],
+// Keep the near-vertical lip and the air below a waterfall in the same
+// triangle survey as the walkable banks, including at the maple confluence.
+const falls=MOUNTAIN_STREAMS.map(({fall:{lip,toe}})=>({
+  x:(lip.x+toe.x)/2,z:(lip.z+toe.z)/2,rx:Math.abs(toe.x-lip.x)/2+5,rz:Math.abs(toe.z-lip.z)/2+5,
+}));
+const approaches=[
+  ...[-1,1].map(side=>({x:MAPLE_BRIDGE.x,z:MAPLE_BRIDGE.z+side*MAPLE_BRIDGE.length/2,rx:3,rz:3})),
+  {x:503,z:-731,rx:3,rz:3}, // The level forecourt joins the timber stage here.
+];
+export const springGround=springGroundSurvey([...falls,...approaches,...RETREATS,SNOW_SPRING,LAKE_ISLET],
   BOUND,groundSpacing,TERRAIN_SUBDIVISIONS);
 export function terrainMeshHeight(x,z,heightAt=terrainHeight) {
   return springGround.height(x,z,heightAt);
 }
+// Contact probes revisit the three vertices of a visible ground triangle
+// many times in one stride. The 1/40-cell lattice includes both the 1/5
+// and 1/8 refinements used on the banks without quantizing the probe itself.
+const surveyHeights=new Map(), surveyScale=40/groundSpacing, surveyWidth=Math.round(2*BOUND*surveyScale)+1;
+function surveyedVertex(x,z) {
+  const key=Math.round((x+BOUND)*surveyScale)+surveyWidth*Math.round((z+BOUND)*surveyScale);
+  let value=surveyHeights.get(key);
+  if (value===undefined) {
+    if (surveyHeights.size>=16384) surveyHeights.clear();
+    value=terrainHeight(x,z);
+    surveyHeights.set(key,value);
+  }
+  return value;
+}
+export function terrainContactHeight(x,z) {
+  return terrainMeshHeight(wrapCoord(x),wrapCoord(z),surveyedVertex);
+}
 // Street processions follow the stone walking level beneath the gatehouse.
 export function roadSurfaceHeight(x,z) {
   const step=gateStoneRise(x-RASHOMON.x,z-RASHOMON.z);
-  return step>0 ? terrainHeight(RASHOMON.x,RASHOMON.z)+step : terrainHeight(x,z);
+  return step>0 ? terrainHeight(RASHOMON.x,RASHOMON.z)+step : terrainContactHeight(x,z);
 }
 export function waterSurfaceAt(x,z,time=0,feet=Infinity) {
   const shell=SAZAE_SPRING;
@@ -1243,6 +1273,17 @@ for(let i=0;i<145;i++){
 }
 // Count only the sites left after opening the stage and summit sightlines.
 growNishiyamaBamboo(TREES);
+// Replant the low spreading boughs at the edges of the freight roads and
+// the Inari gate. The stable planting seeds retain their size and crown.
+const roadsideSites = new Map([
+  [71761, [307.5, -464.8]], [207280, [224.8, 557.1]],
+  [911866, [436.2, -1006.7]], [893519, [341, -956.1]],
+  [757699, [110.4, -774.3]], [862608, [-81.4, -689]],
+]);
+for (const tree of TREES) {
+  const site = roadsideSites.get(tree.seed);
+  if (site) [tree.x, tree.z] = site;
+}
 const forestFootings=new WeakMap();
 export function treeGround(tree) {
   const cached=forestFootings.get(tree);
@@ -1423,11 +1464,16 @@ for(const {hearths} of STREET_BEATS)for(const {x,z} of hearths)
 gateSolids(terrainHeight,putSolid);
 pilgrimageSolids(terrainHeight,putSolid);
 kiyomizuSolids(terrainHeight,putSolid);
-civicAndBathSolids(terrainHeight,putSolid,springLevel);
+const surveyedRims=new Map();
+const rimKey=(site,index)=>site.index+'/'+index;
+civicAndBathSolids(terrainHeight,putSolid,springLevel,(site,stone,solid)=>{
+  surveyedRims.set(rimKey(site,stone.i),solid);
+});
 addSazaeBathSolids(putSolid);
 hutSolids(terrainHeight,putSolid);
 portSolids(putSolid);
 lakeHokoraSolids(putSolid);
+addSeasonalSolids(putSolid,terrainHeight,seeded,nearRoad,springRadius);
 for(const {x,z,rx,rz,yaw,top,rise} of SOURCE_STONES){
   putSolid(x,z,rx,rz,yaw,top,'springRock',true).roundHeight=rise;
 }
@@ -1467,18 +1513,75 @@ putSolid(-161.7,-90.6,1.84,.44,1.18,terrainHeight(-161.7,-90.6)+2.08,'roof',true
 putSolid(-161.7, -90.6, 1.65, 0.24, 1.18, terrainHeight(-161.7, -90.6) + 1.93, 'box', false);
 for(const {x,z,radius,height} of [...LAKE_WILLOWS,...LAKE_ANIMALS])
   putSolid(x,z,radius,radius,0,terrainMeshHeight(x,z)+height,'oval',false);
-for (const r of ROCKS) putSolid(r.x, r.z, r.rx, r.rz, r.yaw || 0, terrainHeight(r.x, r.z) + r.h, 'oval', true);
-for (const t of TREES)
-  putSolid(
-    t.x,
-    t.z,
-    t.form !== undefined ? t.h*.027 : t.kind === 'bamboo' ? 0.3 : 0.37,
-    t.form !== undefined ? t.h*.027 : t.kind === 'bamboo' ? 0.3 : 0.37,
-    0,
-    treeGround(t) + t.h * 0.68,
-    'oval',
-    false,
-  );
+for (const r of ROCKS) {
+  for (const part of rockParts(r,terrainHeight(r.x,r.z))) mountRockContact(part,putSolid);
+}
+// The same seed also feeds the painted road gravel after these stones.
+// Quantised roll gives the tilted pebbles sixteen reusable contact meshes.
+export function* riverbankStones(random) {
+  for(let i=0;i<510;i++){
+    const x=random()*488-244;
+    const z=riverZ(x)+(random()>.5?1:-1)*(riverHalfWidth(x)+random()*5-1);
+    if(abs(x)<16 || BRIDGES.some(b=>abs(x-b.x)<b.halfWidth+1.4))continue;
+    const size=.19+random()**2*1.1;
+    yield {form:'round',x,y:terrainHeight(x,z)-size*.12,z,sx:size*1.33,sy:size*.67,sz:size,
+      yaw:random()*2*Math.PI,pitch:.22,roll:Math.round(random()*15)/60};
+  }
+}
+for(const part of riverbankStones(seeded(27158)))mountRockContact(part,putSolid);
+
+const paintedRims=new Set();
+export function registerPaintedRim(site,index,shape,geometry,matrix) {
+  const key=rimKey(site,index);
+  const part=key+'/'+shape;
+  if(paintedRims.has(part))return;
+  // The renderer has supplied the real foundation or mineral cap. Retire
+  // its survey proxy, which also serves callers that build no scene at all.
+  const survey=surveyedRims.get(key);
+  if(survey){
+    survey.bottom=Infinity;
+    survey.top=-Infinity;
+    surveyedRims.delete(key);
+  }
+  mountScannedContact(geometry,matrix,putSolid);
+  paintedRims.add(part);
+}
+
+const scannedBatches=new Set();
+export function registerScannedStones(id,shapes,placements) {
+  if(scannedBatches.has(id))return;
+  for (const [i,matrices] of placements.entries()) {
+    for (const matrix of matrices) mountScannedContact(shapes[i].geo,matrix,putSolid);
+  }
+  scannedBatches.add(id);
+}
+
+
+function plantWood(tree,base,scale,yaw,wood,surveyRadius,surveyTop) {
+  // Thousands of grove instances share the same branch records. The spatial
+  // index holds just one enclosing footprint per real tree.
+  const culmFeet=wood.culms?groundedCulms(wood,tree,base,yaw,terrainContactHeight):null;
+  const reach=max(wood.reach,culmFeet?.reach??0)*scale;
+  const bottom=min(wood.bottom,culmFeet?.bottom??Infinity)*scale+base;
+  const solid=putSolid(tree.x,tree.z,reach,reach,yaw,base+wood.top*scale,'wood',false,0,bottom);
+  Object.assign(solid,{base,scale,wood,culmFeet,surveyRadius,surveyTop});
+}
+for(const tree of TREES){
+  const grove=tree.form!==undefined,scale=grove?tree.h:1;
+  const base=grove?treeGround(tree):terrainHeight(tree.x,tree.z);
+  const near=!grove && REGIONS.some(q=>(q.x-tree.x)**2+(q.z-tree.z)**2<38**2);
+  const wood=grove?groveWood(tree.form):landmarkWood(tree,seeded(tree.seed),terrainHeight,tree===TREES[0],near);
+  plantWood(tree,base,scale,grove?tree.seed*2.39996323:0,wood,
+    grove?tree.h*.027:tree.kind==='bamboo'?.3:.37,base+tree.h*.68);
+}
+for(const t of PEACH_TREES){
+  plantWood(t,terrainMeshHeight(t.x,t.z),t.size,t.turn,pilgrimageWood('peach',t.form??t.seed%5,seeded),
+    .25*t.size,terrainHeight(t.x,t.z)+2.6*t.size);
+}
+for(const t of CLIFF_PINES){
+  plantWood(t,terrainMeshHeight(t.x,t.z),t.scale,t.yaw,pilgrimageWood('pine',t.type,seeded),
+    .21*t.scale,terrainHeight(t.x,t.z)+4.8*t.scale);
+}
 for(const t of SHRINE_BAMBOO) {
   // One low and one high span approximate the lean without a thick invisible wall.
   for(let k=0;k<2;k++) {
@@ -1528,6 +1631,7 @@ function surfaceHeight(s, x, z, pad) {
     dz = z - s.z,
     a = dx * s.c - dz * s.s,
     b = dx * s.s + dz * s.c;
+  if(s.stone) return rockRange(s.stone,a,b,pad).high;
   if(s.kind==='suzuriBasin'){
     if(onSuzuriLand(a,b))return s.top+okaHeight(a,b);
     const r=bathRadius(capitalInkstone,x,z);
@@ -1576,19 +1680,32 @@ function highest(x, z, pad, feet, supportOnly, body = 1.42) {
   let height = -Infinity;
   const items = cells.get(cell(x, z));
   if (items) for (const item of items) {
-    if (feet + body < item.bottom) continue;
+    if (feet + body < item.bottom && !(item.stone && feet === -Infinity && supportOnly)) continue;
     if (supportOnly && feet === -Infinity && !item.support) continue;
+    if(item.kind==='wood'){
+      // Heightless queries also cast the historic resident population and
+      // reserve hawk perches. That survey measures the bole at ground level.
+      // Physical walkers, jumps and projectiles always supply an altitude.
+      if(feet===Infinity){
+        if((x-item.x)**2+(z-item.z)**2<=(item.surveyRadius+pad)**2)height=max(height,item.surveyTop);
+        continue;
+      }
+      const top=supportOnly?woodContact(item,x,z,pad,-Infinity,feet+.34,'floor'):
+        woodContact(item,x,z,pad,-Infinity,feet+body,'top');
+      height=max(height,top);continue;
+    }
     const sheet = item.kind === 'roof' || item.kind === 'pagodaEave' ||
       item.kind === 'awning' || item.kind === 'toriiCrown';
     const top = surfaceHeight(item,x,z,item.kind==='slab' && feet!==Infinity ? 0 : pad);
     // Posts and upright walls block walking from the side. A falling
     // character can still come to rest on their exposed upper face.
+    if (item.stone && feet !== -Infinity && feet+body <= lowerFace(item,top,x,z,pad)) continue;
     if (top === -Infinity || supportOnly && !item.support && feet < top-.015) continue;
     if (item.kind === 'slab' && feet < top-.34) continue;
     if (sheet) {
       if (feet < top - .34 && (supportOnly || feet + body <= lowerFace(item,top))) continue;
     }
-    if (item.kind === 'bridgeRail' && feet+body <= lowerFace(item,top)) continue;
+    if ((item.kind === 'bridgeRail' || item.roundBottom) && feet+body <= lowerFace(item,top)) continue;
     height = max(height,top);
   }
   return height;
@@ -1600,11 +1717,11 @@ export function swimSurfaceAt(x,z,feet) {
 }
 export function canDiveAt(x,z,feet) {
   const line=swimSurfaceAt(x,z,feet);
-  return feet<=line+.01 && line-max(terrainHeight(x,z),boardingHeightAt(x,z))>.74 &&
+  return feet<=line+.01 && line-max(terrainContactHeight(x,z),boardingHeightAt(x,z))>.74 &&
     waterSurfaceAt(x,z,0,feet)===line;
 }
 export function landscapeFloor(x, z, feet=Infinity) {
-  return max(swimSurfaceAt(x,z,feet)-.57,terrainHeight(x,z));
+  return max(swimSurfaceAt(x,z,feet)-.57,terrainContactHeight(x,z));
 }
 export function groundHeight(x, z, feet = -Infinity) {
   const b = bridgeAt(x, z);
@@ -1616,9 +1733,14 @@ export function waterDepth(x,z,time=0,feet=Infinity) {
   const line=waterSurfaceAt(x,z,time,feet);
   if(abs(x-capitalInkstone.x)<6.5 && abs(z-capitalInkstone.z)<4.5)
     return max(0,line-groundHeight(x,z,line+.15));
-  return max(0,line-terrainHeight(x,z));
+  return max(0,line-terrainContactHeight(x,z));
 }
-function lowerFace(item,top) {
+function lowerFace(item,top,x,z,pad) {
+  if(item.stone) {
+    const dx=x-item.x,dz=z-item.z;
+    return rockRange(item.stone,dx*item.c-dz*item.s,dx*item.s+dz*item.c,pad).low;
+  }
+  if(item.roundBottom)return item.top-2*item.roundHeight+(item.top-top);
   if (item.kind === 'roof' || item.kind === 'pagodaEave') return top - (item.thickness ?? Math.max(.10,item.form==='hip'?.09*item.roofRise:0));
   if (item.kind === 'awning') return top-.044;
   if (item.kind === 'bridgeRail') return top-1.65;
@@ -1632,9 +1754,12 @@ export function overheadHeight(x, z, feet, radius = 0, roofsOnly = false) {
   for (const item of cells.get(cell(x,z)) || []) {
     if (roofsOnly && item.kind !== 'roof' && item.kind !== 'awning' &&
         item.kind !== 'pagodaEave' && item.kind !== 'ceiling') continue;
+    if(item.kind==='wood'){
+      ceiling=min(ceiling,woodContact(item,x,z,radius,feet,Infinity,'ceiling'));continue;
+    }
     const top = surfaceHeight(item,x,z,item.kind==='slab' ? 0 : radius);
     if (top <= feet + .34) continue;
-    const bottom = lowerFace(item,top);
+    const bottom = lowerFace(item,top,x,z,radius);
     if (bottom === -Infinity) continue;
     // A footprint may overlap the next tread on its way upstairs. Landings
     // at the next storey still have a real underside above the climber.
@@ -1645,7 +1770,7 @@ export function overheadHeight(x, z, feet, radius = 0, roofsOnly = false) {
 }
 const palaceBed = terrainHeight(RYUGU.x,RYUGU.z);
 export function staticVolumeAt(x,z,feet,radius=.24,body=1.42) {
-  if (terrainHeight(x,z) > feet+.001 || palaceSolid(x,z,feet,palaceBed,body,radius)) return true;
+  if (terrainContactHeight(x,z) > feet+.001 || palaceSolid(x,z,feet,palaceBed,body,radius)) return true;
   const bridge=bridgeAt(x,z);
   if (bridge) {
     const deck=bridgeHeight(bridge,z);
@@ -1653,8 +1778,12 @@ export function staticVolumeAt(x,z,feet,radius=.24,body=1.42) {
   }
   for (const item of cells.get(cell(x,z)) || []) {
     if (item.bottom >= feet+body) continue;
+    if(item.kind==='wood'){
+      if(woodContact(item,x,z,radius,feet+.001,feet+body,'top')>feet+.001)return true;
+      continue;
+    }
     const top=surfaceHeight(item,x,z,radius);
-    if (top > feet+.001 && lowerFace(item,top) < feet+body) return true;
+    if (top > feet+.001 && lowerFace(item,top,x,z,radius) < feet+body) return true;
   }
   return false;
 }
@@ -1667,8 +1796,10 @@ export function canLand(x, z, feet) {
   return canOccupy(x,z,feet ?? floor,.12);
 }
 function sidePenetration(item,x,z,feet,radius,body) {
+  if(item.kind==='wood')return woodContact(item,x,z,radius,feet+.34,feet+body,'depth');
   const top=surfaceHeight(item,x,z,radius);
-  if (top <= feet+.34 || lowerFace(item,top) >= feet+body) return 0;
+  if (top <= feet+.34 || lowerFace(item,top,x,z,radius) >= feet+body) return 0;
+  if (item.stone) return top - feet - .34;
   const dx=x-item.x,dz=z-item.z;
   const a=abs(dx*item.c-dz*item.s),b=abs(dx*item.s+dz*item.c);
   if(item.kind==='kettleRim'){
@@ -1698,6 +1829,17 @@ function leavingOverlap(x,z,nx,nz,feet,radius,body) {
 function wallSlide(x,z,nx,nz,feet,radius,body,free) {
   const dx=wrapDelta(nx-x),dz=wrapDelta(nz-z);
   for(const item of cells.get(cell(nx,nz)) || []) {
+    if(item.stone || item.kind==='wood'){
+      const depth=(u,v)=>sidePenetration(item,u,v,feet,radius,body);
+      if(!depth(nx,nz))continue;
+      const gx=depth(nx+.005,nz)-depth(nx-.005,nz),gz=depth(nx,nz+.005)-depth(nx,nz-.005);
+      const norm=gx*gx+gz*gz,into=dx*gx+dz*gz;
+      if(norm>1e-12 && into>0){
+        const tx=wrapCoord(nx-gx*into/norm),tz=wrapCoord(nz-gz*into/norm);
+        if(free(tx,tz))return {x:tx,z:tz};
+      }
+      continue;
+    }
     const top=surfaceHeight(item,nx,nz,radius);
     if(top<=feet+.34 || lowerFace(item,top)>=feet+body)continue;
     const a=(x-item.x)*item.c-(z-item.z)*item.s;

@@ -1,3 +1,4 @@
+import {peachStrokes} from './pilgrimage-trees.js';
 import * as T from './vendor/three.module.min.js';
 import { PEACH_TREES } from './pilgrimage-layout.js';
 import { terrainMeshHeight, seeded, wrapDelta } from './terrain.js';
@@ -47,40 +48,10 @@ export function peachMaterials(form=0){
   }
   return palettes[form]={bark:brushWash(new T.MeshLambertMaterial({vertexColors:true}),.29),ink:petals('peach-bough'),flowers:petals('peach-blossom-cloud')};
 }
-function peachTree(seed){
-  const rng=seeded(seed), s=sculpture(), sprays=[];
-  const drift=(rng()-.46)*.91, tilt=(rng()-.5)*.49;
-  const trunk=[[.03,-.34,0],[-.10,.34,.064],[drift+.13,.98,tilt],[drift*.38,1.69,.105],[drift*.4+.16,2.34,-.11]];
-  s.stroke('#614f45',trunk,[.39,.35,.25,.223,.066],18);
-  s.stroke('#a19078',trunk.map(([x,y,z],i)=>[x-.075,y,z+[.23,.28,.23,.16,.05][i]]),
-    [.014,.038,.053,.026,.002],16);
-  for(let i=0;i<4;i++){
-    const a=i*1.57+rng()*.63;
-    const c=cos(a),d=sin(a);
-    s.stroke('#6f5c4b',[[.04,.41,0],[.28*c,.16,.28*d],[.64*c,-.09,.64*d],
-      [.76*c,-.32,.76*d],[.67*c,-.76,.67*d],[.72*c,-1.36,.72*d]],
-      [.17,.19,.09,.061,.035,.008],10);
-  }
-  for(let i=0;i<6;i++){
-    const a=i*2.39+rng()*.93, bend=(rng()-.5)*1.12, reach=1.1+rng()*1.32;
-    const root=trunk[2+(i%3)], h=root[1]+.65+rng()*.73;
-    const elbow=[root[0]+(.45+rng()*.40)*cos(a+bend),h,root[2]+.49*sin(a+bend)];
-    const tip=[root[0]+reach*cos(a),h+.52+rng()*.62,root[2]+reach*sin(a)];
-    const wood=[root,elbow,[.66*tip[0]+.34*elbow[0],elbow[1]-.15+.4*rng(),.66*tip[2]+.34*elbow[2]],tip];
-    s.stroke(i%2?'#725d4e':'#755e55',wood,[.145,.123,.076,.018],11);
-    const midway=wood[2];
-    const spur=[midway[0]+.57*cos(a+bend+.87),midway[1]+.58,midway[2]+.57*sin(a+bend+.87)];
-    s.stroke('#796252',[elbow,midway,spur],[.064,.059,.019],6);
-    sprays.push({q:tip,a,length:1.22+rng()*.67,pitch:.18+rng()*.53},
-      {q:spur,a:a+.91,length:1.16+rng()*.49,pitch:.39+rng()*.27},
-      {q:tip,a:a-.85,length:.98+rng()*.67,pitch:-.29+rng()*.39});
-  }
-  return {geo:s.finish(),sprays};
-}
 // Separate twig and flower impressions share a mesh across all the boughs
 // in each tree. The same folded paintings and matrices also print its distant view.
 export function peachModel(i){
-  const form=peachTree(76231+i*3504),sprig=blossomGeometry(),dummy=new T.Object3D();
+  const bark=sculpture(),sprays=peachStrokes(bark,seeded(76231+i*3504)),sprig=blossomGeometry(),dummy=new T.Object3D();
   const xyz=sprig.getAttribute('position');
   for(let j=0;j<xyz.count;j++){
     const u=xyz.getX(j),v=xyz.getY(j);
@@ -88,7 +59,7 @@ export function peachModel(i){
   }
   sprig.computeVertexNormals();
   const batches=[[],[]],materials=peachMaterials(i);
-  form.sprays.forEach(({q,a,length,pitch},j)=>{
+  sprays.forEach(({q,a,length,pitch},j)=>{
     const w=length*(j%3===0?1.13:1.49);
     dummy.position.set(...q);dummy.scale.set(w,w*.78,1);
     dummy.rotation.set(pitch,-a,.08*sin(i+j),'YXZ');dummy.updateMatrix();
@@ -104,7 +75,7 @@ export function peachModel(i){
     for(const part of parts){for(const k of part.index.array)indices.push(k+offset);offset+=part.attributes.position.count;}
     g.setIndex(indices);g.computeBoundingSphere();return g;
   }
-  return [[form.geo,materials.bark],[gather(batches[0]),materials.ink],[gather(batches[1]),materials.flowers]];
+  return [[bark.finish(),materials.bark],[gather(batches[0]),materials.ink],[gather(batches[1]),materials.flowers]];
 }
 export function createPeachOrchard(scene) {
   const N=PEACH_TREES.length;

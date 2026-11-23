@@ -8,7 +8,6 @@ import * as THREE from './vendor/three.module.min.js';
 
 const asset = (name) => new URL('./assets/world/' + name + '.webp' +
   (name === 'kyo-hills' ? '?v=kyoto-open-basin-1' : ''), import.meta.url).href;
-const paint = (color) => new THREE.Color(color);
 
 export function loadPigments() {
   const loader = new THREE.TextureLoader();
@@ -263,27 +262,4 @@ export function tintedSurface(texture, colorStrength = 0.32, roughness = 0.86, b
   return mat;
 }
 
-export function roundedStone(seed = 0) {
-  const g = new THREE.SphereGeometry(1, 14, 10);
-  const p = g.attributes.position,
-    colors = [],
-    c = new THREE.Color();
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i),
-      y = p.getY(i),
-      z = p.getZ(i);
-    const a = Math.atan2(z, x),
-      jag = 0.075 * Math.sin(a * 3.0 + seed + 0.75 * y) + 0.045 * Math.cos(a * 7.0 - seed + y * 4.5);
-    const r = 1 + (1 - y * y) * jag + 0.038 * Math.sin(8 * x + 4 * y - 3 * z + seed);
-    const yy = Math.sign(y) * Math.pow(Math.abs(y), 0.77);
-    p.setXYZ(i, x * r + 0.08 * y, yy * (1 + 0.06 * x) + 0.025 * Math.sin(a * 5) * (1 - y * y), z * r);
-    const top = Math.max(0, Math.min(1, (y + 0.1) * 0.88));
-    c.copy(paint('#9ba19a'))
-      .lerp(paint('#d8d7b6'), top)
-      .multiplyScalar(0.89 + 0.12 * top);
-    colors.push(c.r, c.g, c.b);
-  }
-  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  g.computeVertexNormals();
-  return g;
-}
+export { roundedStone } from './rock-forms.js';

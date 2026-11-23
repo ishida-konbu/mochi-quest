@@ -1,3 +1,4 @@
+import { SKIFFS, skiffPose, skiffDeck, skiffApproaches } from './skiff-travel.js';
 import { createStoryCollisions } from './story-collisions.js';
 import { createNotebook } from './mochiyori-progress.js';
 import { onSuzuriLand,okaFront } from './suzuri-basin-plan.js';
@@ -25,7 +26,7 @@ import { makeScrollResidents, updateScrollResident } from './scroll-encounters.j
 import { SCROLL_FAUNA, makeScrollFauna, moveScrollFauna } from './scroll-fauna.js';
 import { SEA_SPECIES, retiredSeaIds, makeRyuguResidents, updateRyuguResident } from './ryugu-residents.js';
 import { RYUGU, PALACE_BED, palacePoint, palaceInteriorAt, boardingHeightAt } from './ryugu-layout.js';
-import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, swimSurfaceAt, canDiveAt, groundHeight, landscapeFloor, solidHeightAt, constrainMove, canOccupy, staticVolumeAt, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, springLevel, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
+import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, terrainContactHeight, swimSurfaceAt, canDiveAt, groundHeight, landscapeFloor, constrainMove, canOccupy, staticVolumeAt, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, springLevel, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
 import { POUNDING, POUNDING_CREW } from './festival.js';
 import { prepareVillageRoutes, animalRadius, openGround, walkCircuit } from './village-paths.js';
@@ -49,8 +50,14 @@ const SPEED = { foot: 6.4, dango: 23.6, turtle: 105, bike: 45.9, flight: 32, kag
 const RUN_UP = { dango: 1.8, bike: 3.2, flight: 2.2, turtle: 3.4 };
 const SWIFT_FACTOR = 1.42;
 const MAX_TRAVEL_SPEED = SPEED.turtle * SWIFT_FACTOR + .01;
-// Longitudinal offset, radius, height. The rider occupies the central span.
-const TURTLE_SPANS = [[0,.92,0],[-.68,.62,1.18],[1.23,.37,1.13]];
+// Metres along the local forward axis, radius, lower edge and upper edge.
+// The open-ended span is the rider. The wheel ends and muzzle stay low under eaves.
+const RIDE_PARTS = {
+  bike: [[-.10,.42,.90,null],[0,.22,.19,.94],[.42,.32,.74,1.12],
+    [-.62,.24,0,.76],[-.89,.15,.12,.65],[.62,.24,0,.96],[.89,.15,.12,.65]],
+  turtle: [[-.09,.42,1.04,null],[0,.92,0,1.26],[-.69,.60,.10,1.13],[.82,.36,.32,1.02],[1.29,.31,.55,1.13]],
+};
+const FOOT_PARTS = [[0,0,0,null]];
 const STAMP_RADIUS = 6;
 const SEASONAL_STOPS = {
   snow: ['onsen','sake'], autumn: ['manga','haramaki'], moon: ['sake','manga'], dawn: ['ramen','haramaki']
@@ -58,6 +65,7 @@ const SEASONAL_STOPS = {
 const MODE_COST = { normal: 0, dango: 7, kusa: 6, kinako: 6, habutae: 10, kagami: 0 };
 const MODE_DRAIN = { normal: 0, dango: 2.1, kusa: 1.5, kinako: 1.75, habutae: 2.75, kagami: 0 };
 const MODE_NAME = { normal: 'ふつうのお餅', dango: '団子モード', kusa: '草餅', kinako: 'きなこ餅', habutae: '羽二重餅', kagami: '鏡餅' };
+export const canUseModeOnMount = mode => mode === 'kusa' || mode === 'normal';
 const NOTICE_FORWARD = [0], NOTICE_FAN = [-.28, 0, .28];
 const ring = count => Array.from({ length: count }, (_, i) => i * (Math.PI * 2 / count));
 const EIGHT_NOTICES = ring(8), FULL_KINAKO = ring(24);
@@ -288,7 +296,7 @@ export function createGame(snapshot = null) {
   const interactables=[...objects,turtle,...teaSeats];
   const player = {
     x: 0, z: 62, y: groundHeight(0,62), h: 0, vx: 0, vz: 0, vy: 0, speed: 0, heading: 0,
-    grounded: true, hp: MAX_VITAL, mp: MAX_VITAL, mode: 'normal', mount: null, activity: null,
+    grounded: true, hp: MAX_VITAL, mp: MAX_VITAL, mode: 'normal', mount: null, skiff: null, activity: null,
     activityTime: 0, idleTime: 0, airStretch: 0, diveDepth: 0, inWater: false, night: false, kyoClockOffset: 0, stretch: 0, landing: 0, impact: 0, throwTime: 0, invulnerable: 0,
     buffs: { warm: 0, swift: 0, drunk: 0, full: 0, wrap: 0 }
   };
@@ -302,6 +310,10 @@ export function createGame(snapshot = null) {
   const voyage = createVoyage();
   // The ship's local coordinates stay fixed while a standing passenger is carried.
   Object.defineProperty(player,'vessel',{get:() => voyage.passenger(player)});
+  let passengerBoat=null, passengerPose=null;
+  Object.defineProperty(player,'skiffPose',{get() {
+    return passengerPose;
+  }});
   let heldJump = false;
   let flapRemaining = 0;
   // The render rig reads this transient stroke without adding it to journey saves.
@@ -329,13 +341,13 @@ export function createGame(snapshot = null) {
   let throwCooldown = 0;
   let turtlePause = 0;
   let turtleLeg = 0;
-  let turtlePath = null, recoverRider = false;
+  let turtlePath = null, recoverRider = false, retryRecoveryAt=0;
   const ambientContact = createAmbientContacts(), pickupContact=createPickupContacts(objects);
   const storyCollisions = createStoryCollisions();
   const noticeContact = {};
-  function propOverlap(x,z,y,height,radius,contact) {
+  function propOverlap(x,z,y,height,radius,contact,ignoreSkiff=null) {
     return Math.max(storyCollisions.penetration(x,z,y,height,radius,contact),
-      pickupContact(x,z,y,height,radius),Number(ambientContact(x,z,y,height,radius,state.time,player,true)));
+      pickupContact(x,z,y,height,radius,state.time),Number(ambientContact(x,z,y,height,radius,state.time,player,true,ignoreSkiff)));
   }
   let bumped = null;
   const contactNormal={}, hitNormal={}, fromBody={};
@@ -356,13 +368,19 @@ export function createGame(snapshot = null) {
     if(Math.abs(floor-feet)>.36 || !turtleFits(x,z,floor,animalRadius(turtle)+margin,1.15))return NaN;
     return floor;
   }
-  // The rider's torso and shell occupy different heights. Check the ends of
-  // the shell along its facing instead of sweeping a 3.3 m wide circle.
-  function rideFits(x,z,y,heading,tall,fixtures=true) {
+  const footRadius = () => player.buffs.full>0 ? .33 : .26;
+  function rideFits(x,z,y,heading,tall,mount=player.mount) {
     const s=Math.sin(heading),c=Math.cos(heading);
-    for(const [offset,r,h] of TURTLE_SPANS) {
-      const px=wrapCoord(x+offset*s),pz=wrapCoord(z+offset*c),height=h||tall;
-      if(!canOccupy(px,pz,y,r,height) || !shipFits(px,pz,y,r,height) || fixtures && propOverlap(px,pz,y,height,r))return false;
+    for(const [offset,width,low,top] of RIDE_PARTS[mount] || FOOT_PARTS) {
+      const px=wrapCoord(x+offset*s),pz=wrapCoord(z+offset*c),feet=y+low;
+      const height=(top ?? tall)-low,radius=width || footRadius();
+      if(!canOccupy(px,pz,feet,radius,height) || !shipFits(px,pz,feet,radius,height) ||
+          propOverlap(px,pz,feet,height,radius))return false;
+      Object.assign(fromBody,{x:px,y:feet+height*.5,z:pz});
+      for(const n of state.nearbyNpcs){
+        if(n.mounted || n===turtle && mount==='turtle')continue;
+        if(sweepResident(n,fromBody,0,0,0,radius,height*.5)<1)return false;
+      }
     }
     return true;
   }
@@ -424,7 +442,19 @@ export function createGame(snapshot = null) {
   function nearest() {
     if (player.activity || !player.grounded) return null;
     if (player.mount === 'turtle') return { target: turtle, label: 'カメから降りる', action: 'dismount', distance: 0 };
-    let best = null;
+    if (passengerBoat) return {target:passengerBoat,label:'小舟から降りる',action:'dismount',distance:0};
+    let best=null;
+    if (!player.mount) {
+      for (const boat of SKIFFS) {
+        const pose=skiffPose(boat,state.time);
+        if (gap(pose)>boat.length*.5+2.8) continue;
+        const seat=skiffDeck(boat,state.time);
+        if (Math.abs(seat.y-player.y)>2.1) continue;
+        const reach=Math.min(gap(seat),...skiffApproaches(boat,state.time).map(gap));
+        if (reach<=1.65 && (!best || reach<best.distance))
+          best={target:boat,label:boat.name+'に乗る',action:'interact',distance:reach};
+      }
+    }
     for (const target of interactables) {
       if (!target.active && target !== turtle) continue;
       let distance = gap(target),place=null;
@@ -552,7 +582,7 @@ export function createGame(snapshot = null) {
     return !player.mount && (player.mode === 'habutae' || player.mode === 'kagami');
   }
   function jump() {
-    if (player.activity) return false;
+    if (player.activity || passengerBoat) return false;
     if (player.diveDepth > 0) return true; // Space strokes upward while submerged.
     if (player.mode === 'kagami' && !player.mount) flapRemaining = KAGAMI_BEAT_DURATION;
     const footLaunch = player.grounded || ledgeGrace > 0;
@@ -583,23 +613,93 @@ export function createGame(snapshot = null) {
     sound('jump');
     return true;
   }
+  function canStepTo(x,z) {
+    const r=footRadius(),tall=1.66*(player.buffs.full>0?1.28:1);
+    const at=constrainMove(player.x,player.z,x,z,0,player.y,r,tall);
+    if(distance(at,{x,z})>=.015)return false;
+    const dx=wrapDelta(x-player.x),dz=wrapDelta(z-player.z);
+    const steps=Math.ceil(Math.hypot(dx,dz)/.18);
+    let previous=propOverlap(player.x,player.z,player.y,tall,r);
+    for(let i=1;i<=steps;i++){
+      const px=wrapCoord(player.x+dx*i/steps),pz=wrapCoord(player.z+dz*i/steps);
+      const depth=propOverlap(px,pz,player.y,tall,r);
+      if(depth>previous+.000001 || !shipFits(px,pz,player.y,r,tall))return false;
+      previous=depth;
+    }
+    return true;
+  }
+  function rideSkiff(boat,time) {
+    const seat=skiffDeck(boat,time);
+    passengerPose=seat;
+    Object.assign(player,{x:seat.x,y:seat.y,z:seat.z,heading:seat.heading,
+      h:0,speed:0,vx:0,vy:0,vz:0,airStretch:0,diveDepth:0,inWater:false,grounded:true});
+  }
+  // Step over the gunwale, keeping the transfer on the same side of piers,
+  // bridge decks and other hulls. At the seat the traveller is crouching.
+  function skiffPassage(boat,from,to) {
+    const dx=wrapDelta(to.x-from.x),dz=wrapDelta(to.z-from.z);
+    const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz,to.y-from.y)/.18));
+    for (let i=1;i<=steps;i++) {
+      const t=i/steps,x=wrapCoord(from.x+t*dx),z=wrapCoord(from.z+t*dz);
+      const y=from.y+(to.y-from.y)*t+.45*Math.sin(Math.PI*t)+.035;
+      if (staticVolumeAt(x,z,y,.18,.92) || !shipFits(x,z,y,.18,.92) ||
+          propOverlap(x,z,y,.92,.18,null,boat.id)) return false;
+    }
+    return true;
+  }
+  function boardSkiff(boat) {
+    const seat=skiffDeck(boat,state.time);
+    if (!skiffPassage(boat,player,seat)) {
+      message('舟べりの開けた側から乗ろう。');return false;
+    }
+    if (player.mode!=='kusa') changeMode('normal');
+    passengerBoat=boat;player.skiff=boat.id;
+    rideSkiff(boat,state.time);
+    bufferedJump=ledgeGrace=flapRemaining=0;
+    message(boat.name+'に腰を下ろした。');sound('mount');
+    return true;
+  }
+  function leaveSkiff() {
+    const boat=passengerBoat,seat=skiffDeck(boat,state.time),choices=[];
+    for (const at of skiffApproaches(boat,state.time)) {
+      const y=Math.max(groundHeight(at.x,at.z,seat.y),voyage.sample(at.x,at.z,seat.y)?.floor ?? -Infinity);
+      const target={x:at.x,y,z:at.z};
+      if (Math.abs(y-seat.y)>2.1 || !rideFits(at.x,at.z,y,player.heading,1.66*(player.buffs.full>0?1.28:1),null)) continue;
+      if (skiffPassage(boat,seat,target))
+        choices.push({target,wet:y<waterSurfaceAt(at.x,at.z,state.time,y)-.08,reach:gap(target)});
+    }
+    choices.sort((a,b)=>Number(a.wet)-Number(b.wet) || a.reach-b.reach);
+    if (!choices.length) {message('舟べりが空いたところで降りよう。');return false;}
+    Object.assign(player,choices[0].target,{skiff:null,inWater:choices[0].wet});
+    passengerBoat=passengerPose=null;
+    message(boat.name+'から降りた。');sound('dismount');return true;
+  }
   function dismount() {
+    if (passengerBoat) return leaveSkiff();
     if (player.activity || !player.mount || !player.grounded) return false;
+    const standingHeight=1.66*(player.buffs.full>0?1.28:1);
     if (player.mount === 'bike') {
       const port = nearest();
       if (!port || port.target.type !== 'port') {
         message('電動自転車はポートで返そう。'); return false;
       }
+      // The returned bike now occupies its slot. Step clear before completing the return.
       port.target.bikes++;
+      const side=nearbyFooting(player.x,player.z,player.y,player.heading,7,
+        (x,z,y)=>rideFits(x,z,y,player.heading,standingHeight,null) && canStepTo(x,z));
+      if(!side){port.target.bikes--;message('ポートの開けた側から返そう。');return false;}
+      Object.assign(player,side);
       message('電動自転車を返した。');
     } else {
       // Leave the turtle on connected footing. When a wall covers one side
       // of its shell the rider can step down on the other side.
+      if(!rideFits(player.x,player.z,player.y,player.heading,bodyHeight())){
+        message('少し開けた場所でカメから降りよう。');return false;
+      }
       const origin={x:player.x,y:player.y,z:player.z};
       const side=nearbyFooting(origin.x,origin.z,origin.y,player.heading+Math.PI/2,7,(x,z,y)=>{
-        if(Math.hypot(wrapDelta(x-origin.x),wrapDelta(z-origin.z))<1.55 || !turtleFits(x,z,y,.26,1.66))return false;
-        const at=constrainMove(origin.x,origin.z,x,z,0,origin.y,.26,1.66);
-        return distance(at,{x,z})<.015;
+        return Math.hypot(wrapDelta(x-origin.x),wrapDelta(z-origin.z))>=1.65 &&
+          rideFits(x,z,y,player.heading,standingHeight,null) && canStepTo(x,z);
       });
       if(!side){message('少し開けた場所でカメから降りよう。');return false;}
       Object.assign(turtle,origin,{homeX:origin.x,homeZ:origin.z,mounted:false,speed:0,heading:player.heading});
@@ -613,16 +713,17 @@ export function createGame(snapshot = null) {
     return true;
   }
   function interact(facing) {
-    if (player.mount) return dismount();
+    if (passengerBoat || player.mount) return dismount();
     const found = nearest();
     if (!found) return false;
     const target = found.target;
+    if (SKIFFS.includes(target)) return boardSkiff(target);
     if (target === turtle) {
       if (player.buffs.full > 0) {
         message('カメが首を引っ込めた。満腹のお餅はちょっと重い。'); return false;
       }
       const seat=nearbyFooting(turtle.x,turtle.z,turtle.y,turtle.heading,4,
-        (x,z,y)=>rideFits(x,z,y,turtle.heading,2.70));
+        (x,z,y)=>rideFits(x,z,y,turtle.heading,2.70,'turtle') && canStepTo(x,z));
       if(!seat){message('カメの背に乗れる広さのある場所で待とう。');return false;}
       Object.assign(player,seat,{h:0,vx:0,vy:0,vz:0,speed:0,heading:turtle.heading,grounded:true});
       player.mount = 'turtle';
@@ -637,13 +738,18 @@ export function createGame(snapshot = null) {
     } else if (target.type === 'port') {
       if (target.bikes < 1) return false;
       target.bikes--;
+      const tall=.90+1.66*(player.buffs.full>0?1.28:1);
+      const seat=nearbyFooting(player.x,player.z,player.y,player.heading,7,
+        (x,z,y)=>rideFits(x,z,y,player.heading,tall,'bike') && canStepTo(x,z));
+      if(!seat){target.bikes++;message('ポートの開けた側から乗ろう。');return false;}
+      Object.assign(player,seat,{h:0,vx:0,vy:0,vz:0,speed:0,grounded:true});
       player.mount = 'bike';
       message('電動自転車で出発。次のポートで返せる。');
     } else {
       collect(target,facing,found.place);
       return true;
     }
-    changeMode('normal');
+    if (player.mode !== 'kusa') changeMode('normal');
     sound('mount');
     return true;
   }
@@ -657,7 +763,7 @@ export function createGame(snapshot = null) {
     let angles = full ? NOTICE_FAN : NOTICE_FORWARD;
     if (player.mode === 'kinako') angles = full ? FULL_KINAKO : EIGHT_NOTICES;
     if (player.mode === 'kagami') angles = EIGHT_NOTICES;
-    const height = player.mount === 'turtle' ? 1.98 : player.mount ? 1.45 : player.buffs.full > 0 ? 1.30 : .93;
+    const height = passengerBoat ? .74 : player.mount === 'turtle' ? 1.98 : player.mount ? 1.45 : player.buffs.full > 0 ? 1.30 : .93;
     for (const angle of angles) {
       const heading = forward + angle;
       state.shots.push({
@@ -682,7 +788,7 @@ export function createGame(snapshot = null) {
     const leavingGrass = player.mode === 'kusa';
     player.mode = mode;
     flapRemaining = 0;
-    if (!leavingGrass && mode !== 'kusa') return;
+    if (passengerBoat || !leavingGrass && mode !== 'kusa') return;
     if (player.diveDepth > 0) {
       // A swimmer may have phased inside a hall. Leave the solid by the
       // shortest upward stroke when the grass transformation wears off.
@@ -696,28 +802,36 @@ export function createGame(snapshot = null) {
       return;
     }
     if (leavingGrass) {
-      // Find room for the whole mochi if the last point of MP expires inside a trunk or wall.
-      const fits = (x,z) => {
-        const floor = groundHeight(x,z,player.y);
-        const feet = Math.max(player.y,floor);
-        return floor <= player.y + .52 && solidHeightAt(x,z,.26,feet) <= feet + .34 &&
-          overheadHeight(x,z,feet) >= feet + 1.66 * (player.buffs.full > 0 ? 1.28 : 1);
+      // Both cancellation and MP exhaustion need room for the rider and their mount.
+      const fits = (x,z,y) => {
+        const floor = Math.max(groundHeight(x,z,y), voyage.sample(x,z,y)?.floor ?? -Infinity);
+        const feet=Math.max(y,floor);
+        return floor <= y + .52 && canOccupy(x,z,feet,footRadius(),1.66) &&
+          rideFits(x,z,feet,player.heading,bodyHeight());
       };
-      if (!fits(player.x,player.z)) {
+      if (!fits(player.x,player.z,player.y)) {
         let found = false;
         for (let r=.35; !found && r<=20; r+=.35) {
           const directions = Math.ceil(2*Math.PI*r/.5);
           for (let i=0; i<directions; i++) {
             const a = player.heading + 2*Math.PI*i/directions;
             const x = wrapCoord(player.x + r*Math.sin(a)), z = wrapCoord(player.z + r*Math.cos(a));
-            if (!fits(x,z)) continue;
+            if (!fits(x,z,player.y)) continue;
             player.x=x; player.z=z; found=true;
             break;
           }
         }
+        // A tall plinth can cover every point at the grass mochi's current
+        // height. Emerge above it and let the usual landing find the surface.
+        if (!found) {
+          const limit = landscapeFloor(player.x,player.z,player.y) + CEILING;
+          while (player.y < limit && !fits(player.x,player.z,player.y))
+            player.y = Math.min(limit,player.y + .5);
+        }
       }
     }
-    const floor = mode === 'kusa' ? grassFloor(player.x,player.z,player.y) : groundHeight(player.x,player.z,player.y);
+    const floor = mode === 'kusa' ? grassFloor(player.x,player.z,player.y)
+      : Math.max(groundHeight(player.x,player.z,player.y), voyage.sample(player.x,player.z,player.y)?.floor ?? -Infinity);
     player.y = Math.max(floor,player.y);
     player.h = player.y-floor;
     player.grounded = player.h <= .001 && player.vy <= 0;
@@ -728,7 +842,9 @@ export function createGame(snapshot = null) {
     if (action === 'dismount') return dismount();
     if (action === 'interact') return interact(facing);
     if (!Object.hasOwn(MODE_COST, action) || player.activity) return false;
-    if (player.mount) { message('変身するときは、乗り物から降りよう。'); return false; }
+    if ((player.mount || player.skiff) && !canUseModeOnMount(action)) {
+      message('乗ったまま変身できるのは草餅だよ。'); return false;
+    }
     if (action === 'kagami' && !state.kagamiUnlocked) return false;
     if (action === player.mode) return true;
     if (!spendMP(MODE_COST[action])) {
@@ -924,15 +1040,19 @@ export function createGame(snapshot = null) {
     }
   }
   function residentSweep(x,y,z,dx,dy,dz,radius,halfHeight,moving) {
-    Object.assign(fromBody,{x,y:y+halfHeight,z});
     let first=Infinity, hit;
-    for(const n of state.nearbyNpcs){
-      if(n.mounted)continue;
-      const t=sweepResident(n,fromBody,dx,dy,dz,radius,halfHeight,moving,contactNormal);
-      if(t<first){
-        first=t;hit=n;Object.assign(hitNormal,contactNormal);
-        hitNormal.travelX=moving?wrapDelta(n.x-(n.contactX??n.x)):0;
-        hitNormal.travelZ=moving?wrapDelta(n.z-(n.contactZ??n.z)):0;
+    const s=Math.sin(player.heading),c=Math.cos(player.heading);
+    for(const [offset,width,low,top] of RIDE_PARTS[player.mount] || FOOT_PARTS){
+      const half=((top ?? 2*halfHeight)-low)*.5;
+      Object.assign(fromBody,{x:wrapCoord(x+s*offset),y:y+low+half,z:wrapCoord(z+c*offset)});
+      for(const n of state.nearbyNpcs){
+        if(n.mounted)continue;
+        const t=sweepResident(n,fromBody,dx,dy,dz,width || radius,half,moving,contactNormal);
+        if(t<first){
+          first=t;hit=n;Object.assign(hitNormal,contactNormal);
+          hitNormal.travelX=moving?wrapDelta(n.x-(n.contactX??n.x)):0;
+          hitNormal.travelZ=moving?wrapDelta(n.z-(n.contactZ??n.z)):0;
+        }
       }
     }
     if(hit && !bumped && !hit.area && !hit.encounter && !hit.scrollFauna &&
@@ -956,6 +1076,7 @@ export function createGame(snapshot = null) {
       const k=rx || rz ? Math.min(1,residentSweep(x,player.y,z,rx,0,rz,r,height*.5,false)) : 0;
       dx=rx*k;dz=rz*k;
     }
+    if(player.mount)return {x:wrapCoord(x+dx),z:wrapCoord(z+dz)};
     const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.38));
     for(let j=0;j<steps;j++){
       const nx=wrapCoord(x+dx/steps),nz=wrapCoord(z+dz/steps);
@@ -970,12 +1091,77 @@ export function createGame(snapshot = null) {
     }
     return {x,z};
   }
+  function fixtureDepth(x,z,y,height,radius) {
+    if(!player.mount)return propOverlap(x,z,y,height,radius);
+    const s=Math.sin(player.heading),c=Math.cos(player.heading);
+    let depth=0;
+    for(const [offset,r,low,top] of RIDE_PARTS[player.mount]){
+      const px=wrapCoord(x+offset*s),pz=wrapCoord(z+offset*c);
+      depth=Math.max(depth,propOverlap(px,pz,y+low,(top ?? height)-low,r));
+    }
+    return depth;
+  }
   function crowdLift(x,z,y,dy,height,radius) {
     if(!dy)return dy;
     const t=residentSweep(x,y,z,0,dy,0,radius,height*.5,false);
     const lifted=dy*Math.min(1,t);
-    const next=propOverlap(x,z,y+lifted,height,radius);
-    return next && next>propOverlap(x,z,y,height,radius)?0:lifted;
+    const steps=Math.max(1,Math.ceil(Math.abs(lifted)/.12));
+    let depth=fixtureDepth(x,z,y,height,radius);
+    for(let i=1;i<=steps;i++){
+      const next=fixtureDepth(x,z,y+lifted*i/steps,height,radius);
+      if(next>depth+.000001)return lifted*(i-1)/steps;
+      depth=next;
+    }
+    return lifted;
+  }
+  function fixtureSlide(x,z,sx,sz,feet,tall,radius){
+    const tx=wrapCoord(x+sx),tz=wrapCoord(z+sz);
+    const depth=(a,b)=>fixtureDepth(wrapCoord(a),wrapCoord(b),feet,tall,radius);
+    if(!depth(tx,tz))return null;
+    const gx=depth(tx+.015,tz)-depth(tx-.015,tz),gz=depth(tx,tz+.015)-depth(tx,tz-.015);
+    const length=gx*gx+gz*gz,into=sx*gx+sz*gz;
+    if(length<1e-12 || into<=0)return null;
+    return {x:wrapCoord(tx-gx*into/length),z:wrapCoord(tz-gz*into/length)};
+  }
+  // Check each intermediate pose against the same occupants. A slide along a
+  // wall must still clear the rack, traveller or second wall alongside it.
+  function mountedMove(x,z,targetX,targetZ,tall) {
+    const dx=wrapDelta(targetX-x),dz=wrapDelta(targetZ-z);
+    if(!dx && !dz)return {x,z};
+    const count=Math.ceil(Math.hypot(dx,dz)/.18),sx=dx/count,sz=dz/count;
+    const s=Math.sin(player.heading),c=Math.cos(player.heading);
+    let feet=player.y;
+    for(let i=0;i<count;i++){
+      const tx=wrapCoord(x+sx),tz=wrapCoord(z+sz);
+      const fits=(a,b)=>rideFits(a,b,feet,player.heading,tall);
+      if(fits(tx,tz)){x=tx;z=tz;}
+      else {
+        let ax=tx,az=tz;
+        for(const [offset,r,low,top] of RIDE_PARTS[player.mount]){
+          const ox=s*offset,oz=c*offset;
+          const at=constrainMove(wrapCoord(x+ox),wrapCoord(z+oz),wrapCoord(ax+ox),wrapCoord(az+oz),
+            0,feet+low,r,(top ?? tall)-low);
+          ax=wrapCoord(at.x-ox);az=wrapCoord(at.z-oz);
+        }
+        if((Math.abs(wrapDelta(ax-x))+Math.abs(wrapDelta(az-z))>1e-6) && fits(ax,az)){x=ax;z=az;}
+        else {
+          const slide=fixtureSlide(x,z,sx,sz,feet,tall,bodyRadius());
+          if(slide && fits(slide.x,slide.z)){x=slide.x;z=slide.z;}
+          else if(sx && fits(tx,z))x=tx;
+          else if(sz && fits(x,tz))z=tz;
+          else break;
+        }
+      }
+      feet=Math.max(player.y,groundHeight(x,z,feet));
+    }
+    return {x,z};
+  }
+  function recoverMount() {
+    const tall=bodyHeight(),h=player.h;
+    if(rideFits(player.x,player.z,player.y,player.heading,tall))return;
+    const safe=nearbyFooting(player.x,player.z,player.y-h,player.heading,32,
+      (x,z,floor)=>rideFits(x,z,floor+h,player.heading,tall));
+    if(safe)Object.assign(player,safe,{y:safe.y+h,vx:0,vz:0,speed:0});
   }
   function updateMotion(dt, input) {
     if (player.activity && player.activity !== 'fall') return;
@@ -1002,23 +1188,20 @@ export function createGame(snapshot = null) {
     const speed = SPEED[pace] * modifier;
     if(recoverRider){
       recoverRider=false;
-      if(player.mount==='turtle' && !rideFits(player.x,player.z,player.y,player.heading,bodyHeight(),false)){
-        const safe=nearbyFooting(player.x,player.z,player.y,player.heading,32,
-          (x,z,y)=>rideFits(x,z,y,player.heading,bodyHeight()));
-        if(safe)Object.assign(player,safe,{vx:0,vz:0,speed:0});
-      }
+      if(player.mount && player.mode!=='kusa')recoverMount();
     }
     if (dx || dz) {
       const heading=Math.atan2(dx,dz);
-      if(player.mount!=='turtle')player.heading=heading;
+      if(!player.mount || player.mode==='kusa')player.heading=heading;
       else{
-        // A shell can turn in a narrow passage without swinging its nose
-        // through a post. The rider can still back out while facing the wall.
-        const turn=Math.atan2(Math.sin(heading-player.heading),Math.cos(heading-player.heading));
-        const steps=Math.max(1,Math.ceil(Math.abs(turn)/.22));
+        // Turn through the available arc. Translation remains independent of
+        // facing so reversing out of a slot never requires turning in place.
+        const delta=Math.atan2(Math.sin(heading-player.heading),Math.cos(heading-player.heading));
+        const turn=delta*(1-Math.exp(-dt*12));
+        const steps=Math.abs(delta)<1e-6 ? 0 : Math.ceil(Math.abs(turn)/.14);
         for(let i=0;i<steps;i++){
           const next=player.heading+turn/steps;
-          if(!rideFits(player.x,player.z,player.y,next,bodyHeight(),false))break;
+          if(!rideFits(player.x,player.z,player.y,next,bodyHeight()))break;
           player.heading=Math.atan2(Math.sin(next),Math.cos(next));
         }
       }
@@ -1059,7 +1242,7 @@ export function createGame(snapshot = null) {
       const free=(xx,zz,yy)=>phasing || !staticVolumeAt(xx,zz,yy,radius,1.25) && shipFits(xx,zz,yy,radius,1.25);
       // Use the front of the swimmer's footprint on the submerged treads,
       // so each riser lifts the feet just before the torso reaches its face.
-      const bottom=(xx,zz)=>Math.max(terrainHeight(xx,zz)+.16,boardingHeightAt(xx-radius,zz)+.001);
+      const bottom=(xx,zz)=>Math.max(terrainContactHeight(xx,zz)+.16,boardingHeightAt(xx-radius,zz)+.001);
       const fits=(xx,zz)=>free(xx,zz,Math.max(player.y,bottom(xx,zz)));
       const strideX=wrapDelta(x-player.x),strideZ=wrapDelta(z-player.z);
       const steps=Math.max(1,Math.ceil(Math.hypot(strideX,strideZ)/.35));
@@ -1088,40 +1271,33 @@ export function createGame(snapshot = null) {
     player.diveDepth=0;
     let land;
     if(phasing)land={x:wrapCoord(x),z:wrapCoord(z)};
-    else if(player.mount==='turtle'){
-      const dx=wrapDelta(x-player.x),dz=wrapDelta(z-player.z);
-      const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.32));
-      let nx=player.x,nz=player.z,feet=player.y;
-      for(let i=0;i<steps;i++){
-        const tx=wrapCoord(nx+dx/steps),tz=wrapCoord(nz+dz/steps);
-        const fits=(a,b)=>rideFits(a,b,feet,player.heading,tall,false);
-        if(fits(tx,tz)){nx=tx;nz=tz;}
-        else {
-          // Project a blocked stride along the face touching any part of the
-          // turtle. A post at its nose can otherwise pin a clear shell.
-          let ax=tx,az=tz;
-          for(const [offset,r,h] of TURTLE_SPANS){
-            const ox=offset*Math.sin(player.heading),oz=offset*Math.cos(player.heading);
-            const at=constrainMove(wrapCoord(nx+ox),wrapCoord(nz+oz),wrapCoord(ax+ox),wrapCoord(az+oz),0,feet,r,h||tall);
-            ax=wrapCoord(at.x-ox);az=wrapCoord(at.z-oz);
-          }
-          if(fits(ax,az)){nx=ax;nz=az;}
-          else if(fits(tx,nz))nx=tx;
-          else if(fits(nx,tz))nz=tz;
-          else break;
-        }
-        feet=Math.max(player.y,groundHeight(nx,nz,feet));
-      }
-      land={x:nx,z:nz};
-    } else land=constrainMove(player.x,player.z,x,z,player.h,player.y,radius,tall);
-    const at = phasing ? land : voyage.move(player.x,player.z,land.x,land.z,player.y,radius,tall);
+    else if(player.mount)land=mountedMove(player.x,player.z,x,z,tall);
+    else land=constrainMove(player.x,player.z,x,z,player.h,player.y,radius,tall);
+    // Moving deck contacts are already included at every mounted substep.
+    const at = phasing || player.mount ? land : voyage.move(player.x,player.z,land.x,land.z,player.y,radius,tall);
+    if(player.mount && !phasing && stick && state.time>=retryRecoveryAt && distance(at,player)<.000001 &&
+        !rideFits(player.x,player.z,player.y,player.heading,tall)){
+      retryRecoveryAt=state.time+.35;
+      recoverMount();
+      at.x=player.x;at.z=player.z;
+    }
     player.vx = wrapDelta(at.x-player.x)/dt;
     player.vz = wrapDelta(at.z-player.z)/dt;
     player.speed = Math.hypot(player.vx,player.vz);
     player.x = at.x; player.z = at.z;
     const ship = phasing ? null : voyage.sample(at.x,at.z,player.y);
-    const floor = phasing ? grassFloor(at.x,at.z,player.y) : Math.max(groundHeight(at.x,at.z,player.y),ship?.floor ?? -Infinity);
-    const ceiling = phasing ? Infinity : Math.min(overheadHeight(at.x,at.z,player.y,radius),ship?.ceiling ?? Infinity);
+    let floor = phasing ? grassFloor(at.x,at.z,player.y) : Math.max(groundHeight(at.x,at.z,player.y),ship?.floor ?? -Infinity);
+    let headLimit=Infinity;
+    if(!phasing && player.mount){
+      const s=Math.sin(player.heading),c=Math.cos(player.heading);
+      for(const [offset,r,low,top] of RIDE_PARTS[player.mount]){
+        const px=wrapCoord(at.x+offset*s),pz=wrapCoord(at.z+offset*c),feet=player.y+low;
+        const deck=voyage.sample(px,pz,feet,r,(top ?? tall)-low);
+        floor=Math.max(floor,Math.max(groundHeight(px,pz,feet),deck?.floor ?? -Infinity)-low);
+        const underside=Math.min(overheadHeight(px,pz,feet,r),deck?.ceiling ?? Infinity);
+        headLimit=Math.min(headLimit,underside-(top ?? tall));
+      }
+    }else if(!phasing)headLimit=Math.min(overheadHeight(at.x,at.z,player.y,radius),ship?.ceiling ?? Infinity)-tall;
     const wasGrounded = player.grounded;
     if (player.grounded && floor >= player.y-.32 && player.vy<=0) player.y = floor;
     if (canFly() && input.jump && !player.activity) {
@@ -1138,13 +1314,13 @@ export function createGame(snapshot = null) {
     player.y+=lift;
     // Grass can leave through the ceiling as well as the side panels. Start
     // swimming at the same height when the jump reaches the exterior water.
-    if(wasInside && !palaceInteriorAt(at.x,at.z,player.y)){
+    if(wasInside && !player.mount && !palaceInteriorAt(at.x,at.z,player.y)){
       player.diveDepth=Math.max(0,swimSurfaceAt(at.x,at.z,player.y)-.57-player.y);
       player.grounded=false;player.airStretch=player.h=player.vy=0;
       return;
     }
     if(lift!==dy)player.vy=0;
-    const headroom = Math.max(floor, ceiling - tall);
+    const headroom = Math.max(floor,headLimit);
     if (player.y > headroom && player.vy > 0) {
       player.y = headroom;
       player.vy = 0;
@@ -1168,7 +1344,7 @@ export function createGame(snapshot = null) {
   }
   function checkContact() {
     if (!player.activity && lastBath && !stillAtPlace(lastBath,lastPlace)){lastBath=null;lastPlace=null;}
-    if (player.activity || player.mode === 'kusa') return;
+    if (passengerBoat || player.activity || player.mode === 'kusa') return;
     if (!player.mount && player.grounded) {
       for (const o of objects) {
         if (!['onsen','tsukimi','kyoTea','mitarashi'].includes(o.type) && o.active && PICKUP_ACTION[o.type] && o !== lastBath && Math.abs(player.y-o.y)<1.6 &&
@@ -1202,7 +1378,7 @@ export function createGame(snapshot = null) {
     state.regionId = region.id;
     state.onLake = lakeRadius(player.x,player.z)<1.29;
     player.night = Math.max(seasonAt(player.x,player.z,climate).moon,kyoNight(state.time,player)*kyoInfluence(player.x,player.z)) > .48;
-    player.inWater = player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z,state.time,player.y) > .14 && player.y < waterSurfaceAt(player.x,player.z,state.time,player.y) - .08;
+    player.inWater = !passengerBoat && (player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z,state.time,player.y) > .14 && player.y < waterSurfaceAt(player.x,player.z,state.time,player.y) - .08);
     if (region.id === 'ryugu' && !inPalace && (offshore || player.y > terrainHeight(region.x,region.z) + 3)) return;
     if (!collectStamp || state.visited.includes(region.id) || !inPalace && distance(player,region)>STAMP_RADIUS || player.h>3) return;
     state.visited.push(region.id);
@@ -1210,7 +1386,7 @@ export function createGame(snapshot = null) {
     emit('stamp',{ id:region.id, text }); message(text); sound('pickup');
   }
   function teleport(x, z) {
-    if (!state.kagamiUnlocked || player.mode !== 'kagami' || player.activity || player.mount ||
+    if (!state.kagamiUnlocked || player.mode !== 'kagami' || player.activity || player.mount || passengerBoat ||
         !Number.isFinite(x) || !Number.isFinite(z)) return false;
     x = wrapCoord(x); z = wrapCoord(z);
     // If a pin lands on a wall, use the nearest open footing around the pin.
@@ -1241,7 +1417,8 @@ export function createGame(snapshot = null) {
     if(hour>templeBellHour(priorTime,offset))
       ringTempleBell('mallet',BELL_FIRST+hour*BELL_INTERVAL-offset);
     flapRemaining = Math.max(0, flapRemaining - dt);
-    voyage.update(state.time,player);
+    voyage.update(state.time,passengerBoat ? undefined : player);
+    if (passengerBoat) rideSkiff(passengerBoat,state.time);
     player.idleTime = player.grounded && player.speed < .22 && !player.activity ? Math.min(3, (player.idleTime || 0) + dt) : 0;
     for (const name of Object.keys(player.buffs)) player.buffs[name] = Math.max(0, player.buffs[name] - dt);
     if (bufferedJump > 0 && player.grounded) jump();
@@ -1271,7 +1448,7 @@ export function createGame(snapshot = null) {
     }
     bumped=null;
     updateNPCs(dt);
-    updateMotion(dt,input);
+    if (!passengerBoat) updateMotion(dt,input);
     if(turtle.mounted)moveTurtle(dt);
     updateShots(dt);
     checkContact();
@@ -1365,7 +1542,7 @@ export function createGame(snapshot = null) {
     if(visitor!==p && p.mount==='turtle')t={...t,x:visitor.x,z:visitor.z,homeX:visitor.x,homeZ:visitor.z};
     p=visitor;
     for (const key of Object.keys(player)) {
-      if (!['idleTime','buffs','landing','impact','airStretch','night','kyoClockOffset','inWater','diveDepth'].includes(key)) player[key]=p[key];
+      if (!['idleTime','buffs','landing','impact','airStretch','night','kyoClockOffset','inWater','diveDepth','skiff'].includes(key)) player[key]=p[key];
     }
     // Doubling the old 144-second cycle doubles a saved phase. Add the old
     // elapsed time once to Kyoto's local clock; boats still use data.time.
@@ -1421,7 +1598,7 @@ export function createGame(snapshot = null) {
         line=swimSurfaceAt(player.x,player.z,PALACE_BED+1)-.57;
         player.diveDepth=line-(PALACE_BED+1);
       }else{
-        const floor=Math.max(terrainHeight(p.x,p.z)+.16,boardingHeightAt(p.x-bodyRadius(),p.z)+.001);
+        const floor=Math.max(terrainContactHeight(p.x,p.z)+.16,boardingHeightAt(p.x-bodyRadius(),p.z)+.001);
         player.diveDepth=clamp(p.diveDepth,0,Math.max(0,line-floor));
       }
       if(player.diveDepth>0){
@@ -1449,7 +1626,7 @@ export function createGame(snapshot = null) {
     });
     ports.forEach((o,i)=>{o.bikes=data.bikes[i] ?? 2;});
     Object.assign(turtle, {x:t.x,z:t.z,homeX:t.homeX,homeZ:t.homeZ,y:groundHeight(t.x,t.z),mounted:p.mount==='turtle'});
-    turtlePause=t.pause; turtleLeg=t.leg; recoverRider=turtle.mounted;
+    turtlePause=t.pause; turtleLeg=t.leg; recoverRider=!!player.mount;
     lastBath=objects.find(o=>o.type==='onsen' && o.id===data.lastBath)??null;
     lastPlace=null;berth=null;
     if(lastBath){
@@ -1495,6 +1672,14 @@ export function createGame(snapshot = null) {
     if(player.activity==='bath' && !lastBath) {
       player.activity=null;
       player.activityTime=0;
+    }
+    if (p.skiff && !player.mount && !player.activity && !player.diveDepth) {
+      passengerBoat=SKIFFS.find(boat=>boat.id===p.skiff) ?? null;
+      if (passengerBoat) {
+        player.skiff=passengerBoat.id;
+        if (!canUseModeOnMount(player.mode)) player.mode='normal';
+        rideSkiff(passengerBoat,state.time);
+      }
     }
     updateRegion(false);
     return true;

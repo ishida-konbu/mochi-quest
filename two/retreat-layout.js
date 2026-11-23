@@ -171,7 +171,7 @@ export function retreatStones(s) {
   }).filter(q=>q.v<s.rz*.73 || Math.abs(q.u)>1.84);
 }
 
-export function civicAndBathSolids(height,put,levelOf) {
+export function civicAndBathSolids(height,put,levelOf,recordRim) {
   const base=height(cx,cz);
   function solid(x,z,w,d,top,kind,support=false) {
     return put(cx+x,cz+z,w/2,d/2,0,base+top,kind,support);
@@ -224,6 +224,7 @@ export function civicAndBathSolids(height,put,levelOf) {
       const top=q.scanned?-.03+1.18*q.h:.075+q.h;
       const rim=add(q.u,q.v,(q.scanned?2.08:2)*q.w,(q.scanned?2.11:2)*q.d,top,'springRock',true,q.angle);
       rim.roundHeight=q.h;
+      if(q.scanned)recordRim(s,q,rim);
     }
     if(s.regional){
       const {inlet,sign}=regionalBathFittings(s,springLip);

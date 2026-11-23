@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
+import { visitMooredFittings } from './skiff-travel.js';
 import { BOATS, HULL_HEIGHT, HULL_DRAFT, halfBreadth, sheerHeight } from './shoreline.js';
 import {
   BUILDINGS,
@@ -802,87 +803,11 @@ function makeBoatShape() {
   geo.setIndex(indices); geo.computeVertexNormals();
   return geo;
 }
-function boat(p, {x,z,yaw,length,width,sail}) {
-  const f=fixture(p,x,z,yaw,WATER_Y-HULL_DRAFT), height=HULL_HEIGHT;
-  const half=t=>halfBreadth(t)*width, rim=t=>sheerHeight(t)*height;
-  f.part('boatHull',0,0,0,width,height,length,'#ffffff',0,0,0,p.hullWood,true);
-  // Removable bottom boards run fore and aft. Their ends fit the taper.
-  for(let j=-2;j<=2;j++){
-    const u=j*width*.068, span=length*(.61-.09*Math.abs(j));
-    f.part('box',u,.128,0,width*.066,.044,span,j%2?'#b19878':'#c1aa83',0,0,0,p.wood);
-  }
-  // Steam-bent ribs rise from the sole to the gunwale on both sides.
-  for(const t of [-.76,-.56,-.31,.01,.31,.56,.76]){
-    const v=t*length*.5, w=half(t);
-    for(const side of [-1,1]){
-      const foot=[side*w*.41,.115+t*t*.11,v],turn=[side*w*.78,.248+Math.abs(t)*.07,v];
-      f.line(foot,turn,.030,'#886b4c',p.wood,true);
-      f.line(turn,[side*w*.92,rim(t)-.018,v],.031,'#997953',p.wood,true);
-    }
-  }
-  for(let i=0;i<4;i++){
-    const t=.68+i*.07;
-    f.part('box',0,rim(t)-.036,t*length*.5,half(t+.032)*1.89,.048,length*.032,'#ad906d',0,0,0,p.deck);
-  }
-  for(let i=0;i<4;i++)f.part('ropeCoil',.055,.154+i*.018,-length*.21,.15,.33,.19,'#b19664',0,0,0,p.wood);
-  for (const side of [-1, 1])
-    for (let k = 0; k < 11; k++) {
-      const u = (k / 11) * 2 - 1,
-        n = ((k + 1) / 11) * 2 - 1;
-      f.line(
-        [side * half(u), rim(u), u * length * 0.5],
-        [side * half(n), rim(n), n * length * 0.5],
-        0.032,
-        '#685139'
-      );
-      f.line(
-        [side * half(u) * 0.9, rim(u) * 0.61, u * length * 0.5],
-        [side * half(n) * 0.9, rim(n) * 0.61, n * length * 0.5],
-        0.011,
-        '#73583f'
-      );
-    }
-  for (let i = 0; i < 3; i++) {
-    const t = -0.49 + i * 0.4;
-    f.part(
-      'box',
-      0,
-      rim(t) * 0.78,
-      t * length * 0.5,
-      half(t) * 1.76,
-      0.057,
-      0.19,
-      '#c0a17a',
-      0,
-      0,
-      0,
-      p.wood
-    );
-  }
-  f.line([-0.28, 0.62, -length * 0.34], [0.37, 0.56, length * 0.28], 0.029, '#b19b72', p.wood);
-  f.part('ball', 0.39, 0.52, length * 0.33, 0.085, 0.034, 0.27, '#ab8960', -0.21);
-  if (sail) {
-    f.line([0, 0.2, -0.12], [0, 3.55, -0.12], 0.05, '#94774e', p.wood);
-    f.line([0, 3.28, -0.12], [-0.23, 0.58, -length * 0.41], 0.009, rope);
-    f.line([0, 3.28, -0.12], [0.32, 0.61, length * 0.4], 0.009, rope);
-    f.line([-0.05, 3.3, -0.14], [-0.1, 2.92, 1.35], 0.028, timber, p.wood);
-    f.part('awning', -0.08, 3.09, 0.58, 0.23, 0.37, 1.42, '#e8ddbc', 0.03, -0.15, 0.22);
-    for (let j = 0; j < 6; j++)
-      f.part(
-        'round',
-        -0.08,
-        3.07 - j * 0.041,
-        0.03 + j * 0.195,
-        0.107,
-        0.035,
-        0.11,
-        '#a99870',
-        0,
-        PI * 0.49,
-        0.13
-      );
-    f.part('box', 0, 3.45, 0.1, 0.014, 0.19, 0.46, '#b8694b', 0, -0.07, 0);
-  }
+function boat(p, vessel) {
+  const {x,z,yaw,width,length}=vessel;
+  const f=fixture(p,x,z,yaw,WATER_Y-HULL_DRAFT);
+  f.part('boatHull',0,0,0,width,HULL_HEIGHT,length,'#ffffff',0,0,0,p.hullWood,true);
+  visitMooredFittings(f,p,vessel);
 }
 function netRack(p, a, x, z, yaw, width = 4.2) {
   const f = fixture(p, x, z, yaw),

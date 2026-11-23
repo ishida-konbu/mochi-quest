@@ -7,7 +7,7 @@ const UP = vec(0,1,0);
 export const forestTexture = name => new URL('./assets/world/'+name+'.webp'+
   (name==='forest-crowns'||name==='kyo-crown-washes'?'?v=jointed-bamboo-3':''),import.meta.url).href;
 
-export function forestGeometry(index, perchOnly = false, omitCulms = false) {
+export function forestGeometry(index, perchOnly = false, omitCulms = false, woodStroke = null) {
   const family = Math.floor(index/TREE_FORMS_PER_FAMILY), habit = index%TREE_FORMS_PER_FAMILY;
   const [,form,spray,spread,bole,leafColor,tipColor,barkColor] = TREE_FAMILIES[family];
   let state = (index+1)*139669;
@@ -22,6 +22,7 @@ export function forestGeometry(index, perchOnly = false, omitCulms = false) {
     tex.push(((tile%4)+.008+.984*u)/4,(3-Math.floor(tile/4)+.008+.984*v)/4);
   }
   function stick(points,radii,sides=6,fluting=false) {
+    if(woodStroke){woodStroke(points,radii,fluting && sides===5);return;}
     const start=p.length/3, side=vec(0,0,1), cross=vec(1,0,0);
     for(let j=0;j<points.length;j++) {
       const axis=points[Math.min(j+1,points.length-1)].clone().sub(points[Math.max(0,j-1)]).normalize();
@@ -41,6 +42,7 @@ export function forestGeometry(index, perchOnly = false, omitCulms = false) {
   // A folded leaf-bearing bough has two faces and a lifted ridge. The shading
   // normals point partly skyward so the underside reflects diffuse skylight.
   function tuft(center,yaw,w,h,slope,tint) {
+    if(woodStroke)return;
     const start=p.length/3, dx=Math.cos(yaw), dz=Math.sin(yaw);
     const face=vec(-dz*.54,.84,dx*.54).normalize();
     const tip=vec(-dz*slope*.72,h,dx*slope*.72);
@@ -60,6 +62,7 @@ export function forestGeometry(index, perchOnly = false, omitCulms = false) {
   // fold the two sides down. From above it reads as a fan, from the path
   // below as a tapering hand of needles, with air between successive tiers.
   function needles(anchor,yaw,width,reach,lift,tint){
+    if(woodStroke)return;
     const start=p.length/3,dx=Math.cos(yaw),dz=Math.sin(yaw),along=vec(dx,0,dz),across=vec(-dz,0,dx);
     const heel=spray===0?.18:.16;
     // Where a low evergreen whorl overhangs the bare landing spur, turn the
@@ -229,6 +232,7 @@ export function forestGeometry(index, perchOnly = false, omitCulms = false) {
     }
     if(cone) tuft(spine(.972),angle,.11,.15,.06,tips);
   }
+  if(woodStroke)return;
   const g=new THREE.BufferGeometry();
   for(const [key,data,size] of [['position',p,3],['normal',n,3],['color',c,3],['uv',tex,2]])
     g.setAttribute(key,new THREE.Float32BufferAttribute(data,size));

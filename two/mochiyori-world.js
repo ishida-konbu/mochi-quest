@@ -1,4 +1,5 @@
 import { Group } from './vendor/three.module.min.js';
+import { createModelContacts } from './story-model-contacts.js';
 import { CAST } from './mochiyori-story.js';
 import { STORY_SITES } from './story-sites.js';
 import { placeKey } from './mochiyori-progress.js';
@@ -57,7 +58,11 @@ export function createStoryWorld(scene, book, collisions) {
   const group = new Group();
   group.name = 'もち寄り祭の仕事場';
   scene.add(group);
-  const tables = new Map(), animals = new Map();
+  const tables = new Map(), animals = new Map(), shapes = new WeakMap();
+  function shape(model,skip) {
+    if (!shapes.has(model)) shapes.set(model,createModelContacts(model,skip));
+    return shapes.get(model);
+  }
   let chapter = -1, active = [], nextSurvey = -Infinity;
   function rebuild(p) {
     group.clear();
@@ -80,7 +85,7 @@ export function createStoryWorld(scene, book, collisions) {
       table.rotation.y = site.yaw || 0;
       group.add(table);
       active.push({table, site, station:true});
-      fixtures.push({...site,kind:'table'});
+      fixtures.push({...site,kind:'table',modelContact:shape(table,table.children[0])});
       const offsets = [[-2.05, -.62], [2.12, -.57], [-.75, -1.8], [1.02, -1.84]];
       const festivalGuest = !book.current() && site.key === placeKey('kyo');
       if (site.place === 'court' || festivalGuest) offsets.push([-3.68,-1.5],[3.65,-1.55]);
@@ -93,7 +98,7 @@ export function createStoryWorld(scene, book, collisions) {
         const y = groundHeight(x,z,site.y+.4);
         actor.position.set(x, Math.abs(y-site.y) < 1.3 ? y : site.y, z);
         actor.rotation.y = yaw - Math.atan2(u, 2.9);
-        fixtures.push({x,y:actor.position.y,z,yaw:actor.rotation.y,kind:'person',species:person.species,name:person.name});
+        fixtures.push({x,y:actor.position.y,z,yaw:actor.rotation.y,kind:'person',species:person.species,name:person.name,modelContact:shape(actor)});
         group.add(actor);
         active.push({actor, site, i});
       });
@@ -116,6 +121,7 @@ export function createStoryWorld(scene, book, collisions) {
         if (item.actor) poseStoryCharacter(item.actor, time + item.i * .94, close);
         else if (item.table) animateStoryStillLife(item.table, time, close);
       }
+      collisions?.posed();
     },
     nearest(p) {
       if (p.activity) return null;

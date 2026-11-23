@@ -1,3 +1,4 @@
+import {cliffStrokes} from './pilgrimage-trees.js';
 import * as T from './vendor/three.module.min.js';
 import { TERRAIN_TILES,TERRAIN_SUBDIVISIONS } from './geography.js';
 import { terrainHeight, terrainMeshHeight, BOUND } from './terrain.js';
@@ -10,10 +11,7 @@ const {sin,cos,hypot} = Math;
 const ease=T.MathUtils.smoothstep;
 
 function pine(i) {
-  const s=sculpture(), spin=i*1.23, sign=i%2?-1:1;
-  const wood=[[0,-.4,0],[.08,.35,.03],[.50,1.32,.14],[-.14,2.33,.13],
-    [sign*.50,3.35,.26],[sign*1.19,4.12,.15],[sign*1.42,4.96,.10]];
-  s.stroke('#565344',wood,[.32,.28,.24,.19,.134,.076,.028],16);
+  const s=sculpture();
   const pad=new T.SphereGeometry(1,20,8), edge=pad.attributes.position;
   for(let j=0;j<edge.count;j++){
     const x=edge.getX(j),y=edge.getY(j),z=edge.getZ(j),a=Math.atan2(z,x);
@@ -21,14 +19,10 @@ function pine(i) {
     edge.setXYZ(j,x*jag,y*(y>0?1+y*.13:.48)-((.18+.19*sin(a*9.1))*(1-y*y)),z*jag);
   }
   pad.computeVertexNormals();
-  for(let k=0;k<8;k++){
-    const a=k*2.39+spin, start=wood[2+Math.floor(k*.55)],h=start[1]+(k%2?.74:.32);
-    const len=(2.05-k*.139)*(.88+.31*cos(a)),x=start[0]+cos(a)*len,z=start[2]+sin(a)*len;
-    s.stroke('#585746',[start,[start[0]+.62*cos(a),start[1]-.20,start[2]+.61*sin(a)],
-      [x,h-.22,z],[x+.16*cos(a),h,z+.16*sin(a)]],[.112,.091,.062,.018],8);
+  cliffStrokes(s,i,(x,h,z,a)=>{
     s.add(pad,'#526252',x,h,z,1.20+.23*sin(a),.34,1.02+.18*cos(a),.035,a);
     s.add(pad,'#71816b',x-.14,h+.16,z+.05,.88,.26,.76,-.04,a-.37);
-  }
+  });
   return s.finish();
 }
 export function* paintPeachCliffs(p,map){

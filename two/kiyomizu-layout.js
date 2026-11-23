@@ -29,6 +29,30 @@ export const BELL_COLUMNS=[-3.35,3.35].flatMap(u=>[-2.65,0,2.65].map(v=>[509+u,-
 export const STAGE_PILES=[492.2,496.5,500.8,505.1,509.4,513.7,518].flatMap(x=>
   [-729.15,-725.1,-721.05,-717,-712.95,-708.9,-704.85].map(z=>[x,z]));
 
+export function visitExposedPiles(height,visit) {
+  for(const [x,z] of STAGE_PILES) {
+    const ground=height(x,z);
+    if(ground<=floor-.42)visit(x,z,ground);
+  }
+}
+export function visitStageRails(visit) {
+  for(const [x,z,w,d] of STAGE_RAILS) {
+    const along=w>d, length=Math.max(w,d), count=Math.ceil(length/2.4);
+    for(const [course,y,h,width] of [[0,.24,.14,.12],[1,.63,.10,.11],[2,.96,.13,.23]])
+      visit(x,floor+y,z,along?length:width,h,along?width:length,course);
+    for(let j=0;j<=count;j++){
+      const at=length*(j/count-.5);
+      visit(x+(along?at:0),floor+.54,z+(along?0:at),.20,1.14,.20,0);
+    }
+  }
+}
+export function visitDeckBeams(visit) {
+  for(const z of [-729.15,-725.1,-721.05,-717,-712.95,-708.9,-704.85])
+    visit(506.5,floor-.64,z,31.05,.68,.44);
+  for(const x of [491.38,496.5,500.8,505.1,509.4,513.7,518])
+    visit(x,floor-.83,-717,.49,.63,27.47);
+}
+
 function shelf(x,z,l,r,n,s,f) {
   const edge=Math.max(l-x,x-r,n-z,z-s,0);
   const t=Math.min(1,edge/f);return 1-t*t*(3-2*t);
@@ -86,9 +110,15 @@ export function kiyomizuSolids(height,put) {
   }
   const s=STAGE;
   solid((s.west+s.east)/2,(s.north+s.south)/2,s.east-s.west,s.south-s.north,floor,'slab',floor-.39);
-  for(const [x,z,w,d] of STAGE_RAILS)solid(x,z,w,d,floor+1.02,'wall',floor);
-  for(const [x,z] of STAGE_PILES)solid(x,z,.81,.81,floor-.39,'oval',height(x,z)-.25);
+  visitStageRails((x,y,z,w,h,d)=>solid(x,z,w,d,y+h/2,'wall',y-h/2));
+  visitExposedPiles(height,(x,z,ground)=>{
+    solid(x,z,.81,.81,floor-.30,'oval',ground-.55);
+    const stone=put(x,z,.84,.77,0,ground+.33,'springRock',false,0,ground-.43);
+    stone.roundHeight=.38;
+    if(ground<floor-1.8)solid(x,z,1.06,.86,floor-.73,'slab',floor-1.31);
+  });
   visitStageTies(height,(x,y,z,w,h,d)=>solid(x,z,w,d,y+h/2,'slab',y-h/2));
+  visitDeckBeams((x,y,z,w,h,d)=>solid(x,z,w,d,y+h/2,'slab',y-h/2));
   for(const [x,z] of HALL_COLUMNS)solid(x,z,.62,.62,floor+7.68,'oval',floor);
   solid(520.1,-717,.23,23.6,floor+7.35,'wall',floor);
   for(const z of [-728.8,-705.2])solid(516.1,z,8.14,.22,floor+7.35,'wall',floor);

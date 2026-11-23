@@ -290,9 +290,6 @@ export function pilgrimageSolids(height, putSolid) {
       putSolid(x+dx*cos(yaw),z-dx*sin(yaw),.17,.17,0,height(x,z)+h,'oval',false);
     }
   }
-  for(const tree of PEACH_TREES) putSolid(tree.x,tree.z,.25*tree.size,.25*tree.size,0,
-    height(tree.x,tree.z)+2.6*tree.size,'oval',false);
-  for(const t of CLIFF_PINES) putSolid(t.x,t.z,.21*t.scale,.21*t.scale,0,height(t.x,t.z)+4.8*t.scale,'oval',false);
   putSolid(MOON_GATE.x-.82,MOON_GATE.z-5.65,.60,.63,0,height(MOON_GATE.x,MOON_GATE.z)+4.83,'oval',false);
   for(const side of [-1,1]) putSolid(MOON_GATE.x,MOON_GATE.z+side*3.23,.31,1.42,0,
     height(MOON_GATE.x,MOON_GATE.z)+4.8,'wall',false);

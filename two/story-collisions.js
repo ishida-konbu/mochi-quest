@@ -52,9 +52,11 @@ function structuralDistance(parts,u,v,bottom,top) {
 }
 
 export function createStoryCollisions() {
-  let nearby = [];
+  let nearby = [], pose = 0;
   return {
+    posed() { pose++; },
     update(fixtures) {
+      pose++;
       nearby = fixtures.map(f => ({...f, co:Math.cos(f.yaw || 0), si:Math.sin(f.yaw || 0),
         parts:f.kind==='table' ? tablePlan(f.number,f.place).contacts : null, body:bodies[f.species] || bodies['兎']}));
     },
@@ -63,9 +65,17 @@ export function createStoryCollisions() {
       if (contact) contact.person = null;
       for (const f of nearby) {
         const bottom = feet-f.y, top = bottom+height;
-        if (top<=0 || bottom>=2.25) continue;
+
         const dx=wrapWorld(x-f.x), dz=wrapWorld(z-f.z);
-        if (Math.abs(dx)>1.65+radius || Math.abs(dz)>1.65+radius) continue;
+        if (f.modelContact && Math.abs(dx)<5+radius && Math.abs(dz)<5+radius && top>-.5 && bottom<5) {
+          const modelDepth=f.modelContact(f.x+dx,f.z+dz,feet,height,radius,pose);
+          if (modelDepth>depth) {
+            depth=modelDepth;
+            if (contact) contact.person=f.kind==='person' ? f.name : null;
+          }
+          if (f.kind==='person') continue;
+        }
+        if (top<=0 || bottom>=2.25 || Math.abs(dx)>1.65+radius || Math.abs(dz)>1.65+radius) continue;
         const u=dx*f.co-dz*f.si, v=dz*f.co+dx*f.si;
         let signed;
         if (f.kind==='table') {

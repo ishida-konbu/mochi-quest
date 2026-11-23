@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createGame} from '../two/game.js';
-import {BOUND,groundHeight,nearRoad,regionAt,REGIONS,terrainMeshHeight,waterSurfaceAt} from '../two/terrain.js';
+import {BOUND,groundHeight,nearRoad,regionAt,REGIONS,staticVolumeAt,terrainHeight,terrainMeshHeight,waterSurfaceAt} from '../two/terrain.js';
 import {KADOMATSU,POUNDING} from '../two/festival.js';
 import {HIGASHIYAMA} from '../two/higashiyama.js';
+import {visitMoonFixtures} from '../two/seasonal-fixtures.js';
 
 const tick = (game,seconds,input={}) => {
   for(let frame=0; frame<Math.round(seconds*60); frame++) game.step(1/60,input);
@@ -125,6 +126,38 @@ test('both animals at the dawn mortar accept notices at their actual workstation
     game.step(1/60); assert.ok(game.act('throw',heading)); tick(game,.12);
     assert.ok(game.state.delivered.has(artist.id));
   }
+});
+
+test('the moon lanterns, grass vase, bamboo and mortar occupy their painted heights',()=>{
+  const lanterns=[],vases=[];
+  visitMoonFixtures((x,z)=>({part(shape){
+    if(shape==='kasa')lanterns.push([x,z]);
+    if(shape==='vase')vases.push([x,z]);
+  }}),{});
+  assert.equal(lanterns.length,4);
+  assert.equal(vases.length,1);
+  const hit=(x,z,y)=>staticVolumeAt(x,z,y,.008,.02);
+  for(const [x,z] of lanterns) {
+    const base=terrainHeight(x,z);
+    assert.ok(hit(x,z,base+.46));
+    assert.ok(hit(x+.24,z,base+.77),'overhanging roof');
+    assert.ok(!hit(x+.25,z,base+.46),'beside the narrower paper lantern');
+    assert.ok(!hit(x,z,base+1.15),'air above the finial');
+  }
+  for(const [x,z] of vases) {
+    const base=terrainHeight(x,z);
+    assert.ok(hit(x,z,base+.35));
+    assert.ok(!hit(x,z,base+1.10),'susuki plumes bend out of the way');
+  }
+  for(const [x,z] of KADOMATSU) {
+    const base=terrainHeight(x,z);
+    assert.ok(hit(x,z,base+1.27),'tall central bamboo');
+    assert.ok(!hit(x+.32,z,base+1.27),'open beside the culms');
+  }
+  const {x,z}=POUNDING,base=terrainHeight(x,z)+.012;
+  assert.ok(hit(x,z,base+.48),'wooden bowl');
+  assert.ok(hit(x+.43,z,base+.68),'mortar rim');
+  assert.ok(!hit(x,z,base+.68),'hollow top');
 });
 
 test('the sunrise beach holds the mat, decorations and bicycle rack on dry, level ground',()=>{

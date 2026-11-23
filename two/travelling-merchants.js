@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { batchActorParts as paint } from './actors.js';
 import { wrapDelta } from './terrain.js';
+import { SKIFFS, skiffPose, visitMerchantFittings } from './skiff-travel.js';
 import { courtCurtains, ferryCrew } from './kyo-procession-art.js';
 import { harnessBeast, capitalHorse } from './otsu-travellers.js';
 import { OX_SCALE } from './scroll-fauna.js';
@@ -10,7 +11,7 @@ import { kosode, silkMaterial, SilkPanels } from './kosode.js';
 import { dressedRiceFace } from './mochi-model.js';
 import { paintedSilk,townPortrait } from './emaki-costume.js';
 import { brushStroke } from './pilgrimage-pigment.js';
-import { CARRIAGES, OX_HITCH, RIVER_SKIFFS, SKIFF_SCALE, merchantPose, carriageHorizontalPose, carriagePose, carriageGroundHeight } from './traveller-positions.js';
+import { CARRIAGES, OX_HITCH, RIVER_SKIFFS, SKIFF_SCALE, carriageHorizontalPose, carriagePose, carriageGroundHeight } from './traveller-positions.js';
 export {merchantPosition} from './traveller-positions.js';
 
 const { PI, sin, cos }=Math;
@@ -173,62 +174,7 @@ function marketBoat(index,skiff) {
   if(skiff)root.scale.setScalar(SKIFF_SCALE);
   const hull=paint(root,b=>{
     b.add(boatHull(),'#886e4d');
-    for(const side of [-1,1]){
-      const gunwale=Array.from({length:13},(_,i)=>{const t=i/6-1; return [side*(.84*(1-Math.abs(t)**2.3)+.018),.50+.26*t*t,t*3.05];});
-      b.stroke(gunwale,.045,'#584937');
-    }
-    for(let i=-4;i<=4;i++) b.box(0,.43,i*.47,1.25*(1-Math.abs(i/5)**2),.07,.44,straw);
-    if(!skiff){
-      b.rod([0,.42,-.58],[0,3.3,-.58],.047,'#79573a',.031);
-      b.rod([-.88,3.15,-.58],[.88,3.15,-.58],.035,'#624e36');
-    }
-    for(const side of [-1,1]){
-      if(!skiff){
-        b.stroke([[side*.90,3.15,-.56],[side*.72,2.14,-.30],[side*.78,.54,-1.34]],.014,'#957956');
-        b.stroke([[side*.84,3.16,-.56],[side*.92,2.86,-.45],[side*.95,1.58,-.56],[side*.68,.55,.13]],.011,'#7b6750');
-        b.rod([side*.86,1.56,-.57],[side*.91,1.61,-.56],.025,straw);
-      }
-      for(const height of [.14,.28]){
-        const seam=Array.from({length:15},(_,i)=>{
-          const t=i/7-1;
-          return [side*(.84*(1-Math.abs(t)**2.3)+.018)*(.72+height*.58),height+.26*t*t,t*3.05];
-        });
-        b.stroke(seam,.011,'#5e503f');
-      }
-    }
-    if(skiff){
-      // Low cargo and folded covers fit between the piles under all three
-      // arched bridges. A cloth, tied in two places, identifies each house.
-      b.box(0,.71,-.61,1.21,.46,.95,'#8c7554');
-      b.box(0,.95,-.61,1.24,.065,1.01,skiff.color);
-      for(const side of [-1,1]){
-        b.box(side*.605,.826,-.61,.03,.23,1.01,skiff.color,[0,0,side*.07]);
-        b.box(side*.627,.797,-.61,.012,.032,.96,'#d3c4a1');
-      }
-      for(const z of [-.92,-.29])
-        b.stroke([[-.68,.52,z],[-.617,.95,z],[0,.998,z],[.617,.95,z],[.68,.52,z]],.019,'#b6a17a');
-      b.rod([-.56,.53,-1.63],[-.55,.56,1.53],.034,'#b0986c');
-      if(index===3){
-        for(const [x,y,color] of [[-.17,1.06,skiff.color],[.14,1.06,'#a68271'],[0,1.26,'#85856f']])
-          b.rod([x,y,-1.01],[x,y,-.26],.148,color);
-      }
-      if(index===4){
-        for(const x of [-.26,.26]){
-          b.box(x,1.10,-.61,.42,.25,.67,'#9a895d');
-          b.box(x,1.24,-.61,.45,.041,.71,'#bda77d');
-          b.box(x,1.268,-.61,.065,.022,.71,skiff.color);
-        }
-      }
-    }else{
-      b.rod([-.98,1.57,-.56],[.98,1.57,-.56],.025,'#9d8459');
-      for(const z of [-1.05,.85])
-        b.stroke([[0,3.2,-.57],[-.035,2.43,z*.34-.35],[.025,.53,z]],.011,'#786954');
-    }
-    for(const z of [-1.55,1.6]) for(const side of [-1,1]) {
-      b.ball(side*.30,.65,z,.26,.28,.39,'#bda172');
-      for(const dz of [-.12,.14]) b.loop(side*.30,.66,z+dz,.26,.34,.048,'#7d6b4d');
-    }
-    if(!skiff)b.rod([-.42,1.25,.78],[-1.24,.04,1.75],.039,lacquer);
+    visitMerchantFittings(b,index,skiff,straw,lacquer);
   },skiff?'橋をくぐる高瀬舟':'帆掛けの餅問屋');
   hull.material=scrollPigment();
   const merchant=traveller(root,false);merchant.position.set(0,.45,.56);merchant.scale.setScalar(.87);
@@ -239,14 +185,18 @@ export function createTravellers(scene) {
   const horse=capitalHorse(scene), walkers=createRoadMerchants(scene);
   let body;
   const carts=CARRIAGES.map(journey=>({journey,figure:null}));
-  const boats=[null,null,...RIVER_SKIFFS].map((skiff,i)=>{const boat=marketBoat(i,skiff);scene.add(boat.root);return boat;});
+  const boats=SKIFFS.filter(skiff=>skiff.index!==undefined).map(skiff=>{
+    const boat=marketBoat(skiff.index,RIVER_SKIFFS[skiff.index-2]);
+    scene.add(boat.root);
+    return {...boat,skiff};
+  });
   function place(root,player,x,z,y,yaw){
     const dx=wrapDelta(x-player.x),dz=wrapDelta(z-player.z);
     root.visible=dx*dx+dz*dz<155**2;
     if(root.visible){root.position.set(player.x+dx,y,player.z+dz);root.rotation.y=yaw;}
     return root.visible;
   }
-  return (time,player,camera)=>{
+  return (time,player,camera,voyageTime=time)=>{
     walkers(time,player,camera);
     horse(time,player);
     for(const cart of carts){
@@ -272,11 +222,11 @@ export function createTravellers(scene) {
       wheels.forEach(w=>w.rotation.x=q.travelled/.98);
       ox.pose(time,Number(q.moving),q.travelled*3.44/OX_SCALE,carriageGroundHeight);
     }
-    boats.forEach(({root:m,row},i)=>{
-      const a=merchantPose(i,time);
+    boats.forEach(({root:m,row,skiff})=>{
+      const a=skiffPose(skiff,voyageTime);
       if(!place(m,player,a.x,a.z,a.y,a.yaw)) return;
       row(time,wrapDelta(a.x-player.x)**2+wrapDelta(a.z-player.z)**2<52**2);
-      m.rotation.order='YXZ';m.rotation.x=.022*cos(time*.91+i);m.rotation.z=.034*sin(time*.83+i);
+      m.rotation.order='YXZ';m.rotation.x=a.pitch;m.rotation.z=a.roll;
     });
   };
 }

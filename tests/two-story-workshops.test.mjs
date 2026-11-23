@@ -59,3 +59,27 @@ test('the maple frieze runs around a circular rim', t => {
   assert.ok(rim.size>=24);
   assert.ok(Math.max(...rim.values())-Math.min(...rim.values())<1e-5);
 });
+
+test('the contact of a raised exhibit follows its current pose and leaves open space between its parts', async () => {
+  const { Group, Mesh, BoxGeometry, MeshBasicMaterial }=await import('../two/vendor/three.module.min.js');
+  const { createModelContacts }=await import('../two/story-model-contacts.js');
+  const root=new Group(),rack=new Group(),material=new MeshBasicMaterial();
+  root.position.set(2,3,5);
+  root.add(rack);
+  for (const side of [-1,1]) {
+    const post=new Mesh(new BoxGeometry(.08,.60,.08),material);
+    post.position.set(side*.50,.30,0);
+    rack.add(post);
+  }
+  const contacts=createStoryCollisions();
+  contacts.update([{kind:'person',name:'工人',x:2,y:3,z:5,modelContact:createModelContacts(root)}]);
+  assert.ok(contacts.penetration(2.5,5,3.2,.05,.02)>0);
+  assert.equal(contacts.penetration(2,5,3.2,.05,.02),0);
+  rack.rotation.y=Math.PI/2;
+  rack.position.y=2;
+  contacts.posed();
+  assert.equal(contacts.penetration(2.5,5,3.2,.05,.02),0);
+  const notice={};
+  assert.ok(contacts.penetration(2,5.5,5.25,.05,.02,notice)>0);
+  assert.equal(notice.person,'工人');
+});

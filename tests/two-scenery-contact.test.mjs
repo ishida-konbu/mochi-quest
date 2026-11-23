@@ -72,3 +72,19 @@ test('a stride can clear an initial corner overlap while the back wall stays sol
   const stopped=constrainMove(b.x,b.z,b.x,wall+1,0,b.y+.48);
   assert.ok(stopped.z<wall && stopped.z>wall-1);
 });
+
+test('mountain footing and low clearance probes meet the same painted triangle in every region', async () => {
+  const { REGIONS, terrainMeshHeight, landscapeFloor, swimSurfaceAt }=await import('../two/terrain.js');
+  for (const region of REGIONS) {
+    for (const [u,v] of [[.27,.79],[5.17,-8.37],[-25.75,-38.65],[31.85,34.75]]) {
+      const x=region.x+u,z=region.z+v;
+      const bed=terrainMeshHeight(x,z);
+      assert.ok(Math.abs(landscapeFloor(x,z)-Math.max(bed,swimSurfaceAt(x,z)-.57))<1e-6,region.name);
+    }
+  }
+  for (const [x,z] of [[718.19,-1164.48],[-735.75,-225.65],[449.25,-610.95]]) {
+    const bed=terrainMeshHeight(x,z);
+    assert.ok(staticVolumeAt(x,z,bed-.02,.01,.01));
+    assert.equal(staticVolumeAt(x,z,bed+.02,.01,.01),false);
+  }
+});

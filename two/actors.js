@@ -11,6 +11,7 @@ import { addSpringSurface } from './spring-water.js';
 import { addSazaeBath } from './ryugu-shell-bath-art.js';
 import { finishResident, residentLimb, residentTorso } from './resident-art.js';
 import { inkVolume, sculptHead, scrollParasol } from './scroll-sculpt.js';
+import { PARKED_BIKES, PARKING_ANGLE } from './pickup-contacts.js';
 import { buildTurtle } from './turtle-art.js';
 import { DYES } from './procession.js';
 import { distantProcession, preparePlates, VILLAGERS, beastFrame } from './procession-view.js';
@@ -226,12 +227,12 @@ export function getExpression(p, time = 0) {
   if (p.activity === 'eat' || p.activity === 'tsukimi' || serving === 'mitarashi') return 'eating';
   if (!p.grounded && p.airStretch > 0) return 'joy';
   if (p.throwTime > 0) return 'calling';
-  if (p.mount === 'bike' && p.speed > 0.25) return 'joy';
+  if (p.mount && p.speed > 0.25) return 'joy';
   if (p.mode === 'dango' && p.grounded && p.speed > 0.25) return 'joy';
   if (p.night) return 'sleepy';
   if (p.mode === 'dango' && !p.grounded && p.stretch > 0.04) return 'determined';
   if (p.stretch > 0.025 || (!p.grounded && p.h > 0.25)) return p.mode === 'habutae' ? 'joy' : 'surprise';
-  if (p.inWater) return 'bath';
+  if (p.inWater && !p.mount) return 'bath';
   if (p.buffs?.drunk > 0) return 'blush';
   if (p.buffs?.warm > 0 || p.buffs?.wrap > 0) return 'calm';
   if (p.buffs?.full > 0) return 'eating';
@@ -301,8 +302,8 @@ function sculptBlade(brush, spine, halfWidth, tint, depth, leaf = false) {
   }
 }
 function mugwortSprig(b) {
-  const stem = [-0.14, 1.6, 0.012];
-  b.rod([-0.092, 1.53, -0.012], stem, 0.01, '#85874b', 0.007);
+  const stem = [-.047, .021, .024];
+  b.rod([0, -.042, 0], stem, .016, '#76834a', .011);
   for (const [dx, dy, dz, w, tint] of [
     [-0.32, 0.17, 0.049, 0.071, '#718b45'],
     [0.16, 0.225, -0.019, 0.057, '#91a85b'],
@@ -355,6 +356,11 @@ function makeHero() {
     rolling = group(pose, 'roll');
   const rice = makeRiceModel(rolling);
   const leaves = batch(rolling, mugwortSprig, 'leaves');
+  const vertices = rice.body.geometry.attributes.position;
+  let crown = 0;
+  for (let i = 1; i < vertices.count; i++) {
+    if (vertices.getY(i) > vertices.getY(crown)) crown = i;
+  }
   const wingParts = [];
   for (const s of [-1, 1]) {
     const wing = group(rolling, 'wing', s * 0.65, 0.66, -0.01);
@@ -405,6 +411,7 @@ function makeHero() {
     wingParts,
     wrap,
     leaves,
+    crown,
   };
 }
 
@@ -888,28 +895,35 @@ function turtleGait(mesh, time, movement, resting) {
     }
   }
 }
-function bike(parent) {
+function bike(parent, ridden = false) {
+  const green = '#74877a', metal = '#aca799', black = '#49473f';
+  function wheel(b, y, z, powered) {
+    const tyre = primitive('bicycle-tyre', () => new THREE.TorusGeometry(.351, .036, 8, 40));
+    const rim = primitive('bicycle-rim', () => new THREE.TorusGeometry(.311, .010, 6, 36));
+    b.add(tyre, black, [0, y, z], [1, 1, 1], [0, PI / 2, 0]);
+    b.add(rim, metal, [0, y, z], [1, 1, 1], [0, PI / 2, 0]);
+    for (let i = 0; i < 14; i++) {
+      const a = i * TAU / 14, side = i % 2 ? 1 : -1;
+      b.rod([side * .03, y + .034 * Math.cos(a + side), z + .034 * Math.sin(a + side)],
+        [0, y + .31 * Math.cos(a), z + .31 * Math.sin(a)], .005, metal);
+    }
+    b.rod([-.072, y, z], [.072, y, z], powered ? .080 : .033, powered ? green : metal);
+    b.rod([-.085, y, z], [.085, y, z], .022, metal);
+    // A pale reflector makes one revolution readable through the crossed spokes.
+    b.box(0, y + .215, z + .065, .018, .071, .028, '#dbbc78', [.34, 0, 0]);
+  }
+  function crank(b, y, z) {
+    b.ball(0, y, z, .03, .091, .091, metal);
+    for (const side of [-1, 1]) {
+      b.rod([side * .04, y, z], [side * .085, y + side * .106, z], .013, metal);
+      b.box(side * .116, y + side * .106, z, .105, .026, .062, black);
+    }
+  }
   batch(parent, (b) => {
-    const green = '#699c8e',
-      metal = '#b4b8a3',
-      black = '#514d42';
-    for (const z of [-0.65, 0.65]) {
-      const rim = new THREE.TorusGeometry(0.351, 0.036, 7, 31);
-      b.add(rim, black, [0, 0.374, z], [1, 1, 1], [0, PI / 2, 0]);
-      rim.dispose();
-      const rims = new THREE.TorusGeometry(0.311, 0.01, 5, 27);
-      b.add(rims, metal, [0, 0.374, z], [1, 1, 1], [0, PI / 2, 0]);
-      rims.dispose();
-      for (let i = 0; i < 14; i++) {
-        const a = (i * TAU) / 14;
-        b.rod(
-          [i % 2 ? 0.023 : -0.023, 0.374, z],
-          [0, 0.374 + Math.cos(a) * 0.314, z + Math.sin(a) * 0.314],
-          0.005,
-          metal,
-        );
-      }
-      b.rod([-0.085, 0.374, z], [0.085, 0.374, z], 0.032, metal);
+    if (!ridden) {
+      wheel(b, .374, -.65, true);
+      wheel(b, .374, .65, false);
+      crank(b, .302, -.043);
     }
     for (const s of [-1, 1]) {
       b.rod([s * 0.075, 0.37, -0.65], [s * 0.08, 0.3, -0.02], 0.028, green);
@@ -942,40 +956,48 @@ function bike(parent) {
       metal,
     );
     for (const s of [-1, 1]) b.rod([s * 0.22, 1.074, 0.43], [s * 0.297, 1.057, 0.379], 0.026, black);
-    b.ball(0, 0.302, -0.043, 0.03, 0.091, 0.091, metal);
-    for (const s of [-1, 1]) {
-      b.rod([s * 0.04, 0.302, -0.04], [s * 0.085, 0.3 + s * 0.106, -0.041], 0.013, metal);
-      b.box(s * 0.116, 0.3 + s * 0.106, -0.04, 0.105, 0.026, 0.062, black);
+    // Split bamboo hoops bind the basket to its uprights. The staggered
+    // crossings leave the contents visible even in a side-on silhouette.
+    for (let j = 0; j < 5; j++) {
+      const u = j / 4, h = .744 + .16 * u;
+      const dx = .135 + .044 * u, dz = .11 + .03 * u;
+      const rim = [[-dx, h, .654-dz+.025],[-dx+.024, h, .654-dz],
+        [dx-.024, h, .654-dz],[dx, h, .654-dz+.025],[dx, h, .654+dz-.025],
+        [dx-.024, h, .654+dz],[-dx+.024, h, .654+dz],[-dx, h, .654+dz-.025],
+        [-dx, h, .654-dz+.025]];
+      // Straight cane between the mitred corners keeps the basket inside its rack.
+      for (let k = 1; k < rim.length; k++)
+        b.rod(rim[k-1], rim[k], j === 4 ? .009 : .006, j % 2 ? '#ad9871' : '#8b7958');
     }
-    for (let y = 0; y <= 3; y++) {
-      const h = 0.744 + y * 0.052,
-        dx = 0.137 + y * 0.014,
-        dz = 0.111 + y * 0.01,
-        z = 0.654;
-      b.stroke(
-        [
-          [-dx, h, z - dz],
-          [0, h, z - dz],
-          [dx, h, z - dz],
-          [dx, h, z + dz],
-          [0, h, z + dz],
-          [-dx, h, z + dz],
-          [-dx, h, z - dz],
-        ],
-        0.009,
-        '#7f7f66',
-      );
+    for (const side of [-1,1]) {
+      for (const u of [-.66,0,.66]) {
+        b.rod([side*.136,.744,.654+u*.107],[side*.18,.905,.654+u*.14],.006,'#bda578');
+        b.rod([u*.135,.744,.654+side*.111],[u*.179,.905,.654+side*.141],.006,'#a58e64');
+      }
+      // The brake cables dip below the bars, ahead of the head tube.
+      b.stroke([[side*.233,1.066,.403],[side*.155,.969,.544],
+        [side*.088,.872,.551],[side*.035,.75,.58]],.006,black,9);
     }
-    for (let i = 0; i < 7; i++) {
-      const a = (i * TAU) / 7;
-      b.rod(
-        [0.137 * Math.sin(a), 0.744, 0.654 + 0.111 * Math.cos(a)],
-        [0.181 * Math.sin(a), 0.905, 0.654 + 0.14 * Math.cos(a)],
-        0.009,
-        '#86876e',
-      );
+    b.rod([.065,.35,-.058],[.065,.409,-.647],.012,black);
+    b.rod([.065,.239,-.044],[.065,.335,-.647],.010,black);
+    b.ball(0,.558,-.135,.051,.165,.058,'#585e50',[.32,0,0]);
+    // Pale edges along the guards, like the second pass of a loaded brush.
+    for (const z of [-.65,.65]) {
+      const curve=[];
+      for (let i=0;i<=10;i++) {
+        const angle=-.99+i*.198;
+        curve.push([0,.374+.413*Math.cos(angle),z+.41*Math.sin(angle)]);
+      }
+      b.stroke(curve,.023,green,20);
+      b.stroke(curve.map(([x,y,z])=>[x+.015,y+.009,z]),.006,'#b4ae93',20);
     }
   });
+  if (ridden) {
+    for (const z of [-.65,.65]) {
+      batch(parent, b=>wheel(b,0,0,z<0), z<0?'後輪':'前輪', [0,.374,z]);
+    }
+    batch(parent, b=>crank(b,0,0), 'クランク', [0,.302,-.043]);
+  }
 }
 
 const textures = new Map();
@@ -1249,11 +1271,11 @@ function bicyclePort(parent) {
     c.strokeRect(4, 4, 120, 117);
   });
   printPlane(parent, 'sign', mat, -0.82, 1.425, -0.157, 0.345, 0.38);
-  for (let i = 0; i < 2; i++) {
+  for (const [i, x] of PARKED_BIKES.entries()) {
     const m = model('bicycle', bike);
     m.name = 'park' + i;
-    m.position.set(-0.15 + i * 0.62, 0, 0);
-    m.rotation.y = -0.21;
+    m.position.set(x, 0, 0);
+    m.rotation.y = PARKING_ANGLE;
     parent.add(m);
   }
 }
@@ -1378,7 +1400,7 @@ function gaitHero(h, p, t, dt, state) {
   const riding = !!p.mount;
   const bath=p.bathPose,walking=p.heading || 0;
   const target=Number.isFinite(bath?.heading)?walking+shortest(walking,bath.heading)*bath.settle:walking;
-  if (h.angle === undefined) h.angle = target;
+  if (h.angle === undefined || (riding || p.skiff) && !state.photo) h.angle = target;
   if (!state.photo) {
     const turn = shortest(h.angle, target);
     h.angle = Math.abs(turn) < .001 ? target : h.angle + turn * (1 - Math.exp(-dt * 9));
@@ -1405,6 +1427,13 @@ function gaitHero(h, p, t, dt, state) {
     h.pose.rotation.z+=fall*.93;
     h.pose.position.set(-.11*fall,h.pose.position.y+.16*fall,0);
   }
+  if (p.skiff) {
+    const seat=p.skiffPose;
+    h.pose.scale.y*=.78;
+    h.pose.scale.x*=1.05;
+    h.pose.rotation.x+=seat.pitch+.06;
+    h.pose.rotation.z+=seat.roll;
+  }
   if(p.activity==='chaya'){
     h.pose.scale.y*=.92;
     h.pose.rotation.x+=.07;
@@ -1430,7 +1459,14 @@ function gaitHero(h, p, t, dt, state) {
   if(p.buffs?.drunk>0) h.pose.rotation.z+=.115*Math.sin(t*3.7);
   if(bath?.action==='rinse')gripRinsingLadle(h.rice,p);
   h.leaves.visible = p.mode === 'kusa';
-  h.leaves.position.y = response.extension+response.floatDraw;
+  if (h.leaves.visible) {
+    // Follow the skinned crown as the bathing and riding poses lower it.
+    // The same point stretches with the actual dough when it jumps.
+    h.rolling.updateWorldMatrix(true,false);
+    h.rice.model.updateMatrixWorld(true);
+    const crown = h.rice.body.getVertexPosition(h.crown,h.leaves.position);
+    h.rolling.worldToLocal(h.rice.body.localToWorld(crown));
+  }
   h.wrap.visible = p.buffs?.wrap > 0;
   const pull = response.pull;
   h.leaves.scale.set(1-.25*pull,1,1-.25*pull);
@@ -1488,11 +1524,17 @@ function gaitHero(h, p, t, dt, state) {
     h.spoon.rotation.set(-0.07, 0.16, -0.20 + 0.12 * bite);
   }
   h.bicycle.visible = p.mount === 'bike';
+  if (h.bicycle.visible && !state.photo) {
+    // The outer tyre, rather than the spoke radius, meets the road.
+    const advance = dt * speed / .387;
+    for (const wheel of h.wheels) wheel.rotation.x = (wheel.rotation.x + advance) % TAU;
+    h.crank.rotation.x = (h.crank.rotation.x + advance * .42) % TAU;
+  }
   h.ridingTurtle.visible = p.mount === 'turtle';
   if(h.ridingTurtle.visible) turtleGait(h.ridingTurtle,t,speed,false);
   const shadowScale = Math.max(0.25, 1 - (p.h || 0) * 0.1);
   h.shadow.scale.set(1.91 * shadowScale * g, 1.6 * shadowScale * g, 1);
-  h.shadow.visible = !p.inWater && !bath;
+  h.shadow.visible = !p.inWater && !p.skiff && !bath;
   h.shadow.position.y = 0.036 - (p.h || 0);
   h.dust.visible = false;
   if (p.mode === 'kinako' && speed > 0.12) mistAt(h.dust, t, false, 1);
@@ -1737,7 +1779,9 @@ export function createActors(scene, renderer) {
     item.visible = false;
     h.rolling.add(item);
   }
-  h.bicycle = model('bicycle', bike);
+  h.bicycle = model('ridden-bicycle', parent => bike(parent, true));
+  h.wheels = ['後輪','前輪'].map(name=>h.bicycle.getObjectByName(name));
+  h.crank = h.bicycle.getObjectByName('クランク');
   h.ridingTurtle = model('turtle', turtle);
   h.ridingTurtle.scale.setScalar(2.26);
   h.root.add(h.bicycle, h.ridingTurtle);

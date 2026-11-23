@@ -24,11 +24,12 @@ export function springGroundSurvey(sites,bound,spacing,tileSize){
     // Intermediate vertices along the outside must lie exactly on the edge of
     // the coarse neighbour. Do the same along tile seams where the distant
     // and skyline indices can be drawn beside a tile at full resolution.
-    if(dz && (ix===rect.left*detail || ix===rect.right*detail || ix%(tileSize*detail)===0)){
+    const cx=Math.floor(ix/detail),cz=Math.floor(iz/detail);
+    if(dz && !dx && (ix%(tileSize*detail)===0 || cells.get(key(cx-1,cz))?.detail!==cells.get(key(cx,cz))?.detail)){
       const north=z-dz*fineStep,t=dz/detail;
       return sample(x,north)*(1-t)+sample(x,north+spacing)*t;
     }
-    if(dx && (iz===rect.north*detail || iz===rect.south*detail || iz%(tileSize*detail)===0)){
+    if(dx && !dz && (iz%(tileSize*detail)===0 || cells.get(key(cx,cz-1))?.detail!==cells.get(key(cx,cz))?.detail)){
       const left=x-dx*fineStep,t=dx/detail;
       return sample(left,z)*(1-t)+sample(left+spacing,z)*t;
     }

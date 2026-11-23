@@ -79,3 +79,98 @@ test('old embedded turtle saves recover, and a turtle left offshore can roam and
   tick(next,4);assert.ok(Math.hypot(t.x,t.z-1411)>2);
   place(p,t.x,t.z);assert.ok(next.act('interact'));
 });
+
+function board(game,mount) {
+  const target=mount==='bike' ? game.state.objects.find(o=>o.type==='port') : game.state.npcs.find(n=>n.type==='turtle');
+  place(game.state.player,target.x,target.z);
+  assert.ok(game.act('interact'));
+  assert.equal(game.state.player.mount,mount);
+}
+for(const mount of ['bike','turtle']){
+  test(mount+' stops its leading end at a worktable at full speed and reverses freely',()=>{
+    const game=createGame(),p=game.state.player;
+    board(game,mount);
+    place(p,0,1410);
+    const table={kind:'table',number:1,x:0,y:p.y,z:1413,yaw:0};
+    game.storyCollisions.update([table]);
+    p.heading=0;p.vz=p.speed=mount==='turtle'?149:65;p.buffs.swift=5;
+    tick(game,.25,{z:1});
+    const reach=mount==='turtle'?1.60:1.04;
+    assert.ok(p.z<=table.z-.55-reach+.03,`leading end at ${p.z+reach}`);
+    assert.ok(p.z>1410.6,'the mount can approach the actual face');
+    const stop=p.z;
+    tick(game,.5,{z:-1});
+    assert.ok(p.z<stop-1.6);
+  });
+
+  test(mount+' backs between two worktables even when its turning circle is obstructed',()=>{
+    const game=createGame(),p=game.state.player;
+    board(game,mount);
+    place(p,0,1411);
+    p.heading=0;
+    const gap=mount==='turtle'?.98:.45;
+    game.storyCollisions.update([-1,1].map(side=>({kind:'table',number:1,x:side*(gap+.56),
+      y:p.y,z:p.z,yaw:Math.PI/2})));
+    let peakAngle=0;
+    for(let i=0;i<9;i++){
+      game.step(1/60,{z:-1});
+      peakAngle=Math.max(peakAngle,Math.abs(p.heading));
+    }
+    assert.ok(peakAngle<Math.PI*.48,'the nose cannot swivel through the side tables');
+    assert.ok(p.z<1410.7,'reverse travel starts while the turn is blocked');
+    tick(game,1,{z:-1});
+    assert.ok(p.z<1404 && Math.abs(p.heading)>2.9);
+  });
+
+  test('a saved '+mount+' embedded in a trunk is playable on the first simulation step',()=>{
+    const game=createGame(),p=game.state.player,tree=TREES[0];
+    board(game,mount);
+    place(p,tree.x,tree.z);
+    const resumed=createGame(game.save()),q=resumed.state.player;
+    assert.ok(resumed.restored);
+    resumed.step(1/60);
+    const dx=q.x-tree.x,dz=q.z-tree.z,dist=Math.hypot(dx,dz);
+    assert.ok(dist>.4 && dist<5);
+    assert.equal(q.mount,mount);
+    tick(resumed,.5,{x:dx/dist,z:dz/dist});
+    assert.ok(Math.hypot(q.x-tree.x,q.z-tree.z)>dist+1);
+  });
+}
+
+test('a completely obstructed rental keeps the inventory intact and the port usable',()=>{
+  const game=createGame(),p=game.state.player,port=game.state.objects.find(o=>o.type==='port');
+  place(p,port.x,port.z);
+  const tables=[];
+  for(let x=-3;x<=3;x+=1.5)for(let z=-3;z<=3;z+=.65){
+    tables.push({kind:'table',number:3,x:p.x+x,y:p.y,z:p.z+z,yaw:0});
+  }
+  game.storyCollisions.update(tables);
+  assert.equal(game.act('interact'),false);
+  assert.equal(port.bikes,2);
+  assert.equal(p.mount,null);
+  game.storyCollisions.update([]);
+  assert.ok(game.act('interact'));
+  assert.equal(port.bikes,1);
+  assert.ok(game.act('dismount'));
+  assert.equal(port.bikes,2);
+});
+
+for(const mount of ['bike','turtle']){
+  test(mount+' clears a fixture that appears around a stopped rider during play',()=>{
+    const game=createGame(),p=game.state.player;
+    board(game,mount);
+    place(p,0,1411);
+    p.heading=0;
+    game.step(1/60);
+    const table={kind:'table',number:3,x:p.x,y:p.y,z:p.z,yaw:0};
+    game.storyCollisions.update([table]);
+    assert.ok(game.storyCollisions.penetration(p.x,p.z,p.y,1,.15)>0);
+    game.step(1/60,{z:1});
+    assert.equal(game.storyCollisions.penetration(p.x,p.z,p.y,1,.15),0);
+    const dx=p.x-table.x,dz=p.z-table.z,gap=Math.hypot(dx,dz);
+    assert.ok(gap<3.5);
+    tick(game,.5,{x:dx/gap,z:dz/gap});
+    assert.ok(Math.hypot(p.x-table.x,p.z-table.z)>gap+1.5);
+    assert.equal(p.mount,mount);
+  });
+}

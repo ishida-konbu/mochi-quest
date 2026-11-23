@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DISTRICTS } from '../two/geography.js';
 import { KYO_LOOKOUTS } from '../two/higashiyama.js';
-import { KIYOMIZU, STAGE, STAGE_PILES, KIYOMIZU_BELL, OTOWA_ROOFS, KIYOMIZU_APPROACH } from '../two/kiyomizu-layout.js';
+import { KIYOMIZU, STAGE, STAGE_PILES, KIYOMIZU_BELL, OTOWA_ROOFS, KIYOMIZU_APPROACH,
+  kiyomizuSolids } from '../two/kiyomizu-layout.js';
 import { KIYOMIZU_ROAD, terrainHeight, terrainMeshHeight, canOccupy, groundHeight, solidHeightAt,
   staticVolumeAt, TREES } from '../two/terrain.js';
 import { roofProfile, roofSkinDepth } from '../two/architecture.js';
@@ -28,6 +29,27 @@ test('the timber stage spans a real slope and is accessible from the north court
   assert.ok(staticVolumeAt(x,z,y-.44,.08,.24),'underside of the planks');
   assert.ok(!canOccupy(STAGE.west+.22,-717,y,.19,1.4),'outer railing');
   assert.ok(!TREES.some(t=>t.x>STAGE.west && t.x<STAGE.east && t.z>STAGE.north && t.z<STAGE.south));
+});
+
+test('the platform has exposed piles and intersecting joists, with openings between the rail boards',()=>{
+  const floor=KIYOMIZU.floor;
+  const posts=[];
+  kiyomizuSolids(terrainHeight,(x,z,rx,rz,yaw,top,kind,support,rise,bottom)=>{
+    if(kind==='oval' && rx===.405 && rz===.405){
+      assert.ok(top>bottom);
+      posts.push([x,z]);
+    }
+    return {};
+  });
+  assert.deepEqual(posts,STAGE_PILES.filter(([x,z])=>terrainHeight(x,z)<=floor-.42));
+  assert.ok(posts.length && posts.length<STAGE_PILES.length);
+  const hits=(x,z,y)=>staticVolumeAt(x,z,floor+y,.015,.03);
+  // Take thin vertical slices between two western railing posts.
+  for(const y of [.22,.62,.95])assert.ok(hits(491.22,-716,y));
+  for(const y of [.42,.80,1.23])assert.ok(!hits(491.22,-716,y));
+  assert.ok(hits(493.55,-721.05,-.72));
+  assert.ok(hits(491.38,-716,-.82));
+  assert.ok(!hits(493.55,-716,-.82));
 });
 
 test('the bark roof, swept eaves and hollow underside use the same profile as contact',()=>{

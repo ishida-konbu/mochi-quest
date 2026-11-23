@@ -988,7 +988,8 @@ dialog {border:2px solid #526761;border-radius:2px;}
   border-block-end: 3px solid var(--seal);
   clip-path: polygon(5% 3%,99% 0,98% 31%,100% 74%,97% 97%,63% 95%,19% 100%,0 96%,2% 72%,0 9%);
 }
-.mode:hover { background-color: #ae967323; }
+.mode:enabled:hover { background-color: #ae967323; }
+.mode:disabled { opacity: .48; cursor: default; }
 .mode:focus-visible { outline-offset: -2px; }
 .keyline { padding: 3px 10px; background: #343b31d9; border-radius: 2px; text-shadow: none; }
 .keyline kbd { color: #f9f2dd; border-color: #bcbdaa; border-radius: 1px; }

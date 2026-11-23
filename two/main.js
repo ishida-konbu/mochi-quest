@@ -12,7 +12,7 @@ import { createActors, getExpression } from './actors.js';
 import { loadRiceModel } from './mochi-model.js';
 import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS_KEY as settingsKey,
   transferURL, decodeTransfer, storeTransfer } from './journey-transfer.js';
-import { createGame } from './game.js';
+import { createGame, canUseModeOnMount } from './game.js';
 import { createStoryWorld, storyDestination } from './mochiyori-world.js';
 import { createPerformance } from './mochiyori-performance.js';
 import { createBookView } from './mochiyori-book.js';
@@ -24,7 +24,7 @@ import { seaPortrait } from './ryugu-performers.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
 import { preloadBeastCoats } from './beast-art.js';
 import { WAYSIDE_SITES } from './wayside-hut-layout.js';
-import { REGIONS, regionAt, canDiveAt, waterSurfaceAt, terrainHeight, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
+import { REGIONS, regionAt, canDiveAt, waterSurfaceAt, terrainHeight, terrainContactHeight, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
 import { palaceInteriorAt, palaceStoreyAt } from './ryugu-layout.js';
 import { createMeadow } from './meadow.js';
 import { createSoundscape } from './soundscape.js';
@@ -150,6 +150,7 @@ let surfaceJumpAt = Infinity;
 let jumpTouch = false, diveTouch = false,
   lastFace = '',
   lastMode = '',
+  lastMount = null,
   lastEffects = '';
 const compassTicks = [];
 const cards = new Map();
@@ -216,6 +217,7 @@ function dispatchEvents() {
 }
 function nearbyAction() {
   const original = game.nearest();
+  if (p.skiff) return original;
   const encounter = storyWorld?.nearest(p);
   return encounter && (!original || encounter.distance < original.distance + .3) ? encounter : original;
 }
@@ -648,7 +650,7 @@ function updateCamera(dt, snap = false) {
     const line=waterSurfaceAt(p.x,p.z,state.time,p.y);
     if(focus.y < line-.24)eye.y=Math.min(eye.y,line-.24);
   }
-  const eyeFloor = diving || inPalace ? terrainHeight(eye.x,eye.z) : emerging ? landscapeFloor(eye.x,eye.z) : groundHeight(eye.x,eye.z,eye.y);
+  const eyeFloor = diving || inPalace ? terrainContactHeight(eye.x,eye.z) : emerging ? landscapeFloor(eye.x,eye.z) : groundHeight(eye.x,eye.z,eye.y);
   eye.y = Math.max(eye.y, eyeFloor + .2);
   camera.position.copy(eye);
   aim.copy(focus);
@@ -689,9 +691,14 @@ function updateHUD() {
     $(k).textContent = Math.ceil(p[k]);
     $(k + '-bar').style.width = p[k] + '%';
   }
-  if (lastMode !== p.mode) {
-    for (const [id, b] of cards) b.setAttribute('aria-pressed', String(id === p.mode));
+  const ride=p.mount || p.skiff;
+  if (lastMode !== p.mode || lastMount !== ride) {
+    for (const [id, b] of cards) {
+      b.setAttribute('aria-pressed', String(id === p.mode));
+      b.disabled = !!ride && !canUseModeOnMount(id);
+    }
     lastMode = p.mode;
+    lastMount = ride;
   }
   const expression = getExpression(p, photoMode ? photoTime : state.time),
     faceKey = p.mode + expression;
@@ -709,6 +716,7 @@ function updateHUD() {
     effects.push(p.diveDepth ? '水深 '+depth+' m' + (coarse ? ' ・ 跳ぶ長押しで浮上' : ' ・ Spaceで浮上') :
       (coarse ? '泳ぎ ・ 潜る長押し' : '泳ぎ ・ Space＋↓で潜る'));
   }
+  if (p.skiff) effects.push('小舟に乗船中');
   if (p.mount) effects.push(p.mount === 'bike' ? '電動自転車' : 'カメに騎乗中');
   for (const [k, n] of Object.entries({
     warm: 'ほかほか',

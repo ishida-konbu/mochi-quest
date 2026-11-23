@@ -1,5 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 import { sitePoint } from './retreat-layout.js';
+import { registerPaintedRim } from './terrain.js';
 
 export function workshopFrame(p,site,base) {
   const at=(u,y,v)=>{
@@ -10,7 +11,11 @@ export function workshopFrame(p,site,base) {
     at,
     put(shape,u,y,v,sx,sy,sz,tint,mat=p.wood,yaw=0,pitch=0,roll=0){
       const pos=at(u,y,v);
-      p.part(shape,pos.x,pos.y,pos.z,sx,sy,sz,tint,site.yaw+yaw,pitch,roll,mat,true,true);
+      return p.part(shape,pos.x,pos.y,pos.z,sx,sy,sz,tint,site.yaw+yaw,pitch,roll,mat,true,true);
+    },
+    rim(index,shape,...args){
+      const matrix=this.put(shape,...args);
+      registerPaintedRim(site,index,shape,p.shapes[shape],matrix);
     },
     bar(a,b,r,tint,mat=p.wood,square=false) {
       p.link(at(...a),at(...b),r,tint,square,true,true,mat);

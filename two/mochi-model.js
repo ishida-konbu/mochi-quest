@@ -51,7 +51,7 @@ function skinMaterial(maps) {
   const uniforms = {
     riceBare:{value:bare}, riceFaces:{value:expressions}, riceGrain:{value:grain},
     riceEyes:{value:eyeRelief}, riceCell:{value:0}, riceSmile:{value:1},
-    riceTint:{value:new T.Color(0xffffff)}, ricePull:{value:0},
+    riceTint:{value:new T.Color(0xffffff)}, ricePull:{value:0}, mugwort:{value:0},
   };
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms,uniforms);
@@ -63,7 +63,7 @@ function skinMaterial(maps) {
         varying vec3 vRiceRest;
         varying vec3 vRiceNormal;
         uniform sampler2D riceBare, riceFaces, riceGrain, riceEyes;
-        uniform float riceCell, riceSmile, ricePull;
+        uniform float riceCell, riceSmile, ricePull, mugwort;
         uniform vec3 riceTint;
         float riceGrainAt(vec3 p) {
           // Tri-planar texture keeps the pressed grains continuous across the original UV seams.
@@ -71,6 +71,20 @@ function skinMaterial(maps) {
           w/=max(dot(w,vec3(1.)),.001);
           vec3 q=p*vec3(3.0,3.4,3.2);
           return dot(w,vec3(texture2D(riceGrain,q.yz).r,texture2D(riceGrain,q.xz).r,texture2D(riceGrain,q.xy).r));
+        }
+        float herbFlecks(vec3 p) {
+          // A cross section through thin slivers of leaf in the dough. Rest
+          // coordinates keep them in place through the smile and stretch poses.
+          vec3 at=p*10.3;
+          vec3 seed=fract(floor(at)*vec3(.1031,.1030,.0973));
+          seed+=dot(seed,seed.yxz+33.33);
+          seed=fract((seed.xxy+seed.yzz)*seed.zyx);
+          vec3 sliver=fract(at)-.5-(seed-.5)*.3;
+          sliver.y+=sliver.x*(seed.x-.5)*1.5;
+          sliver.z+=sliver.x*(seed.y-.5);
+          float size=length(sliver*vec3(3.6,8.5,5.1));
+          float aa=clamp(fwidth(size),.12,.70);
+          return (1.-smoothstep(.82-aa,1.+aa,size))*(.38+.62*seed.z);
         }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
         // Projection matches the Generated coordinates of the authored Blender face nodes.
@@ -101,6 +115,11 @@ function skinMaterial(maps) {
         dough=mix(dough,vec3(.99,.94,.86),.35*doughMask);
         dough*=mix(vec3(1.),riceTint,doughMask);
         dough*=1.+(grain-.5)*.07*doughMask;
+        if(mugwort>.5) {
+          float herbs=herbFlecks(vRiceRest);
+          float kneaded=riceGrainAt(vRiceRest*.082);
+          dough*=1.+skinMask*((kneaded-.52)*.31-.56*herbs);
+        }
         diffuseColor.rgb=mix(dough,features.rgb,paint);`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor=clamp(roughnessFactor+(grain-.5)*.27*skinMask-.19*(1.-skinMask)+.055*ricePull,.23,.78);
@@ -359,7 +378,7 @@ export function makeRiceModel(parent) {
 
 const poses = { curious:'Normal',calm:'Warm',sleepy:'Drowsy',bath:'Bathe',
   hurt:'Bump',determined:'Bump',calling:'Notify',surprise:'Surprise',blush:'Warm',eating:'Read' };
-const tints = {normal:new T.Color(0xffffff),kusa:new T.Color('#bfd79c'),kinako:new T.Color('#f1c38a')};
+const tints = {normal:new T.Color(0xffffff),kusa:new T.Color('#acc58f'),kinako:new T.Color('#f1c38a')};
 function playGesture(r,name,dt,face=name) {
   for (let i=0;i<r.bones.length;i++){
     r.bones[i].position.copy(r.samples[i].p);
@@ -422,6 +441,7 @@ export function poseRice(r,p,t,dt,mood,bath) {
   r.uniforms.riceCell.value=cell;
   r.uniforms.ricePull.value=pull;
   r.uniforms.riceTint.value.copy(tints[p.mode]||tints.normal);
+  r.uniforms.mugwort.value=Number(p.mode==='kusa');
   const inFlight=stack && !grounded && !ride && !p.activity;
   const beat=inFlight ? clamp(p.flapBeat||0,0,1) : 0;
   if (stack) {
@@ -485,6 +505,15 @@ export function poseRice(r,p,t,dt,mood,bath) {
       foot.position.y+=(ride ? .053 : .080);
       foot.position.z+=(ride ? .132 : .058);
       foot.rotateX(ride?-.23:.27);
+    }
+    if (p.skiff) {
+      // Sit on the thwart with the heels forward and both mitts in the lap.
+      foot.position.z+=.24;
+      foot.position.x+=side*.035;
+      foot.rotateX(-.29);
+      hand.position.x-=side*.16;
+      hand.position.z+=.17;
+      hand.rotateX(-.16);
     }
     if (p.activity==='chaya') {
       foot.position.z+=.13;
