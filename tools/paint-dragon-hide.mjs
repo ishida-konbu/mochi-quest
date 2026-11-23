@@ -4,6 +4,10 @@ import { dragonRings } from '../two/dragon-anatomy.js';
 // quarter-turn is the backbone, the third the belly. Each flank meets its
 // neighbour at the extremities, including across the texture seam.
 const width = 1024, height = 256;
+// The original scroll laid 2048 texels along 11.306411 body units. Keep its
+// physical resolution as vertebrae are added between the hip and the brush.
+const inkPitch=2048/11.3064112526;
+export const dragonHideWidth=Math.round(dragonRings.at(-1).distance*inkPitch);
 
 function fillPath(g, color, draw) {
   g.fillStyle = color;
@@ -145,10 +149,9 @@ function face(g) {
 }
 
 export function paintDragonHide(g, part, seed) {
-  // The generic painter uses a 768×384 drawing area. Give the long body
-  // twice its resolution in the longitudinal direction.
+  // The generic painter uses a 768×384 drawing area.
   g.save();
-  const sheetWidth=part==='body' ? 2048 : width;
+  const sheetWidth=part==='body' ? dragonHideWidth : width;
   const columns=part==='body' ? plateColumns(sheetWidth) : null;
   g.scale(768/sheetWidth,384/height);
   flank(g,()=>{

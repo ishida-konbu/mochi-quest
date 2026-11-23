@@ -79,7 +79,7 @@ function compare(panel, targets) {
   panel.innerHTML = `<div class="scale-pickers"></div>
     <div class="scale-frame"><div class="scale-scene" role="img" aria-label="選んだ動物を同じ縮尺で並べた図"></div></div>
     <table class="scale-table"><thead><tr><th scope="col">動物</th><th scope="col">高さ</th><th scope="col">横幅</th></tr></thead><tbody></tbody></table>
-    <a class="scale-plate-link" href="./assets/bestiary/legend-size.webp?v=sculpted-tail-1" target="_blank" rel="noopener">白餅・麒麟・龍の図を拡大</a>`;
+    <a class="scale-plate-link" href="./assets/bestiary/legend-size.webp?v=dragon-60m-1" target="_blank" rel="noopener">白餅・麒麟・龍の図を拡大</a>`;
   const pickers = panel.querySelector('.scale-pickers');
   selections.forEach((id, i) => {
     const label = document.createElement('label');

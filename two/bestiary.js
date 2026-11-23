@@ -13,7 +13,7 @@ export const SPECIES = Object.freeze({
   bird:   { count:40, points:30, label:'丹頂', stature:1, frame:3.5, center:.13 },
   fox:    { count:40, points:50, label:'狐', stature:1, frame:2.7, center:.72 },
   tiger:  { count:10, points:100, label:'虎', stature:2.44, frame:3.6, center:.84 },
-  dragon: { count:1, points:1000, label:'龍', stature:8.4, frame:12.4, center:1.37, centerZ:-1.61, skyRange:1200, rigNear:280 },
+  dragon: { count:1, points:1000, label:'龍', stature:8.4, frame:13.6, center:1.39, centerZ:-2.25, skyRange:1200, rigNear:280 },
   kirin:  { count:1, points:1000, label:'麒麟', stature:5.25, frame:4.9, center:1.72, skyRange:384, rigNear:195 },
   deer:   { count:32, points:60, label:'鹿', stature:1.16, frame:3.8, center:1.24 },
   boar:   { count:18, points:60, label:'猪', stature:1.08, frame:3.4, center:.8 },

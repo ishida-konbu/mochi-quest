@@ -122,17 +122,17 @@
           "./bath-pavilion-art.js": "./bath-pavilion-art.js?v=amimoto-yudono-1",
           "./regional-bath-carpentry.js": "./regional-bath-carpentry.js?v=amimoto-yudono-1",
           "./actors.js": "./actors.js?v=kirin-zuiun-1",
-          "./animal-scale-book.js": "./animal-scale-book.js?v=sculpted-tail-1",
-          "./animal-scale-residents.js": "./animal-scale-residents.js?v=sculpted-tail-1",
+          "./animal-scale-book.js": "./animal-scale-book.js?v=dragon-60m-1",
+          "./animal-scale-residents.js": "./animal-scale-residents.js?v=dragon-60m-1",
           "./animal-motion.js": "./animal-motion.js?v=sculpted-tail-1",
           "./roof-shell.js": "./roof-shell.js?v=emaki-landscape-1-otowa-1",
           "./architecture.js": "./architecture.js?v=emaki-landscape-1-otowa-1",
           "./atmosphere.js": "./atmosphere.js?v=island-horizon-2",
-          "./beast-art.js": "./beast-art.js?v=sculpted-tail-1",
-          "./bestiary.js": "./bestiary.js?v=sculpted-tail-1",
+          "./beast-art.js": "./beast-art.js?v=dragon-60m-1",
+          "./bestiary.js": "./bestiary.js?v=dragon-60m-1",
           "./craftwork.js": "./craftwork.js?v=sakuragawa-yumeguri",
           "./crane-flight.js": "./crane-flight.js?v=3.3",
-          "./dragon-anatomy.js": "./dragon-anatomy.js?v=sculpted-tail-1",
+          "./dragon-anatomy.js": "./dragon-anatomy.js?v=dragon-60m-1",
           "./dragon-flight.js": "./dragon-flight.js?v=kirin-zuiun-1",
           "./festival.js": "./festival.js?v=mochiyori-2",
           "./forest-forms.js": "./forest-forms.js?v=3.3",
@@ -166,7 +166,7 @@
           "./places.js": "./places.js?v=emaki-funatabi-1",
           "./predator-trails.js": "./predator-trails.js?v=winter-coast-1",
           "./preparation.js": "./preparation.js?v=handscroll-arrival-1",
-          "./procession-view.js": "./procession-view.js?v=sculpted-tail-1",
+          "./procession-view.js": "./procession-view.js?v=dragon-60m-1",
           "./procession.js": "./procession.js?v=sakuragawa-yumeguri",
           "./resident-art.js": "./resident-art.js?v=mochiyori-2",
           "./scanned-stone.js": "./scanned-stone.js?v=handscroll-arrival-1",
@@ -299,7 +299,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=island-horizon-2" />
+    <link rel="modulepreload" href="./main.js?v=dragon-60m-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -548,7 +548,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=island-horizon-2').catch(error => {
+      import('./main.js?v=dragon-60m-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'

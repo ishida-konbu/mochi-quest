@@ -1,7 +1,7 @@
 // Paint the original emaki pigment maps in a browser, then export to WebP.
 // X follows the spine towards the nose. Y is one revolution around the pelt,
 // with the left and right flanks meeting the spine at 1/4 of a revolution.
-import { paintDragonHide } from './paint-dragon-hide.mjs';
+import { dragonHideWidth, paintDragonHide } from './paint-dragon-hide.mjs';
 import { seeded } from '../two/terrain.js';
 const TAU=Math.PI*2;
 const pigment={monkey:'#87664e',bird:'#e6e0cc',fox:'#bd6d3f',tiger:'#c08640',dragon:'#547c74',kirin:'#8a9f86',deer:'#bcaa90',boar:'#9d967f',shishi:'#cbbfa1'};
@@ -187,7 +187,11 @@ brushwork.src = new URL('./animal-brushwork.webp', import.meta.url).href;
 // and lip line register with the sockets, nasal wings and moving lower jaw.
 const portrait = new Image();
 portrait.src = new URL('./macaque-portrait.webp', import.meta.url).href;
-await Promise.all([brushwork.decode(), portrait.decode()]);
+// This cropped strip of the original painting runs from just behind the
+// hind legs to the neck. Its tailward edge fades into the newly painted plates.
+const dragonTorso=new Image();
+dragonTorso.src=new URL('./dragon-torso-pigment.webp',import.meta.url).href;
+await Promise.all([brushwork.decode(), portrait.decode(), dragonTorso.decode()]);
 
 function printMacaquePortrait(g) {
   g.drawImage(portrait,0,0,768,384);
@@ -222,7 +226,7 @@ function printBrushwork(g,type,part) {
 }
 
 export function paintBeastCoat(type,part) {
-  const canvas=document.createElement('canvas');canvas.width=type==='dragon' && part==='body'?2048:1024;canvas.height=512;
+  const canvas=document.createElement('canvas');canvas.width=type==='dragon' && part==='body'?dragonHideWidth:1024;canvas.height=512;
   const g=canvas.getContext('2d');g.scale(canvas.width/768,canvas.height/384);g.lineCap=g.lineJoin='round';
   const rng=seeded(318+type.charCodeAt(2)*103+part.charCodeAt(0));
   g.fillStyle=pigment[type];g.fillRect(0,0,768,384);
@@ -265,6 +269,12 @@ export function paintBeastCoat(type,part) {
   for(let i=0;i<13000;i++){
     const x=rng()*768,y=rng()*384;
     stroke(g,i%3?'rgba(61,43,32,.065)':'rgba(255,242,208,.17)',x,y,x+2,y-.4,x+1+rng()*6,y+rng()*.8,.5+rng());
+  }
+  if(type==='dragon' && part==='body') {
+    // At the original physical pitch the same texels fall on the same front
+    // vertebrae, measured back from the neck. Preserve even the paper grain.
+    g.setTransform(1,0,0,1,0,0);
+    g.drawImage(dragonTorso,canvas.width-dragonTorso.naturalWidth,0);
   }
   return canvas;
 }

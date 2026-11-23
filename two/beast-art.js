@@ -54,7 +54,7 @@ function coat(type, detail) {
     coats.set(key, material);
   }
   if (!coatLoads.has(key)) {
-    const file=key+'.webp'+(key==='dragon-body'?'?v=anatomic-tail-1':type==='dragon'?'?v=ink-dragon-1':'');
+    const file=key+'.webp'+(key==='dragon-body'?'?v=dragon-60m-1':type==='dragon'?'?v=ink-dragon-1':'');
     const url = new URL('./assets/bestiary/' + file, import.meta.url).href;
     const request = demandPaint(() => coatLoader.loadAsync(url).then(image => {
       image.colorSpace = THREE.SRGBColorSpace;
@@ -104,11 +104,15 @@ function pelt(parent,type,sections,mask=false) {
   const center=new THREE.Vector3(),r=new THREE.Vector3();
   for(let j=0;j<=rows;j++){
     const t=j/rows,ring=dragonBody?dragonRings[j]:null;
-    let u=t;
+    let u=t, flankPhase=0;
     if(ring) {
       center.copy(ring);r.set(ring.rx,ring.ry,0);
       across.copy(ring.across);up.copy(ring.up);
-      u=ring.distance/dragonRings.at(-1).distance;
+      const total=dragonRings.at(-1).distance;
+      u=ring.distance/total;
+      // Place the shallow scale relief by distance from the neck, fixing its
+      // pitch on the torso as well as on newly carved tail sections.
+      flankPhase=(ring.distance-total)*TAU/.3768804;
     } else {
       line.getPoint(t,center);dims.getPoint(t,r);line.getTangent(t,tangent);
       across.set(1,0,0).addScaledVector(tangent,-tangent.x).normalize();
@@ -120,7 +124,7 @@ function pelt(parent,type,sections,mask=false) {
       // Broad ventral shields and a narrow dorsal spine give the dragon a
       // keeled section. A circular tube catches a hard, plastic highlight.
       const keel=dragonBody ? .17*Math.max(0,angular)**12-.075*Math.max(0,-angular)**4 : 0;
-      const flank=dragonBody ? 1+.026*Math.cos(u*TAU*30+a*.72)*Math.cos(a)**2 : 1;
+      const flank=dragonBody ? 1+.026*Math.cos(flankPhase+a*.72)*Math.cos(a)**2 : 1;
       point.copy(center).addScaledVector(across,Math.cos(a)*Math.max(.002,r.x)*flank)
         .addScaledVector(up,(angular+keel)*Math.max(.002,r.y));
       positions.push(...point.toArray());

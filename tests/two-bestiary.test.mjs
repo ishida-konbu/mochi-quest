@@ -7,8 +7,8 @@ import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { batchActorParts } from '../two/actors.js';
 import { kirinTouchdowns } from '../two/handscroll-beasts.js';
 import { buildBeast, beastRig, poseBeast } from '../two/beast-art.js';
-import { Euler, Group, MeshBasicMaterial, Vector3 } from '../two/vendor/three.module.min.js';
-import { dragonLengthScale, dragonPhase, dragonPitch, dragonWave } from '../two/animal-motion.js';
+import { Group, MeshBasicMaterial, Vector3 } from '../two/vendor/three.module.min.js';
+import { dragonPhase } from '../two/animal-motion.js';
 
 test('the expanded recipient ledger preserves the original 691 entries and the two legends’ hundredfold score',()=>{
   const {state}=createGame();
@@ -210,11 +210,13 @@ function hindRing(joints,rings) {
   return rings.reduce((best,r,i)=>r.center.distanceTo(hip)<rings[best].center.distanceTo(hip)?i:best,0);
 }
 
-test('the modeled hide tapers smoothly over two thirds of the published hip-to-tip arc',()=>{
+test('the dragon carries a sixty-metre tapered tail behind its original hip and neck',()=>{
   const {joints,skin}=sculptedBeast({type:'dragon',stature:SPECIES.dragon.stature});
   const rings=drawnRings(skin), hip=hindRing(joints,rings), attachment=joints['hindClaw-1'].getWorldPosition(new Vector3());
-  // Published hind attachment and centerline length, sampled in world metres
-  // on the preceding production sculpt at t=.407. Measure the actual new mesh.
+  // Compare the two preserved mounts in world space, then measure the new
+  // tail along the visible cross-sections rather than its projected width.
+  const neck=joints.mask.getWorldPosition(new Vector3());
+  assert.ok(neck.distanceTo(new Vector3(-1.092,15.792,17.892))<.02);
   assert.ok(attachment.distanceTo(new Vector3(-1.23575,8.48580,-20.20372))<.02);
   assert.ok(rings[hip].center.distanceTo(attachment)<.18);
   const uv=skin.geometry.attributes.uv;
@@ -235,7 +237,7 @@ test('the modeled hide tapers smoothly over two thirds of the published hip-to-t
     if(previous)assert.ok(previous.angleTo(span)<.5,'the bend must meet its neighbour smoothly');
     previous=span;
   }
-  assert.ok(Math.abs(length-71.1844543*2/3)<.20,'rendered hip-to-tip arc in metres: '+length);
+  assert.ok(Math.abs(length-60)<.10,'rendered hip-to-tip arc in metres: '+length);
   assert.ok(minInkSpacing>0 && maxInkSpacing/minInkSpacing<1.08,'ink rows keep their spacing through the bend');
   assert.ok(rings[0].radius<.14 && rings[hip].radius>1.9);
   for(const [a,b] of [[0,.25],[.25,.5],[.5,.75],[.75,1]])
@@ -271,10 +273,12 @@ test('letters reach the moving hide up to its fine tip with clear air beyond the
     }
     const end=rings[0].center, beyond=end.clone().sub(rings[1].center).normalize().multiplyScalar(1.5).add(end);
     assert.equal(recipientContact(n,beyond,dx,dz,0),Infinity,'a letter beyond the fine point misses');
-    // The lowest turn of the previous long tail was at (-.65,.65,-6.27306).
-    const oldZ=-6.27306, oldWave=dragonWave(oldZ,n.wavePhase,{});
-    const former=new Vector3(-.65+oldWave.x,.65+oldWave.y,oldZ*dragonLengthScale)
-      .multiplyScalar(n.stature).applyEuler(new Euler(dragonPitch(n),n.heading,0,'YXZ')).add(mesh.position);
-    assert.equal(recipientContact(n,former,dx,dz,0),Infinity,'the old bend is empty sky');
+    for(const fraction of [.21,.47,.72]) {
+      const {center,radius,surface}=rings[Math.round(hip*fraction)];
+      for(const side of [0,16]) {
+        const clear=surface[side].clone().sub(center).normalize().multiplyScalar(radius+2).add(center);
+        assert.equal(recipientContact(n,clear,dx,dz,0),Infinity,'letters can pass alongside each bend');
+      }
+    }
   }
 });
