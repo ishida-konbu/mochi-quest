@@ -1,4 +1,3 @@
-import { onKaedeWaterStep } from './kaede-water-steps.js';
 import * as THREE from './vendor/three.module.min.js';
 import { nearRoad, terrainContactHeight, waterSurfaceAt } from './terrain.js';
 import { WORLD_BOUND, TERRAIN_TILES, TERRAIN_SUBDIVISIONS } from './geography.js';
@@ -41,7 +40,7 @@ export function groundWindrows(painter) {
   const bridge=MAPLE_BRIDGE;
   const originY=terrainContactHeight(bridge.x,bridge.z);
   function clearBank(x,z,y) {
-    return y>=waterSurfaceAt(x,z)+.12 && !onKaedeWaterStep(x,z,.04) && !reservedScenery(x,z) && !nearRoad(x,z,.35) &&
+    return y>=waterSurfaceAt(x,z)+.12 && !reservedScenery(x,z) && !nearRoad(x,z,.35) &&
       (Math.abs(x-bridge.x)>=bridge.halfWidth+.2 || Math.abs(z-bridge.z)>=bridge.length/2+1.12);
   }
   // At the crossing the ground uses a half-metre survey. Use its actual

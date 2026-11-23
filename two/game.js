@@ -29,8 +29,7 @@ import { RYUGU, PALACE_BED, palacePoint, palaceInteriorAt, boardingHeightAt } fr
 import { BUILDINGS, ORIGINAL_REGIONS, terrainHeight, terrainContactHeight, swimSurfaceAt, canDiveAt, groundHeight, landscapeFloor, constrainMove, canOccupy, staticVolumeAt, overheadHeight, canLand, REGIONS, regionAt, BOUND, waterDepth, wrapDelta, wrapCoord, springLevel, waterSurfaceAt, SNOW_SPRING, TSUKIMI, springRadius, seasonAt } from './terrain.js';
 
 import { POUNDING, POUNDING_CREW } from './festival.js';
-import { updateWaterHare } from './kaede-water-hare.js';
-import { KAEDE_WATER_TREADS } from './kaede-water-steps.js';
+import { KAEDE_WATER_HARE_HOME, updateWaterHare } from './kaede-water-hare.js';
 import { prepareVillageRoutes, animalRadius, openGround, walkCircuit } from './village-paths.js';
 import { procession } from './procession.js';
 import { walkingScore } from './animal-motion.js';
@@ -132,10 +131,12 @@ function makeWorld() {
           npcs.at(-1).y=groundHeight(POUNDING.x,POUNDING.z)+.012;
         }
       } else {
-        npc('rabbit', 'wander', x - 7, z - 12, i + 1.4);
         if(id==='autumn') {
-          const hare=npcs.at(-1), landing=KAEDE_WATER_TREADS[0];
-          Object.assign(hare,{waterHare:true,homeX:landing.x,homeZ:landing.z});
+          const {x:homeX,z:homeZ}=KAEDE_WATER_HARE_HOME;
+          npc('rabbit','wander',homeX,homeZ,i+1.4);
+          npcs.at(-1).waterHare=true;
+        } else {
+          npc('rabbit','wander',x-7,z-12,i+1.4);
         }
         npc('frog', 'porter', x - 19, z + 5, i + 2.8);
       }

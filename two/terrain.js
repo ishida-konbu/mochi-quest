@@ -8,7 +8,6 @@ import { pilgrimRoofContact,snowLamp } from './pilgrim-lodge-plan.js';
 import { SNOW_TOWN, FOREST_LAKE, SNOW_PASS, LAKE_ISLET, isletRadius, snowPoint, lakeRadius, lakePoint } from './snow-country.js';
 import { LAKE_WILLOWS, LAKE_ANIMALS } from './lake-grove-layout.js';
 import { lakeHokoraSolids } from './lake-hokora-layout.js';
-import { KAEDE_WATER_TREADS, kaedeStairBed } from './kaede-water-steps.js';
 import { kaedeDragonShrineSolids } from './kaede-dragon-layout.js';
 import { WINTER_REEFS } from './winter-reefs.js';
 import { addSeasonalSolids } from './seasonal-fixtures.js';
@@ -375,7 +374,7 @@ export function springLevel(site) {
 }
 const freightGround=freightRoadEarthwork(road);
 export function terrainHeight(x,z) {
-  const native=kaedeStairBed(x,z,freightGround(x,z,groundBeforeBath(x,z)));
+  const native=freightGround(x,z,groundBeforeBath(x,z));
   const hut=nearbyHut(x,z);
   if(hut){
     const w=clearingWeight(hut,x,z);
@@ -1505,9 +1504,6 @@ hutSolids(terrainHeight,putSolid);
 portSolids(putSolid);
 lakeHokoraSolids(putSolid);
 kaedeDragonShrineSolids(putSolid,terrainContactHeight);
-for(const stone of KAEDE_WATER_TREADS) {
-  putSolid(stone.x,stone.z,stone.width/2,stone.depth/2,stone.yaw,stone.y,'slab',true,0,stone.y-.27);
-}
 addSeasonalSolids(putSolid,terrainHeight,seeded,nearRoad,springRadius);
 for(const {x,z,rx,rz,yaw,top,rise} of SOURCE_STONES){
   putSolid(x,z,rx,rz,yaw,top,'springRock',true).roundHeight=rise;

@@ -1,10 +1,9 @@
 import * as T from './vendor/three.module.min.js';
-import { terrainHeight } from './terrain.js';
 
 export function fitWaterPail(limbs,model,batch) {
   const pail=model('楓峡の手桶',root=>{
     // The inside wall returns to the coopered bottom, so the same vessel
-    // reads hollow going downhill and holds a visible waterline coming back.
+    // reads hollow on the walk out and holds a visible waterline coming back.
     const outline=[[.001,-.502],[.098,-.502],[.105,-.492],[.126,-.249],
       [.126,-.238],[.115,-.238],[.095,-.483],[.001,-.483]];
     const sides=16, quarter=Math.PI/2;
@@ -45,7 +44,6 @@ export function fitWaterPail(limbs,model,batch) {
   limbs.pourStream=batch(pail,b=>b.rod([0,0,0],[0,-1,0],.0085,'#b8c9bc',.005),'手桶から鉢への水');
   limbs.pourStream.castShadow=false;
   limbs.pourStream.visible=false;
-  limbs.basinWaterHeight=terrainHeight(289,-120)+.658;
 }
 
 const swing=new T.Euler(), tilt=new T.Quaternion();
@@ -54,7 +52,7 @@ export function poseWaterHare(limbs,n,beat) {
   const dip=n.waterDip || 0, pour=n.waterPour || 0, reach=dip+.52*pour;
   const torso=limbs.torso;
   torso.rotation.x += .94*reach;
-  // Bend about the hips. The knees and supporting paw remain over the landing.
+  // Bend about the hips; keep the supporting paw on the dry bank.
   torso.position.y += .70*(1-Math.cos(.94*reach))-.25*reach;
   torso.position.z = -.70*Math.sin(.94*reach);
   limbs.head.rotation.x -= .38*reach;
@@ -71,7 +69,9 @@ export function poseWaterHare(limbs,n,beat) {
   // Suspend the handle from the paw while gravity keeps the load upright.
   limbs.pailGrip.quaternion.copy(torso.quaternion).multiply(limbs.arm1.quaternion).invert();
   pail.quaternion.copy(tilt.setFromEuler(swing));
-  const drop=.44*dip;
+  // The pool laps just below the bank. Pay out enough cord to submerge
+  // the low edge of the tipped rim while the bottom clears the gravel.
+  const drop=.296*dip;
   pail.position.y=-drop;
   limbs.pailCord.visible=drop>.005;
   limbs.pailCord.scale.y=drop;
@@ -86,7 +86,7 @@ export function poseWaterHare(limbs,n,beat) {
   if(stream.visible) {
     stream.position.set(0,-.238,.126);
     lip.copy(stream.position);
-    const height=pail.localToWorld(lip).y-limbs.basinWaterHeight;
+    const height=pail.localToWorld(lip).y-n.basinWaterHeight;
     pail.getWorldQuaternion(tilt).invert();
     const flow=Math.min(1,level*9,(1-level)*9);
     stream.quaternion.setFromUnitVectors(down,lip.copy(down).applyQuaternion(tilt));
