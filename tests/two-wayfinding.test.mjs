@@ -34,9 +34,13 @@ test('new and old map goals reopen at surveyed positions, and a custom pin retai
     assert.equal(restoreMapGoal(savedMapGoal(place), destinations), place);
   }
   const pin = mapPoint(184.63, -23.92);
-  const minimap = { size: 'large', zoom: 2 };
-  for (const goal of [destinations.find(place => place.kind === 'port').id, savedMapGoal(pin)]) {
-    const settings = { sound: true, yaw: .35, minimap, goal };
+  const transfers = [
+    { goal: destinations.find(place => place.kind === 'port').id, minimap: { size: 'large', zoom: 2 } },
+    { goal: savedMapGoal(pin), minimap: { size: 'mochi', zoom: .25 } },
+  ];
+  for (const { goal, minimap } of transfers) {
+    // Only the chosen size and scale travel. Restore following the new player position.
+    const settings = { sound: true, yaw: .35, minimap: { ...minimap, centerX: 18, centerZ: -40 }, goal };
     const hash = new URL(transferURL(PAGES_ORIGIN, game.save(), settings)).hash;
     const incoming = decodeTransfer(WORKER_ORIGIN, hash, createGame);
     assert.deepEqual(incoming.settings.goal, goal);

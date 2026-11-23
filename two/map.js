@@ -2,6 +2,7 @@ import { drawAtlasMarks, drawAtlasFlag } from './atlas-marks.js';
 import { atlasDestinations } from './atlas-destinations.js';
 import { MOUNTAIN_STREAMS } from './mountain-streams.js';
 import { drawMapSurvey } from './map-survey.js';
+import { miniMapWorldWidth } from './mini-map.js';
 import { FOREST_LAKE, LAKE_HOKORA, isletPoint, lakePoint, lakeRadius } from './snow-country.js';
 import { isNishiyamaTree } from './mountain-woodland.js';
 import { PEACH_RANGE_BOUNDS } from './peach-range.js';
@@ -361,34 +362,38 @@ export function paintMapPaper() {
 export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = null, recipient = null, recipientName = '', options = {}) {
   const ratio = options.pixelRatio || 1, zoom = options.zoom || 1;
   const w = canvas.width/ratio, h = canvas.height/ratio, g = canvas.getContext('2d'), p = state.player;
-  const midX = large ? options.centerX || 0 : p.x, midZ = large ? options.centerZ || 0 : p.z;
-  const scale = large ? Math.min(w, h)*zoom/SPAN : w*zoom/118;
-  const sx = x => w/2 + (x-midX)*scale, sy = z => h/2 + (z-midZ)*scale;
+  const midX = options.centerX ?? (large ? 0 : p.x);
+  const midZ = options.centerZ ?? (large ? 0 : p.z);
+  const scale = large ? Math.min(w, h)*zoom/SPAN : w*zoom/miniMapWorldWidth;
+  const sx = x => w/2 + (large ? x-midX : wrapDelta(x-midX))*scale;
+  const sy = z => h/2 + (large ? z-midZ : wrapDelta(z-midZ))*scale;
   g.setTransform(ratio,0,0,ratio,0,0);
   g.clearRect(0, 0, w, h);
   g.fillStyle = '#ece7d1';
   g.fillRect(0, 0, w, h);
-  const map = paper;
+  // A panned chart can straddle the world's seam. Print the survey details
+  // on the same copy of the sheet as its coast and roads.
   for (let u = -1; u <= 1; u++) for (let v = -1; v <= 1; v++) {
-    const left = sx(u * SPAN - BOUND), top = sy(v * SPAN - BOUND);
+    const cx = midX - u * SPAN, cz = midZ - v * SPAN;
+    const left = w/2 - (BOUND+cx)*scale, top = h/2 - (BOUND+cz)*scale;
     const side = SPAN * scale;
-    if (map && left < w && top < h && left + side > 0 && top + side > 0)
-      g.drawImage(map, left, top, side, side);
-  }
-  drawMapSurvey(g, midX, midZ, w, h, scale);
-  for(const stream of MOUNTAIN_STREAMS){
-    g.beginPath();
-    for(const [i,point] of stream.stations.entries()){
-      const x=sx(point.x),y=sy(point.z);
-      if(i===0)g.moveTo(x,y);
-      else g.lineTo(x,y);
+    if (left >= w || top >= h || left + side <= 0 || top + side <= 0) continue;
+    if (paper) g.drawImage(paper, left, top, side, side);
+    drawMapSurvey(g, cx, cz, w, h, scale);
+    for (const stream of MOUNTAIN_STREAMS) {
+      g.beginPath();
+      for (const [i, point] of stream.stations.entries()) {
+        const x = w/2 + (point.x-cx)*scale, y = h/2 + (point.z-cz)*scale;
+        if (i === 0) g.moveTo(x,y);
+        else g.lineTo(x,y);
+      }
+      g.strokeStyle='#708f8b';g.lineWidth=large?1.15:2.2;g.stroke();
     }
-    g.strokeStyle='#708f8b';g.lineWidth=large?1.15:2.2;g.stroke();
   }
   for(const ship of FLEET){
     const vessel=vesselPose(ship,state.time);
     if(large && vessel.docked)continue;
-    const x=w/2+wrapDelta(vessel.x-midX)*scale,y=h/2+wrapDelta(vessel.z-midZ)*scale;
+    const x=sx(vessel.x), y=sy(vessel.z);
     if(x<0||x>w||y<0||y>h)continue;
     g.save();g.translate(x,y);
     const size=large?.72:1.0;g.scale(size,size);
@@ -412,7 +417,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
       if(bath)marks.push([bath,bath.rank==='main'?'♨':'湯']);
     }
     for(const [site,glyph] of marks){
-      const x=w/2+wrapDelta(site.x-midX)*scale,y=h/2+wrapDelta(site.z-midZ)*scale;
+      const x=sx(site.x), y=sy(site.z);
       if(x<0||x>w||y<0||y>h)continue;
       const mainBath=site.rank==='main', subBath=site.rank==='sub';
       const size=subBath ? 14 : 17;
@@ -422,8 +427,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
       g.strokeText(glyph,x,y);g.fillText(glyph,x,y);
     }
     for (const r of REGIONS) {
-      const x = w / 2 + wrapDelta(r.x - midX) * scale,
-        y = h / 2 + wrapDelta(r.z - midZ) * scale,
+      const x = sx(r.x), y = sy(r.z),
         on = state.visited.includes(r.id),
         rad = 6;
       if (goal === r.id) {
@@ -443,8 +447,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     }
     for (const o of state.objects) {
       if (o.type !== 'port') continue;
-      const x = w / 2 + wrapDelta(o.x - midX) * scale;
-      const y = h / 2 + wrapDelta(o.z - midZ) * scale;
+      const x = sx(o.x), y = sy(o.z);
       if (x >= 0 && x <= w && y >= 0 && y <= h) drawPort(g, x, y, o.bikes);
     }
   }
@@ -452,7 +455,7 @@ export function drawMap(canvas, state, cameraYaw, goal, large = false, pin = nul
     g.textAlign = 'center'; g.textBaseline = 'middle';
     for (const [point, tint] of [[recipient, '#435e62'], [pin, '#ae452c']]) {
       if (!point) continue;
-      const x = w/2+wrapDelta(point.x-midX)*scale, y = h/2+wrapDelta(point.z-midZ)*scale;
+      const x = sx(point.x), y = sy(point.z);
       if (x < -8 || x > w+8 || y < -8 || y > h+8) continue;
       g.save(); g.translate(x,y); g.rotate(Math.PI/4);
       g.strokeStyle = '#fff5db'; g.lineWidth=2; g.fillStyle=tint;

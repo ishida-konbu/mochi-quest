@@ -1497,16 +1497,23 @@ dialog[data-performance] .sheet {display:none}
 @media (pointer:coarse) { .reply-key {display:none;} }
 #stage:has(dialog[open]) .speech-layer {display:none;}
 
-/* A round travelling chart, with its scale and leaf size on a separate paper tab. */
+/* The round charts and the hand-pulled rice cake share the same paper controls. */
 #stage {
   --mini-small: 100px;
   --mini-medium: 144px;
   --mini-large: 206px;
   --mini-diameter: var(--mini-medium);
+  --mini-height: var(--mini-diameter);
+  --mini-room: calc(100dvh - 225px);
   --mini-edge: max(12px, 2.2vw, env(safe-area-inset-right));
 }
 #stage[data-mini-size='small'] { --mini-diameter: var(--mini-small); }
 #stage[data-mini-size='large'] { --mini-diameter: var(--mini-large); }
+#stage[data-mini-size='mochi'] {
+  --mini-diameter: var(--mini-large);
+  --mini-height: clamp(76px, var(--mini-room), calc(2 * var(--mini-large)));
+}
+.mini-shape-defs { position: absolute; pointer-events: none; }
 #mini-chart {
   display: grid;
   grid-template-areas: 'disc' 'tools';
@@ -1517,15 +1524,63 @@ dialog[data-performance] .sheet {display:none}
   bottom: max(43px, 5.7vh, env(safe-area-inset-bottom));
   pointer-events: none;
 }
+/* The loading curtain follows this chart in the same stacking context. */
+#stage:not(.speaking) #mini-chart { z-index: 4; }
 #mini-button {
   grid-area: disc;
   width: var(--mini-diameter);
-  height: var(--mini-diameter);
+  height: var(--mini-height);
   pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+#mini-chart[data-dragging] #mini-button { cursor: grabbing; }
+
+/* Three nested impressions of the same outline leave a continuous washi rim,
+   including where the soft sides draw in. The surveyed canvas keeps its own aspect. */
+#stage[data-mini-size='mochi'] #mini-button {
+  position: relative;
+  isolation: isolate;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #554d39;
+  box-shadow: none;
+  clip-path: url(#mini-pulled-mochi);
+}
+#stage[data-mini-size='mochi'] #mini-button::before,
+#stage[data-mini-size='mochi'] #mini-button::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  clip-path: url(#mini-pulled-mochi);
+}
+#stage[data-mini-size='mochi'] #mini-button::before {
+  inset: 1.5px;
+  background: #f6ead0 url('../assets/ui/paper.png');
+}
+#stage[data-mini-size='mochi'] #mini-button::after {
+  inset: 5px;
+  background: #968769;
+}
+#stage[data-mini-size='mochi'] #mini-button:focus-visible::before { background: #af5438; }
+#stage[data-mini-size='mochi'] #minimap {
+  position: absolute;
+  z-index: 1;
+  inset: 6px;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
+  border: 0;
+  border-radius: 0;
+  clip-path: url(#mini-pulled-mochi);
 }
 .mini-zoom {
   grid-area: disc;
   align-self: end;
+  z-index: 1;
+  pointer-events: none;
   margin-bottom: calc(var(--mini-diameter) * .085);
   padding: 1px 5px 2px;
   border-radius: 8px;
@@ -1535,6 +1590,21 @@ dialog[data-performance] .sheet {display:none}
   font-variant-numeric: tabular-nums;
   box-shadow: 0 0 0 1px #f1e6c888;
 }
+#mini-recenter {
+  grid-area: disc;
+  align-self: end;
+  z-index: 1;
+  margin-bottom: max(3px, calc(var(--mini-diameter) * .06));
+  padding: 4px 7px;
+  border: 1px solid #506054;
+  border-radius: 12px;
+  background: #f8edd5 url('../assets/ui/paper.png');
+  box-shadow: 0 1px 3px #393c3040;
+  color: #344d40;
+  font: 700 11px/1.3 var(--min);
+  pointer-events: auto;
+}
+#mini-chart[data-panned] .mini-zoom { visibility: hidden; }
 .mini-tools {
   grid-area: tools;
   display: flex;
@@ -1580,6 +1650,7 @@ dialog[data-performance] .sheet {display:none}
 .mini-tools button:disabled { opacity: .38; cursor: default; }
 @media (pointer: coarse) {
   .mini-tools button { min-width: 34px; height: 35px; }
+  #mini-recenter { min-height: 31px; padding-inline: 8px; }
 }
 @media (max-width: 620px), (pointer: coarse) and (min-height: 531px) {
   #stage {
@@ -1588,18 +1659,23 @@ dialog[data-performance] .sheet {display:none}
     --mini-large: clamp(110px, calc(100vw - 210px), 160px);
     --mini-edge: max(10px, env(safe-area-inset-right));
     --mini-top: max(63px, calc(env(safe-area-inset-top) + 60px));
+    --mini-room: calc(100dvh - var(--mini-top) - max(344px, calc(env(safe-area-inset-bottom) + 340px)));
   }
   #mini-chart { top: var(--mini-top); bottom: auto; }
   #story-book {
-    top: calc(var(--mini-top) + var(--mini-diameter) + 52px);
+    top: calc(var(--mini-top) + var(--mini-height) + 52px);
     right: var(--mini-edge);
   }
+}
+@media (pointer: coarse) and (min-width: 621px) and (min-height: 531px) {
+  #stage { --mini-top: max(74px, calc(env(safe-area-inset-top) + 70px)); }
 }
 @media (max-height: 530px) and (orientation: landscape) {
   #stage {
     --mini-small: 64px;
     --mini-medium: 86px;
     --mini-large: 120px;
+    --mini-room: calc(100dvh - max(47px, calc(env(safe-area-inset-top) + 43px)) - max(134px, calc(env(safe-area-inset-bottom) + 126px)));
     --mini-edge: max(10px, env(safe-area-inset-right));
   }
   #mini-chart { top: max(47px, calc(env(safe-area-inset-top) + 43px)); bottom: auto; }

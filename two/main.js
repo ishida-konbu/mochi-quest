@@ -97,10 +97,11 @@ async function startJourney() {
 }
 paintGlyphs();
 const { game, settings: savedSettings, status: transferStatus } = await startJourney();
-const miniMap = createMiniMap($('mini-chart'), savedSettings.minimap, persistSettings);
 let hasJourney = game.restored;
 const state = game.state,
   p = state.player;
+const miniMap = createMiniMap($('mini-chart'), savedSettings.minimap, persistSettings, p,
+  () => redrawMiniMap(pinnedStorySite()));
 state.inariWeather = inariWeatherAt(p.x, p.z, state.time, state.flightSeed);
 const audio = createAudio(createSoundscape);
 let audible = savedSettings.sound !== false;
@@ -873,11 +874,13 @@ function updateHUD() {
     $('target-distance').textContent = cue.distance + ' m';
     $('target-elevation').textContent = cue.elevation;
   }
-  if (!photoMode) {
-    const region = goal?.kind === 'region' ? goal.id : null;
-    const pin = goal && goal.kind !== 'region' ? goal : null;
-    drawMap(miniMap.canvas, state, yaw, region, false, pin, targetSite || trackedAnimal, '', miniMap.projection());
-  }
+  redrawMiniMap(targetSite);
+}
+function redrawMiniMap(targetSite) {
+  if (photoMode) return;
+  const region = goal?.kind === 'region' ? goal.id : null;
+  const pin = goal && goal.kind !== 'region' ? goal : null;
+  drawMap(miniMap.canvas, state, yaw, region, false, pin, targetSite || trackedAnimal, '', miniMap.projection());
 }
 function openDialog(kind) {
   if (!renderer || dialog.open) return;
