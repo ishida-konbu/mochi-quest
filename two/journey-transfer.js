@@ -34,14 +34,19 @@ export function decodeTransfer(origin, hash, createGame, regions) {
   }
 }
 
-export function storeTransfer(storage, incoming) {
+export function replaceJourney(storage, settings, snapshot) {
   const previous = storage.getItem(SETTINGS_KEY);
-  storage.setItem(SETTINGS_KEY, JSON.stringify(incoming.settings));
+  storage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   try {
-    storage.setItem(SAVE_KEY, JSON.stringify(incoming.game.save()));
+    if (snapshot === null) storage.removeItem(SAVE_KEY);
+    else storage.setItem(SAVE_KEY, JSON.stringify(snapshot));
   } catch (error) {
     if (previous === null) storage.removeItem(SETTINGS_KEY);
     else storage.setItem(SETTINGS_KEY, previous);
     throw error;
   }
+}
+
+export function storeTransfer(storage, incoming) {
+  replaceJourney(storage, incoming.settings, incoming.game.save());
 }

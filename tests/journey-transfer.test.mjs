@@ -5,7 +5,7 @@ import { canOccupy, BUILDINGS, REGIONS, SNOW_SPRING, groundHeight, terrainHeight
 import { fromHokora, HOKORA_LANTERN, HOKORA_ROOM } from '../two/lake-hokora-layout.js';
 import { FOREST_LAKE, isletPoint, snowPoint } from '../two/snow-country.js';
 import { COURT } from '../two/retreat-layout.js';
-import { PAGES_ORIGIN, WORKER_ORIGIN, SAVE_KEY, SETTINGS_KEY, decodeTransfer, storeTransfer, transferURL } from '../two/journey-transfer.js';
+import { PAGES_ORIGIN, WORKER_ORIGIN, SAVE_KEY, SETTINGS_KEY, decodeTransfer, replaceJourney, storeTransfer, transferURL } from '../two/journey-transfer.js';
 
 const settings = { sound:false, yaw:-1.27, goal:'moon' };
 function decode(hash) { return decodeTransfer(WORKER_ORIGIN,hash,createGame,REGIONS); }
@@ -56,6 +56,24 @@ test('failed storage retains the previous settings and journey',()=>{
   assert.throws(()=>storeTransfer(storage,decode(encode(createGame().save()).hash)));
   assert.equal(old.get(SETTINGS_KEY),'old settings');
   assert.equal(old.get(SAVE_KEY),'old journey');
+});
+
+test('reset removes only the second journey and rolls back preferences if removal fails', () => {
+  const records = new Map([[SAVE_KEY, 'old journey'], [SETTINGS_KEY, 'old settings'], ['other', 'keep']]);
+  const storage = {
+    getItem: key => records.get(key) ?? null,
+    setItem: (key, value) => records.set(key, value),
+    removeItem() { throw new Error('denied'); },
+  };
+  const preferences = { sound: false, volumes: { music: .25 }, yaw: 0, goal: null, resetAt: 5 };
+  assert.throws(() => replaceJourney(storage, preferences, null), /denied/);
+  assert.equal(records.get(SETTINGS_KEY), 'old settings');
+  assert.equal(records.get(SAVE_KEY), 'old journey');
+  storage.removeItem = key => records.delete(key);
+  replaceJourney(storage, preferences, null);
+  assert.equal(records.has(SAVE_KEY), false);
+  assert.deepEqual(JSON.parse(records.get(SETTINGS_KEY)), preferences);
+  assert.equal(records.get('other'), 'keep');
 });
 
 test('older travellers keep their place inside the relocated court and both shop lofts',()=>{

@@ -11,7 +11,7 @@ import { createInkPass } from './ink.js';
 import { createActors, getExpression } from './actors.js';
 import { loadRiceModel } from './mochi-model.js';
 import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS_KEY as settingsKey,
-  transferURL, decodeTransfer, storeTransfer } from './journey-transfer.js';
+  transferURL, decodeTransfer, storeTransfer, replaceJourney } from './journey-transfer.js';
 import { createGame, canUseModeOnMount } from './game.js';
 import { createStoryWorld, storyDestination } from './mochiyori-world.js';
 import { createPerformance } from './mochiyori-performance.js';
@@ -170,16 +170,30 @@ let ratio = nativeRatio;
 let frames = 0,
   workTime = 0,
   qualitySince = 0;
+// A tab opened before a reset must not autosave its old journey on pagehide.
+let restarting = false;
+function restartJourney() {
+  if (restarting) return;
+  restarting = true;
+  location.reload();
+}
+function canSaveJourney() {
+  if (!restarting && read(settingsKey)?.resetAt !== savedSettings.resetAt) restartJourney();
+  return !restarting;
+}
+window.addEventListener('storage', event => {
+  if (event.key === settingsKey) canSaveJourney();
+});
 function journeySettings() {
-  return { sound: audible, volumes, yaw: photoMode ? priorCamera.yaw : yaw, goal };
+  return { sound: audible, volumes, yaw: photoMode ? priorCamera.yaw : yaw, goal, resetAt: savedSettings.resetAt };
 }
 function persistSettings() {
-  store(settingsKey, journeySettings());
+  if (canSaveJourney()) store(settingsKey, journeySettings());
 }
 function save() {
-  if (active) {
+  if (active && canSaveJourney()) {
     if (store(saveKey, game.save())) hasJourney = true;
-    persistSettings();
+    store(settingsKey, journeySettings());
   }
 }
 function unlock() {
@@ -285,6 +299,17 @@ const audioSettings = createAudioSettings({
   onOpen() {
     clearInput();
     unlock();
+  },
+  onReset() {
+    if (!canSaveJourney()) return;
+    const preferences = { sound: audible, volumes, yaw: 0, goal: null, resetAt: Date.now() };
+    try {
+      replaceJourney(localStorage, preferences, null);
+    } catch {
+      message('リセットできませんでした。ブラウザの保存設定を確認してください。', 6);
+      return;
+    }
+    restartJourney();
   },
   onChange(nextVolumes) {
     volumes = nextVolumes;

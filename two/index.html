@@ -21,7 +21,7 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=emaki-funatabi-1" />
+    <link rel="stylesheet" href="./game.css?v=emaki-funatabi-1-reset1" />
     <script type="importmap">
       {
         "imports": {
@@ -133,7 +133,7 @@
           "./kagami-paper.js": "./kagami-paper.js?v=6.1",
           "./kagami-surfaces.js": "./kagami-surfaces.js?v=5.2",
           "./interiors.js": "./interiors.js?v=3.3",
-          "./journey-transfer.js": "./journey-transfer.js?v=audio-controls-1",
+          "./journey-transfer.js": "./journey-transfer.js?v=audio-controls-1-reset1",
           "./legend-flight.js": "./legend-flight.js?v=ryu-emaki-1",
           "./map.js": "./map.js?v=kyoto-market-highways-1",
           "./meadow-herbs.js": "./meadow-herbs.js?v=emaki-landscape-1",
@@ -166,7 +166,7 @@
           "./lake-shore.js": "./lake-shore.js?v=islet-escarpment-1",
           "./snow-bath.js": "./snow-bath.js?v=yuya-emaki-1",
           "./snow-daruma.js": "./snow-daruma.js?v=3.3",
-          "./audio-settings.js": "./audio-settings.js?v=boat-audio-1",
+          "./audio-settings.js": "./audio-settings.js?v=boat-audio-1-reset1",
           "./soundscape.js": "./soundscape.js?v=boat-audio-1-emaki-funatabi-1",
           "./journey-music.js": "./journey-music.js?v=boat-audio-1",
           "./journey-player.js": "./journey-player.js?v=region-tracks-2",
@@ -268,7 +268,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=emaki-funatabi-1" />
+    <link rel="modulepreload" href="./main.js?v=emaki-funatabi-1-reset1" />
   </head>
   <body>
     <main id="stage">
@@ -305,8 +305,8 @@
             <i data-glyph="camera"></i>
           </button>
           <button class="circle" id="audio" aria-label="音の切り替え"><i data-glyph="volume"></i></button>
-          <button type="button" class="circle" id="audio-settings-toggle" title="音量設定"
-            aria-label="音量設定" aria-expanded="false" aria-haspopup="dialog" aria-controls="audio-settings">
+          <button type="button" class="circle" id="audio-settings-toggle" title="設定"
+            aria-label="設定" aria-expanded="false" aria-haspopup="dialog" aria-controls="audio-settings">
             <i aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7h4m6 0h8M3 17h9m6 0h3"/><circle cx="10" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></i>
           </button>
           <button class="circle" id="guide" aria-label="遊び方・一時停止" title="遊び方・一時停止（Esc）">
@@ -383,8 +383,8 @@
     </main>
     <section id="audio-settings" role="dialog" aria-labelledby="audio-settings-title" hidden>
       <header>
-        <h2 id="audio-settings-title">音量設定</h2>
-        <button type="button" id="audio-settings-close" class="circle" aria-label="音量設定を閉じる"><i data-glyph="close"></i></button>
+        <h2 id="audio-settings-title">設定</h2>
+        <button type="button" id="audio-settings-close" class="circle" aria-label="設定を閉じる"><i data-glyph="close"></i></button>
       </header>
       <p id="audio-muted" hidden>全体の音は消音中です。</p>
       <div class="volume-row">
@@ -409,6 +409,10 @@
           <tbody></tbody>
         </table>
       </details>
+      <div class="journey-reset">
+        <p id="reset-description">旅の記録と手帖を消して、桜川の渡しから始めます。</p>
+        <button id="reset-journey" type="button" class="choice" aria-describedby="reset-description">ゲームをリセット</button>
+      </div>
     </section>
     <dialog id="dialog" aria-labelledby="dialog-title">
       <div class="sheet">
@@ -419,7 +423,7 @@
         <div id="dialog-content"></div>
       </div>
     </dialog>
-    <script type="module" src="./main.js?v=emaki-funatabi-1"></script>
+    <script type="module" src="./main.js?v=emaki-funatabi-1-reset1"></script>
     <noscript>JavaScript を有効にして遊んでください。</noscript>
   </body>
 </html>

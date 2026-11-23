@@ -22,10 +22,14 @@ function fillSoundtrack(table) {
   }
 }
 
-export function createAudioSettings({ volumes, onChange, onOpen }) {
+export function createAudioSettings({ volumes, onChange, onOpen, onReset }) {
   const panel = document.getElementById('audio-settings');
   const toggle = document.getElementById('audio-settings-toggle');
   const dismiss = document.getElementById('audio-settings-close');
+  const reset = document.getElementById('reset-journey');
+  reset.addEventListener('click', () => {
+    if (window.confirm('ほんとうにリセットしてもよいか？')) onReset();
+  });
   const sliders = panel.querySelectorAll('input[type="range"]');
   const levels = { ...volumes };
   for (const slider of sliders) {
@@ -71,7 +75,7 @@ export function createAudioSettings({ volumes, onChange, onOpen }) {
       event.preventDefault();
       close(true);
     }
-    if (event.key === 'Tab' && !event.shiftKey && event.target.matches('summary')) {
+    if (event.key === 'Tab' && !event.shiftKey && event.target === reset) {
       // Rejoin the HUD's tab order just after the opener.
       event.preventDefault();
       close();

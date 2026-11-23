@@ -1138,6 +1138,18 @@ dialog {border:2px solid #526761;border-radius:2px;}
   font: 600 12px var(--sans);
   font-variant-numeric: tabular-nums;
 }
+.journey-reset {
+  border-top: 1px solid var(--line);
+  padding: 12px 0;
+}
+.journey-reset p {
+  font: 13px/1.6 var(--sans);
+  margin-bottom: 6px;
+}
+#reset-journey {
+  color: #813d2c;
+  min-height: 44px;
+}
 #soundtrack {
   border-top: 1px solid var(--line);
 }
