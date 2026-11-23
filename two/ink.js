@@ -159,18 +159,7 @@ export function createInkPass(renderer, camera) {
   quad.frustumCulled = false;
   screen.add(quad);
   return {
-    prepare(scene) {
-      // Compile with the very same offscreen format, lights and camera as draw().
-      // This lets the driver link shaders while the CPU stages texture uploads.
-      renderer.setRenderTarget(target);
-      try {
-        const landscape = renderer.compileAsync(scene, camera);
-        renderer.setRenderTarget(null);
-        return Promise.all([landscape, renderer.compileAsync(screen, lens)]);
-      } finally {
-        renderer.setRenderTarget(null);
-      }
-    },
+    paper,
     resize() {
       renderer.getDrawingBufferSize(size);
       target.setSize(size.x, size.y);

@@ -115,7 +115,7 @@ test('loaded scans give every shoal and spring its drawn geometry',async t=>{
     }
   }
   const scene=new T.Scene();
-  setRiverStones(scene,pools);
+  await setRiverStones(scene,pools);
   const batches=scene.children.filter(o=>o.isInstancedMesh);
   const count=(n,batch)=>n+batch.count;
   assert.equal(batches.slice(0,6).length,6);

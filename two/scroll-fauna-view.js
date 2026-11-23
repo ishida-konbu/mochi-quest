@@ -13,8 +13,8 @@ export function createScrollFaunaView(root,batch,shadowMaterial) {
   shadow.name='鳥獣の足もとの影';shadow.frustumCulled=false;shadow.renderOrder=1;shadow.count=0;
   root.add(shadow);
   const plates=distantProcession(root,shadowMaterial,total,'scroll');
-  function* prepare() {
-    for(const kind of faunaForms) {
+  function partsFor(kind) {
+    if (!cast[kind]) {
       const species=kind==='hen'?'chicken':kind==='courtier'?'fishfolk':kind;
       const count=SCROLL_FAUNA[species].count;
       cast[kind]=buildFaunaParts(kind,batch).map(part=>{
@@ -23,8 +23,8 @@ export function createScrollFaunaView(root,batch,shadowMaterial) {
         mesh.castShadow=mesh.receiveShadow=true;mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
         root.add(mesh);return {...part,mesh};
       });
-      yield;
     }
+    return cast[kind];
   }
   const counts={};
   function update(state,camera,viewportHeight) {
@@ -37,8 +37,6 @@ export function createScrollFaunaView(root,batch,shadowMaterial) {
     for(const actor of state.nearbyNpcs) {
       if(!actor.scrollFauna || (actor.type==='fishfolk' && !seaCourtVisible))continue;
       const n=state.photo?moveScrollFauna(Object.assign(photoPose,actor),time):actor;
-      const kind=faunaForm(n), parts=cast[kind];
-      if(!parts)continue;
       const dx=wrapDelta(n.x-player.x),dz=wrapDelta(n.z-player.z),dist=Math.hypot(dx,dz);
       if(dist>129)continue;
       const x=player.x+dx,z=player.z+dz,spec=SCROLL_FAUNA[n.type],scale=n.stature;
@@ -49,6 +47,7 @@ export function createScrollFaunaView(root,batch,shadowMaterial) {
       if(!n.courtier && spec.frame*scale*focal/Math.max(.1,depth)<63) {
         plates.add(n,x,z,camera,time,Math.min(1,(129-dist)/16));continue;
       }
+      const kind=faunaForm(n), parts=partsFor(kind);
       const i=counts[kind]++;
       base.position.set(x,n.y,z);base.rotation.set(0,n.heading,0);
       base.scale.setScalar(scale);base.updateMatrix();
@@ -64,10 +63,12 @@ export function createScrollFaunaView(root,batch,shadowMaterial) {
     }
     for(const [kind,parts] of Object.entries(cast))for(const {mesh} of parts) {
       mesh.count=counts[kind];
+      mesh.visible=mesh.count>0;
       if(mesh.count){mesh.instanceMatrix.clearUpdateRanges();mesh.instanceMatrix.addUpdateRange(0,16*mesh.count);mesh.instanceMatrix.needsUpdate=true;}
     }
+    shadow.visible=shadow.count>0;
     if(shadow.count)shadow.instanceMatrix.needsUpdate=true;
     plates.end();
   }
-  return {prepare,update};
+  return {update,warm:plates.warm};
 }

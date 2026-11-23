@@ -21,10 +21,13 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=emaki-funatabi-1-reset1" />
+    <link rel="stylesheet" href="./game.css?v=handscroll-arrival-1" />
     <script type="importmap">
       {
         "imports": {
+          "./ferry-curtain.js": "./ferry-curtain.js?v=handscroll-arrival-1",
+          "./landscape-tiles.js": "./landscape-tiles.js?v=handscroll-arrival-1",
+          "./travel-paint.js": "./travel-paint.js?v=handscroll-arrival-1",
           "./wood-contacts.js": "./wood-contacts.js?v=emaki-funatabi-1",
           "./story-model-contacts.js": "./story-model-contacts.js?v=emaki-funatabi-1",
           "./story-collisions.js": "./story-collisions.js?v=emaki-funatabi-1",
@@ -105,12 +108,12 @@
           "./bath-enclosures.js": "./bath-enclosures.js?v=amimoto-yudono-1",
           "./bath-pavilion-art.js": "./bath-pavilion-art.js?v=amimoto-yudono-1",
           "./regional-bath-carpentry.js": "./regional-bath-carpentry.js?v=amimoto-yudono-1",
-          "./actors.js": "./actors.js?v=emaki-funatabi-1",
+          "./actors.js": "./actors.js?v=handscroll-arrival-1",
           "./animal-motion.js": "./animal-motion.js?v=ryu-emaki-1",
           "./roof-shell.js": "./roof-shell.js?v=emaki-landscape-1-otowa-1",
           "./architecture.js": "./architecture.js?v=emaki-landscape-1-otowa-1",
           "./atmosphere.js": "./atmosphere.js?v=kyoto-groves-snow-1",
-          "./beast-art.js": "./beast-art.js?v=ryu-emaki-1",
+          "./beast-art.js": "./beast-art.js?v=handscroll-arrival-1",
           "./bestiary.js": "./bestiary.js?v=ryu-emaki-1",
           "./craftwork.js": "./craftwork.js?v=sakuragawa-yumeguri",
           "./crane-flight.js": "./crane-flight.js?v=3.3",
@@ -124,7 +127,7 @@
           "./handscroll-beasts.js": "./handscroll-beasts.js?v=3.3",
           "./inari-rain.js": "./inari-rain.js?v=inari-rain-1",
           "./inari-weather.js": "./inari-weather.js?v=inari-rain-1",
-          "./ink.js": "./ink.js?v=emaki-funatabi-1",
+          "./ink.js": "./ink.js?v=handscroll-arrival-1",
           "./interface.js": "./interface.js?v=emaki-funatabi-1",
           "./kagami-fern.js": "./kagami-fern.js?v=6.3",
           "./kagami-mochibana.js": "./kagami-mochibana.js?v=6.5",
@@ -145,11 +148,11 @@
           "./pigments.js": "./pigments.js?v=emaki-funatabi-1",
           "./places.js": "./places.js?v=emaki-funatabi-1",
           "./predator-trails.js": "./predator-trails.js?v=winter-coast-1",
-          "./preparation.js": "./preparation.js?v=3.3",
-          "./procession-view.js": "./procession-view.js?v=ryu-emaki-1",
+          "./preparation.js": "./preparation.js?v=handscroll-arrival-1",
+          "./procession-view.js": "./procession-view.js?v=handscroll-arrival-1",
           "./procession.js": "./procession.js?v=sakuragawa-yumeguri",
           "./resident-art.js": "./resident-art.js?v=mochiyori-2",
-          "./scanned-stone.js": "./scanned-stone.js?v=emaki-funatabi-1",
+          "./scanned-stone.js": "./scanned-stone.js?v=handscroll-arrival-1",
           "./scroll-riders.js": "./scroll-riders.js?v=3.3",
           "./scroll-sculpt.js": "./scroll-sculpt.js?v=3.3",
           "./seasons.js": "./seasons.js?v=emaki-funatabi-1",
@@ -173,7 +176,7 @@
           "./spring-water.js": "./spring-water.js?v=suzuri-roji-1",
           "./stone-water.js": "./stone-water.js?v=3.3",
           "./maple-crossing.js": "./maple-crossing.js?v=world-footings-1",
-          "./terrain.js": "./terrain.js?v=emaki-funatabi-1",
+          "./terrain.js": "./terrain.js?v=handscroll-arrival-1",
           "./trade-tools.js": "./trade-tools.js?v=mochiyori-2",
           "./turtle-art.js": "./turtle-art.js?v=3.3",
           "./village-paths.js": "./village-paths.js?v=kyoto-groves-snow-1",
@@ -230,11 +233,11 @@
           "./otsu-travellers.js": "./otsu-travellers.js?v=kyoto-market-highways-1",
           "./wedding-visages.js": "./wedding-visages.js?v=6.2",
           "./scroll-fauna-art.js": "./scroll-fauna-art.js?v=ryugu-goten-1",
-          "./scroll-fauna-view.js": "./scroll-fauna-view.js?v=ryugu-goten-1",
+          "./scroll-fauna-view.js": "./scroll-fauna-view.js?v=handscroll-arrival-1",
           "./scroll-fauna.js": "./scroll-fauna.js?v=ryugu-goten-1",
-          "./wayside-baths.js": "./wayside-baths.js?v=emaki-funatabi-1",
+          "./wayside-baths.js": "./wayside-baths.js?v=handscroll-arrival-1",
           "./costume-distance.js": "./costume-distance.js?v=5.0",
-          "./world.js": "./world.js?v=emaki-funatabi-1",
+          "./world.js": "./world.js?v=handscroll-arrival-1",
           "./court-patrol.js": "./court-patrol.js?v=kyoto-east-1",
           "./court-watch.js": "./court-watch.js?v=kyoto-foothills-1",
           "./flowering-peaches.js": "./flowering-peaches.js?v=emaki-funatabi-1",
@@ -257,7 +260,7 @@
           "./wayside-hut-art.js": "./wayside-hut-art.js?v=sakuragawa-yumeguri",
           "./wayside-hut-layout.js": "./wayside-hut-layout.js?v=amimoto-yudono-1",
           "./peach-haze.js": "./peach-haze.js?v=peach-ink-groves-1",
-          "./peach-range.js": "./peach-range.js?v=peach-kasumi-1",
+          "./peach-range.js": "./peach-range.js?v=handscroll-arrival-1",
           "./mountain-streams.js": "./mountain-streams.js?v=kaede-shimizu",
           "./kaede-bedrock.js": "./kaede-bedrock.js?v=kaede-shimizu",
           "./mountain-waterfalls.js": "./mountain-waterfalls.js?v=kaede-shimizu",
@@ -268,7 +271,8 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=emaki-funatabi-1-reset1" />
+    <link rel="modulepreload" href="./main.js?v=handscroll-arrival-1" />
+    <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
     <main id="stage">
@@ -374,11 +378,25 @@
       </div>
       <div id="loading" role="status">
         <div class="loading-folio">
-          <p lang="en">MOCHI QUEST <b>II</b></p>
-          <h2>十七景もち寄り帖</h2>
-          <img src="./assets/world/mochiyori-frontispiece.webp" alt="桜の下で籠をのぞく兎と蛙" />
+          <div class="loading-scroll">
+            <header class="loading-caption">
+              <p lang="en">Mochi Quest <b>II</b></p>
+              <h2>十七景もち寄り帖</h2>
+            </header>
+            <img
+              src="./assets/world/sakuragawa-ferry-840.webp"
+              srcset="./assets/world/sakuragawa-ferry-840.webp 840w, ./assets/world/sakuragawa-ferry-1500.webp 1500w"
+              sizes="(max-width: 600px) 90vw, (max-width: 1040px) 77vw, 800px"
+              width="1500" height="500" decoding="async"
+              alt="桜川の渡し。卯助が籠を載せた舟に竿をさし、岸のおはなが手を振る。"
+            />
+          </div>
           <span id="loading-copy">絵巻をひらいています…</span>
-        </div><a href="../" hidden id="load-back">作品選択へ</a>
+        </div>
+        <div id="load-actions" hidden>
+          <button type="button" id="load-retry" class="choice">読み込み直す</button>
+          <a href="../" id="load-back">作品選択へ</a>
+        </div>
       </div>
     </main>
     <section id="audio-settings" role="dialog" aria-labelledby="audio-settings-title" hidden>
@@ -423,7 +441,22 @@
         <div id="dialog-content"></div>
       </div>
     </dialog>
-    <script type="module" src="./main.js?v=emaki-funatabi-1-reset1"></script>
+    <script type="module">
+      const loading = document.getElementById('loading');
+      for (const child of loading.parentElement.children) child.inert = child !== loading;
+      document.getElementById('load-retry').onclick = () => {
+        if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
+        location.reload();
+      };
+      import('./main.js?v=handscroll-arrival-1').catch(error => {
+        console.error('Mochi Quest 2', error);
+        document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
+          ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'
+          : '絵巻の読み込みが途中で止まりました。もう一度、読み込み直してください。';
+        document.getElementById('load-actions').hidden = false;
+        loading.hidden = false;
+      });
+    </script>
     <noscript>JavaScript を有効にして遊んでください。</noscript>
   </body>
 </html>

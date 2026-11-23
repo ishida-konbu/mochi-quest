@@ -6,6 +6,7 @@ import * as THREE from './vendor/three.module.min.js';
 import { buildScrollBeast, buildQuadrupedTrunk, bindScrollSkin } from './handscroll-beasts.js';
 import { inkVolume, brushWash, brushContour, surfaceGrain } from './scroll-sculpt.js';
 import { SPECIES } from './bestiary.js';
+import { demandPaint } from './travel-paint.js';
 
 const TAU=Math.PI*2, soot='#493d35', paper='#eadbc0', ivory='#efdfbc', cinnabar='#a75142';
 const pigment={monkey:'#957057',bird:'#eae4d4',fox:'#bd7445',tiger:'#c18b49',dragon:'#648575',kirin:'#c5a46c',deer:'#bbae92',boar:'#968d74',shishi:'#d0bfa2'};
@@ -54,7 +55,7 @@ function coat(type, detail) {
   if (!coatLoads.has(key)) {
     const file=key+'.webp'+(type==='dragon'?'?v=ink-dragon-1':'');
     const url = new URL('./assets/bestiary/' + file, import.meta.url).href;
-    const ready = coatLoader.loadAsync(url).then(image => {
+    const request = demandPaint(() => coatLoader.loadAsync(url).then(image => {
       image.colorSpace = THREE.SRGBColorSpace;
       image.anisotropy = 4;
       material.map = image;
@@ -62,11 +63,10 @@ function coat(type, detail) {
       material.needsUpdate = true;
       material.dispatchEvent({type:'pigmentready'});
       return image;
-    });
-    coatLoads.set(key, ready);
-    // A transient fetch can retry against the same material, including clones already on stage.
-    ready.catch(() => coatLoads.delete(key));
+    }));
+    coatLoads.set(key, request);
   }
+  coatLoads.get(key)();
   return material;
 }
 
@@ -75,10 +75,23 @@ export function preloadBeastCoats(types=Object.keys(SPECIES)) {
   for (const type of types) {
     for (const part of coatParts[type]) {
       coat(type, part);
-      pending.push(coatLoads.get(type + '-' + part));
+      pending.push(coatLoads.get(type + '-' + part)());
     }
   }
   return Promise.all(pending);
+}
+
+// Wait for inks used by the rigs on stage, including the articulated cranes.
+export function readyBeastCoats() {
+  return Promise.all(Array.from(coatLoads.values(),request=>request()));
+}
+
+// Cached or cloned rigs can return without running their original builders.
+export function refreshBeastCoats(type) {
+  for (const part of coatParts[type] || []) {
+    const key=type+'-'+part;
+    if (coats.has(key) && !coats.get(key).map) coatLoads.get(key)();
+  }
 }
 
 function pelt(parent,type,sections,mask=false) {

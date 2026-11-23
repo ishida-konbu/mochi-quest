@@ -15,12 +15,11 @@ import { PARKED_BIKES, PARKING_ANGLE } from './pickup-contacts.js';
 import { buildTurtle } from './turtle-art.js';
 import { DYES } from './procession.js';
 import { distantProcession, preparePlates, VILLAGERS, beastFrame } from './procession-view.js';
-import { finishInSlices } from './preparation.js';
 import { SPECIES, isFlying, moveWildlife } from './bestiary.js';
 import { poseHareRider } from './scroll-riders.js';
 import { createSkyLife } from './sky-life.js';
 import { createCraneFlight } from './crane-flight.js';
-import { buildBeast, beastRig, poseBeast } from './beast-art.js';
+import { buildBeast, beastRig, poseBeast, readyBeastCoats, refreshBeastCoats, preloadBeastCoats } from './beast-art.js';
 import { updateScrollResident } from './scroll-encounters.js';
 import { createScrollFaunaView } from './scroll-fauna-view.js';
 import { createRyuguPerformers } from './ryugu-performers.js';
@@ -1830,42 +1829,35 @@ export function createActors(scene, renderer) {
     }
   }
 
-  // Each species/occupation template is shared by all its live skeletons.
-  // Prepare one of each and the ten tools while the loading screen is up.
-  // Moving to the next district then only needs a lightweight rig clone.
-  function* prepareRigs(state) {
-    const nearDistance=n=>wrapDelta(n.x-state.player.x)**2+wrapDelta(n.z-state.player.z)**2;
-    const nearest=[...state.npcs].sort((a,b)=>nearDistance(a)-nearDistance(b));
-    const bodies=new Set(), tools=new Set(), stage=new THREE.Group();
-    for (const n of nearest) {
-      if(n.scrollFauna || n.seaResident || n.atMortar || n.type==='bird') continue;
-      const key=n.type+'-'+(n.area?'artisan':n.role)+(n.type==='shishi' ? n.variant : '');
-      if(bodies.has(key) && (!n.area || tools.has(n.craft || n.role))) continue;
-      bodies.add(key);
-      if(n.area) tools.add(n.craft || n.role);
-      const rec=makeNPC(n,stage);rec.entity=n;
-      park(rec);
-      yield;
-    }
+  // The first camera pose selects its real rigs and portraits before boot waits
+  // for their paint. Other districts use the same builders on first encounter.
+  let firstPose = true;
+  function prepare() {
+    return Promise.all([preparePlates(), readyBeastCoats()]);
   }
-  function* prepareTravellersAndItems(state) {
-    prepareCranes();
-    yield;
-    yield* faunaView.prepare();
-    yield* prepareRigs(state);
-    const kinds = new Set();
-    for (const item of state.objects) {
-      const kind = item.goemon ? 'goemon' : item.grand ? 'snow-spring' : item.retreat ? 'wayside-spring' : item.type;
-      if ((!objectModels[item.type] && item.type!=='onsen') || kinds.has(kind)) continue;
-      kinds.add(kind);
-      const record = makeObject(item, root);
-      record.mesh.visible = false;
-      objects.set(item.id, record);
-      yield;
+
+  let warmedCrowd, warmScheduled=false;
+  function warmNearby(state) {
+    if(warmScheduled || warmedCrowd===state.nearbyNpcs)return;
+    warmScheduled=true;
+    function warm() {
+      warmScheduled=false;
+      if(document.hidden)return;
+      warmedCrowd=state.nearbyNpcs;
+      const localCoats=new Set();
+      for(const n of warmedCrowd) {
+        if(n.atMortar || n.seaResident || !within(n,state.player,n.type==='dragon'?330:170))continue;
+        if(n.scrollFauna)faunaView.warm();
+        else if(SPECIES[n.type]) {
+          if(n.type!=='bird')beastView.warm();
+          if(within(n,state.player,n.type==='bird'?145:n.type==='dragon'?250:55))localCoats.add(n.type);
+        } else if(n.type!=='turtle')processionView.warm();
+      }
+      // The visible material will retry any paint still missing on arrival.
+      preloadBeastCoats(localCoats).catch(()=>{});
     }
-  }
-  function prepare(state) {
-    return Promise.all([preparePlates(renderer), finishInSlices(prepareTravellersAndItems(state))]);
+    if(window.requestIdleCallback)window.requestIdleCallback(warm);
+    else window.setTimeout(warm,80);
   }
 
   function update(state, dt, camera) {
@@ -1877,8 +1869,8 @@ export function createActors(scene, renderer) {
     faunaView.update(state,camera,viewport?.height || window.innerHeight);
     if (!processionView) processionView=distantProcession(root,shadowMap(),state.npcs.length);
     if (!beastView) beastView=distantProcession(root,shadowMap(),state.npcs.filter(n=>SPECIES[n.type]).length,true);
-    prepareCranes();
-    craneFlight.begin();
+    if(!firstPose)warmNearby(state);
+    craneFlight?.begin();
     processionView.begin(p);beastView.begin(p);
     viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
     const eye=camera.matrixWorldInverse.elements;
@@ -1899,6 +1891,8 @@ export function createActors(scene, renderer) {
       actorBounds.radius=span*.65;
       if (!viewFrustum.intersectsSphere(actorBounds)) continue;
       if (n.type==='bird') {
+        prepareCranes();
+        refreshBeastCoats('bird');
         craneFlight.add(view,x,z,t,Math.min(1,(128-distance)/16));
         continue;
       }
@@ -1937,12 +1931,13 @@ export function createActors(scene, renderer) {
         else {
           // When a camera cut reveals a whole village, keep the native
           // resolution plates visible while new meshes arrive over frames.
-          if(fresh>=1 && n.type!=='turtle') continue;
+          if(!firstPose && fresh>=1 && n.type!=='turtle') continue;
           fresh++;
           rec=makeNPC(n,root);rec.entity=n;
         }
         npcs.set(n.id,rec);
       }
+      if (SPECIES[n.type]) refreshBeastCoats(n.type);
       selected.add(n);
       animateNPC(rec,slot.view,t);
       rec.mesh.position.x=slot.x;rec.mesh.position.z=slot.z;
@@ -1956,7 +1951,8 @@ export function createActors(scene, renderer) {
       if(selected.has(n) || n.type==='turtle') continue;
       (SPECIES[n.type]?beastView:processionView).add(view,x,z,camera,t,fade);
     }
-    processionView.end();beastView.end();craneFlight.end();
+    processionView.end();beastView.end();craneFlight?.end();
+    firstPose = false;
     for (const o of state.objects) {
       if (!objectModels[o.type] && o.type!=='onsen') continue;
       let rec = objects.get(o.id);

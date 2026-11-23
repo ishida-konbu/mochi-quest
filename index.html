@@ -79,7 +79,12 @@
     </div>
     <script>
       if (location.origin === 'https://ishida-konbu.github.io') {
-        document.querySelector('.game-card.next').href = 'https://mochi-quest.mochi-quest.workers.dev/two/';
+        const game = document.querySelector('.game-card.next');
+        game.href = 'https://mochi-quest.mochi-quest.workers.dev/two/';
+        const connection = document.createElement('link');
+        connection.rel = 'preconnect';
+        connection.href = new URL(game.href).origin;
+        document.head.append(connection);
       }
     </script>
   </body>

@@ -5,22 +5,19 @@ import { buildWaysideHut } from './wayside-hut-art.js';
 import { buildGoemonBath } from './goemon-bath-art.js';
 import { createLampCollection } from './kyo-lights.js';
 import { GATE_PAVING, RASHOMON, inCapitalWard } from './kyo-layout.js';
-import { kyoRidgeHeight } from './higashiyama.js';
+import { createTerrainTiles } from './landscape-tiles.js';
 import { dressSeaports } from './seaports.js';
 import { createOceanShips } from './ocean-ship-art.js';
 import { dressWardShop } from './kyo-market.js';
 import { createMountainWaterfalls } from './mountain-waterfalls.js';
 import { createLakeShore } from './lake-shore.js';
 import { dressOutcrops } from './outcrops.js';
-import { DISTRICTS,TERRAIN_TILES,TERRAIN_SUBDIVISIONS } from './geography.js';
-import { PEACH_RANGE_BOUNDS } from './peach-range.js';
-import { scrollCoverage } from './scroll-paper.js';
 import { createKiyomizu } from './kiyomizu.js';
 import { createKyo, kyoPavingMaterial } from './kyo.js';
 import { dressPilgrimage, pilgrimageLife } from './pilgrimage.js';
 import { dressCourt } from './magistrates-hall.js';
 import { createBathTableaux } from './main-bath-art.js';
-import { dressWaysideBaths } from './wayside-baths.js';
+import { prepareWaysideBaths } from './wayside-baths.js';
 import { dressRyugu, createRyuguLife } from './ryugu.js';
 import { createTravellers } from './travelling-merchants.js';
 import { RIVER_SKIFFS, merchantPose } from './traveller-positions.js';
@@ -31,7 +28,7 @@ import { roofShell, atticWalls, timberLining } from './roof-shell.js';
 import { wetStone } from './stone-water.js';
 import { prepareForest } from './forest.js';
 import { furnishRoom } from './interiors.js';
-import { FOREST_LAKE, LAKE_ISLET, SNOW_PASS, lakeRadius, lakeRadiusGLSL, isletRadius, isletRadiusGLSL } from './snow-country.js';
+import { FOREST_LAKE, LAKE_ISLET, SNOW_PASS, lakeRadiusGLSL, isletRadiusGLSL } from './snow-country.js';
 import * as THREE from './vendor/three.module.min.js';
 import { dressSeasonalPlaces, seasonalWeather } from './seasons.js';
 import { winterSurfGLSL } from './winter-surf.js';
@@ -48,7 +45,7 @@ import {
   BOUND,
   wrapDelta,
   seasonAt,
-  shoreDistance, PENINSULAS, CONNECTING_ROADS,
+  PENINSULAS, CONNECTING_ROADS,
   BUILDINGS,
   GATES, gateFooting,
   TREES,
@@ -58,13 +55,10 @@ import {
   ROADS,
   BRIDGES, MAPLE_FOOTINGS,
   WATER_Y,
-  terrainHeight, terrainMeshHeight, terrainContactHeight, springGround,
+  terrainHeight, terrainMeshHeight, terrainContactHeight,
   bridgeHeight,
   riverZ,
   riverHalfWidth,
-  riverMouthFlare,
-  coastX,
-  regionAt,
   nearRoad,
   seeded,
 } from './terrain.js';
@@ -125,145 +119,6 @@ function grain() {
       }
     }),
   );
-}
-// Keep the survey vertices along every tile edge. Inside each two-cell square
-// only omit a midpoint if its surveyed height is within 4 cm of the chord.
-// Steep folds, the firebeds and the joins with neighbouring tiles stay intact.
-function distantHillSurface(ground,grid) {
-  const triangles=[],positions=ground.attributes.position,stride=grid+1;
-  const keep=(a,m,b)=>Math.abs(positions.getY(m)-(positions.getY(a)+positions.getY(b))*.5)>.04;
-  for(let z=0;z<grid;z+=2)for(let x=0;x<grid;x+=2){
-    const nw=z*stride+x,ne=nw+2,sw=nw+2*stride,se=sw+2,centre=nw+stride+1;
-    const edges=[nw,sw,se,ne];
-    const midpoints=[
-      x===0 || keep(nw,nw+stride,sw), z+2===grid || keep(sw,sw+1,se),
-      x+2===grid || keep(se,ne+stride,ne), z===0 || keep(ne,nw+1,nw),
-    ];
-    if(!midpoints.some(Boolean) && !keep(ne,centre,sw)){
-      triangles.push(nw,sw,ne,ne,sw,se);
-      continue;
-    }
-    for(let i=0;i<4;i++){
-      const a=edges[i],b=edges[(i+1)%4],m=(a+b)/2;
-      if(midpoints[i])triangles.push(centre,a,m,centre,m,b);
-      else triangles.push(centre,a,b);
-    }
-  }
-  const distant=new THREE.BufferGeometry();
-  for(const [key,value] of Object.entries(ground.attributes))distant.setAttribute(key,value);
-  distant.setIndex(triangles);
-  return distant;
-}
-// A summit view reaches past the street-level terrain radius. One shared
-// index draws the original survey at 20 m intervals, retaining every edge
-// vertex so a 100 m tile meets both its near and its distant neighbours.
-function horizonIndex(grid){
-  const index=[],stride=grid+1,step=8;
-  for(let z=0;z<grid;z+=step)for(let x=0;x<grid;x+=step){
-    const endX=Math.min(x+step,grid),endZ=Math.min(z+step,grid);
-    const centre=Math.floor((z+endZ)/2)*stride+Math.floor((x+endX)/2);
-    const rim=[];
-    for(let j=z;j<endZ;j+=x===0?1:step)rim.push(j*stride+x);
-    for(let i=x;i<endX;i+=endZ===grid?1:step)rim.push(endZ*stride+i);
-    for(let j=endZ;j>z;j-=endX===grid?1:step)rim.push(j*stride+endX);
-    for(let i=endX;i>x;i-=z===0?1:step)rim.push(z*stride+i);
-    for(let k=0;k<rim.length;k++)index.push(centre,rim[k],rim[(k+1)%rim.length]);
-  }
-  return new THREE.Uint16BufferAttribute(index,1);
-}
-function* landscape(scene, art) {
-  const mat = meadowMaterial(art);
-  const colors = ['#f2f0dc','#e3edce','#ebe8d7','#e6e2cc','#ede5ca','#e1e6d6',
-    '#f4f6fc','#e8ca9e','#dfd7b9','#f3e0bd','#e4d5b5','#efd5ce','#a9c1b3','#e1d8bb','#dbd6bb','#d8d7bf','#e1d1b4'].map(css);
-  const soil = css('#efeadc'), stone = css('#d5d4c6'), hillPaper = css('#ebe9da'), c = new THREE.Color(), season = {};
-  const bins = new Map();
-  for (const tree of TREES) {
-    const rad = tree.h*.67+2.3;
-    for (let i=Math.floor((tree.x-rad)/18); i<=Math.floor((tree.x+rad)/18); i++)
-      for (let j=Math.floor((tree.z-rad)/18); j<=Math.floor((tree.z+rad)/18); j++) {
-        const key=i*256+j;
-        if (!bins.has(key)) bins.set(key,[]);
-        bins.get(key).push(tree);
-      }
-  }
-  const tiles=TERRAIN_TILES, span=2*BOUND/tiles,farIndices=horizonIndex(TERRAIN_SUBDIVISIONS);
-  for (let row=0; row<tiles; row++) for (let column=0; column<tiles; column++) {
-    // Deep ocean is a level shelf. Keep the fine lattice for shores, roads,
-    // palace and cliffs, without allocating a million detailed sea vertices.
-    const midX=(column+.5)*span-BOUND, midZ=(row+.5)*span-BOUND;
-    const deep=shoreDistance(midX,midZ)<-span*1.6 &&
-      Math.hypot(midX-DISTRICTS.ryugu.x,midZ-DISTRICTS.ryugu.z)>span*1.8;
-    const grid=deep ? 1 : TERRAIN_SUBDIVISIONS;
-    const range=PEACH_RANGE_BOUNDS;
-    const peachTile=midX+span/2>range.west && midX-span/2<range.east && midZ+span/2>range.north && midZ-span/2<range.south;
-    const p=[], ix=[], uv=[], col=[], surface=[], seasons=[], scroll=[], ridges=[];
-    let ridgeTile=false;
-    for (let j=0; j<=grid; j++) for (let i=0; i<=grid; i++) {
-      const x=(column+i/grid)*span-BOUND, z=(row+j/grid)*span-BOUND, y=h(x,z);
-      p.push(x,y,z);
-      uv.push(x/3.7,z/3.7);
-      const r=regionAt(x,z), coast=shoreDistance(x,z);
-      const river=abs(z-riverZ(x))-riverHalfWidth(x)-6.4*riverMouthFlare(x);
-      c.copy(colors[r]).lerp(soil, max(0,1-abs(river-2)/7)*.72);
-      c.lerp(stone, max(0,min(1,(y-15)/30))*.68);
-      const rise=kyoRidgeHeight(x,z);
-      const ridge=THREE.MathUtils.smoothstep(rise,1.5,17);
-      ridges.push(ridge);
-      if(rise>0)ridgeTile=true;
-      c.multiplyScalar(.96+.042*cos(x*.076+sin(z*.044))+.039*sin(z*.115+sin(x*.093)));
-      c.lerp(hillPaper,ridge*.90);
-      let canopy=0;
-      for (const tree of bins.get(Math.floor(x/18)*256+Math.floor(z/18)) || []) {
-        const radius=tree.h*.67+2.3;
-        canopy=max(canopy,1-((x-tree.x)**2+(z-tree.z)**2)/(radius*radius));
-      }
-      const lakeBank=max(0,1-abs(lakeRadius(x,z)-1)*FOREST_LAKE.rz/4.8,
-        1-abs(isletRadius(x,z)-1)*LAKE_ISLET.rz/2.1);
-      surface.push(canopy,max(lakeBank,max(0,1-abs(river-.2)/7.3),max(0,min(1,(7.6-coast)/8.2))));
-      scroll.push(scrollCoverage(x,z));
-      seasonAt(x,z,season);
-      seasons.push(season.snow,season.autumn,season.moon, season.dawn*max(0,min(1,(30-coast)/23)));
-      col.push(c.r,c.g,c.b);
-      if (i<grid && j<grid) {
-        const k=j*(grid+1)+i,l=k+grid+1;
-        ix.push(k,l,k+1,k+1,l,l+1);
-      }
-    }
-    if(!deep)springGround.refineTile(column,row,p,ix,[[uv,2],[col,3],[ridges,1],[surface,2],[scroll,1],[seasons,4]],h);
-    const ground=geometry(p,ix,uv,col);
-    ground.setAttribute('ridgeRelief',new THREE.Float32BufferAttribute(ridges,1));
-    ground.setAttribute('terrainMix',new THREE.Float32BufferAttribute(surface,2));
-    ground.setAttribute('scrollAmount',new THREE.Float32BufferAttribute(scroll,1));
-    ground.setAttribute('seasons',new THREE.Float32BufferAttribute(seasons,4));
-    // Adjacent tiles compute their own normals. Sample both sides at the
-    // join so a sunlit rock face stays continuous across the tile boundary.
-    if((peachTile || ridgeTile) && !deep){
-      const step=span/grid,normals=ground.attributes.normal;
-      function seamNormal(i,j){
-        const v=j*(grid+1)+i,x=p[v*3],z=p[v*3+2];
-        const nx=h(x-step,z)-h(x+step,z),nz=h(x,z-step)-h(x,z+step),ny=2*step;
-        const length=Math.hypot(nx,ny,nz);
-        normals.setXYZ(v,nx/length,ny/length,nz/length);
-      }
-      for(let i=0;i<=grid;i++){seamNormal(i,0);seamNormal(i,grid);}
-      for(let j=1;j<grid;j++){seamNormal(0,j);seamNormal(grid,j);}
-    }
-    const land=new THREE.Mesh(ground,mat);
-    if(!deep){
-      const skyline=new THREE.BufferGeometry();
-      for(const [name,attr] of Object.entries(ground.attributes))skyline.setAttribute(name,attr);
-      skyline.setIndex(farIndices);
-      land.userData.skylineGeometry=skyline;
-      land.userData.nearGeometry=ground;
-    }
-    if(ridgeTile && !deep){
-      land.userData.farGeometry=distantHillSurface(ground,grid);
-    }
-    land.receiveShadow=true;
-    land.userData.range=peachTile || ridgeTile?710:475;
-    scene.add(land);
-    yield;
-  }
 }
 // Both road materials pull their surface toward the camera for intersections.
 // Cut their pigment precisely at the dressed stone, even in a grazing view.
@@ -921,12 +776,21 @@ class Painter {
       Number(shadow) + '|' + Math.floor(x / (chunk ? 104 : 144)) + ',' + Math.floor(z / (chunk ? 104 : 144));
     let b = this.groups.get(key);
     if (!b) {
-      b = { shape, geo: this.shapes[shape], mat, matrices: [], colors: [], shadow, extent: 0, skyline };
+      b = {shape, geo:this.shapes[shape], mat, shadow, skyline, extent:0, count:0, instances:new Float32Array(4*19)};
       this.groups.set(key, b);
     }
     b.extent = Math.max(b.extent, matrix.getMaxScaleOnAxis());
-    b.matrices.push(matrix.clone());
-    b.colors.push(this.color.set(color).clone());
+    // Store the exact floats the renderer consumes, instead of retaining two
+    // JS objects per roof tile, leaf or beam until the island is finished.
+    const offset=b.count*19;
+    if(offset===b.instances.length) {
+      const grown=new Float32Array(b.instances.length*2);
+      grown.set(b.instances);
+      b.instances=grown;
+    }
+    matrix.toArray(b.instances,offset);
+    this.color.set(color).toArray(b.instances,offset+16);
+    b.count++;
   }
   part(
     shape,
@@ -965,26 +829,28 @@ class Painter {
   }
   *finish() {
     const sprays=new Set(Object.values(this.sprays));
-    for (const { shape, geo, mat, matrices, colors, shadow, extent, skyline } of this.groups.values()) {
-      const m = new THREE.InstancedMesh(geo, mat, matrices.length);
+    for (const [key, batch] of this.groups) {
+      const {shape,geo,mat,instances,count,shadow,extent,skyline}=batch;
+      const m = new THREE.InstancedMesh(geo, mat, count);
       let index=0;
       // Interleave sprays so a distant batch can draw two in every five
       // without dropping the last trees in its grove.
       const stride=sprays.has(mat)?5:1;
-      for(let pass=0;pass<stride;pass++) for(let i=pass;i<matrices.length;i+=stride) {
-        m.setMatrixAt(index, matrices[i]);
-        m.setColorAt(index++, colors[i]);
+      for(let pass=0;pass<stride;pass++) for(let i=pass;i<count;i+=stride) {
+        m.setMatrixAt(index, this.dummy.matrix.fromArray(instances,i*19));
+        m.setColorAt(index++, this.color.fromArray(instances,i*19+16));
       }
-      if(stride>1) m.userData.foliageCount=matrices.length;
+      if(stride>1) m.userData.foliageCount=count;
+      m.matrixAutoUpdate=false;
       m.userData.range=skyline?690:mat.userData.range || geo.userData.range || Math.min(300,72+extent*24);
       m.computeBoundingSphere();
       m.castShadow = shadow;
       m.receiveShadow = true;
       this.scene.add(m);
       if (shape === 'leaf') this.closeDetails.push(m);
+      this.groups.delete(key);
       yield;
     }
-    this.groups.clear();
   }
 }
 function* woodland(p, art) {
@@ -1929,13 +1795,15 @@ function createWaysideHuts(scene) {
   };
 }
 
-export function* prepareWorld(scene) {
+export function* prepareWorld(scene, initialCamera) {
   const atmosphere = createAtmosphere(scene);
   const paper = grain(),
     art = loadPigments();
   const landGroup = new THREE.Group();
-  scene.add(landGroup);
-  yield* landscape(landGroup, art);
+  const terrainGroup=new THREE.Group();
+  scene.add(terrainGroup,landGroup);
+  const terrain=createTerrainTiles(terrainGroup,meadowMaterial(art));
+  yield* terrain.prepare(initialCamera);
   buildRoads(landGroup, art);
   const water = makeWater(scene, art, atmosphere.panorama, atmosphere.winterWash);
   const painter = new Painter(landGroup, paper, art);
@@ -1968,7 +1836,7 @@ export function* prepareWorld(scene) {
   painter.cityShell=true;
   const updateCourt=dressCourt(painter,scene);
   painter.cityShell=false;
-  dressWaysideBaths(painter,art.gravel);
+  yield* prepareWaysideBaths(painter,art.gravel);
   dressSeaports(painter);
   yield;
   const updateKyo=createKyo(scene,painter);
@@ -1988,7 +1856,7 @@ export function* prepareWorld(scene) {
   // Perspective and populated shorelines are preserved on crossing the ocean.
   const close = new Set(painter.closeDetails);
   const batches = landGroup.children.map(mesh => {
-    if (mesh.isInstancedMesh) mesh.computeBoundingSphere();
+    if (mesh.isInstancedMesh) { if (!mesh.boundingSphere) mesh.computeBoundingSphere(); }
     else if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
     const bounds = mesh.isInstancedMesh ? mesh.boundingSphere : mesh.geometry.boundingSphere;
     return {mesh, x:bounds.center.x, z:bounds.center.z, radius:bounds.radius, range:close.has(mesh)?94:(mesh.userData.range||328)};
@@ -2006,6 +1874,7 @@ export function* prepareWorld(scene) {
       painter.sway.value = time;
       if (camera) {
         const valleyView=atmosphere.update(time, player, camera);
+        terrain.update(camera,valleyView);
         updateKyo(time,player,camera);
         updateKiyomizu(voyageTime,player,bellStrike);
         updateLamps(time,player);
@@ -2021,16 +1890,16 @@ export function* prepareWorld(scene) {
         updateForest(camera, player);
         for (const b of batches) {
           const dx=wrapDelta(b.x-camera.position.x), dz=wrapDelta(b.z-camera.position.z);
-          b.mesh.position.x=Math.round((camera.position.x+dx-b.x)/(2*BOUND))*2*BOUND;
-          b.mesh.position.z=Math.round((camera.position.z+dz-b.z)/(2*BOUND))*2*BOUND;
-          const squared=dx*dx+dz*dz;
-          const data=b.mesh.userData,skyline=data.skylineGeometry && valleyView>.015;
-          const range=skyline?b.range+(1350-b.range)*Math.min(1,valleyView*3):b.range;
-          b.mesh.visible=squared<(range+b.radius)**2;
-          if(data.nearGeometry){
-            if(skyline && squared>(385+b.radius)**2)b.mesh.geometry=data.skylineGeometry;
-            else b.mesh.geometry=data.farGeometry && squared>(73+b.radius)**2?data.farGeometry:data.nearGeometry;
+          const x=Math.round((camera.position.x+dx-b.x)/(2*BOUND))*2*BOUND;
+          const z=Math.round((camera.position.z+dz-b.z)/(2*BOUND))*2*BOUND;
+          if(b.mesh.position.x!==x || b.mesh.position.z!==z) {
+            b.mesh.position.x=x; b.mesh.position.z=z;
+            if (!b.mesh.matrixAutoUpdate) b.mesh.updateMatrix();
           }
+          const squared=dx*dx+dz*dz;
+          const data=b.mesh.userData;
+          b.mesh.visible=squared<(b.range+b.radius)**2;
+          if(data.nearGeometry) b.mesh.geometry=data.farGeometry && squared>(73+b.radius)**2?data.farGeometry:data.nearGeometry;
           if(data.foliageCount) b.mesh.count=squared>(105+b.radius)**2?Math.ceil(data.foliageCount*.40):data.foliageCount;
         }
         powder(time,camera,atmosphere.climate.value.x);

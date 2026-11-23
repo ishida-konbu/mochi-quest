@@ -74,7 +74,7 @@ function plants(p,f,s) {
       s.kind==='peach'?'#dec0ac':j%3?'#ad7552':'#b18851',p.fine,j);
   }
 }
-export function dressWaysideBaths(p,gravel) {
+export function* prepareWaysideBaths(p,gravel) {
   p.springGravel=new T.MeshLambertMaterial({
     map:gravel,vertexColors:true,transparent:true,depthWrite:false,
   });
@@ -101,6 +101,9 @@ export function dressWaysideBaths(p,gravel) {
   };
   for(let i=0;i<3;i++)p.shapes['springCrag'+i]=roundedStone(i*2.59+.42);
   for(const s of RETREATS){
+    // Each bath has its own joinery and carved stonework. Give the loading
+    // screen and image decoders a turn between these independent sites.
+    yield;
     const level=springLevel(s),f=workshopFrame(p,s,level),tints=palettes[s.kind];
     dressBathEnclosure(p,f,s,level);
     if(s.regional){dressRegionalBath(p,f,s,level);continue;}

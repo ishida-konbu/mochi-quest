@@ -1,7 +1,8 @@
 import { copyFile, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 import { WORKER_ORIGIN } from '../two/journey-transfer.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -22,6 +23,34 @@ async function collect(directory, suffixes, nested) {
     if (nested && entry.isDirectory()) await collect(path, suffixes, true);
     if (entry.isFile() && suffixes.some(suffix => entry.name.endsWith(suffix))) files.push(path);
   }
+}
+
+// Keep the bundle beside the source modules: their paintings, models and
+// music are located relative to import.meta.url. Shared audio belongs at
+// the site root, and the separately cached Three.js serves the model viewer too.
+async function bundleJourney() {
+  const result = await build({
+    entryPoints: [join(root, 'two/main.js')],
+    outdir: join(stage, 'two'),
+    entryNames: 'journey-[hash]',
+    bundle: true,
+    format: 'esm',
+    target: 'es2022',
+    minify: true,
+    external: ['./vendor/*', '../sound.js'],
+    write: false,
+  });
+  const [bundle] = result.outputFiles;
+  const filename = basename(bundle.path);
+  await writeFile(bundle.path, bundle.contents);
+  files.push(join('two', filename));
+
+  const page = join(stage, 'two/index.html');
+  const html = await readFile(page, 'utf8');
+  const entry = html.match(/<link rel="modulepreload" href="(\.\/main\.js[^"]*)"\s*\/>/)?.[1];
+  if (!entry || !html.includes(`import('${entry}')`)) throw new Error('Missing Mochi Quest 2 entry point');
+  await writeFile(page, html.replace(/\s*<script type="importmap">[\s\S]*?<\/script>/, '')
+    .replaceAll(entry, './' + filename));
 }
 
 // Keep licensed recordings on the game origin. A clean Workers Builds checkout
@@ -60,6 +89,7 @@ try {
     await mkdir(dirname(target), { recursive: true });
     await copyFile(join(root, file), target);
   }
+  await bundleJourney();
   const music = Object.entries(JSON.parse(await readFile(join(stage, 'audio/music/available.json'), 'utf8')));
   for (let i = 0; i < music.length; i += 3) {
     const results = await Promise.allSettled(music.slice(i, i + 3).map(stageMusic));

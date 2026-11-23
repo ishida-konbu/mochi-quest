@@ -55,56 +55,55 @@ export function scannedShoalMatrices(shapeCount) {
 
 // The models use the original UVs and tangent-space normals from six scanned
 // rocks. Place them as shallow, partially submerged shoals off the footpaths.
-export function setRiverStones(scene, objects) {
+export async function setRiverStones(scene, objects) {
   const clock = scene.userData.waterClock ??= {value:0};
   const model = new URL('./assets/world/moss-stones.glb', import.meta.url).href;
-  new GLTFLoader().load(model, ({ scene: collection }) => {
-    const shapes = [];
-    collection.traverse((part) => {
-      if (!part.isMesh) return;
-      const g = part.geometry;
-      g.computeBoundingBox();
-      const box = g.boundingBox,
-        center = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3());
-      g.translate(-center.x, -box.min.y, -center.z);
-      g.scale(1 / size.x, 1 / size.y, 1 / size.z);
-      shapes.push({ geo: g, material: part.material });
-    });
-    if (!shapes.length) return;
-    const stones = scannedShoalMatrices(shapes.length);
-    const transform = new THREE.Object3D();
-    function drawGroups(batches, level, mineral) {
-      shapes.forEach(({ geo, material }, i) => {
-        if (!batches[i].length) return;
-        material.map.anisotropy = 4;
-        material.normalScale.setScalar(0.76);
-        const finish = wetStone(material.clone(), level, clock);
-        if(mineral) finish.color.lerp(new THREE.Color(mineral),.30);
-        const mesh = new THREE.InstancedMesh(geo, finish, batches[i].length);
-        batches[i].forEach((matrix, j) => mesh.setMatrixAt(j, matrix));
-        mesh.castShadow = mesh.receiveShadow = true;
-        mesh.computeBoundingSphere();
-        scene.add(mesh);
-      });
-    }
-    drawGroups(stones, WATER_Y);
-    registerScannedStones('river-and-coast',shapes,stones);
-    contactRipples(scene, stones, shapes, clock);
-    // Each bath has its own batch bounds. Only the spring in view spends
-    // triangles on the lichen, chisel edges and dark stones at the waterline.
-    for (const pool of objects.filter(o=>o.retreat)) {
-      const site=pool.retreat,rim=shapes.map(()=>[]);
-      for(const q of retreatStones(site).filter(q=>q.scanned)){
-        const [x,z]=sitePoint(site,q.u,q.v);
-        transform.position.set(x,pool.y+.49-.31*q.h,z);
-        transform.scale.set(q.w*2.08,q.h*1.49,q.d*2.11);
-        transform.rotation.set(.03*Math.sin(q.i),site.yaw+q.angle,.05*Math.cos(q.i));
-        transform.updateMatrix();
-        rim[(q.i+site.index)%shapes.length].push(transform.matrix.clone());
-      }
-      drawGroups(rim,pool.y+.52,site.regional?bathCraft[site.kind].base:null);
-      registerScannedStones(site.index,shapes,rim);
-    }
+  const { scene: collection } = await new GLTFLoader().loadAsync(model);
+  const shapes = [];
+  collection.traverse((part) => {
+    if (!part.isMesh) return;
+    const g = part.geometry;
+    g.computeBoundingBox();
+    const box = g.boundingBox,
+      center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    g.translate(-center.x, -box.min.y, -center.z);
+    g.scale(1 / size.x, 1 / size.y, 1 / size.z);
+    shapes.push({ geo: g, material: part.material });
   });
+  if (!shapes.length) return;
+  const stones = scannedShoalMatrices(shapes.length);
+  const transform = new THREE.Object3D();
+  function drawGroups(batches, level, mineral) {
+    shapes.forEach(({ geo, material }, i) => {
+      if (!batches[i].length) return;
+      material.map.anisotropy = 4;
+      material.normalScale.setScalar(0.76);
+      const finish = wetStone(material.clone(), level, clock);
+      if(mineral) finish.color.lerp(new THREE.Color(mineral),.30);
+      const mesh = new THREE.InstancedMesh(geo, finish, batches[i].length);
+      batches[i].forEach((matrix, j) => mesh.setMatrixAt(j, matrix));
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.computeBoundingSphere();
+      scene.add(mesh);
+    });
+  }
+  drawGroups(stones, WATER_Y);
+  registerScannedStones('river-and-coast',shapes,stones);
+  contactRipples(scene, stones, shapes, clock);
+  // Each bath has its own batch bounds. Only the spring in view spends
+  // triangles on the lichen, chisel edges and dark stones at the waterline.
+  for (const pool of objects.filter(o=>o.retreat)) {
+    const site=pool.retreat,rim=shapes.map(()=>[]);
+    for(const q of retreatStones(site).filter(q=>q.scanned)){
+      const [x,z]=sitePoint(site,q.u,q.v);
+      transform.position.set(x,pool.y+.49-.31*q.h,z);
+      transform.scale.set(q.w*2.08,q.h*1.49,q.d*2.11);
+      transform.rotation.set(.03*Math.sin(q.i),site.yaw+q.angle,.05*Math.cos(q.i));
+      transform.updateMatrix();
+      rim[(q.i+site.index)%shapes.length].push(transform.matrix.clone());
+    }
+    drawGroups(rim,pool.y+.52,site.regional?bathCraft[site.kind].base:null);
+    registerScannedStones(site.index,shapes,rim);
+  }
 }

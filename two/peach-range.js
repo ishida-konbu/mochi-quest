@@ -36,33 +36,44 @@ const crests=[
   [[-92,93,68,82],[-119,60,64,82],[-118,28,88,107],[-137,-4,106,113],[-163,-29,100,121]],
 ];
 
-const cells=new Map(),cellSize=40;
+function crestProfile(distance){
+  return .80*(1-ease(0,1,distance))+.20*(1-ease(0,.47,distance));
+}
+const cells=new Map(),cellSize=24,cellRadius=cellSize*Math.SQRT1_2;
 const cellKey=(u,v)=>Math.floor(u/cellSize)*128+Math.floor(v/cellSize);
 for(const chain of crests)for(let i=1;i<chain.length;i++){
-  const [x,z,h,w]=chain[i-1],[ex,ez,eh,ew]=chain[i],dx=ex-x,dz=ez-z,widest=max(w,ew)+7;
+  const [x,z,h,w]=chain[i-1],[ex,ez,eh,ew]=chain[i],dx=ex-x,dz=ez-z,widest=max(w,ew);
   const segment={x,z,dx,dz,h,w,dh:eh-h,dw:ew-w,inv:1/(dx*dx+dz*dz)};
   for(let a=Math.floor((min(x,ex)-widest)/cellSize);a<=Math.floor((max(x,ex)+widest)/cellSize);a++)
     for(let b=Math.floor((min(z,ez)-widest)/cellSize);b<=Math.floor((max(z,ez)+widest)/cellSize);b++){
       const key=a*128+b;
+      // Even the nearest corner of this cell is at least this far from
+      // the crest. Its widest, highest section bounds the entire flank.
+      const u=(a+.5)*cellSize-x,v=(b+.5)*cellSize-z;
+      const t=min(1,max(0,(u*dx+v*dz)*segment.inv));
+      const nearest=max(0,hypot(u-t*dx,v-t*dz)-cellRadius);
+      if(nearest>=widest)continue;
+      const ceiling=max(h,eh)*crestProfile(nearest/widest);
       if(!cells.has(key))cells.set(key,[]);
-      cells.get(key).push(segment);
+      cells.get(key).push({segment,ceiling});
     }
 }
+for(const segments of cells.values())segments.sort((a,b)=>b.ceiling-a.ceiling);
 
 // Runoff has carved small coves and fluted secondary spines into the sides
 // of the main massifs. The broad foot remains gently convex below the rock.
 function divides(u,v){
-  const segments=cells.get(cellKey(u,v));
-  if(!segments)return 0;
   const x=u+3.9*sin(v*.045+u*.014)+1.7*sin(v*.11-u*.027);
   const z=v+4.1*sin(u*.037-v*.024)+2.1*cos(u*.092+v*.013);
+  const segments=cells.get(cellKey(x,z));
+  if(!segments)return 0;
   let rise=0;
-  for(const s of segments){
+  for(const {segment:s,ceiling} of segments){
+    if(ceiling<rise)break;
     const a=x-s.x,b=z-s.z,t=min(1,max(0,(a*s.dx+b*s.dz)*s.inv));
     const du=a-t*s.dx,dv=b-t*s.dz,w=s.w+t*s.dw,d2=(du*du+dv*dv)/(w*w);
     if(d2>=1)continue;
-    const d=Math.sqrt(d2),flank=1-ease(0,1,d),crown=1-ease(0,.47,d);
-    rise=max(rise,(s.h+s.dh*t)*(.80*flank+.20*crown));
+    rise=max(rise,(s.h+s.dh*t)*crestProfile(Math.sqrt(d2)));
   }
   return rise;
 }

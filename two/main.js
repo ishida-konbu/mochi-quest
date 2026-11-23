@@ -2,7 +2,7 @@ import * as THREE from './vendor/three.module.min.js';
 import { applyClimateLights } from './atmosphere.js';
 import { createWake } from './wake.js';
 import { prepareWorld } from './world.js';
-import { finishInSlices, uploadSceneTextures } from './preparation.js';
+import { finishInSlices, watchArrivalPaint } from './preparation.js';
 import { setRiverStones } from './scanned-stone.js';
 import { bathPosture,seatedFeet } from './bath-gestures.js';
 import { createBathReflection } from './spring-water.js';
@@ -22,7 +22,6 @@ import { SCROLL_FAUNA, faunaDrawing, FAUNA_SHEET } from './scroll-fauna.js';
 import { SEA_SPECIES } from './ryugu-residents.js';
 import { seaPortrait } from './ryugu-performers.js';
 import { BEASTS, beastDrawing } from './procession-view.js';
-import { preloadBeastCoats } from './beast-art.js';
 import { WAYSIDE_SITES } from './wayside-hut-layout.js';
 import { REGIONS, regionAt, canDiveAt, waterSurfaceAt, terrainHeight, terrainContactHeight, groundHeight, landscapeFloor, staticVolumeAt, wrapDelta, BOUND } from './terrain.js';
 import { palaceInteriorAt, palaceStoreyAt } from './ryugu-layout.js';
@@ -137,7 +136,8 @@ let nextFrame = 0,
   bathReflection,
   wake,
   ink,
-  contextLost = false;
+  contextLost = false,
+  playable = false;
 const keys = new Set(),
   stick = { id: null, x: 0, y: 0 },
   look = { id: null, x: 0, y: 0 };
@@ -529,6 +529,7 @@ const bindings = new Set([
   'Digit5',
 ]);
 document.addEventListener('keydown', (e) => {
+  if (!playable || contextLost) return;
   if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || !bindings.has(e.code)) return;
   if (dialog.open) {
     if (
@@ -590,7 +591,13 @@ document.addEventListener('visibilitychange', () => {
   previous = 0;
   save();
 });
-window.addEventListener('pagehide', () => { audio.setPaused(true); save(); });
+window.addEventListener('pagehide', event => {
+  audio.setPaused(true);
+  save();
+  // Keep the live context for back/forward cache restores. Release the GPU
+  // promptly on an actual navigation away, including repeated reloads.
+  if (event.persisted === false && renderer && !renderer.getContext().isContextLost()) renderer.forceContextLoss();
+});
 function updateCamera(dt, snap = false) {
   const full = p.buffs.full > 0 ? 1.26 : 1,
     ride = p.mount === 'bike' ? 0.9 : p.mount === 'turtle' ? .99 : 0;
@@ -1171,14 +1178,68 @@ function frame(now) {
     }
   }
 }
+async function openGraphics() {
+  // Choose the GPU without changing the framebuffer format. Some dual-GPU
+  // browsers reject the discrete adapter while the default adapter is usable.
+  const attributes = { antialias: true, alpha: false, stencil: false };
+  let context = canvas.getContext('webgl2', { ...attributes, powerPreference: 'high-performance' });
+  if (!context) {
+    await new Promise(resolve => setTimeout(resolve, 150));
+    context = canvas.getContext('webgl2', { ...attributes, powerPreference: 'default' });
+  }
+  if (!context) {
+    throw new DOMException('Unable to acquire a WebGL 2 context', 'WebGLUnavailableError');
+  }
+  return new THREE.WebGLRenderer({ canvas, context, ...attributes });
+}
+
+let loadingCaption = '';
+function setLoadingCaption(caption) {
+  loadingCaption = caption;
+  if (!contextLost) $('loading-copy').textContent = caption;
+}
+function blockGameplay(blocked) {
+  for (const child of stage.children) {
+    if (child !== $('loading')) child.inert = blocked;
+  }
+}
+function onContextLost(event) {
+  event.preventDefault();
+  contextLost = true;
+  clearInput();
+  save();
+  audio.setPaused(true);
+  blockGameplay(true);
+  $('loading-copy').textContent = '描画の復帰を待っています…';
+  $('load-actions').hidden = false;
+  $('loading').hidden = false;
+}
+function onContextRestored() {
+  contextLost = false;
+  previous = 0;
+  resize(true);
+  $('loading-copy').textContent = loadingCaption;
+  $('load-actions').hidden = true;
+  if (playable) {
+    drawScene();
+    blockGameplay(false);
+    $('loading').hidden = true;
+  }
+}
+async function waitForGraphics() {
+  // A driver may mark the context lost before dispatching the DOM event.
+  while (contextLost || renderer.getContext().isContextLost()) {
+    await new Promise(resolve => canvas.addEventListener('webglcontextrestored', resolve, { once: true }));
+  }
+}
 async function boot() {
+  renderer = await openGraphics();
+  const preparation = new AbortController();
+  const paint = watchArrivalPaint(THREE.DefaultLoadingManager);
+  // Register after Three's renderer so its GL state is rebuilt first.
+  canvas.addEventListener('webglcontextlost', onContextLost);
+  canvas.addEventListener('webglcontextrestored', onContextRestored);
   try {
-    renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      alpha: false,
-      powerPreference: 'high-performance',
-    });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -1186,30 +1247,36 @@ async function boot() {
     settingsForLighting();
     resize();
     updateCamera(1, true);
-    setRiverStones(scene, state.objects);
-    const [heroTextures, landscape, coats] = await Promise.all([
-      loadRiceModel(), finishInSlices(prepareWorld(scene)), preloadBeastCoats(), loadMapPaper(),
-    ]);
-    world = landscape;
+    setLoadingCaption(state.region + 'の景色をひらいています…');
+    const arrivalAssets = Promise.all([loadRiceModel(), loadMapPaper(), setRiverStones(scene, state.objects)]);
+    [world] = await Promise.all([finishInSlices(prepareWorld(scene, camera), preparation.signal), arrivalAssets]);
     storyWorld = createStoryWorld(scene, game.notebook, game.storyCollisions);
-    storyWorld.update(state.time,p);
+    storyWorld.update(state.time, p);
     meadow = createMeadow(scene, state.objects, coarse, state.npcs);
     wake = createWake(scene);
-    sun.target.position.set(p.x,p.y,p.z);
+    sun.target.position.set(p.x, p.y, p.z);
     applyClimateLights(hemisphere, sun, bounce, p, state.time);
     wake(p, state.time);
+    setLoadingCaption('旅の仲間を描いています…');
     actors = createActors(scene, renderer);
-    await actors.prepare(state);
-    bathReflection = createBathReflection(renderer, scene, actors.hero);
     actors.update(state, 0, camera);
+    await actors.prepare();
+    bathReflection = createBathReflection(renderer, scene, actors.hero);
     world.update(state.time, p, camera, state.time, state.bellStrike, state.inariWeather);
     meadow(state.time, p, camera);
-    await Promise.all([
-      ink.prepare(scene),
-      finishInSlices(uploadSceneTextures(renderer, scene, [...heroTextures, ...world.textures, ...coats])),
-    ]);
-    drawScene();
+    // The normal render submits just this view (including its shadows and
+    // reflections). Distant districts get their GPU resources on first use.
+    for (;;) {
+      await waitForGraphics();
+      drawScene();
+      if (renderer.getContext().isContextLost()) continue;
+      const pending = paint.waitFor(renderer, scene, ink.paper);
+      if (!pending) break;
+      await pending;
+    }
     updateHUD();
+    playable = true;
+    blockGameplay(false);
     $('loading').hidden = true;
     if (transferStatus) message(transferStatus,6);
     if (location.origin === PAGES_ORIGIN && location.hash === '#guide') {
@@ -1218,26 +1285,19 @@ async function boot() {
     }
     qualitySince = performance.now();
     new ResizeObserver(resize).observe(canvas);
-    canvas.addEventListener('webglcontextlost', (e) => {
-      e.preventDefault();
-      clearInput();
-      save();
-      contextLost = true;
-      $('loading-copy').textContent = '描画を再開しています…';
-      $('loading').hidden = false;
-    });
-    canvas.addEventListener('webglcontextrestored', () => {
-      contextLost = false;
-      previous = 0;
-      resize(true);
-      $('loading').hidden = true;
-    });
     requestAnimationFrame(frame);
   } catch (error) {
-    console.error(error);
-    $('loading').hidden = false;
-    $('loading-copy').textContent = '3D画面を開けませんでした。WebGL 2 対応のブラウザで開いてください。';
-    $('load-back').hidden = false;
+    preparation.abort();
+    canvas.removeEventListener('webglcontextlost', onContextLost);
+    canvas.removeEventListener('webglcontextrestored', onContextRestored);
+    playable = false;
+    blockGameplay(true);
+    renderer.dispose();
+    if (!renderer.getContext().isContextLost()) renderer.forceContextLoss();
+    renderer = null;
+    throw error;
+  } finally {
+    paint.close();
   }
 }
-boot();
+await boot();

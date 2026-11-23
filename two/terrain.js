@@ -170,10 +170,28 @@ export const PENINSULAS = [
   [-413,121,62,27], [-492,311,52,30], [-583,174,24,15],
   ...FIRE_COAST,
 ];
+// A blended coast depends on the original order of the overlapping lobes.
+// Index their existing survey bounds once so inland probes skip distant shores.
+const shoreCells = new Map(), shoreCellSize = 128;
+function shoreCell(x,z) {
+  return Math.floor(x / shoreCellSize) * 128 + Math.floor(z / shoreCellSize);
+}
+for (const lobe of PENINSULAS) {
+  const [x,z,rx,rz] = lobe;
+  for (let i = Math.floor((x-rx-62)/shoreCellSize); i <= Math.floor((x+rx+62)/shoreCellSize); i++) {
+    for (let j = Math.floor((z-rz-62)/shoreCellSize); j <= Math.floor((z+rz+62)/shoreCellSize); j++) {
+      const key = i*128+j;
+      if (!shoreCells.has(key)) shoreCells.set(key, []);
+      shoreCells.get(key).push(lobe);
+    }
+  }
+}
 export function shoreDistance(x,z) {
   let shore=originalShore(x,z);
+  const lobes=shoreCells.get(shoreCell(x,z));
+  if(!lobes)return portShore(x,z,shore);
   const erosion=5.9*sin(x*.048+z*.025)+3.8*cos(z*.062-x*.033)+2.3*sin(x*.109-z*.089);
-  for(const [cx,cz,rx,rz] of PENINSULAS) {
+  for(const [cx,cz,rx,rz] of lobes) {
     // Ellipses outside this bounding box cannot contribute land, surf or shoals.
     if(abs(x-cx)>rx+62 || abs(z-cz)>rz+62) continue;
     const margin=(1-hypot((x-cx)/rx,(z-cz)/rz))*min(rx,rz)+erosion;
@@ -922,15 +940,38 @@ function earlierFireSurvey(x,z){
   return east>100 && east<370 && clearing(east,z-city.z,earlierFireRidgeHeight(x,z,false),.128,.17) ||
     north>100 && north<370 && clearing(north,x-city.x,earlierFireRidgeHeight(x,z,true),.111,.157);
 }
+// Keep the earlier planting order and every seed draw. A new tree only tests
+// trunks in its nine neighbouring 12 m parcels, including the last planting.
+const saplingCells=new Map();
+function saplingCell(x,z) { return Math.floor(x/12)*512+Math.floor(z/12); }
+function rememberSapling(tree) {
+  const cell=saplingCell(tree.x,tree.z);
+  if (!saplingCells.has(cell)) saplingCells.set(cell,[]);
+  saplingCells.get(cell).push(tree);
+}
+function plantSapling(tree) {
+  TREES.push(tree);
+  rememberSapling(tree);
+}
+function trunkWithin(x,z,radiusSq) {
+  const cell=saplingCell(x,z);
+  for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++) {
+    const neighbours=saplingCells.get(cell+i*512+j);
+    if(neighbours?.some(t=>(t.x-x)**2+(t.z-z)**2<radiusSq))return true;
+  }
+  return false;
+}
+TREES.forEach(rememberSapling);
+const lotClearances=plantingLots.map(b=>({x:b.x,z:b.z,radius:hypot(b.w,b.d)*.52+4.5}));
 function transplant(x,z,family) {
   if(abs(x-RASHOMON.x)<19 && abs(z-RASHOMON.z)<29)return false;
   if(portReserved(x,z)||reservedScenery(x,z)||earlierFireSurvey(x,z))return false;
   if(nearPeachTrunk(x,z,5))return false;
   if (shoreDistance(x,z)<10 || landHeight(x,z)<2 || nearRoad(x,z,3.1) ||
       abs(z-riverZ(x))-riverHalfWidth(x)<11 || safe(x,z,6) ||
-      plantingLots.some(b=>hypot(b.x-x,b.z-z)<hypot(b.w,b.d)*.52+4.5) ||
-      TREES.some(t=>(t.x-x)**2+(t.z-z)**2<24)) return false;
-  TREES.push({x,z,kind:TREE_FAMILIES[family][0], form:family*TREE_FORMS_PER_FAMILY+Math.floor(saplings()*4),
+      lotClearances.some(b=>abs(b.x-x)<b.radius && abs(b.z-z)<b.radius && hypot(b.x-x,b.z-z)<b.radius) ||
+      trunkWithin(x,z,24)) return false;
+  plantSapling({x,z,kind:TREE_FAMILIES[family][0], form:family*TREE_FORMS_PER_FAMILY+Math.floor(saplings()*4),
     h:5.6+saplings()*6,seed:Math.floor(saplings()*1e6)});
   return true;
 }
@@ -999,9 +1040,9 @@ for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
     const high=earlierFireRidgeHeight(x,z,!east);
     if(high<7 || earlierFireSurvey(x,z) || nearRoad(x,z,4) || portReserved(x,z) || protectedDistrict(x,z))continue;
     if(Math.sin(across*.044+along*.013)+Math.sin(along*.055-across*.018)>.93 && plant()<.86)continue;
-    if(TREES.some(t=>(t.x-x)**2+(t.z-z)**2<68))continue;
+    if(trunkWithin(x,z,68))continue;
     const family=(high>96?[0,0,1,2,3]:[0,1,2,2,3])[i%5];
-    TREES.push({x,z,h:4.5+plant()*(high>116?4.8:7.3),kind:TREE_FAMILIES[family][0],
+    plantSapling({x,z,h:4.5+plant()*(high>116?4.8:7.3),kind:TREE_FAMILIES[family][0],
       form:family*TREE_FORMS_PER_FAMILY+i%4,seed:(east?181033:390901)+i*13});
   }
 }
@@ -1009,19 +1050,6 @@ for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
 // shorter wind-shaped red pines above. The openings between these copses
 // expose the rock underneath, including the cut grass around 大 and 福.
 {
-  const spacing=new Map(),cell=(x,z)=>Math.floor(x/12)*512+Math.floor(z/12);
-  function remember(t) {
-    const key=cell(t.x,t.z);
-    if(!spacing.has(key))spacing.set(key,[]);
-    spacing.get(key).push(t);
-  }
-  TREES.forEach(remember);
-  function occupied(x,z,gap) {
-    const key=cell(x,z);
-    for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++)
-      if(spacing.get(key+i*512+j)?.some(t=>(t.x-x)**2+(t.z-z)**2<gap*gap))return true;
-    return false;
-  }
   for(const [centre,height,seed,width,depth] of [
     [HIGASHIYAMA,(x,z)=>earlierFireRidgeHeight(x,z,false),7709,470,540],
     [KITAYAMA,(x,z)=>earlierFireRidgeHeight(x,z,true),4093,520,450],
@@ -1041,13 +1069,13 @@ for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
         const az=plant()*Math.PI*2,rad=Math.sqrt(plant());
         const u=cos(az)*length*rad,v=sin(az)*breadth*rad;
         const x=cx+u*c-v*s,z=cz+u*s+v*c;
-        if(height(x,z)<6 || occupied(x,z,gap) || earlierFireSurvey(x,z) ||
+        if(height(x,z)<6 || trunkWithin(x,z,gap*gap) || earlierFireSurvey(x,z) ||
            shoreDistance(x,z)<10 || nearRoad(x,z,4.5) || protectedDistrict(x,z) || reservedScenery(x,z))continue;
         const kind=plant()<.16?(exposed?9:12):family;
         const h=(exposed?4.8:6.3)+plant()*(exposed?4.2:5.5)+1.6*(1-rad);
         const tree={x,z,h,kind:TREE_FAMILIES[kind][0],form:kind*TREE_FORMS_PER_FAMILY+Math.floor(plant()*4),
           seed:seed*1000+grove*18+i};
-        TREES.push(tree);remember(tree);
+        plantSapling(tree);
       }
     }
   }
@@ -1056,7 +1084,7 @@ for(const [east,summit] of [[true,HIGASHIYAMA],[false,KITAYAMA]]) {
 // crowns as the surrounding woodland. A clear strip follows every gate.
 for(const [i,t] of CEDAR_GROVES.entries()) {
   if(nearRoad(t.x,t.z,2.7) || reservedScenery(t.x,t.z)) continue;
-  TREES.push({x:t.x,z:t.z,h:t.h,kind:'cedar',form:2*TREE_FORMS_PER_FAMILY+i%4,seed:61979+i*67});
+  plantSapling({x:t.x,z:t.z,h:t.h,kind:'cedar',form:2*TREE_FORMS_PER_FAMILY+i%4,seed:61979+i*67});
 }
 // Fractured shoulders crop out in groups, their long axes sharing a strike.
 // They stay clear of riding lanes, of the courtyards and of each bath entrance.
@@ -1076,7 +1104,7 @@ for(const headland of PENINSULAS) {
       const scale=(n===0?1.7:.48)+stoneSeed()*(high?2.05:1.56);
       const rx=scale*(1.04+stoneSeed()*.68),rz=scale*(.61+stoneSeed()*.34);
       if(nearRoad(x,z,rx+2.6) || earlierFireSurvey(x,z) || reservedScenery(x,z) || protectedDistrict(x,z) ||
-         shoreDistance(x,z)<3 || TREES.some(t=>(t.x-x)**2+(t.z-z)**2<(rx+.45)**2))continue;
+         shoreDistance(x,z)<3 || trunkWithin(x,z,(rx+.45)**2))continue;
       ROCKS.push({x,z,rx,rz,h:scale*(high?1.16:.78),yaw:yaw+(stoneSeed()-.5)*.32,
         stratum:(bed+n)%4,tint:high?'#b7beb9':cz>0?'#cbc2a9':'#c6cbaf'});
     }
@@ -1090,11 +1118,12 @@ for(const s of RETREATS){
   const spots=s.kind==='cedar'?[[-6,-8],[5,-9],[6,-6],[-7,-5]]:[[-6,-7],[6,-5],[-7,-2]];
   for(const [i,[u,v]] of spots.entries()){
     const [x,z]=sitePoint(s,u,v);
-    if(nearRoad(x,z,3)||reservedScenery(x,z)||TREES.some(t=>hypot(t.x-x,t.z-z)<3))continue;
-    TREES.push({x,z,kind:TREE_FAMILIES[family][0],form:family*4+i,seed:94071+i+41*s.index,
+    if(nearRoad(x,z,3)||reservedScenery(x,z)||trunkWithin(x,z,9))continue;
+    plantSapling({x,z,kind:TREE_FAMILIES[family][0],form:family*4+i,seed:94071+i+41*s.index,
       h:(s.kind==='cedar'?9.3:s.kind==='slate'?4.4:5.7)+i*.54});
   }
 }
+saplingCells.clear();
 ROCKS.push(...offshoreReefs(terrainHeight,shoreDistance,seeded(0x687063)),
   ...WINTER_REEFS.map(r=>({...r,h:r.top-terrainHeight(r.x,r.z)})));
 // Respect the same surveyed yards whatever the seeded planting sequence.

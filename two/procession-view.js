@@ -7,7 +7,7 @@ import { SPECIES } from './bestiary.js';
 import { dragonPitch } from './animal-motion.js';
 import { dragonSkyHaze } from './dragon-flight.js';
 import { seasonAt } from './terrain.js';
-import { finishInSlices } from './preparation.js';
+import { demandPaint } from './travel-paint.js';
 
 import { WORKSHOP_TOOLS, workRate } from './trade-tools.js';
 
@@ -49,10 +49,13 @@ export function gaitFrequency(type) {
 const plates=new Map();
 function plate(filename,color) {
   if (!plates.has(filename)) {
-    let texture;
-    const ready=new Promise((resolve,reject)=>{
-      texture=new THREE.TextureLoader().load(new URL('./assets/residents/'+filename,import.meta.url).href,resolve,undefined,reject);
-    });
+    const texture=new THREE.Texture();
+    const url=new URL('./assets/residents/'+filename,import.meta.url).href;
+    const request=demandPaint(()=>new THREE.ImageLoader().loadAsync(url).then(image=>{
+      texture.image=image;
+      texture.needsUpdate=true;
+      return texture;
+    }));
     // Weight the RGB by coverage before generating mip levels, then unweight
     // it in the shader. Transparent WebP texels otherwise introduce a black
     // fringe in the middle of each fine ear, feather and brush stroke.
@@ -61,22 +64,19 @@ function plate(filename,color) {
     if (!color) texture.format=THREE.RedFormat;
     texture.minFilter=THREE.LinearMipmapLinearFilter;
     texture.magFilter=THREE.LinearFilter;
-    plates.set(filename,{texture,ready});
+    plates.set(filename,{texture,request});
   }
-  return plates.get(filename);
+  const entry=plates.get(filename);
+  entry.request();
+  return entry.texture;
 }
 
 export const COSTUME_SHEET={columns:8,rows:10,width:128,height:128};
 export const costumeFrame=role=>role<5 ? 2.28:role===8 ? 4.45:3.18;
 export const costumeCentre=role=>role<5 ? .94:1.39;
 
-export async function preparePlates(renderer) {
-  const entries=[plate('procession.webp',true),plate('procession-dyes.webp',false),plate(BEASTS.atlas,true),plate(FAUNA_SHEET.atlas,true),plate('emaki-costumes.webp',true)];
-  await Promise.all(entries.map(entry=>entry.ready));
-  function* upload() {
-    for (const {texture} of entries) {renderer?.initTexture(texture);yield;}
-  }
-  await finishInSlices(upload());
+export function preparePlates() {
+  return Promise.all(Array.from(plates.values(), entry => entry.request()));
 }
 
 export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
@@ -87,9 +87,9 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   geometry.setAttribute('tileCell',cells);
   const motion=new THREE.InstancedBufferAttribute(new Float32Array(capacity*3),3).setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('nextPose',motion);
-  const atlas=plate(costumes?'emaki-costumes.webp':scroll?FAUNA_SHEET.atlas:beasts?BEASTS.atlas:'procession.webp',true).texture;
-  const cloth=beasts ? null : plate('procession-dyes.webp',false).texture;
-  const material=new THREE.MeshBasicMaterial({map:atlas,transparent:true,alphaTest:.035});
+  const filename=costumes?'emaki-costumes.webp':scroll?FAUNA_SHEET.atlas:beasts?BEASTS.atlas:'procession.webp';
+  const material=new THREE.MeshBasicMaterial({transparent:true,alphaTest:.035});
+  let cloth;
   material.onBeforeCompile=shader=>{
     shader.vertexShader=shader.vertexShader
       .replace('#include <common>','#include <common>\nattribute vec3 tileCell; varying float presence;')
@@ -131,7 +131,7 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   material.customProgramCacheKey=()=>costumes?'costume-plate':scroll?'fauna-plate':beasts?'beast-plate':'haori-plate';
   const figures=new THREE.InstancedMesh(geometry,material,capacity);
   const shadows=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1),shadowMaterial,capacity);
-  if (cloth) {
+  if (!beasts) {
     figures.setColorAt(0,white);
     figures.instanceColor.setUsage(THREE.DynamicDrawUsage);
   }
@@ -141,6 +141,7 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
     batch.frustumCulled=false;
     batch.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     batch.count=0;
+    batch.visible=false;
     parent.add(batch);
   }
   const transform=new THREE.Object3D(), shadow=new THREE.Object3D(), climate={};
@@ -153,7 +154,15 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
     const {moon,dawn,snow,autumn}=seasonAt(player.x,player.z,climate);
     material.color.setRGB(1-.59*moon-.05*snow,1-.46*moon-.1*dawn-.035*autumn,1-.28*moon-.23*dawn-.075*autumn);
   }
+  function warm() {
+    if(material.map?.image && (beasts || cloth?.image))return;
+    const first=!material.map;
+    material.map=plate(filename,true);
+    if (!beasts) cloth=plate('procession-dyes.webp',false);
+    if (first) material.needsUpdate=true;
+  }
   function add(n,x,z,camera,time,fade) {
+    if(count===0)warm();
     const vx=camera.position.x-x, vz=camera.position.z-z;
     const facing=Math.atan2(vx,vz);
     const handedness=n.room===undefined ? 1 : -1;
@@ -205,6 +214,7 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   }
   function end() {
     figures.count=count;shadows.count=shadowCount;
+    figures.visible=count>0;shadows.visible=shadowCount>0;
     if(shadowCount){
       shadows.instanceMatrix.clearUpdateRanges();
       shadows.instanceMatrix.addUpdateRange(0,shadowCount*16);
@@ -217,5 +227,5 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
       attribute.needsUpdate=true;
     }
   }
-  return {begin,add,end};
+  return {begin,add,end,warm};
 }
