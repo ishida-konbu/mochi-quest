@@ -5,6 +5,7 @@ status: active
 updated: 2026-11-25
 sources:
   - ../raw/2026-11-25-user-direction.md
+  - ../raw/2026-11-25-phase-3-4-verification.md
   - ../raw/2026-11-25-prior-design.md
   - ../raw/2026-11-25-repository-baseline.md
   - ../raw/2026-11-25-technical-references.md
@@ -81,6 +82,12 @@ Codexが実装を完了したか判断するため、ユーザー体験と状態
 ## フェーズ1・2の実装記録
 
 2026-11-25の対象版、遊べる範囲、保存形式、検証結果と未検証の項目は[実装と検版記録](../raw/2026-11-25-phase-1-2-verification.md)に記載した。
+
+## フェーズ3・4の検版
+
+T-MKT-01〜05、T-BUILD-01〜04と、今回の保存・操作・性能の確認範囲は次の実行記録を参照。端末、固定位置から始めた試験、実操作、数値試験を区別して記載した。
+
+[交易・拠点の実装と検版](../raw/2026-11-25-phase-3-4-verification.md)
 
 ## 関連ページ
 
