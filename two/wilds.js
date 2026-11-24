@@ -364,9 +364,9 @@ function scatteredHerbs(p, art) {
   // hold the near corners, with higher plumes against the river and hills.
   const beds = [
     [-4.4, 64.1, 1.13],
-    [4.7, 63.6, 1.13],
+    [8.4, 63.6, 1.13],
     [-3.57, 65.7, 0.83],
-    [3.85, 65.3, 0.88],
+    [8.6, 66.7, 0.88],
     [-6.75, 58.3, 1.25],
     [6.65, 58.9, 1.17],
     [-9.42, 51.2, 1.43],

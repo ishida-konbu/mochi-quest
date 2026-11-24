@@ -1,8 +1,9 @@
 import * as T from './vendor/three.module.min.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { houseCandles, houseFrontLamps } from './lamp-layout.js';
-import { kyoNight, kyoClock, KYO_DAY_SECONDS } from './kyo-layout.js';
-import { terrainHeight, wrapDelta } from './terrain.js';
+import { watchClock } from './kyo-layout.js';
+import { lightAtMinute, WORLD_DAY_SECONDS } from './world-clock.js';
+import { terrainHeight, wrapDelta, seasonAt } from './terrain.js';
 
 const TAU=2*Math.PI;
 const lathe=(profile,sides=20)=>new T.LatheGeometry(profile.map(([r,h])=>new T.Vector2(r,h)),sides);
@@ -234,10 +235,12 @@ export function createLampCollection(p){
     const lights=Array.from({length:2},()=>{
       const l=new T.PointLight(0xffbb7a,0,6.5,2);scene.add(l);return l;
     });
+    const lampClimate={};
     return (time,player)=>{
-      const night=kyoNight(time,player),clock=kyoClock(time,player);
+      const night=lightAtMinute(seasonAt(player.x,player.z,lampClimate),player.worldMinute).moon;
+      const clock=watchClock(time,player);
       uniforms.clock.value=time;uniforms.night.value=night;
-      uniforms.watchTime.value=((clock%KYO_DAY_SECONDS)+KYO_DAY_SECONDS)%KYO_DAY_SECONDS;
+      uniforms.watchTime.value=((clock%WORLD_DAY_SECONDS)+WORLD_DAY_SECONDS)%WORLD_DAY_SECONDS;
       paper.emissiveIntensity=.02+1.13*night;shoji.emissiveIntensity=.02+.83*night;
       const px=player.x,pz=player.z,eye=player.y+1.0;
       let best=null,second=null,d0=Infinity,d1=Infinity;

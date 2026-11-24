@@ -1,3 +1,5 @@
+import { LIVING_SITES } from './living-sites.js';
+import { REST_SITES } from './rest-sites.js';
 import { REGIONS, SNOW_SPRING, regionAt } from './terrain.js';
 import { WAYSIDE_SITES } from './wayside-hut-layout.js';
 import { KIYOMIZU } from './kiyomizu-layout.js';
@@ -39,6 +41,14 @@ export function atlasDestinations(state) {
   ];
   for (const [id,site,name,glyph,category] of landmarks) {
     places.push({id:'landmark-'+id,x:site.x,z:site.z,kind:'landmark',region:nearest(site).id,name,glyph,category});
+  }
+  const livingTypes = { workshop:['臼','公共工房'], shop:['市','食材の店'], gather:['採','採集'] };
+  for (const site of LIVING_SITES) {
+    const [glyph,category] = livingTypes[site.kind];
+    places.push({...site,glyph,category});
+  }
+  for (const {id,name,x,y,z,regionId} of REST_SITES) {
+    places.push({id,name:id.startsWith('bench-') ? name+'の腰掛け' : name,x,y,z,region:regionId,kind:'rest',glyph:'休',category:'休み処'});
   }
   return places;
 }

@@ -1,3 +1,4 @@
+import { dressLivingSites, dressCharcoalGrill, shareBeans } from './living-site-art.js';
 import { createSteam, steamSource } from './steam.js';
 import * as THREE from './vendor/three.module.min.js';
 import { visitMooredFittings } from './skiff-travel.js';
@@ -52,7 +53,7 @@ function fixture(p, x, z, yaw = 0, y = terrainHeight(x, z)) {
     const q = at(a, 0, b);
     p.link(v(q.x, terrainHeight(q.x, q.z) - 0.16, q.z), at(a, top, b), r, tint, square, true, true, mat);
   };
-  return { part, line, post, at };
+  return { part, line, post, at, painter:p };
 }
 
 function tex(w, h, paint, options = {}) {
@@ -432,6 +433,7 @@ function marketGoods(f, a, id, r) {
     }
     pottery(f, 0.92, y, 0.29, 0.33, '#7d8475');
   } else if (id === 4) {
+    dressCharcoalGrill(f,f.painter);
     for (let j = 0; j < 3; j++) {
       const x = -0.91 + j * 0.86;
       boxLid(f, x, y + 0.05, 0.43, 0.67, 0.53);
@@ -452,7 +454,8 @@ function marketGoods(f, a, id, r) {
       }
     }
   } else {
-    for (let i = 0; i < 3; i++) {
+    shareBeans(f,a,f.painter);
+    for (let i = 1; i < 3; i++) {
       const x = -0.9 + i * 0.45;
       f.part('ball', x, y + 0.15, 0.46, 0.21, 0.17, 0.21, '#b59a65', 0, 0, -0.16);
       f.part('round', x - 0.04, y + 0.3, 0.45, 0.077, 0.12, 0.063, '#9b8054');
@@ -854,6 +857,7 @@ export function dressPlaces(p) {
   grove(p, art);
   passVent(p);
   terraces(p, art);
+  dressLivingSites(p,art,fixture);
   coast(p, art);
   for(const vessel of BOATS) boat(p,vessel);
 }

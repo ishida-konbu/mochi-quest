@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createGame } from '../two/game.js';
 import { COURT, COURT_GATE_Z, COURT_BRAZIERS, RETREATS, sitePoint, retreatStones } from '../two/retreat-layout.js';
 import { watchPose } from '../two/court-patrol.js';
-import { KYO_DAY_SECONDS, KYO_ROADS } from '../two/kyo-layout.js';
+import { KYO_ROADS } from '../two/kyo-layout.js';
+import { WORLD_DAY_SECONDS } from '../two/world-clock.js';
 import { DISTRICTS } from '../two/geography.js';
 import { terrainHeight, groundHeight, waterDepth, waterSurfaceAt, constrainMove, solidHeightAt, overheadHeight, TREES, BUILDINGS } from '../two/terrain.js';
 
@@ -110,7 +111,7 @@ test('the full mural is visible through the main hearing bay, and both guards li
   }
   for(const i of [0,1]){
     let first=0,second=0,deskVisits=0,atDesk=false;
-    for(let t=0;t<=KYO_DAY_SECONDS;t+=.2){
+    for(let t=0;t<=WORLD_DAY_SECONDS;t+=.2){
       const q=watchPose(t,i);
       const byDesk=q.z < -2.6;
       if(byDesk && !atDesk)deskVisits++;
@@ -125,8 +126,8 @@ test('the full mural is visible through the main hearing bay, and both guards li
       }
       first=q.front;second=q.inner;
     }
-    assert.equal(deskVisits,3);
-    const noon=watchPose(0,i),night=watchPose(KYO_DAY_SECONDS/2,i),returning=watchPose(KYO_DAY_SECONDS,i);
+    assert.ok(deskVisits>=40 && deskVisits<=50,'the longer night accommodates full walking rounds');
+    const noon=watchPose(0,i),night=watchPose(WORLD_DAY_SECONDS/2,i),returning=watchPose(WORLD_DAY_SECONDS,i);
     assert.ok(noon.z>COURT_GATE_Z && night.z<8);
     assert.equal(night.front,1);assert.equal(night.inner,1);
     assert.deepEqual(noon,returning);assert.equal(noon.front+noon.inner+noon.taper,0);

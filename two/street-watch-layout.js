@@ -1,9 +1,9 @@
 import { DISTRICTS } from './geography.js';
-import { KYO_DAY_SECONDS } from './kyo-layout.js';
+import { WORLD_DAY_SECONDS } from './world-clock.js';
 
 const pi=Math.PI;
 const ease=t=>{const u=Math.max(0,Math.min(1,t));return u*u*(3-2*u);};
-const phase=t=>((t%KYO_DAY_SECONDS)+KYO_DAY_SECONDS)%KYO_DAY_SECONDS;
+const phase=t=>((t%WORLD_DAY_SECONDS)+WORLD_DAY_SECONDS)%WORLD_DAY_SECONDS;
 const turn=(a,b,f)=>a+Math.atan2(Math.sin(b-a),Math.cos(b-a))*f;
 const city=DISTRICTS.kyo;
 
@@ -29,8 +29,8 @@ function makeBeat([name,first,second,corners,offset],index){
   const home={x:stands[0].x+offset*Math.cos(first[2]),z:stands[0].z-offset*Math.sin(first[2]),
     yaw:first[2]+pi};
   const path=[stands[0],...corners.map(([x,z])=>({x:city.x+x,z:city.z+z})),stands[1]];
-  const speed=1.22+.08*(index%3),depart=KYO_DAY_SECONDS/4+8+(index*3%11);
-  const dawn=KYO_DAY_SECONDS*3/4+3+(index%4);
+  const speed=1.22+.08*(index%3),depart=WORLD_DAY_SECONDS * .30 + (index*3%11);
+  const dawn=WORLD_DAY_SECONDS*3/4+3+(index%4);
   const stops=[],ignition=[];let time=0,last=home;
   function wait(at,duration,yaw=at.yaw,reach=0){
     time+=duration;stops.push({time,x:at.x,z:at.z,yaw,reach});last=at;
@@ -59,7 +59,7 @@ function makeBeat([name,first,second,corners,offset],index){
   wait(home,Math.max(0,dawn-13-time-leg*2),home.yaw);
   walk(stands[0]);wait(stands[0],1.3,stands[0].yaw,1);wait(stands[0],1.8,stands[0].yaw,1);
   wait(stands[0],1,stands[0].yaw);walk(home);wait(home,1.2,home.yaw);
-  wait(home,KYO_DAY_SECONDS-time,home.yaw);
+  wait(home,WORLD_DAY_SECONDS-time,home.yaw);
   return {name,home,hearths,stops,ignition,depart,dawn};
 }
 export const STREET_BEATS=quarters.map(makeBeat);

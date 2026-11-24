@@ -1,6 +1,7 @@
 // Each tile is an orthographic portrait of the actual articulated rig. The
 // six haori dyes share one portrait and a smaller cloth-coverage plate.
 import * as THREE from './vendor/three.module.min.js';
+import { lightAtMinute } from './world-clock.js';
 import { DYES, TRADES } from './procession.js';
 import { SCROLL_FAUNA, FAUNA_SHEET, faunaDrawing, faunaFrequency } from './scroll-fauna.js';
 import { SPECIES } from './bestiary.js';
@@ -151,7 +152,7 @@ export function distantProcession(parent,shadowMaterial,capacity,beasts=false) {
   let count=0,shadowCount=0;
   function begin(player) {
     count=0;shadowCount=0;
-    const {moon,dawn,snow,autumn}=seasonAt(player.x,player.z,climate);
+    const {moon,dawn,snow,autumn}=lightAtMinute(seasonAt(player.x,player.z,climate),player.worldMinute);
     material.color.setRGB(1-.59*moon-.05*snow,1-.46*moon-.1*dawn-.035*autumn,1-.28*moon-.23*dawn-.075*autumn);
   }
   function warm() {

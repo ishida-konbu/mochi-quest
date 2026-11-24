@@ -102,6 +102,7 @@ export function createAudioSettings({
   document.addEventListener('focusin', closeFromOutside);
   return {
     close,
+    get open() { return !panel.hidden; },
     setMuted(muted) { document.getElementById('audio-muted').hidden = !muted; },
   };
 }

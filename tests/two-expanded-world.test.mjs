@@ -156,6 +156,7 @@ test('city lights follow a local day and night cycle',()=>{
 test('the longer Kyoto cycle preserves the light of an older journey without rescheduling its ships',()=>{
   const fresh=createGame(),p=fresh.state.player;
   Object.assign(p,{x:DISTRICTS.kyo.x,z:DISTRICTS.kyo.z});
+  fresh.state.livingWorld.worldMinute=0;
   fresh.state.time=144;fresh.step(.01);
   assert.ok(p.night);
   for(const [version,time] of [[5,72],[6,175.75],[7,144],[7,1000072]]){

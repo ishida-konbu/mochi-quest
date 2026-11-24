@@ -1,7 +1,8 @@
 import * as T from './vendor/three.module.min.js';
 import { DISTRICTS } from './geography.js';
-import { kyoClock } from './kyo-layout.js';
-import { terrainHeight,wrapDelta } from './terrain.js';
+import { watchClock } from './kyo-layout.js';
+import { terrainHeight,roadSurfaceHeight,wrapDelta } from './terrain.js';
+import { watchFooting } from './watch-footing.js';
 import { STREET_BEATS,streetWatchPose } from './street-watch-layout.js';
 import { brazierGeometry,createWatchman,moveWatchman,createWatchFire,burnWatchFire } from './court-watch.js';
 
@@ -24,7 +25,8 @@ export function createStreetWatch(scene,painter){
       hearth.glow.quaternion.setFromUnitVectors(up,normal);
       return hearth;
     });
-    return {man,beat,fires,pose:{}};
+    const feet=watchFooting((t,q)=>streetWatchPose(t,beat,q),(x,z)=>roadSurfaceHeight(x,z)+.052);
+    return {man,beat,fires,feet,pose:{}};
   });
   // A single local light follows the nearest bright source. Other baskets
   // keep their painted pool of light among the paving stones all night.
@@ -35,7 +37,7 @@ export function createStreetWatch(scene,painter){
     ward.visible=Math.abs(dx)<244 && Math.abs(dz)<226;
     if(!ward.visible)return;
     ward.position.set(player.x+dx-city.x,0,player.z+dz-city.z);
-    const px=city.x-dx,pz=city.z-dz,clock=kyoClock(time,player);
+    const px=city.x-dx,pz=city.z-dz,clock=watchClock(time,player);
     let brightest=0;light.intensity=0;
     function illuminate(x,y,z,intensity){
       const d=(x-px)**2+(z-pz)**2;
@@ -46,13 +48,12 @@ export function createStreetWatch(scene,painter){
       }
     }
     for(let i=0;i<watches.length;i++){
-      const {man,beat,fires,pose}=watches[i];
+      const {man,beat,fires,feet,pose}=watches[i];
       streetWatchPose(clock,beat,pose);
       const distance=(pose.x-px)**2+(pose.z-pz)**2;
       man.root.visible=distance<122**2;
       if(man.root.visible){
-        const floor=terrainHeight(pose.x,pose.z)+.074;
-        moveWatchman(man,pose,time,i,floor);
+        moveWatchman(man,pose,time,i,feet(clock,i));
         if(pose.taper>.01 && distance<19**2){
           man.fire.getWorldPosition(tip).sub(ward.position);
           illuminate(tip.x,tip.y,tip.z,7.8*pose.taper*(.94+.06*Math.sin(time*9+i)));

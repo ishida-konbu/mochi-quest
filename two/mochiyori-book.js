@@ -132,8 +132,8 @@ export function createBookView({dialog, body, heading, book, dialogue, save, tra
     if (!held.length) {
       const empty = el('div','parcel-empty');
       empty.append(itemImage({art:'empty'}), el('p','',delivered.length
-        ? '風呂敷の中は空っぽ。届けた品は下の控えで確かめられます。'
-        : '風呂敷の中は空っぽ。旅先で拾った品や、誰かに託された品がここに入ります。'));
+        ? '今は預かり物がありません。届けた品は下の控えに、餅作りの食材は「暮らし帖」の素材袋に載っています。'
+        : '今は預かり物がありません。旅先で託された品や調べ物に使う品は、この風呂敷に入ります。餅作りの食材は「暮らし帖」の素材袋で確かめられます。'));
       wrap.append(empty);
     }
     const byDestination = new Map();

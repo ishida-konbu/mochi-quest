@@ -1,3 +1,8 @@
+import { createLivingBook } from './living-book.js';
+import { LIVING_SITES } from './living-sites.js';
+import { worldClockLabel } from './world-clock.js';
+import { claimJourneyWriter, openJourneyStorage } from './journey-storage.js';
+import { showJourneyFiles } from './journey-files.js';
 import * as THREE from './vendor/three.module.min.js';
 import { applyClimateLights } from './atmosphere.js';
 import { createWake } from './wake.js';
@@ -12,7 +17,7 @@ import { scrollCoverage } from './scroll-paper.js';
 import { createInkPass } from './ink.js';
 import { createActors, getExpression } from './actors.js';
 import { loadRiceModel } from './mochi-model.js';
-import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, SAVE_KEY as saveKey, SETTINGS_KEY as settingsKey,
+import { PAGES_ORIGIN, PAGES_GUIDE, WORKER_ORIGIN, BACKUP_KEY, PREVIOUS_KEY, SETTINGS_KEY as settingsKey,
   travelCameraPreference, transferURL, decodeTransfer, storeTransfer, replaceJourney } from './journey-transfer.js';
 import { createGame, canUseModeOnMount } from './game.js';
 import { createStoryWorld } from './mochiyori-world.js';
@@ -82,17 +87,26 @@ function confirmJourney(existing, incoming) {
     resolve(dialog.returnValue === 'replace');
   }, { once: true }));
 }
+let journeyStorage = null;
+const writer = await claimJourneyWriter();
+try { journeyStorage = openJourneyStorage(localStorage); } catch { /* Saving may be disabled by the browser. */ }
+function sourceGame() {
+  try { return createGame(JSON.parse(journeyStorage?.original ?? 'null')); }
+  catch { return createGame(); }
+}
 async function startJourney() {
-  const local = { game: createGame(read(saveKey)), settings: read(settingsKey) || {} };
+  const local = { game: sourceGame(), settings: read(settingsKey) || {} };
   const hash = window.pendingMochiJourney;
   delete window.pendingMochiJourney;
   if (!hash || location.origin !== WORKER_ORIGIN) return local;
   const incoming = decodeTransfer(location.origin, hash, createGame);
   if (!incoming) return { ...local, status: '引き継ぐ記録を読み取れませんでした。' };
   try {
-    if (localStorage.getItem(saveKey) !== null && !await confirmJourney(local.game, incoming.game))
+    if (!writer || !journeyStorage?.current()) throw new Error();
+    if (journeyStorage.original !== null && !await confirmJourney(local.game, incoming.game))
       return { ...local, status: 'Cloudflare版の現在の記録から再開しました。' };
     storeTransfer(localStorage, incoming);
+    journeyStorage = openJourneyStorage(localStorage);
     return { ...incoming, status: 'GitHub Pages版の旅の記録を引き継ぎました。' };
   } catch {
     return { ...local, status: '旅の記録を保存できませんでした。ブラウザの保存設定を確認してください。' };
@@ -101,6 +115,17 @@ async function startJourney() {
 paintGlyphs();
 const { game, settings: savedSettings, status: transferStatus } = await startJourney();
 let hasJourney = game.restored;
+const unreadable = journeyStorage?.original != null && !game.restored;
+let saveWarning = !writer ? '別のタブで旅を保存中です。そちらを閉じて、この画面を読み込み直してください。'
+  : unreadable ? '保存元の記録を読み取れません。手引きの「旅の記録」で控えを書き出せます。'
+  : !journeyStorage ? 'ブラウザに保存できません。手引きの「旅の記録」から書き出せます。' : '';
+function showSaveWarning(text) {
+  saveWarning = text;
+  $('save-notice').textContent = text && '未保存 · 旅の記録';
+  $('save-notice').hidden = !text;
+  $('save-notice').title = text;
+}
+showSaveWarning(saveWarning);
 const state = game.state,
   p = state.player;
 const miniMap = createMiniMap($('mini-chart'), savedSettings.minimap, persistSettings, p,
@@ -186,7 +211,7 @@ let frames = 0,
   workTime = 0,
   qualitySince = 0;
 // A tab opened before a reset must not autosave its old journey on pagehide.
-let restarting = false;
+let restarting = false, hasWritten = false;
 function restartJourney() {
   if (restarting) return;
   restarting = true;
@@ -194,10 +219,11 @@ function restartJourney() {
 }
 function canSaveJourney() {
   if (!restarting && read(settingsKey)?.resetAt !== savedSettings.resetAt) restartJourney();
-  return !restarting;
+  return !restarting && writer && Boolean(journeyStorage?.current());
 }
+window.addEventListener('pageshow', event => { if (event.persisted) restartJourney(); });
 window.addEventListener('storage', event => {
-  if (event.key === settingsKey) canSaveJourney();
+  if (event.key === settingsKey && read(settingsKey)?.resetAt !== savedSettings.resetAt) restartJourney();
 });
 function journeySettings() {
   return {
@@ -209,9 +235,22 @@ function persistSettings() {
   if (canSaveJourney()) store(settingsKey, journeySettings());
 }
 function save() {
-  if (active && canSaveJourney()) {
-    if (store(saveKey, game.save())) hasJourney = true;
+  if (!active || unreadable || !writer || !journeyStorage || restarting) return;
+  try {
+    if (!canSaveJourney()) {
+      showSaveWarning('別の画面で記録が更新されました。旅を続けるには読み込み直してください。');
+      return;
+    }
+    const snapshot = game.save();
+    snapshot.livingWorld.revision++;
+    if (!hasWritten && !createGame(snapshot).restored) throw new Error();
+    journeyStorage.write(snapshot);
+    state.livingWorld.revision = snapshot.livingWorld.revision;
+    hasWritten = hasJourney = true;
     store(settingsKey, journeySettings());
+    if (saveWarning) showSaveWarning('');
+  } catch {
+    showSaveWarning('旅を保存できませんでした。手引きの「旅の記録」から今の旅を書き出せます。');
   }
 }
 function unlock() {
@@ -234,6 +273,11 @@ function message(text, seconds = 2.7) {
 function dispatchEvents() {
   for (const e of state.events.splice(0)) {
     audio.handle(e);
+    if (e.type === 'livingChanged') save();
+    if (e.type === 'living') {
+      const site = LIVING_SITES.find(s => s.id === e.siteId);
+      if (site) openDialog('living',site.kind === 'workshop' ? 'craft' : 'supplies');
+    }
     if (e.type === 'say') {
       $('speech').hidden = false;
       $('speech').textContent = e.text;
@@ -261,7 +305,7 @@ const performancePlayer = createPerformance({
     localResident=null;
     storyWorld.visible(false);
     actors.visible(false);
-    cinemaViewer = {...p,x:site.x,y:site.y,z:site.z,activity:null,mount:null};
+    cinemaViewer = {...p,worldMinute:p.worldMinute,x:site.x,y:site.y,z:site.z,activity:null,mount:null};
     sun.target.position.set(site.x,site.y,site.z);
     applyClimateLights(hemisphere,sun,bounce,cinemaViewer,state.time);
   },
@@ -374,6 +418,17 @@ const notebook = createBookView({
     message(dest.name + 'に道しるべを付けました');
     updateHUD();
   }
+});
+const livingBook = createLivingBook({
+  dialog, body:$('dialog-content'), heading:$('dialog-title'), game, save,
+  guide(site) {
+    const destination = mapDestinations.find(d => d.id === site.id);
+    if (!destination) return;
+    applyAtlasGoal(destination);
+    lastFocus = canvas;
+    dialog.close();
+    message(site.name + 'に道しるべを付けました。');
+  },
 });
 function action(name) {
   if (dialog.open || photoMode) return;
@@ -639,6 +694,7 @@ const bindings = new Set([
   'KeyM',
   'KeyJ',
   'KeyI',
+  'KeyL',
   'KeyH',
   'KeyP',
   'Escape',
@@ -656,6 +712,11 @@ document.addEventListener('keydown', (e) => {
   if (!dialog.open && speech.handleKey(e)) return;
   if (!bindings.has(e.code)) return;
   if (dialog.open) {
+    if (dialogKind === 'living' && e.code === 'KeyL' && !e.repeat && !e.target.closest('input,textarea,select')) {
+      e.preventDefault();
+      dialog.close();
+      return;
+    }
     if (dialogKind === 'story' && e.code === 'KeyI' && !e.repeat && !performancePlayer.active) {
       e.preventDefault();
       if ($('dialog-title').textContent === '旅の風呂敷') dialog.close();
@@ -686,6 +747,7 @@ document.addEventListener('keydown', (e) => {
     togglePhoto();
     return;
   }
+  if (e.code === 'KeyL' && !photoMode) { openDialog('living'); return; }
   if (e.code === 'KeyI' && !photoMode) { openDialog('inventory'); return; }
   if (e.code === 'KeyJ' && !photoMode) { openDialog('story'); return; }
   if (e.code === 'KeyM') {
@@ -934,6 +996,8 @@ function updateHUD() {
     $('effects').textContent = effectsText;
     lastEffects = effectsText;
   }
+  $('living-wallet').textContent = state.livingWorld.wallet + '文';
+  $('time-band').textContent = worldClockLabel(state.livingWorld.worldMinute).split('　')[1].split(' ')[0];
   $('parcel-count').textContent = carried.length + '品';
   const chapter = game.notebook.current();
   $('story-volume').textContent = chapter ? chapterLabel(game.notebook.index+1) + (game.notebook.index ? '　·　もち寄り帖' : '　·　旅控え') : '結び　·　もち寄り帖';
@@ -975,11 +1039,11 @@ function redrawMiniMap(targetSite) {
   const tracked = targetSite || trackedAnimal;
   drawMap(miniMap.canvas, state, yaw, region, false, pin, tracked, '', miniMap.projection(tracked || goal));
 }
-function openDialog(kind) {
+function openDialog(kind, section) {
   if (!renderer || dialog.open) return;
   speech.stop();
   const folio = kind === 'story' || kind === 'inventory';
-  if (folio) unlock();
+  if (folio || kind === 'living') unlock();
   clearInput();
   save();
   audioSettings.close();
@@ -987,6 +1051,7 @@ function openDialog(kind) {
   dialogKind = folio ? 'story' : kind;
   $('dialog-title').textContent = kind === 'map' ? '十七景の地図' : kind === 'journal' ? '三条通知の配達帳' : '旅の手引き';
   dialog.showModal();
+  if (kind === 'living') { livingBook.open(section); return; }
   if (folio) { (kind === 'inventory' ? notebook.inventory : notebook.open)(); return; }
   if (kind === 'map') mapDialog();
   else if (kind === 'journal') journalDialog();
@@ -1095,9 +1160,9 @@ function helpDialog(tab) {
     transfer.className = 'choice';
     transfer.textContent = 'Cloudflare版に旅の記録を引き継ぐ';
     transfer.onclick = () => {
-      const url = transferURL(location.origin, read(saveKey), journeySettings());
+      const url = transferURL(location.origin, game.save(), journeySettings());
       if (url) location.assign(url);
-      else transfer.textContent = '旅の記録を読み取れませんでした';
+      else { fileDialog(); $('dialog-content').querySelector('[role=status]').textContent = 'リンクに収まらない大きさです。ファイルに書き出し、引き継ぎ先で読み込んでください。'; }
     };
     body.querySelector('.actions').append(transfer);
   } else if (location.origin === WORKER_ORIGIN && !hasJourney) {
@@ -1106,10 +1171,35 @@ function helpDialog(tab) {
     link.textContent = '以前の旅を引き継ぐ（GitHub Pages版の手引き）';
     body.querySelector('.credit').append(document.createElement('br'),link);
   }
+  const files = document.createElement('button');
+  files.className = 'choice';
+  files.textContent = '旅の記録';
+  files.onclick = fileDialog;
+  body.querySelector('.actions').append(files);
   $('continue').onclick = () => { lastFocus = canvas; dialog.close(); };
 }
+function fileDialog() {
+  $('dialog-title').textContent = '旅の記録';
+  let backup = null, previousRecord = null;
+  try {
+    backup = localStorage.getItem(BACKUP_KEY);
+    previousRecord = localStorage.getItem(PREVIOUS_KEY);
+  } catch { /* Export still works. */ }
+  showJourneyFiles($('dialog-content'), {
+    game, settings:journeySettings, original:journeyStorage?.original, backup, previousRecord, warning:saveWarning, createGame,
+    back() { $('dialog-title').textContent = '旅の手引き'; helpDialog('歩き方'); },
+    replace(incoming) {
+      if (!canSaveJourney()) throw new Error();
+      incoming.settings.resetAt = Date.now();
+      storeTransfer(localStorage, incoming);
+      restartJourney();
+    },
+  });
+}
+$('save-notice').onclick = () => { openDialog('guide'); fileDialog(); };
 $('map').onclick = $('mini-button').onclick = () => openDialog('map');
 $('journal').onclick = () => openDialog('journal');
+$('living-book').onclick = () => openDialog('living');
 $('parcel-bag').onclick = () => openDialog('inventory');
 $('guide').onclick = () => openDialog('guide');
 $('story-book').onclick = () => openDialog('story');
@@ -1120,6 +1210,7 @@ dialog.addEventListener('click', (e) => {
 dialog.addEventListener('close', () => {
   if (dialog.open) return;
   previous = 0;
+  if (dialogKind === 'living') livingBook.close();
   if (dialogKind === 'story') { performancePlayer.close(); notebook.close(); }
   dialogKind = '';
   (lastFocus?.tagName === 'BUTTON' ? lastFocus : canvas).focus({ preventScroll: true });
@@ -1183,7 +1274,8 @@ function frame(now) {
   if (!previous || now >= nextFrame + interval) nextFrame = now;
   if (now + .75 < nextFrame) return;
   nextFrame += interval;
-  const delta = previous ? Math.min((now - previous) / 1000, 0.09) : 1 / 60;
+  const activeSeconds = previous ? (now - previous) / 1000 : 0;
+  const delta = previous ? Math.min(activeSeconds, 0.09) : 1 / 60;
   previous = now;
   const left = Number(keys.has('ArrowLeft') || keys.has('KeyA')),
     right = Number(keys.has('ArrowRight') || keys.has('KeyD'));
@@ -1218,6 +1310,8 @@ function frame(now) {
     if(!speech.active && (orbit || look.id!==null))conversationShot=null;
     const staging=speech.active && storyWorld.walkInput(p,delta);
     game.step(delta, {
+      clockSeconds: activeSeconds,
+      pauseClock: speech.active || audioSettings.open,
       x: staging ? staging.x : (c * side - s * forward) / magnitude,
       z: staging ? staging.z : (-s * side - c * forward) / magnitude,
       rightX: c,
@@ -1388,7 +1482,7 @@ async function boot() {
     playable = true;
     blockGameplay(false);
     $('loading').hidden = true;
-    if (transferStatus) message(transferStatus,6);
+    if (saveWarning || transferStatus) message(saveWarning || transferStatus,6);
     if (location.origin === PAGES_ORIGIN && location.hash === '#guide') {
       history.replaceState(history.state, '', location.pathname + location.search);
       openDialog('guide');

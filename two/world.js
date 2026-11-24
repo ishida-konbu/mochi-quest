@@ -203,6 +203,7 @@ function makeWater(scene, art, panorama, winterWash) {
       {
         clock: { value: 0 },
         climate: {value:new THREE.Vector4()},
+        sunWest: {value:0},
         hullPlacement: {value: BOATS.map(b => new THREE.Vector4(b.x,b.z,cos(b.yaw),sin(b.yaw)))},
         hullSize: {value: BOATS.map(b => new THREE.Vector4(b.length,b.width,0,0))},
         skiffPlacement: {value: RIVER_SKIFFS.map(()=>new THREE.Vector4())},
@@ -223,7 +224,7 @@ function makeWater(scene, art, panorama, winterWash) {
         vec4 mvPosition=viewMatrix*wp;gl_Position=projectionMatrix*mvPosition;
         #include <fog_vertex>
       }`,
-    fragmentShader: `uniform float clock;uniform vec4 climate;uniform sampler2D pebble,horizon;uniform vec3 deep,jade,foam;
+    fragmentShader: `uniform float clock,sunWest;uniform vec4 climate;uniform sampler2D pebble,horizon;uniform vec3 deep,jade,foam;
       uniform vec4 skiffPlacement[${RIVER_SKIFFS.length}];
       varying vec3 vWorld;
       ${hullWaterGLSL}
@@ -383,7 +384,7 @@ function makeWater(scene, art, panorama, winterWash) {
         dawnWater+=vec3(.055,.051,.050)*(glint*.68+hair*.48+choppy*.14);
         dawnWater=mix(dawnWater,vec3(.76,.66,.51),shore*.29);
         col=mix(col,dawnWater,climate.w*.9);
-        vec3 sunDir=normalize(vec3(.976,.094,-.192)),moonDir=normalize(vec3(.13,.26,-.96));
+        vec3 sunDir=normalize(vec3(.976*(1.-2.*sunWest),.094,-.192)),moonDir=normalize(vec3(.13,.26,-.96));
         float spark=.12+.65*smoothstep(.35,.90,choppy)+.51*glint+.23*hair;
         col+=vec3(1.55,.82,.33)*exp(-26.*length((reflection-sunDir)*vec3(1.,.63,1.)))*spark*climate.w;
         col+=vec3(.54,.69,.92)*exp(-24.*length((reflection-moonDir)*vec3(1.,.63,1.)))*spark*climate.z;
@@ -2014,6 +2015,7 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
   festival.root.position.set(POUNDING.x,h(POUNDING.x,POUNDING.z)+.012,POUNDING.z);
   festival.root.rotation.y=POUNDING.yaw;
   water.uniforms.climate=atmosphere.climate;
+  water.uniforms.sunWest=atmosphere.sunWest;
   const leaves = driftingLeaves(scene,boughs);
   return {
     textures: [...Object.values(art), atmosphere.panorama, atmosphere.winterWash],

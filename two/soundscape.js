@@ -4,7 +4,7 @@ import { FOREST_LAKE, lakeRadius } from './snow-country.js';
 import { MARKET_STALLS, REGIONS, bridgeAt, nearRoad, overheadHeight, regionAt, riverHalfWidth, riverZ, seasonAt,
   shoreDistance, wrapCoord, wrapDelta } from './terrain.js';
 import { onMountOtowa } from './kiyomizu-layout.js';
-import { kyoNight, kyoInfluence } from './kyo-layout.js';
+import { lightAtMinute } from './world-clock.js';
 import { MOUNTAIN_STREAMS } from './mountain-streams.js';
 import { POUNDING } from './festival.js';
 import { createTempleBell } from './kiyomizu-bell.js';
@@ -260,8 +260,7 @@ export function createSoundscape(ctx, master, channels = {}) {
 
   function updateEnvironment(state, now) {
     const p = state.player;
-    const climate=seasonAt(p.x,p.z);
-    climate.moon=Math.max(climate.moon,kyoNight(state.time,p)*kyoInfluence(p.x,p.z));
+    const climate=lightAtMinute(seasonAt(p.x,p.z),p.worldMinute);
     const weights = landscapeMix(p,climate,state.inariWeather);
     // A narrow torii lintel catches drops but admits sound from both sides.
     // A roof, the ship's hold or a bridge deck muffles the outdoor mix.

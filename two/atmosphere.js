@@ -4,7 +4,7 @@ import { peachHazeWeight } from './peach-haze.js';
 import { winterCloudGLSL, winterCloudTexture } from './winter-clouds.js';
 import * as THREE from './vendor/three.module.min.js';
 import { HDRLoader } from './vendor/HDRLoader.js';
-import { kyoNight, kyoInfluence } from './kyo-layout.js';
+import { lightAtMinute } from './world-clock.js';
 import { seasonAt } from './terrain.js';
 
 const asset = (name) => new URL('./assets/world/' + name, import.meta.url).href;
@@ -30,13 +30,11 @@ const palette = {
   dawnFog: color('#f5c3a3'),
 };
 const lighting = {};
-function climateAtTime(player,time,out) {
-  const climate=seasonAt(player.x,player.z,out);
-  climate.moon=Math.max(climate.moon,kyoNight(time,player)*kyoInfluence(player.x,player.z));
-  return climate;
+function climateAtTime(player,out) {
+  return lightAtMinute(seasonAt(player.x,player.z,out),player.worldMinute);
 }
-export function applyClimateLights(hemisphere, sun, bounce, player,time=0) {
-  const { snow, autumn, moon, dawn } = climateAtTime(player,time,lighting);
+export function applyClimateLights(hemisphere, sun, bounce, player) {
+  const { snow, autumn, moon, dawn, sunWest } = climateAtTime(player,lighting);
   sun.color
     .copy(palette.sun)
     .lerp(palette.snow, snow)
@@ -44,10 +42,10 @@ export function applyClimateLights(hemisphere, sun, bounce, player,time=0) {
     .lerp(palette.blue, moon);
   // A bank of snow cloud supplies mostly diffuse light. The weak remnant
   // of the key still shapes the roofs, with a broad, shallow cast shadow.
-  sun.intensity = 2.35 - 1.78 * snow - 0.22 * autumn - 1.5 * moon - 0.35 * dawn;
+  sun.intensity = (2.35 - 1.78 * snow - 0.22 * autumn) * (1 - .638 * moon - .149 * dawn);
   sun.shadow.intensity = 1 - .67 * snow;
   sun.shadow.radius = 1 + 2.4 * snow;
-  sun.position.set(player.x + 35 + 30 * dawn - 20 * moon, player.y + 38 - 19 * dawn, player.z - 51 + 29 * dawn);
+  sun.position.set(player.x + 35 + (30 - 130 * sunWest) * dawn - 20 * moon, player.y + 38 - 19 * dawn, player.z - 51 + 29 * dawn);
   hemisphere.color.copy(palette.sky).lerp(palette.cloudLight, snow).lerp(palette.twilight, dawn).lerp(palette.blue, moon);
   hemisphere.groundColor
     .copy(palette.earth)
@@ -59,7 +57,7 @@ export function applyClimateLights(hemisphere, sun, bounce, player,time=0) {
     .lerp(palette.snowBounce, snow)
     .lerp(palette.ice, moon)
     .lerp(palette.ember, 0.28 * dawn);
-  bounce.intensity = 0.65 - 0.34 * moon - .38 * snow;
+  bounce.intensity = (.65 - .38 * snow) * (1 - .523 * moon);
 }
 
 // The sky is painted in directions rather than positions so its horizon is
@@ -69,6 +67,7 @@ function mountainSky(scene, panorama, winterWash) {
     ridges: { value: panorama },
     winterWash: { value: winterWash },
     climate: { value: new THREE.Vector4() },
+    sunWest: {value:0}, dawnSea: {value:0},
     clock: { value: 0 },
     horizonInk: { value: 1 },
     valleyHaze: {value:0}, valleyMist: {value:new THREE.Color()},
@@ -85,7 +84,7 @@ function mountainSky(scene, panorama, winterWash) {
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
       }`,
     fragmentShader: `
-      varying vec3 direction; uniform sampler2D ridges; uniform vec4 climate; uniform float clock,horizonInk,valleyHaze; uniform vec3 valleyMist;
+      varying vec3 direction; uniform sampler2D ridges; uniform vec4 climate; uniform float clock,horizonInk,valleyHaze,sunWest,dawnSea; uniform vec3 valleyMist;
       ${winterCloudGLSL}
       float hash(vec2 p) {
         vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);
@@ -123,7 +122,7 @@ function mountainSky(scene, panorama, winterWash) {
         vec3 lining=mix(vec3(.96,.916,.814),vec3(1.,.71,.51),dawn);
         lining=mix(lining,vec3(.16,.19,.30),night);
         sky=mix(sky,lining,silk*(.19+.21*dawn-.05*night));
-        vec3 sun=normalize(mix(vec3(.3,.235,-.94),vec3(.976,.094,-.192),dawn));
+        vec3 sun=normalize(mix(vec3(.3,.235,-.94),vec3(.976*(1.-2.*sunWest),.094,-.192),dawn));
         float sunDist=length(ray-sun), halo=exp(-sunDist*(8.+5.*dawn));
         sky+=vec3(.19,.10,.033)*halo*(1.-night)*(1.+2.7*dawn);
         vec3 moon=normalize(vec3(.13,.26,-.96));
@@ -143,11 +142,14 @@ function mountainSky(scene, panorama, winterWash) {
                     (1.-smoothstep(.028,.030,sunDist))*(1.-night)*(1.-snow));
         // A low bank of cold cloud meets the horizon out beyond the northern bay.
         float winterOpening=snow*smoothstep(.08,.69,dot(ray.xz,vec2(.16,-.987)));
-        float seaOpening=max(winterOpening,dawn*smoothstep(.18,.83,ray.x));
+        float seaOpening=max(winterOpening,dawnSea*smoothstep(.18,.83,ray.x));
         float v=.20+elevation*(3.30+seaOpening*13.);
         float u=angle/3.14159265+.095;
         if(snow>.001) {
-          sky=mix(sky,winterOvercast(ray,clock,valleyMist),snow);
+          vec3 ceiling=winterOvercast(ray,clock,valleyMist);
+          ceiling*=mix(vec3(1.),vec3(.17,.23,.36),night*smoothstep(.01,.26,ray.y));
+          ceiling+=vec3(.082,.028,.008)*dawn*(1.-smoothstep(.02,.6,ray.y));
+          sky=mix(sky,ceiling,snow);
           low=mix(low,valleyMist,snow);
         }
         vec3 scan=texture2D(ridges,vec2(u,clamp(v,.006,.995))).rgb;
@@ -192,11 +194,14 @@ export function createAtmosphere(scene) {
   return {
     panorama, winterWash,
     climate: dome.material.uniforms.climate,
+    sunWest: dome.material.uniforms.sunWest,
     update(time, player, camera, profile) {
-      const s = climateAtTime(player,time,region);
+      const s = climateAtTime(player,region);
       dome.position.copy(camera.position);
       dome.material.uniforms.clock.value = time;
       dome.material.uniforms.climate.value.set(s.snow, s.autumn, s.moon, s.dawn);
+      dome.material.uniforms.sunWest.value = s.sunWest;
+      dome.material.uniforms.dawnSea.value = s.dawnSea;
       scene.fog.color
         .copy(palette.fog)
         .lerp(palette.winterFog, s.snow)
@@ -237,7 +242,7 @@ export function createAtmosphere(scene) {
       // Clear salt air leaves the fishing sail and ink-coloured reefs legible
       // from the pagoda. Snow is still visible on the inland approach.
       scene.fog.density = THREE.MathUtils.lerp(THREE.MathUtils.lerp(openAir,valleyAir,peachAir),.0048,s.snow) - .0008*s.dawn;
-      scene.environmentIntensity = 0.67 - 0.51 * s.moon - .33 * s.snow;
+      scene.environmentIntensity = (.67 - .33 * s.snow) * (1 - .761 * s.moon);
       return valleyView;
     },
   };

@@ -9,7 +9,10 @@ import { restoreMapGoal, savedMapGoal } from './wayfinding.js';
 export const PAGES_ORIGIN = 'https://ishida-konbu.github.io';
 export const PAGES_GUIDE = PAGES_ORIGIN + '/mochi-quest/two/#guide';
 export const WORKER_ORIGIN = 'https://mochi-quest.mochi-quest.workers.dev';
-export const SAVE_KEY = 'mochi-quest.two.journey.v1';
+export const LEGACY_KEY = 'mochi-quest.two.journey.v1';
+export const SAVE_KEY = 'mochi-quest.two.journey.v2';
+export const PREVIOUS_KEY = SAVE_KEY + '.previous';
+export const BACKUP_KEY = SAVE_KEY + '.backup';
 export const SETTINGS_KEY = 'mochi-quest.two.settings.v1';
 const prefix = '#mochi2=';
 const sizeLimit = 24000;
@@ -29,11 +32,17 @@ export function decodeTransfer(origin, hash, createGame) {
   if (origin !== WORKER_ORIGIN || typeof hash !== 'string' || !hash.startsWith(prefix) || hash.length > sizeLimit) return null;
   try {
     const data = JSON.parse(decodeURIComponent(hash.slice(prefix.length)));
+    return decodeJourney(data, createGame);
+  } catch {
+    return null;
+  }
+}
+
+export function decodeJourney(data, createGame) {
+  try {
     if (data?.format !== 1) return null;
     const settings = data.settings;
     if (!settings || typeof settings.sound !== 'boolean' || !Number.isFinite(settings.yaw)) return null;
-    // The game accepts both historical save formats and normalizes the old
-    // item/port layouts. It also strips fields that aren't part of the save.
     const game = createGame(data.journey);
     if (!game.restored) return null;
     const goal = restoreMapGoal(settings.goal, atlasDestinations(game.state));
@@ -53,9 +62,15 @@ export function decodeTransfer(origin, hash, createGame) {
 
 export function replaceJourney(storage, settings, snapshot) {
   const previous = storage.getItem(SETTINGS_KEY);
+  const original = storage.getItem(SAVE_KEY) ?? storage.getItem(LEGACY_KEY);
+  if (original !== null) storage.setItem(BACKUP_KEY, original);
   storage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   try {
-    if (snapshot === null) storage.removeItem(SAVE_KEY);
+    if (snapshot === null) {
+      // A reset must not resurrect the previous edition on the next startup.
+      storage.removeItem(LEGACY_KEY);
+      storage.removeItem(SAVE_KEY);
+    }
     else storage.setItem(SAVE_KEY, JSON.stringify(snapshot));
   } catch (error) {
     if (previous === null) storage.removeItem(SETTINGS_KEY);

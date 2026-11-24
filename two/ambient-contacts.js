@@ -8,7 +8,7 @@ import { OX_SCALE } from './scroll-fauna.js';
 import { MAX_MERCHANT_SHOULDER, MERCHANT_ROUTES, ROAD_MERCHANTS, roadMerchantPose } from './road-merchant-routes.js';
 import { QUAY_MERCHANTS } from './seaport-layout.js';
 import { COURT } from './retreat-layout.js';
-import { kyoNight, kyoClock } from './kyo-layout.js';
+import { kyoNight, watchClock } from './kyo-layout.js';
 import { watchPose } from './court-patrol.js';
 import { STREET_BEATS, streetWatchPose } from './street-watch-layout.js';
 import { WEDDING_SITES, WEDDING_ROLES, weddingWalkerPose } from './pilgrimage-layout.js';
@@ -54,7 +54,7 @@ function penetration(q,shapes,x,z,feet,height,radius,scale=1) {
 }
 
 export function createAmbientContacts(){
-  let sampledTravel, sampledCity, cityOffset, vehicles=[], citizens=[], walkers;
+  let sampledTravel, sampledCity, sampledWatch, vehicles=[], citizens=[], walkers;
   const courtBase=terrainHeight(COURT.x,COURT.z);
   const monkPose={};
   const tradingRoads=MERCHANT_ROUTES.map(route=>({
@@ -103,16 +103,21 @@ export function createAmbientContacts(){
     }
     const inCity=Math.abs(wrapDelta(x-DISTRICTS.kyo.x))<200 && Math.abs(wrapDelta(z-DISTRICTS.kyo.z))<185;
     if(inCity){
-      if(time!==sampledCity || cityOffset!==player.kyoClockOffset){
-        sampledCity=time;cityOffset=player.kyoClockOffset;citizens.length=0;
+      const clock=watchClock(time,player);
+      if(time!==sampledCity || clock!==sampledWatch){
+        sampledCity=time;sampledWatch=clock;citizens.length=0;
         walkers??=makeCityWalkers();
-        const night=kyoNight(time,player),clock=kyoClock(time,player);
+        const night=kyoNight(time,player);
         for(const w of walkers)if(night<=w.curfew){
           const q=cityWalkerPose(w,time,player,{});
           q.floor=roadSurfaceHeight;
           citizens.push([q,w.scale]);
         }
-        for(const beat of STREET_BEATS)citizens.push([streetWatchPose(clock,beat,{}),1.06]);
+        for(const beat of STREET_BEATS){
+          const q=streetWatchPose(clock,beat,{});
+          q.floor=roadSurfaceHeight;
+          citizens.push([q,1.06]);
+        }
         for(let i=0;i<2;i++){
           const q=watchPose(clock,i);
           q.x+=COURT.x;q.z+=COURT.z;

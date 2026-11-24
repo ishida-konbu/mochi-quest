@@ -1,6 +1,7 @@
 import { districtPoint, DISTRICTS, DISTRICT_SHIFT } from './geography.js';
 import { HIGASHIYAMA, KITAYAMA, NISHIYAMA } from './higashiyama.js';
 import { COURT, COURT_GATE_Z, COURT_PRECINCT } from './retreat-layout.js';
+import { DAY_MINUTES, LEGACY_KYO_SECONDS, minutesSinceNoon, SECONDS_PER_MINUTE, WORLD_DAY_SECONDS } from './world-clock.js';
 
 // The main avenue is kept open from the southern gate right up to the hillside fires.
 const oldRoads = [
@@ -183,10 +184,16 @@ export function kyoInfluence(x,z) {
   const otowa=Math.hypot((x-HIGASHIYAMA.x+135)/211,(z-HIGASHIYAMA.z-113)/94);
   return 1 - smooth(.52, 1.08, Math.min(urban,east,north,west,otowa));
 }
-// Daylight, the curfew, the night watch and both mountains use this noon-to-noon period.
-export const KYO_DAY_SECONDS = 288;
+// Bells and legacy saves keep the original units. The watch's walking
+// choreography uses real seconds within the much longer common day.
+export const KYO_DAY_SECONDS = LEGACY_KYO_SECONDS;
 export function kyoClock(time,player) {
+  if (Number.isFinite(player?.worldMinute)) return minutesSinceNoon(player.worldMinute) * KYO_DAY_SECONDS / DAY_MINUTES;
   return time+(player?.kyoClockOffset ?? 0);
+}
+export function watchClock(time, player) {
+  if (Number.isFinite(player?.worldMinute)) return minutesSinceNoon(player.worldMinute) * SECONDS_PER_MINUTE;
+  return kyoClock(time, player) * WORLD_DAY_SECONDS / KYO_DAY_SECONDS;
 }
 export function kyoNight(time,player) {
   const phase = -Math.cos(kyoClock(time,player) * Math.PI * 2 / KYO_DAY_SECONDS);

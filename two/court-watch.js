@@ -1,7 +1,8 @@
 import * as T from './vendor/three.module.min.js';
 import { COURT, COURT_BRAZIERS } from './retreat-layout.js';
 import { watchPose } from './court-patrol.js';
-import { kyoClock } from './kyo-layout.js';
+import { watchFooting } from './watch-footing.js';
+import { watchClock } from './kyo-layout.js';
 import { terrainHeight,groundHeight,wrapDelta } from './terrain.js';
 import { sculpture } from './pilgrimage-pigment.js';
 import { sculptHead,brushWash } from './scroll-sculpt.js';
@@ -22,13 +23,16 @@ function guard(index){
   // A round standing collar, loose jacket, gathered side vents and divided
   // trousers. Each individual trouser leg has radiating enameled ink folds.
   for(const side of [-1,1]){
+    const legCloth=new SilkPanels();
     const trouser=(u,v)=>{
       const a=tau*u,r=.094+.080*sin(pi*v*.91)+.057*v,pleat=1+.092*cos(6*a+v);
-      return [side*(.154+.039*(1-v))+r*sin(a)*pleat,.17+.63*v+.023*cos(4*a)*(1-v),
+      return [r*sin(a)*pleat,-.63*(1-v)+.018*cos(4*a)*(1-v),
         .01+r*.91*cos(a)*pleat];
     };
-    silk.cut(14,32,trouser,4,hakama,(u,v)=>[u,.1+.8*v]);
-    silk.cut(2,32,(u,v)=>trouser(u,.015+.044*v),4,'#99907a');
+    legCloth.cut(14,32,trouser,4,hakama,(u,v)=>[u,.1+.8*v]);
+    legCloth.cut(2,32,(u,v)=>trouser(u,.015+.044*v),4,'#99907a');
+    const cloth=mesh(legCloth.finish(),silkMaterial(),root);
+    cloth.name=side<0?'左袴':'右袴';
   }
   function coat(u,v,lift=0){
     const a=(u-.5)*tau,r=.284+.077*cos(v*pi*1.38)+.046*sin(2*pi*v)+.026*cos(6*a)*(1-v);
@@ -132,16 +136,31 @@ export function createWatchman(index){
   const root=pattern.root.clone(true),find=name=>root.getObjectByName(name);
   const arm=find('松明を持つ腕'),fire=flame(arm,index*.91+4);
   fire.position.fromArray(pattern.tip);
-  return {root,arm,fire,torso:find('狩衣'),head:find('烏帽子'),feet:[find('左足'),find('右足')]};
+  return {root,arm,fire,torso:find('狩衣'),head:find('烏帽子'),feet:[find('左足'),find('右足')],legs:[find('左袴'),find('右袴')]};
 }
-export function moveWatchman(g,q,time,index,floor){
-  const stride=sin(time*5.23+index)*q.walk;
+const downLeg=new T.Vector3(0,-1,0),ankle=new T.Vector3();
+export function moveWatchman(g,q,time,index,feet){
+  const floor=(feet[0].ground+feet[1].ground)*.5;
+  const c=cos(q.yaw),s=sin(q.yaw);
+  const stride=Math.max(-1,Math.min(1,((feet[0].x-feet[1].x)*s+(feet[0].z-feet[1].z)*c)/.36));
   g.root.position.set(q.x,floor,q.z);g.root.rotation.y=q.yaw;
   g.torso.position.y=.018*Math.abs(stride)+.006*cos(time*2.3+index);
   g.torso.rotation.x=.056*q.reach;
   g.head.rotation.set(.07*q.reach+.018*sin(time*1.9),.087*sin(time*.66+index),0);
   g.arm.rotation.x=.38*q.reach+.045*stride;
-  g.feet.forEach((leg,k)=>{const step=(k?1:-1)*stride;leg.position.z=.136*step;leg.position.y=.055*Math.max(0,step);});
+  g.feet.forEach((leg,k)=>{
+    const foot=feet[k], dx=foot.x-q.x,dz=foot.z-q.z;
+    leg.position.set(c*dx-s*dz,foot.y-floor,s*dx+c*dz);
+    leg.rotation.y=foot.yaw-q.yaw;
+    // The divided hakama follows each ankle from its own hip, covering the
+    // instep even when one sandal is still a full tread below the other.
+    const cloth=g.legs[k];
+    cloth.position.set((k?1:-1)*.154,.80+g.torso.position.y,.012);
+    ankle.copy(leg.position);ankle.y+=.148;ankle.z+=.018;
+    ankle.sub(cloth.position);
+    cloth.scale.y=ankle.length()/.63;
+    cloth.quaternion.setFromUnitVectors(downLeg,ankle.normalize());
+  });
   g.fire.visible=q.taper>.012;g.fire.scale.setScalar(.38*q.taper);g.fire.material.uniforms.clock.value=time;
 }
 
@@ -243,6 +262,8 @@ export function dressCourtWatch(scene,p,f){
   const root=new T.Group();root.name='京の評定所の夜回り';scene.add(root);
   const base=terrainHeight(COURT.x,COURT.z);root.position.set(COURT.x,base,COURT.z);
   const guards=[createWatchman(0),createWatchman(1)],poses=[{},{}],tipPoint=new T.Vector3();
+  const floorAt=(x,z)=>groundHeight(COURT.x+x,COURT.z+z,base+1.09)-base;
+  const feet=guards.map((_,i)=>watchFooting((t,q)=>watchPose(t,i,q),floorAt));
   for(const g of guards)root.add(g.root);
   const fires=COURT_BRAZIERS.map(([x,z],i)=>createWatchFire(root,x,0,z,.109,i*2));
   // Keep the lighting program stable across the night. Each pair of fires
@@ -252,11 +273,10 @@ export function dressCourtWatch(scene,p,f){
     const dx=wrapDelta(COURT.x-player.x),dz=wrapDelta(COURT.z-player.z);
     root.visible=dx*dx+dz*dz<107**2;if(!root.visible)return;
     root.position.set(player.x+dx,base,player.z+dz);
-    const watchTime=kyoClock(time,player);
+    const watchTime=watchClock(time,player);
     for(const [i,g] of guards.entries()){
       const q=watchPose(watchTime,i,poses[i]);
-      const floor=groundHeight(COURT.x+q.x,COURT.z+q.z,base+1.09)-base;
-      moveWatchman(g,q,time,i,floor);
+      moveWatchman(g,q,time,i,feet[i](watchTime,i));
       const lit=[q.front,q.inner],light=lights[i];
       let nearest=Infinity;light.intensity=0;
       if(q.taper>.01){

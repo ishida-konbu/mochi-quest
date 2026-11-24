@@ -1,7 +1,7 @@
 // Local metres and seconds on the same noon-to-noon clock as the capital.
 // Rebuilding a saved night midway through the rounds reproduces every ember.
 import { COURT_BRAZIERS, COURT_GATE_Z } from './retreat-layout.js';
-import { KYO_DAY_SECONDS } from './kyo-layout.js';
+import { WORLD_DAY_SECONDS } from './world-clock.js';
 const clamp=x=>Math.max(0,Math.min(1,x));
 const fade=x=>{const t=clamp(x);return t*t*(3-2*t);};
 function itinerary(i){
@@ -9,8 +9,8 @@ function itinerary(i){
   const home=[side*5.88,gate+2.30,0,0];
   const reach=([x,z])=>[x+.35,z+.78,Math.PI,1];
   const aim=([x,z])=>[x+.35,z+.78,Math.PI,0];
-  const depart=KYO_DAY_SECONDS/4-16+delay;
-  const leaveHall=KYO_DAY_SECONDS*3/4-5+delay;
+  const depart=WORLD_DAY_SECONDS*.22+delay;
+  const leaveHall=WORLD_DAY_SECONDS*3/4-5+delay;
   const knots=[
     [0,home],[depart,home],[depart+2.6,[side*2.75,gate+1,Math.PI]],
     [depart+4.4,[side*2.75,gate-2.61,Math.PI]],[depart+8.3,aim(first)],
@@ -33,14 +33,19 @@ function itinerary(i){
   }
   const homeAt=leaveHall+22.1;
   knots.push([leaveHall+6.2,[side*3.66,15.2,0]],
-    [leaveHall+19.1,[side*2.75,gate+1,0]],[homeAt,home],[KYO_DAY_SECONDS,home]);
+    [leaveHall+19.1,[side*2.75,gate+1,0]],[homeAt,home],[WORLD_DAY_SECONDS,home]);
   return {knots,depart,homeAt,lights:[depart+10.25,depart+22.45]};
 }
 const rounds=[itinerary(0),itinerary(1)];
 export function watchPose(time,index,out={}){
-  const t=((time%KYO_DAY_SECONDS)+KYO_DAY_SECONDS)%KYO_DAY_SECONDS;
+  const t=((time%WORLD_DAY_SECONDS)+WORLD_DAY_SECONDS)%WORLD_DAY_SECONDS;
   const {knots,depart,homeAt,lights}=rounds[index];
-  let end=1;while(end<knots.length-1 && t>=knots[end][0])end++;
+  let startIndex=1,end=knots.length-1;
+  while(startIndex<end){
+    const middle=Math.floor((startIndex+end)/2);
+    if(t>=knots[middle][0])startIndex=middle+1;
+    else end=middle;
+  }
   const [start,a]=knots[end-1],[finish,b]=knots[end],f=clamp((t-start)/(finish-start));
   const dx=b[0]-a[0],dz=b[1]-a[1],distance=Math.hypot(dx,dz);
   out.x=a[0]+dx*f;out.z=a[1]+dz*f;

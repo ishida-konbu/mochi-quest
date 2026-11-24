@@ -1,7 +1,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { inkVolume } from './scroll-sculpt.js';
 
-import { POUNDING, POUNDING_CREW } from './festival.js';
+import { MORTAR_PROFILE, POUNDING, POUNDING_CREW } from './festival.js';
 
 const TAU = 2 * Math.PI;
 const smooth = (a, b, x) => THREE.MathUtils.smoothstep(x, a, b);
@@ -330,26 +330,7 @@ export function buildPounding(parent, { animal, batch, group, shadow }) {
   // The outer profile folds back into the carved bowl, with cut end grain on the lip.
   carvedWood(
     root,
-    [
-      [0.012, 0.015],
-      [0.42, 0.015],
-      [0.473, 0.048],
-      [0.455, 0.13],
-      [0.348, 0.255],
-      [0.331, 0.34],
-      [0.372, 0.42],
-      [0.473, 0.56],
-      [0.504, 0.681],
-      [0.494, 0.739],
-      [0.465, 0.757],
-      [0.404, 0.754],
-      [0.377, 0.731],
-      [0.353, 0.663],
-      [0.31, 0.59],
-      [0.246, 0.519],
-      [0.15, 0.47],
-      [0.003, 0.458],
-    ],
+    MORTAR_PROFILE,
     '欅の臼',
   );
   batch(root, (b) => {

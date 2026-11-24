@@ -1,4 +1,7 @@
+import { createLivingWorld, validLivingWorld, JOURNEY_VERSION } from './living-save.js';
 import { SKIFFS, skiffPose, skiffDeck, skiffApproaches } from './skiff-travel.js';
+import { LIVING_SITES, nearLivingSite } from './living-sites.js';
+import { deliveryReward, gatherResource } from './living-resources.js';
 import { createStoryCollisions } from './story-collisions.js';
 import { createNotebook } from './mochiyori-progress.js';
 import { onSuzuriLand,okaFront } from './suzuri-basin-plan.js';
@@ -21,7 +24,9 @@ import { relocateLegacyPosition, relocateSixthEdition } from './geography.js';
 import { COURT, RETREATS, bathRadius, wetRetreatRadius, sitePoint } from './retreat-layout.js';
 import { SEAPORTS,relocateOldQuay } from './seaport-layout.js';
 import { pairRiverTravellers, updateHareRider } from './scroll-riders.js';
-import { RASHOMON, GATE_STONE, GATE_WING, GATE_LEAF, KYO_FOOD, KYO_ANIMALS, KYO_DAY_SECONDS, kyoNight, kyoInfluence } from './kyo-layout.js';
+import { RASHOMON, GATE_STONE, GATE_WING, GATE_LEAF, KYO_FOOD, KYO_ANIMALS, KYO_DAY_SECONDS } from './kyo-layout.js';
+import { SECONDS_PER_MINUTE, legacyWorldMinute, lightAtMinute, waitTargetMinute } from './world-clock.js';
+import { nearbyRestSite } from './rest-sites.js';
 import { makeScrollResidents, updateScrollResident } from './scroll-encounters.js';
 import { SCROLL_FAUNA, makeScrollFauna, moveScrollFauna } from './scroll-fauna.js';
 import { SEA_SPECIES, retiredSeaIds, makeRyuguResidents, updateRyuguResident } from './ryugu-residents.js';
@@ -309,11 +314,14 @@ export function createGame(snapshot = null) {
   };
   const region = REGIONS[regionAt(player.x,player.z)];
   const state = {
-    time: 0, player, npcs, nearbyNpcs: [], objects, shots: [], events: [], score: 0, bellStrike: null,
+    time: 0, livingWorld: createLivingWorld(), player, npcs, nearbyNpcs: [], objects, shots: [], events: [], score: 0, bellStrike: null,
     delivered: new Set(), recipientTotal:npcs.length, kagamiUnlocked:false,
     region: region.name, regionId: region.id, visited: [region.id]
   };
   const climate = {};
+  // Render and contact code already share this player view. Keep one source
+  // of time and leave this derived clock out of the saved player fields.
+  Object.defineProperty(player, 'worldMinute', {get: () => state.livingWorld.worldMinute});
   const voyage = createVoyage();
   // The ship's local coordinates stay fixed while a standing passenger is carried.
   Object.defineProperty(player,'vessel',{get:() => voyage.passenger(player)});
@@ -499,6 +507,15 @@ export function createGame(snapshot = null) {
       }
       if (distance <= radius && (!best || distance < best.distance)) {
         best = { target, place, label, action: player.mount ? 'dismount' : 'interact', distance };
+      }
+    }
+    for (const site of LIVING_SITES) {
+      if (!nearLivingSite(player,site)) continue;
+      const distance=gap(site);
+      if (!best || distance<best.distance) {
+        const remaining = (state.livingWorld.nodeReadyAt[site.id] || 0) - Math.floor(player.worldMinute);
+        const label = remaining > 0 ? site.name + '（あと' + remaining + '分）' : site.label;
+        best={target:{livingSite:site}, label, action:'interact', distance};
       }
     }
     return best;
@@ -721,6 +738,17 @@ export function createGame(snapshot = null) {
     const found = nearest();
     if (!found) return false;
     const target = found.target;
+    if (target.livingSite) {
+      const site=target.livingSite;
+      if (site.kind==='gather') {
+        const got=gatherResource(state.livingWorld,site.id);
+        message(got.ok?got.message:got.reason);
+        if (got.ok) { sound('pickup'); emit('livingChanged',{}); }
+        return got.ok;
+      }
+      emit('living',{siteId:site.id});
+      return true;
+    }
     if (SKIFFS.includes(target)) return boardSkiff(target);
     if (target === turtle) {
       if (player.buffs.full > 0) {
@@ -1032,8 +1060,10 @@ export function createGame(snapshot = null) {
       if (hit) {
         const points=(SPECIES[hit.type] || SEA_SPECIES[hit.type] || SCROLL_FAUNA[hit.type])?.points ?? 10;
         hit.flash=.58; state.score+=points;
+        const reward=state.delivered.has(hit.id) ? null : deliveryReward(state.livingWorld,hit.id);
         state.delivered.add(hit.id);
         emit('score', { value:points, text:'+'+points, x:hit.x, z:hit.z, y:shot.y+1 });
+        if (reward) {message('三条通知を届けたお礼に、'+reward+'を受け取りました。'); emit('livingChanged',{});}
         sound('score');
         if (!state.kagamiUnlocked && state.delivered.size===state.recipientTotal) {
           state.kagamiUnlocked=true;
@@ -1382,7 +1412,7 @@ export function createGame(snapshot = null) {
     state.region = offshore ? '竜宮沖' : otowa && kiyomizuClearing(player.x,player.z) ? KIYOMIZU.name : region.name;
     state.regionId = region.id;
     state.onLake = lakeRadius(player.x,player.z)<1.29;
-    player.night = Math.max(seasonAt(player.x,player.z,climate).moon,kyoNight(state.time,player)*kyoInfluence(player.x,player.z)) > .48;
+    player.night = lightAtMinute(seasonAt(player.x,player.z,climate), player.worldMinute).moon > .48;
     player.inWater = !passengerBoat && (player.diveDepth > 0 || player.grounded && waterDepth(player.x,player.z,state.time,player.y) > .14 && player.y < waterSurfaceAt(player.x,player.z,state.time,player.y) - .08);
     if (region.id === 'ryugu' && !inPalace && (offshore || player.y > terrainHeight(region.x,region.z) + 3)) return;
     if (!collectStamp || state.visited.includes(region.id) || !inPalace && distance(player,region)>STAMP_RADIUS || player.h>3) return;
@@ -1461,6 +1491,9 @@ export function createGame(snapshot = null) {
   }
   function step(elapsed, input = {}) {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return;
+    const activeSeconds = input.clockSeconds ?? elapsed;
+    if (!input.pauseClock && Number.isFinite(activeSeconds) && activeSeconds > 0)
+      state.livingWorld.worldMinute += activeSeconds / SECONDS_PER_MINUTE;
     if (input.jump && !input.dive && !heldJump) jump();
     heldJump = !!input.jump;
     // Bounded substeps preserve contacts, landings and projectiles on a slow frame.
@@ -1472,9 +1505,21 @@ export function createGame(snapshot = null) {
     }
   }
 
+  function restSite() {
+    return nearbyRestSite(player)?.name ?? null;
+  }
+  function waitUntil(hour, inEvent = false) {
+    if (inEvent || !restSite()) return {ok: false, reason: '宿の入口か茶屋の腰掛けのそばで、足を止めて休みましょう。'};
+    const target = waitTargetMinute(player.worldMinute, hour);
+    if (target === null) return {ok: false, reason: '休み終える時刻を選んでください。'};
+    state.livingWorld.worldMinute = target;
+    updateRegion(false);
+    return {ok: true};
+  }
+
   function save() {
     return {
-      version: 12, notebook: notebook.save(), flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
+      version: JOURNEY_VERSION, livingWorld: structuredClone(state.livingWorld), notebook: notebook.save(), flightSeed:state.flightSeed, kagamiUnlocked: state.kagamiUnlocked, time: state.time, score: state.score, visited: [...state.visited], delivered:[...state.delivered],
       player: { ...player, buffs: { ...player.buffs } },
       items: inventory.map(o => o?.cooldown ?? 0),
       bikes: objects.filter(o => o.type === 'port').map(o => o.bikes),
@@ -1485,7 +1530,8 @@ export function createGame(snapshot = null) {
   function restore(data) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
     const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
-    if (!data || ![2,3,4,5,6,7,8,9,10,11,12].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    if (!data || ![2,3,4,5,6,7,8,9,10,11,12,JOURNEY_VERSION].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    if (data.version === JOURNEY_VERSION && !validLivingWorld(data.livingWorld)) return;
     let p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
     // The original six districts occupy the prefix of the inventory. New
@@ -1553,6 +1599,8 @@ export function createGame(snapshot = null) {
     // elapsed time once to Kyoto's local clock; boats still use data.time.
     if(data.version>=5 && data.version<8)player.kyoClockOffset=data.time%KYO_DAY_SECONDS;
     else if(data.version>=8 && finite(p.kyoClockOffset,0,KYO_DAY_SECONDS))player.kyoClockOffset=p.kyoClockOffset%KYO_DAY_SECONDS;
+    if (data.version === JOURNEY_VERSION) state.livingWorld = structuredClone(data.livingWorld);
+    else state.livingWorld.worldMinute = legacyWorldMinute(data.time, player.kyoClockOffset);
     // These short pose cues were added after the first version-two saves.
     player.airStretch = !player.grounded && finite(p.airStretch,0,1) ? p.airStretch : 0;
     player.landing = finite(p.landing,0,.25) ? p.landing : 0;
@@ -1708,5 +1756,5 @@ export function createGame(snapshot = null) {
   }
   updateHareRider(riverRider,state.time);
   refreshCrowd();
-  return { state, act, step, nearest, teleport, save, restored, voyage, notebook, storyCollisions };
+  return { state, act, step, nearest, teleport, save, restored, voyage, notebook, storyCollisions, restSite, waitUntil };
 }

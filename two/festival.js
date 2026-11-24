@@ -12,3 +12,25 @@ export const POUNDING_CREW = [
   {type:'rabbit',role:'pounder',u:-.89,v:-.63},
   {type:'frog',role:'turner',u:.75,v:.44},
 ];
+
+// Profile of the hollow keyaki mortar, from foot to lip and back into its bowl.
+export const MORTAR_PROFILE = [
+      [0.012, 0.015],
+      [0.42, 0.015],
+      [0.473, 0.048],
+      [0.455, 0.13],
+      [0.348, 0.255],
+      [0.331, 0.34],
+      [0.372, 0.42],
+      [0.473, 0.56],
+      [0.504, 0.681],
+      [0.494, 0.739],
+      [0.465, 0.757],
+      [0.404, 0.754],
+      [0.377, 0.731],
+      [0.353, 0.663],
+      [0.31, 0.59],
+      [0.246, 0.519],
+      [0.15, 0.47],
+      [0.003, 0.458],
+    ];
