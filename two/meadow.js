@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
-import { BOUND } from './terrain.js';
+import { prunePlantBatch } from './homestead-groundcover.js';
+import { BOUND, wrapDelta } from './terrain.js';
 import { HERB_ATLAS_SIDE } from './meadow-herbs.js';
 import { MEADOW_TILE, MEADOW_TILES, meadowExclusions, visitMeadowTile } from './meadow-layout.js';
 
@@ -55,6 +56,15 @@ export function createMeadow(scene,objects,coarse,residents) {
     shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n diffuseColor.rgb *= vHerbTint;')
       .replace('#include <normal_fragment_begin>','#include <normal_fragment_begin>\n normal=normalize(mat3(viewMatrix)*vec3(0.,1.,0.));');
   };
+  const empty=[];
+  let clipped=empty;
+  function trimTile(m) {
+    const x0=wrapDelta(m.position.x),z0=wrapDelta(m.position.z);
+    const near=clipped.filter(p=>Math.abs(p.x-x0-MEADOW_TILE/2)<MEADOW_TILE/2+4 &&
+      Math.abs(p.z-z0-MEADOW_TILE/2)<MEADOW_TILE/2+4);
+    if(!near.length && !m.userData.pruned?.size)return;
+    prunePlantBatch(m.geometry.attributes.planting,0,x0,z0,m.userData.pruned??=new Map(),near,.42);
+  }
   function makeTile(i,j) {
     const canonical=v=>((v%MEADOW_TILES)+MEADOW_TILES)%MEADOW_TILES;
     const ci=canonical(i),cj=canonical(j),x0=ci*MEADOW_TILE-BOUND,z0=cj*MEADOW_TILE-BOUND;
@@ -76,11 +86,16 @@ export function createMeadow(scene,objects,coarse,residents) {
     g.boundingSphere=g.boundingBox.getBoundingSphere(new THREE.Sphere());
     const m=new THREE.Mesh(g,material);m.name='道端の草花';m.receiveShadow=true;
     m.position.set(i*MEADOW_TILE-BOUND,0,j*MEADOW_TILE-BOUND);m.updateMatrix();m.matrixAutoUpdate=false;
-    scene.add(m);return m;
+    trimTile(m);scene.add(m);return m;
   }
   let oldX=Infinity,oldZ=Infinity,pending=[];
   return (now,p,camera)=>{
     time.value=now;traveller.value.set(p.x,p.z);
+    const plots=scene.userData.homesteadPlots || empty;
+    if(plots!==clipped){
+      clipped=plots;
+      for(const m of cache.values())if(m)trimTile(m);
+    }
     const x=camera.position.x,z=camera.position.z;
     if(Math.abs(x-oldX)>4 || Math.abs(z-oldZ)>4){
       oldX=x;oldZ=z;

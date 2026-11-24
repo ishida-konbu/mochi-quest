@@ -1,3 +1,4 @@
+import { BUILD_MODULES } from './living-build-state.js';
 import { LIVING_SITES } from './living-sites.js';
 import { REST_SITES } from './rest-sites.js';
 import { REGIONS, SNOW_SPRING, regionAt } from './terrain.js';
@@ -49,6 +50,12 @@ export function atlasDestinations(state) {
   }
   for (const {id,name,x,y,z,regionId} of REST_SITES) {
     places.push({id,name:id.startsWith('bench-') ? name+'の腰掛け' : name,x,y,z,region:regionId,kind:'rest',glyph:'休',category:'休み処'});
+  }
+  for (const s of state.livingWorld?.structures ?? []) {
+    if (s.parentId || s.kind==='fence') continue;
+    const glyph={stand:'商',camp:'営',chest:'櫃',floor:'床'}[s.kind];
+    places.push({id:s.id,x:s.x,y:s.y,z:s.z,kind:'homestead',region:s.regionId,
+      name:BUILD_MODULES[s.kind].name,glyph,category:'自分の建物'});
   }
   return places;
 }

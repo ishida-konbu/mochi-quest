@@ -3,15 +3,12 @@ import { hokoraCarpentry } from './kaede-hokora-mesh.js';
 import { buildHokoraJoinery } from './kaede-hokora-joinery.js';
 import { buildHokoraRoof } from './kaede-hokora-roof.js';
 import { buildHokoraStone } from './kaede-hokora-stone.js';
+import { carpentryMaps } from './homestead-pigment.js';
 
 function shrineFinish() {
   const material = new T.MeshStandardMaterial({vertexColors:true, side:T.DoubleSide, roughness:.89});
   if (typeof document === 'undefined') return material;
-  const loader = new T.TextureLoader();
-  material.map = loader.load(new URL('./assets/world/kaede-hokora-grain.webp',import.meta.url).href);
-  material.map.colorSpace = T.SRGBColorSpace;
-  material.normalMap = loader.load(new URL('./assets/world/kaede-hokora-normal.webp',import.meta.url).href);
-  material.map.anisotropy = material.normalMap.anisotropy = 4;
+  Object.assign(material,carpentryMaps());
   material.onBeforeCompile = shader => {
     shader.vertexShader = 'attribute float finishId; varying float vFinish; varying vec3 vHokoraPoint;\n' + shader.vertexShader
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFinish = finishId; vHokoraPoint = position;');

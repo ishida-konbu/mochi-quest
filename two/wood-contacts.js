@@ -1,3 +1,4 @@
+import { isTimberFelled } from './living-build-trees.js';
 // One reusable branch survey per instanced form. The cylinder sweep queries
 // only woody strokes across its height, leaving the painted leaves permeable.
 import {forestGeometry} from './forest-mesh.js';
@@ -107,6 +108,7 @@ function measureWood(parts) {
 // clips the centreline to the body's height before measuring side clearance.
 export function woodContact(tree,x,z,pad,lo,hi,kind) {
   let result=kind==='ceiling'?Infinity:kind==='depth'?0:-Infinity;
+  if(tree.tree && isTimberFelled(tree.tree))return result;
   const dx=x-tree.x,dz=z-tree.z,scale=tree.scale;
   if(abs(dx)>tree.rx+pad || abs(dz)>tree.rz+pad ||
       lo>tree.top || hi<tree.bottom)return result;

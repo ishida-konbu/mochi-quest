@@ -66,16 +66,47 @@ function fits(living,id,amount) {
   return (living.inventory[id] ?? 0)+amount<=RESOURCES[id].limit;
 }
 
+// The morning delivery is shared by all visits to a particular shop.
+// A dated receipt is sufficient even after a long journey or overnight rest.
+const supplyDay = minute => Math.floor((minute + 1080) / 1440);
+const bundleLimit = (shopId, id) => shopId === 'terraces-farmer' && ['rice','brownRice'].includes(id) ? 12 : 6;
+
+export function shopOffer(living, shopId, id) {
+  if (!Object.hasOwn(SHOP_STOCK,shopId) || !SHOP_STOCK[shopId].includes(id)) return null;
+  const food = RESOURCES[id], day = supplyDay(living.worldMinute);
+  const receipt = living.market?.shopPurchases[shopId];
+  const bought = receipt?.day === day ? (receipt.counts[id] || 0) : 0;
+  // Bringing the rice down from the terraces adds one mon to its price at the market.
+  const price = food.price + Number(shopId === 'market-grocer' && ['rice','brownRice'].includes(id));
+  return {day, price, left:bundleLimit(shopId,id) - bought};
+}
+
+export function validShopPurchases(living) {
+  const receipts = living.market?.shopPurchases;
+  if (!ledger(receipts)) return false;
+  return Object.entries(receipts).every(([shopId, receipt]) => Object.hasOwn(SHOP_STOCK,shopId) &&
+    receipt && natural(receipt.day) && receipt.day <= supplyDay(living.worldMinute) && ledger(receipt.counts) &&
+    Object.entries(receipt.counts).every(([id,n]) => SHOP_STOCK[shopId].includes(id) &&
+      natural(n) && n <= bundleLimit(shopId,id)));
+}
+
 export function buyResource(living,site,id) {
-  const stock=Object.hasOwn(SHOP_STOCK,site?.id) && SHOP_STOCK[site.id];
-  if (!stock || !stock.includes(id)) return {ok:false,reason:'ここでは、その材料を扱っていません。'};
+  const offer=shopOffer(living,site?.id,id);
+  if (!offer) return {ok:false,reason:'ここでは、その材料を扱っていません。'};
+  if (!offer.left) return {ok:false,reason:'今日の分は売り切れです。朝六時に新しい荷が届きます。'};
   const food=RESOURCES[id];
-  if (living.wallet<food.price) return {ok:false,reason:'銭が足りません。三条通知を初めて届ける相手から、お礼をもらえます。'};
+  if (living.wallet<offer.price) return {ok:false,reason:'銭が足りません。三条通知を初めて届ける相手から、お礼をもらえます。'};
   if (!fits(living,id,food.amount)) return {ok:false,reason:food.name+'をこれ以上持てません。餅を作って空きを用意してください。'};
+  if (living.market) {
+    const receipts=living.market.shopPurchases, key=site.id;
+    if (receipts[key]?.day !== offer.day) receipts[key]={day:offer.day, counts:{}};
+    const counts=receipts[key].counts;
+    counts[id]=(counts[id] || 0)+1;
+  }
   living.inventory[id]=(living.inventory[id] ?? 0)+food.amount;
-  living.costs[id]=(living.costs[id] ?? 0)+food.price;
-  living.wallet-=food.price;
-  return {ok:true,message:food.name+food.amount+'gを'+food.price+'文で買いました。'};
+  living.costs[id]=(living.costs[id] ?? 0)+offer.price;
+  living.wallet-=offer.price;
+  return {ok:true,message:food.name+food.amount+'gを'+offer.price+'文で買いました。'};
 }
 
 export function gatherResource(living,nodeId,tool='hand') {

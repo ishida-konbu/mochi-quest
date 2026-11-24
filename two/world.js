@@ -1,3 +1,5 @@
+import { createHomesteadWorld } from './homestead-world.js';
+import { isTimberFelled, timberRevision } from './living-build-trees.js';
 import { createKaedeLeafFall, kaedeBoughs, kaedeTrees } from './kaede-grove.js';
 import {landmarkCulms} from './landmark-tree.js';
 import { buildDangoChaya } from './dango-chaya-art.js';
@@ -1850,13 +1852,14 @@ function driftingLeaves(scene, boughs) {
   });
   let grove = [],
     lastX = Infinity,
-    lastZ = Infinity;
+    lastZ = Infinity,lastTimber;
   return (time, player) => {
     kaedeFall(time,player);
-    if (abs(player.x - lastX) + abs(player.z - lastZ) > 7) {
+    if (abs(player.x - lastX) + abs(player.z - lastZ) > 7 || lastTimber!==timberRevision()) {
+      lastTimber=timberRevision();
       lastX = player.x;
       lastZ = player.z;
-      grove = maple.filter((t) => (t.x - lastX) ** 2 + (t.z - lastZ) ** 2 < 36 ** 2).slice(0, 4);
+      grove = maple.filter((t) => (t.x - lastX) ** 2 + (t.z - lastZ) ** 2 < 36 ** 2 && !isTimberFelled(t)).slice(0, 4);
     }
     leaves.count = grove.length * 4;
     grove.forEach((tree, j) => {
@@ -1943,7 +1946,7 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
   const boughs=kaedeBoughs();
   yield* woodland(painter, art, boughs);
   const updateForest = yield* prepareForest(scene, painter.sway, boughs);
-  plantUnderstory(painter, art);
+  const pruneUnderstory=plantUnderstory(painter, art);
   yield;
   dressPlaces(painter);
   yield;
@@ -2017,7 +2020,10 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
   water.uniforms.climate=atmosphere.climate;
   water.uniforms.sunWest=atmosphere.sunWest;
   const leaves = driftingLeaves(scene,boughs);
+  const homestead = createHomesteadWorld(scene,terrain.refreshCanopy,pruneUnderstory);
   return {
+    setLivingWorld:homestead.setLivingWorld,
+    setBuildingPreview:homestead.setBuildingPreview,
     textures: [...Object.values(art), atmosphere.panorama, atmosphere.winterWash],
     setSceneryQuality(value) {
       const next=SCENERY_PROFILES[sceneryQualityPreference(value) ?? DEFAULT_SCENERY_QUALITY];
@@ -2046,6 +2052,7 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
         updateOcean(voyageTime,player);
         updatePalace(time,player,camera,voyageTime);
         updateForest(camera, player, profile);
+        homestead.update(time,camera.position);
         for (const b of batches) {
           const dx=wrapDelta(b.x-camera.position.x), dz=wrapDelta(b.z-camera.position.z);
           const x=Math.round((camera.position.x+dx-b.x)/(2*BOUND))*2*BOUND;

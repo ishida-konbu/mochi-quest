@@ -4,6 +4,7 @@ import { inHutYard } from './wayside-hut-layout.js';
 import { GATE_PAVING, RASHOMON, inCapitalWard } from './kyo-layout.js';
 import { kiyomizuClearing } from './kiyomizu-layout.js';
 import { reservedScenery } from './retreat-layout.js';
+import { prunePlantBatch } from './homestead-groundcover.js';
 import * as THREE from './vendor/three.module.min.js';
 import {
   BRIDGES,
@@ -398,6 +399,7 @@ function scatteredHerbs(p, art) {
   }
   const material = herbsMaterial(art, p.sway),
     base = herbGeometry();
+  const bedsByMesh=[];
   for (const arr of patches.values()) {
     const geo = base.clone(),
       cells = new Float32Array(arr.length * 2);
@@ -414,8 +416,16 @@ function scatteredHerbs(p, art) {
     mesh.castShadow = false;
     p.scene.add(mesh);
     p.closeDetails.push(mesh);
+    bedsByMesh.push({mesh,hidden:new Map()});
   }
+  return plots=>{
+    for(const {mesh,hidden} of bedsByMesh){
+      const {center,radius}=mesh.boundingSphere;
+      const near=plots.filter(p=>Math.hypot(p.x-center.x,p.z-center.z)<radius+4);
+      if(near.length || hidden.size)prunePlantBatch(mesh.instanceMatrix,12,0,0,hidden,near,.78);
+    }
+  };
 }
 export function plantUnderstory(p, art) {
-  scatteredHerbs(p, art);
+  return scatteredHerbs(p, art);
 }

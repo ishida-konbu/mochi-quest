@@ -1,4 +1,7 @@
-import { RESOURCES, buyResource } from './living-resources.js';
+import { renderMarket } from './living-market-book.js';
+import { createHomesteadBook } from './living-homestead-book.js';
+import { buyTimber } from './living-build.js';
+import { RESOURCES, buyResource, shopOffer } from './living-resources.js';
 import { LIVING_SITES, nearLivingSite, nearGiftRecipient } from './living-sites.js';
 import { REST_SITES } from './rest-sites.js';
 import { WAIT_HOURS, DAY_MINUTES, waitTargetMinute, worldClockLabel } from './world-clock.js';
@@ -6,7 +9,7 @@ import { ATTRIBUTE_NAMES, BASIC_RECIPE, CRAFT_OPTIONS, STARTER_RECIPES, craftRec
 import { renderCraftPreview, disposeCraftPreview } from './living-craft-preview.js';
 import { REGIONS, wrapDelta } from './terrain.js';
 
-const tabs = { supplies:'素材袋', craft:'餅作り', book:'餅図鑑', rest:'ひと休み' };
+const tabs = { supplies:'素材袋', craft:'餅作り', book:'餅図鑑', market:'商い', build:'家づくり', rest:'ひと休み' };
 const regionName = id => REGIONS.find(r => r.id === id)?.name ?? '';
 const firstMochi = { ...BASIC_RECIPE, fillings:[{id:'sakura', amount:4, placement:'top'}], shape:'flat' };
 const el = (tag, text, cls) => {
@@ -72,7 +75,7 @@ function attributes(parent, values, keys = Object.keys(ATTRIBUTE_NAMES)) {
   parent.append(dl);
 }
 
-export function createLivingBook({ dialog, body, heading, game, save, guide, cook }) {
+export function createLivingBook({ dialog, body, heading, game, save, guide, cook, saw, preview, bearing }) {
   const world = game.state.livingWorld, player = game.state.player;
   let tab = 'supplies', recipeId, draft, preset, customName, customDescription, area, receipt;
   const near = kind => LIVING_SITES.find(site => site.kind === kind && nearLivingSite(player,site));
@@ -81,11 +84,14 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
   function route(site, text) {
     return button(text || (site.name + 'へ　' + Math.round(distance(site)) + ' m'), () => guide(site), 'living-route');
   }
+  const shared = {world,game,save,el,button,section,field,details,select,number,route,choose};
+  const homestead = createHomesteadBook({...shared,dialog,body,heading,preview,bearing,saw});
   function updateReceipt(result) {
     receipt.textContent = result.message || result.reason;
     if (result.ok) save();
   }
-  function choose(next, message = '') {
+  function choose(next, message = '', buildKind) {
+    homestead.clearPreview();
     tab = next;
     // Keep the same renderer and orbit while comparing pages of the book.
     if (next !== 'craft' && next !== 'book') disposeCraftPreview();
@@ -105,7 +111,7 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
     receipt.setAttribute('role','status');
     area = el('div',undefined,'living-area');
     body.append(meta,nav,receipt,area);
-    ({supplies, craft, book, rest}[tab])();
+    ({supplies, craft, book, market:()=>renderMarket({...shared,area}), build:()=>homestead.render(area,buildKind), rest}[tab])();
     dialog.scrollTop = 0;
   }
   function supplies() {
@@ -125,18 +131,26 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
       const stall = section(shop.name,area);
       const goods = el('div',undefined,'living-goods');
       for (const id of shop.stock) {
-        const r = RESOURCES[id];
-        const b = button(r.name+'　'+r.amount+' g　'+r.price+'文', () => {
+        const r = RESOURCES[id], offer = shopOffer(world,shop.id,id);
+        const label = offer.left ? offer.price+'文（残り'+offer.left+'包）' : '売り切れ';
+        const b = button(r.name+'　'+r.amount+' g　'+label, () => {
           if (!nearLivingSite(player,shop)) return;
           const result = buyResource(world,shop,id);
           if (result.ok) save();
           choose('supplies', result.message || result.reason);
           if (result.ok) area.querySelector('[data-food="'+id+'"]')?.focus({preventScroll:true});
         });
+        b.disabled = !offer.left;
         b.dataset.food = id;
         goods.append(b);
       }
-      stall.append(goods);
+      goods.append(button('木材　4本　6文',()=>{
+        if (!nearLivingSite(player,shop)) return;
+        const r=buyTimber(world,shop);
+        if(r.ok) save();
+        choose('supplies',r.message || r.reason);
+      }));
+      stall.append(el('p','朝六時に新しい荷が届きます。'), goods);
     }
     const routes = section('材料と工房を探す',area);
     routes.append(el('p','行き先を選ぶと道しるべが付きます。着いたら画面に出る「餅を作る」「よもぎを摘む」などのボタンか E を押します。三条通知を初めて届けた相手からも、銭と食材をもらえます。'));
@@ -320,6 +334,7 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
     }
     uses.append(button('この配合で作る',()=>{resetDraft(recipe.draft,'free');customName=recipe.name;customDescription=recipe.description;choose('craft');}));
     area.append(uses);
+    if (remaining) uses.append(button('商いを開く',()=>choose('market')));
     const spec = details('配合と持ち味',area);
     spec.append(el('p',Object.entries(v.requirements).map(([id,n])=>RESOURCES[id].name+' '+n+' g').join('、')));
     attributes(spec,batches[0]?.attributes || v.attributes);
@@ -337,9 +352,11 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
   }
   function rest() {
     const name = game.restSite();
-    const place = section(name || '旅籠と茶屋',area);
+    const place = section(name || '休める場所',area);
     if (!name) {
-      place.append(el('p','旅籠の入口や茶屋の腰掛けのそばに立つと、朝・昼・夕方・夜のいずれかを選んで休めます。'),route(nearest(REST_SITES)));
+      place.append(el('p','旅籠の入口や茶屋の腰掛け、自分の野営地の寝床で、朝・昼・夕方・夜まで休めます。'),route(nearest(REST_SITES)));
+      const camps=world.structures.filter(s=>s.kind==='camp');
+      if(camps.length) place.append(route({...nearest(camps),name:'自分の野営地'}));
       return;
     }
     place.append(el('p','休み終える時刻を選んでください。'));
@@ -359,6 +376,6 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
       if (section === 'craft' && !draft) resetDraft(firstMochi,'blossom');
       choose(section);
     },
-    close() { disposeCraftPreview();delete dialog.dataset.living; },
+    close() { homestead.clearPreview();disposeCraftPreview();delete dialog.dataset.living; },
   };
 }

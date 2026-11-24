@@ -1,6 +1,7 @@
 // Stable additions to the delivery scroll. The location of each ensemble is
 // relative to its landmark, including when a journey moves to a larger map.
 import { TREES, REGIONS, BUILDINGS, regionAt, terrainHeight, treeGround, groundHeight, solidHeightAt, nearRoad, WATER_Y } from './terrain.js';
+import { reserveTimberPerch } from './living-build-trees.js';
 import { DAIBUTSU } from './pilgrimage-layout.js';
 import { RYUGU, PALACE_BED, PALACE_LEVELS, PALACE_POOL, boardingHeightAt, palacePoint } from './ryugu-layout.js';
 import { animalRadius, openGround, canopyHeight, walkCircuit } from './village-paths.js';
@@ -68,6 +69,7 @@ function hawkRoute(index) {
       const d=(tree.x-x)**2+(tree.z-z)**2;
       if(d<score && !stops.some(s=>hypot(s.tree.x-tree.x,s.tree.z-tree.z)<32) && reachableBough(tree)) {score=d;best=tree;}
     }
+    reserveTimberPerch(best);
     stops.push(reachableBough(best));
   }
   return stops.map((a,i)=>{

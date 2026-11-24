@@ -1,3 +1,4 @@
+import { isTimberFelled, timberRevision } from './living-build-trees.js';
 import * as THREE from './vendor/three.module.min.js';
 import { kyoRidgeHeight } from './higashiyama.js';
 import { kaedeTrees } from './kaede-grove.js';
@@ -293,7 +294,7 @@ export function* prepareForest(scene, clock, boughs) {
   const transform=new THREE.Object3D(), tint=new THREE.Color();
   const view=new THREE.Frustum(),projection=new THREE.Matrix4(),crown=new THREE.Sphere();
   const lastRotation=new THREE.Quaternion();
-  let lastX=Infinity,lastY=Infinity,lastZ=Infinity,lastZoom=0,lastAspect=0,lastProfile;
+  let lastX=Infinity,lastY=Infinity,lastZ=Infinity,lastZoom=0,lastAspect=0,lastProfile,lastTimber;
   return function updateForest(camera, player, profile=SCENERY_PROFILES[DEFAULT_SCENERY_QUALITY]) {
     const eye=camera.position;
     const scale=player.buffs.full>0 ? 1.28 : 1;
@@ -306,7 +307,8 @@ export function* prepareForest(scene, clock, boughs) {
     heroRadius.value.set(scale*(1.17-.18*pull),height+.29);
     const zoom=camera.projectionMatrix.elements[5],aspect=camera.projectionMatrix.elements[0];
     if ((eye.x-lastX)**2+(eye.y-lastY)**2+(eye.z-lastZ)**2<STEP*STEP &&
-        Math.abs(lastRotation.dot(camera.quaternion))>.9999 && zoom===lastZoom && aspect===lastAspect && profile===lastProfile)return;
+        Math.abs(lastRotation.dot(camera.quaternion))>.9999 && zoom===lastZoom && aspect===lastAspect && profile===lastProfile && lastTimber===timberRevision())return;
+    lastTimber=timberRevision();
     lastProfile=profile;
     lastZoom=zoom;lastAspect=aspect;lastRotation.copy(camera.quaternion);
     view.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
@@ -328,7 +330,7 @@ export function* prepareForest(scene, clock, boughs) {
         const {tree,ground,rotation,wash,dye,bambooWash,detailStart,reach,tint:brightness}=record;
         const dx=wrapDelta(tree.x-eye.x), dz=wrapDelta(tree.z-eye.z);
         const d2=dx*dx+dz*dz+(ground-eye.y)**2;
-        if(d2>rangeSq) continue;
+        if(d2>rangeSq || isTimberFelled(tree)) continue;
         const x=eye.x+dx,z=eye.z+dz;
         crown.center.set(x,ground+.58*tree.h,z);
         // Include the whole baked crown, a camera stride, and the permitted

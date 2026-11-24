@@ -1,4 +1,6 @@
 import { createCookingPerformance } from './cooking-performance.js';
+import { createForestryView } from './living-forestry-view.js';
+import { syncBuildTerrain } from './living-build.js';
 import { createLivingBook } from './living-book.js';
 import { LIVING_SITES } from './living-sites.js';
 import { worldClockLabel } from './world-clock.js';
@@ -44,7 +46,7 @@ import { createAudio, normalizeVolumes } from '../sound.js';
 import { createAudioSettings } from './audio-settings.js';
 import { createMiniMap } from './mini-map.js';
 import { atlasDestinations } from './atlas-destinations.js';
-import { guideBearing, restoreMapGoal, savedMapGoal } from './wayfinding.js';
+import { guideBearing, mapPoint, restoreMapGoal, savedMapGoal } from './wayfinding.js';
 import { MODES, EMOTES, HELP, glyph, paintGlyphs, drawFace } from './interface.js';
 import { loadMapPaper, drawMap } from './map.js';
 
@@ -129,6 +131,7 @@ function showSaveWarning(text) {
 showSaveWarning(saveWarning);
 const state = game.state,
   p = state.player;
+syncBuildTerrain(state.livingWorld);
 const miniMap = createMiniMap($('mini-chart'), savedSettings.minimap, persistSettings, p,
   () => redrawMiniMap(pinnedStorySite()));
 state.inariWeather = inariWeatherAt(p.x, p.z, state.time, state.flightSeed);
@@ -144,7 +147,7 @@ let pitch = 0.23,
   distance = 6.55,
   priorCamera = null,
   photoMode = false;
-const mapDestinations = atlasDestinations(state);
+let mapDestinations = atlasDestinations(state), mappedStructures = state.livingWorld.structures;
 let goal = restoreMapGoal(savedSettings.goal, mapDestinations);
 let trackedAnimal = null, trackedHabitat = null;
 const guideTorso = {};
@@ -236,6 +239,11 @@ function persistSettings() {
   if (canSaveJourney()) store(settingsKey, journeySettings());
 }
 function save() {
+  if (mappedStructures!==state.livingWorld.structures) {
+    mapDestinations=atlasDestinations(state);
+    mappedStructures=state.livingWorld.structures;
+    if(goal?.kind==='homestead') goal=mapDestinations.find(d=>d.id===goal.id) ?? null;
+  }
   if (!active || unreadable || !writer || !journeyStorage || restarting) return;
   try {
     if (!canSaveJourney()) {
@@ -277,7 +285,8 @@ function dispatchEvents() {
     if (e.type === 'livingChanged') save();
     if (e.type === 'living') {
       const site = LIVING_SITES.find(s => s.id === e.siteId);
-      if (site) openDialog('living',site.kind === 'workshop' ? 'craft' : 'supplies');
+      if (e.section) openDialog('living',e.section);
+      else if (site) openDialog('living',site.kind === 'workshop' ? 'craft' : 'supplies');
     }
     if (e.type === 'say') {
       $('speech').hidden = false;
@@ -452,11 +461,28 @@ const cooking = createCookingPerformance({
   },
   playSound(name) {audio.handle({type:'sound',name:'cook-'+name});},
 });
+const forestry=createForestryView({
+  scene,camera,player:p,dialog,
+  canStand(x,z,y,radius,height) {
+    if (game.storyCollisions.penetration(x,z,y,height,radius)>0) return false;
+    return !state.nearbyNpcs.some(n=>Math.abs(n.y-y)<2 && Math.hypot(wrapDelta(n.x-x),wrapDelta(n.z-z))<radius+.75);
+  },
+  enter(){ clearInput();actors.hero.visible=false; },
+  draw(){
+    world.update(state.time,p,camera,state.time,state.bellStrike,state.inariWeather);
+    meadow(state.time,p,camera);drawScene();
+  },
+  leave(){
+    actors.hero.visible=true;previous=0;updateCamera(0,true);
+    world.update(state.time,p,camera,state.time,state.bellStrike,state.inariWeather);
+    meadow(state.time,p,camera);if(!contextLost)drawScene();
+  },
+});
 const livingBook = createLivingBook({
   dialog, body:$('dialog-content'), heading:$('dialog-title'), game, save,
-  cook:cooking.start,
+  cook:cooking.start, saw:forestry.start, preview:showLandSurvey, bearing:()=>yaw,
   guide(site) {
-    const destination = mapDestinations.find(d => d.id === site.id);
+    const destination = mapDestinations.find(d => d.id === site.id) ?? {...mapPoint(site.x,site.z),name:site.name};
     if (!destination) return;
     applyAtlasGoal(destination);
     lastFocus = canvas;
@@ -464,6 +490,47 @@ const livingBook = createLivingBook({
     message(site.name + 'に道しるべを付けました。');
   },
 });
+// The traveller stays put while measuring. Keep the same viewing side when the
+// plan turns, and lift the survey eye above existing roofs or wooded slopes.
+let surveyPose=null, lastSurvey=null;
+function showLandSurvey(candidate) {
+  lastSurvey=candidate;
+  world.setBuildingPreview(candidate);
+  if (!candidate) {
+    surveyPose=null;
+    camera.clearViewOffset();
+    updateCamera(0,true);
+  } else {
+    const x=candidate.x, z=candidate.z, y=candidate.y;
+    const w=canvas.clientWidth, h=canvas.clientHeight;
+    const visibleHeight=Math.max(h*.35,dialog.getBoundingClientRect().top-canvas.getBoundingClientRect().top);
+    const range=Math.max(7,5.6/camera.aspect,3.9*h/visibleHeight);
+    // Evaluate the previous side first. A nudge normally keeps the camera
+    // level and facing the same way, even after turning the building.
+    const preferred=surveyPose?.a ?? yaw;
+    let best=-1;
+    for (const offset of [0,.7,-.7,1.5,-1.5,Math.PI]) {
+      const a=preferred+offset, dx=Math.sin(a)*range, dz=Math.cos(a)*range;
+      const top=Math.max(y+range*.9,groundHeight(x+dx,z+dz,y+range*.9)+.5);
+      const aimY=y+.85, rise=top-aimY, steps=Math.ceil(Math.hypot(range,rise)/.22);
+      let clear=1;
+      for(let i=1;i<=steps;i++) {
+        const t=i/steps, px=x+dx*t, pz=z+dz*t, py=aimY+rise*t;
+        if (landscapeFloor(px,pz)>py-.18 || staticVolumeAt(px,pz,py-.18,.18,.36)) {clear=(i-1)/steps;break;}
+      }
+      const score=clear-.018*Math.abs(offset);
+      if(score>best) {best=score;surveyPose={a};camera.position.set(x+dx,top,z+dz);}
+      if(score===1) break;
+    }
+    camera.lookAt(x,y+.85,z);
+    camera.setViewOffset(w,h,0,(h-visibleHeight)/2,w,h);
+  }
+  camera.updateMatrixWorld();
+  world.update(state.time,p,camera,state.time,state.bellStrike,state.inariWeather);
+  meadow(state.time,p,camera);
+  if (!contextLost) drawScene();
+  return surveyPose?.a;
+}
 function action(name) {
   if (dialog.open || photoMode) return;
   unlock();
@@ -746,7 +813,7 @@ document.addEventListener('keydown', (e) => {
   if (!dialog.open && speech.handleKey(e)) return;
   if (!bindings.has(e.code)) return;
   if (dialog.open) {
-    if (cooking.active) return;
+    if (cooking.active || forestry.active) return;
     if (dialogKind === 'living' && e.code === 'KeyL' && !e.repeat && !e.target.closest('input,textarea,select')) {
       e.preventDefault();
       dialog.close();
@@ -815,6 +882,7 @@ window.addEventListener('blur', () => {
 });
 document.addEventListener('visibilitychange', () => {
   cooking.resetClock();
+  forestry.resetClock();
   audio.setPaused(document.hidden || dialog.open || contextLost);
   clearInput();
   previous = 0;
@@ -1241,12 +1309,13 @@ $('guide').onclick = () => openDialog('guide');
 $('story-book').onclick = () => openDialog('story');
 $('dismiss').onclick = () => dialog.close();
 dialog.addEventListener('click', (e) => {
-  if (e.target === dialog && !cooking.active) dialog.close();
+  if (e.target === dialog && !cooking.active && !forestry.active) dialog.close();
 });
 dialog.addEventListener('close', () => {
   if (dialog.open) return;
   previous = 0;
   if (cooking.active) cooking.close();
+  if (forestry.active) forestry.close();
   if (dialogKind === 'living') livingBook.close();
   if (dialogKind === 'story') { performancePlayer.close(); notebook.close(); }
   dialogKind = '';
@@ -1275,6 +1344,7 @@ function resize(force = false) {
   camera.fov = w < h ? 65 : 57;
   camera.updateProjectionMatrix();
   ink?.resize();
+  if (lastSurvey) requestAnimationFrame(()=>{if(lastSurvey)showLandSurvey(lastSurvey);});
 }
 function settingsForLighting() {
   scene.add(hemisphere);
@@ -1301,6 +1371,7 @@ function frame(now) {
   const paused = document.hidden || dialog.open || contextLost;
   audio.setPaused(document.hidden || contextLost || (dialog.open && (!cooking.active || cooking.paused)));
   if (paused) {
+    if (forestry.active && !document.hidden && !contextLost) forestry.frame(now);
     if (cooking.active && !document.hidden && !contextLost) cooking.frame(now);
     if (performancePlayer.active && !document.hidden && !contextLost) performancePlayer.frame(now);
     previous = 0;
@@ -1447,6 +1518,7 @@ function onContextLost(event) {
   event.preventDefault();
   contextLost = true;
   cooking.resetClock();
+  forestry.resetClock();
   clearInput();
   save();
   audio.setPaused(true);
@@ -1492,6 +1564,7 @@ async function boot() {
     const arrivalAssets = Promise.all([loadRiceModel(), loadMapPaper(), setRiverStones(scene, state.objects)]);
     const preparingWorld = prepareWorld(scene, camera, sceneryQuality);
     [world] = await Promise.all([finishInSlices(preparingWorld, preparation.signal), arrivalAssets]);
+    world.setLivingWorld(state.livingWorld);
     world.setSceneryQuality(sceneryQuality);
     storyWorld = createStoryWorld(scene, game.notebook, game.storyCollisions, () => actors?.hero, site => dialogue.pickupAt(site));
     storyWorld.update(state.time, p);

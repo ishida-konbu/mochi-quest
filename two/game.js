@@ -1,4 +1,6 @@
-import { createLivingWorld, validLivingWorld, JOURNEY_VERSION } from './living-save.js';
+import { settleMarket } from './living-market.js';
+import { nearBuildStructure, withBuildTerrain, validBuildLand } from './living-build.js';
+import { createLivingWorld, readLivingWorld, JOURNEY_VERSION } from './living-save.js';
 import { SKIFFS, skiffPose, skiffDeck, skiffApproaches } from './skiff-travel.js';
 import { LIVING_SITES, nearLivingSite } from './living-sites.js';
 import { deliveryReward, gatherResource } from './living-resources.js';
@@ -297,6 +299,11 @@ function restoreSnowVisitor(p) {
 }
 
 export function createGame(snapshot = null) {
+  // Population and waypoints belong to the original landscape even when a
+  // second journey is being inspected for import beside a developed one.
+  return withBuildTerrain(null, () => openGame(snapshot));
+}
+function openGame(snapshot) {
   const { objects, npcs, inventory } = makeWorld();
   const riverRider = pairRiverTravellers(npcs);
   const turtle = npcs.find(n => n.type === 'turtle');
@@ -518,6 +525,12 @@ export function createGame(snapshot = null) {
         best={target:{livingSite:site}, label, action:'interact', distance};
       }
     }
+    const owned = nearBuildStructure(state.livingWorld,player);
+    if (owned && ['stand','camp','chest'].includes(owned.kind) && (!best || gap(owned) < best.distance)) {
+      const section = {stand:'market',camp:'rest',chest:'build'}[owned.kind];
+      const label = {stand:'販売棚を開く',camp:'寝床で休む',chest:'収納箱を開ける'}[owned.kind];
+      best = {target:{livingSection:section}, label, action:'interact', distance:gap(owned)};
+    }
     return best;
   }
   function beginActivity(activity, duration) {
@@ -738,6 +751,7 @@ export function createGame(snapshot = null) {
     const found = nearest();
     if (!found) return false;
     const target = found.target;
+    if (target.livingSection) { emit('living',{section:target.livingSection}); return true; }
     if (target.livingSite) {
       const site=target.livingSite;
       if (site.kind==='gather') {
@@ -1502,6 +1516,7 @@ export function createGame(snapshot = null) {
     const activeSeconds = input.clockSeconds ?? elapsed;
     if (!input.pauseClock && Number.isFinite(activeSeconds) && activeSeconds > 0)
       state.livingWorld.worldMinute += activeSeconds / SECONDS_PER_MINUTE;
+    settleMarket(state.livingWorld);
     if (input.jump && !input.dive && !heldJump) jump();
     heldJump = !!input.jump;
     // Bounded substeps preserve contacts, landings and projectiles on a slow frame.
@@ -1514,13 +1529,14 @@ export function createGame(snapshot = null) {
   }
 
   function restSite() {
-    return nearbyRestSite(player)?.name ?? null;
+    return nearbyRestSite(player)?.name ?? (nearBuildStructure(state.livingWorld,player,'camp') ? '野営地の寝床' : null);
   }
   function waitUntil(hour, inEvent = false) {
     if (inEvent || !restSite()) return {ok: false, reason: '宿の入口か茶屋の腰掛けのそばで、足を止めて休みましょう。'};
     const target = waitTargetMinute(player.worldMinute, hour);
     if (target === null) return {ok: false, reason: '休み終える時刻を選んでください。'};
     state.livingWorld.worldMinute = target;
+    settleMarket(state.livingWorld);
     updateRegion(false);
     return {ok: true};
   }
@@ -1535,11 +1551,11 @@ export function createGame(snapshot = null) {
       lastBath: lastBath?.id ?? null, lastBathPlace:lastPlace?.id??null
     };
   }
-  function restore(data) {
+  function restore(data, living) {
     const finite = (n,min,max) => Number.isFinite(n) && n>=min && n<=max;
     const point = (x,z) => finite(x,-BOUND,BOUND) && finite(z,-BOUND,BOUND);
-    if (!data || ![2,3,4,5,6,7,8,9,10,11,12,JOURNEY_VERSION].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
-    if (data.version === JOURNEY_VERSION && !validLivingWorld(data.livingWorld)) return;
+    if (!data || ![2,3,4,5,6,7,8,9,10,11,12,13,JOURNEY_VERSION].includes(data.version) || !data.player || !data.turtle || !Array.isArray(data.visited)) return;
+    if (data.version >= 13 && (!living || !validBuildLand(living,state))) return;
     let p = data.player, t = data.turtle;
     const ports = objects.filter(o=>o.type==='port');
     // The original six districts occupy the prefix of the inventory. New
@@ -1607,8 +1623,7 @@ export function createGame(snapshot = null) {
     // elapsed time once to Kyoto's local clock; boats still use data.time.
     if(data.version>=5 && data.version<8)player.kyoClockOffset=data.time%KYO_DAY_SECONDS;
     else if(data.version>=8 && finite(p.kyoClockOffset,0,KYO_DAY_SECONDS))player.kyoClockOffset=p.kyoClockOffset%KYO_DAY_SECONDS;
-    if (data.version === JOURNEY_VERSION) state.livingWorld = structuredClone(data.livingWorld);
-    else state.livingWorld.worldMinute = legacyWorldMinute(data.time, player.kyoClockOffset);
+    state.livingWorld = living ?? createLivingWorld(legacyWorldMinute(data.time, player.kyoClockOffset));
     // These short pose cues were added after the first version-two saves.
     player.airStretch = !player.grounded && finite(p.airStretch,0,1) ? p.airStretch : 0;
     player.landing = finite(p.landing,0,.25) ? p.landing : 0;
@@ -1745,13 +1760,15 @@ export function createGame(snapshot = null) {
     updateRegion(false);
     return true;
   }
-  const restored = restore(snapshot) === true;
+  const savedLiving = snapshot?.version >= 13 ? readLivingWorld(snapshot.version,snapshot.livingWorld) : null;
+  const restored = withBuildTerrain(savedLiving,()=>restore(snapshot,savedLiving)) === true;
   const notebook = createNotebook(restored ? snapshot.notebook : null);
   // Older scrolls have no sky seed. Give their existing journey a stable
   // migration, so a second import opens onto exactly the same stretch of sky.
   const savedSeed=restored ? snapshot.flightSeed : null;
   const validSeed=Number.isInteger(savedSeed) && savedSeed>=0 && savedSeed<=0xffffffff;
   state.flightSeed=restored ? (validSeed?savedSeed:0x82c6710b) : Math.floor(Math.random()*0x100000000);
+  if (!restored || snapshot.version < JOURNEY_VERSION) state.livingWorld.market.seed=state.flightSeed;
   for(const n of npcs) {
     if(n.waterHare) updateWaterHare(n,state.time,player);
     else if(n.encounter) updateScrollResident(n,state.time);

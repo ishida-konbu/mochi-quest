@@ -1,3 +1,4 @@
+import { isTimberFelled } from './living-build-trees.js';
 import { addCooksPlatformSolids, addCookwareSolids, addLivingSolids, marketCookCanopy, marketCooktop } from './living-layout.js';
 import { rockParts } from './rock-forms.js';
 import { mountRockContact, mountScannedContact, rockRange } from './rock-contact.js';
@@ -1364,7 +1365,7 @@ const cells = new Map();
 function cell(x, z) {
   return Math.floor(x / 16) + ',' + Math.floor(z / 16);
 }
-function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0, bottom = -Infinity) {
+function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0, bottom = -Infinity, ownedCells = null) {
   // A ceiling records the underside of a beam. A slab records its top.
   if (kind === 'ceiling') { bottom = top; top += .13; }
   if (kind === 'slab' && bottom === -Infinity) bottom = top - .13;
@@ -1376,8 +1377,25 @@ function putSolid(x, z, rx, rz, yaw, top, kind, support, roofRise = 0, bottom = 
       const id = a + ',' + b;
       if (!cells.has(id)) cells.set(id, []);
       cells.get(id).push(item);
+      if (ownedCells) ownedCells.add(id);
     }
   return item;
+}
+// The same local-cell lookup serves footsteps, roofs, mounts, hand reach and
+// camera sweeps. Only cells touched by a previous player structure are rebuilt.
+const ownedCells = new Set();
+export function replaceBuildContacts(contacts) {
+  for (const id of ownedCells) {
+    const retained=cells.get(id).filter(item=>!item.owned);
+    if(retained.length)cells.set(id,retained);
+    else cells.delete(id);
+  }
+  ownedCells.clear();
+  for (const q of contacts) {
+    const item=putSolid(q.x,q.z,q.w/2,q.d/2,q.yaw,q.top,q.kind,q.support,q.rise??0,q.bottom,ownedCells);
+    item.owned=true;
+    if(q.kind==='roof'){item.form='campGable';item.thickness=.13;}
+  }
 }
 addLivingSolids(putSolid,terrainContactHeight);
 for(const part of PALACE_SHELL) {
@@ -1608,7 +1626,7 @@ function plantWood(tree,base,scale,yaw,wood,surveyRadius,surveyTop) {
   const reach=max(wood.reach,culmFeet?.reach??0)*scale;
   const bottom=min(wood.bottom,culmFeet?.bottom??Infinity)*scale+base;
   const solid=putSolid(tree.x,tree.z,reach,reach,yaw,base+wood.top*scale,'wood',false,0,bottom);
-  Object.assign(solid,{base,scale,wood,culmFeet,surveyRadius,surveyTop});
+  Object.assign(solid,{tree,base,scale,wood,culmFeet,surveyRadius,surveyTop});
 }
 for(const tree of TREES){
   const grove=tree.form!==undefined,scale=grove?tree.h:1;
@@ -1706,6 +1724,7 @@ function surfaceHeight(s, x, z, pad) {
   if (pad > 0 && max(0,abs(a)-s.rx)**2 + max(0,abs(b)-s.rz)**2 > pad*pad) return -Infinity;
   if (s.kind === 'roofWall') return surfaceHeight(s.sheet,x,z,pad);
   if (s.kind === 'roof' || s.kind === 'pagodaEave') {
+    if(s.form==='campGable')return s.top+Math.max(0,1-abs(b)/s.rz)*s.roofRise;
     const h = roofProfile(s.kind === 'pagodaEave' ? 'pagoda' : s.form,
       a/s.rx,b/s.rz,s.aperture,pad/s.rx,pad/s.rz);
     return h === -Infinity ? h : s.top + h*s.roofRise;
@@ -1727,6 +1746,7 @@ function highest(x, z, pad, feet, supportOnly, body = 1.42) {
     if (feet + body < item.bottom && !(item.stone && feet === -Infinity && supportOnly)) continue;
     if (supportOnly && feet === -Infinity && !item.support) continue;
     if(item.kind==='wood'){
+      if(isTimberFelled(item.tree))continue;
       // Heightless queries also cast the historic resident population and
       // reserve hawk perches. That survey measures the bole at ground level.
       // Physical walkers, jumps and projectiles always supply an altitude.
@@ -1813,7 +1833,7 @@ export function overheadHeight(x, z, feet, radius = 0, roofsOnly = false) {
   return ceiling;
 }
 const palaceBed = terrainHeight(RYUGU.x,RYUGU.z);
-export function staticVolumeAt(x,z,feet,radius=.24,body=1.42) {
+export function staticVolumeAt(x,z,feet,radius=.24,body=1.42,baseOnly=false) {
   if (terrainContactHeight(x,z) > feet+.001 || palaceSolid(x,z,feet,palaceBed,body,radius)) return true;
   const bridge=bridgeAt(x,z);
   if (bridge) {
@@ -1821,7 +1841,7 @@ export function staticVolumeAt(x,z,feet,radius=.24,body=1.42) {
     if (deck > feet+.001 && deck-.235 < feet+body) return true;
   }
   for (const item of cells.get(cell(x,z)) || []) {
-    if (item.bottom >= feet+body) continue;
+    if ((baseOnly && item.owned) || item.bottom >= feet+body) continue;
     if(item.kind==='wood'){
       if(woodContact(item,x,z,radius,feet+.001,feet+body,'top')>feet+.001)return true;
       continue;

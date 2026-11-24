@@ -1,6 +1,6 @@
 import * as T from './vendor/three.module.min.js';
 
-const finishes = ['wood', 'bark', 'stone', 'metal', 'rope', 'paper'];
+const finishes = ['wood', 'bark', 'stone', 'metal', 'rope', 'paper', 'noren', 'rush', 'endGrain', 'washi', 'stumpBark'];
 const axes = ['x', 'y', 'z'];
 
 // Keep the original timber coordinates for UV projection, before rotating a

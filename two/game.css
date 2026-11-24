@@ -2007,3 +2007,28 @@ dialog[data-living] #dialog-content { padding:0 clamp(14px,4vw,28px) 20px; color
   .cook-heading > div {padding-block:2px;}
   .cook-strip {margin-bottom:3px;padding-block:3px;}
 }
+
+.living-build-picker,.living-storage-row,.survey-actions,.survey-arrows {
+  display:flex;align-items:end;flex-wrap:wrap;gap:8px;
+}
+.living-build-picker .living-field,.living-storage-row .living-field:first-child {flex:1 1 160px;}
+.living-storage-row .living-field:nth-child(2) {width:78px;}
+.living-build-picker button,.living-storage-row button {margin-bottom:7px;}
+dialog[data-survey] {position:fixed;inset:auto 0 max(10px,env(safe-area-inset-bottom));margin:0 auto;width:min(540px,96vw);max-height:48dvh;}
+dialog[data-survey]::backdrop {background:transparent;backdrop-filter:none;}
+dialog[data-survey] .sheet > header {min-height:0;padding:6px 14px;}
+dialog[data-survey] .sheet > header h2 {font-size:18px;}
+dialog[data-survey] #dialog-content {padding:0 14px 9px;}
+.survey-verdict {margin:6px 0;font:600 14px/1.4 var(--min);}
+.survey-arrows .choice {flex:1;padding-inline:6px;}
+.survey-actions {margin-top:6px;align-items:center;}
+.survey-cost {margin-right:auto;font-size:12px;}
+body:has(dialog[data-survey]) #stage > :not(#scene) {visibility:hidden;}
+@media(max-width:540px) {
+  .living-tabs {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));}
+  .living-tabs .choice {padding:5px 2px;}
+  .survey-arrows button,.survey-actions button {min-height:40px;}
+}
+
+.forestry-paper {position:absolute;inset:0;pointer-events:none;opacity:0;background:#eee3c9 url('../assets/ui/paper.png');}
+.cook-view:has(.forestry-paper) .cook-strip {position:relative;z-index:1;align-self:center;margin-top:auto;}

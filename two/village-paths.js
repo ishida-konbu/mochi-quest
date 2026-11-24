@@ -1,6 +1,7 @@
 // Plan the whole trip before an animal sets out. A traveller can be streamed
 // out or restored at any point on the circuit without jumping across a trunk.
 import { SNOW_SPRING, BUILDINGS, BRIDGES, GATES, MARKET_STALLS, REGIONS, TREES, SHRINE_BAMBOO, gateFooting, regionAt, solidHeightAt, terrainHeight, treeGround, waterDepth, groundHeight, nearRoad } from './terrain.js';
+import { isTimberFelled } from './living-build-trees.js';
 import { buildingCraft, roomPlan } from './architecture.js';
 import { KADOMATSU, POUNDING } from './festival.js';
 import { predatorRange, patrolAt } from './predator-trails.js';
@@ -24,9 +25,9 @@ for(const tree of TREES) {
   const bamboo=kind==='bamboo' || kind==='moso';
   const trunk=form===undefined ? bamboo?1.74:h*(tree===TREES[0]?.145:.102)
     : bamboo?h*.14:h*(form%4===1 || form%4===3 ? .124 : .087);
-  indexDisc(fixtures,x,z,trunk);
+  indexDisc(fixtures,x,z,trunk,0,tree);
   const crown=(kind==='cedar'?.36:bamboo?.37:.56)*h;
-  indexDisc(crowns,x,z,crown,treeGround(tree)+h);
+  indexDisc(crowns,x,z,crown,treeGround(tree)+h,tree);
 }
 for(const t of SHRINE_BAMBOO) {
   indexDisc(crowns,t.x+t.sx,t.z+t.sz,1.5,terrainHeight(t.x,t.z)+t.height);
@@ -52,6 +53,7 @@ for(const [x,z] of KADOMATSU) indexDisc(fixtures,x,z,.4);
 export function canopyHeight(x,z,pad) {
   let top=-Infinity;
   for(const tree of crowns.get(cellKey(x,z))||[]) {
+    if(tree.source && isTimberFelled(tree.source))continue;
     const d=Math.hypot(x-tree.x,z-tree.z)-pad;
     if(d<tree.radius) top=Math.max(top,tree.top-Math.max(d,0)*.44);
   }
@@ -80,6 +82,7 @@ export function animalRadius(n) {
 }
 export function openGround(x,z,pad) {
   for(const prop of fixtures.get(cellKey(x,z))||[]) {
+    if(prop.source && isTimberFelled(prop.source))continue;
     if((x-prop.x)**2+(z-prop.z)**2<(prop.radius+pad)**2) return false;
   }
   // Using the bare earth rejects the top of a rock or a stall as a spawn.

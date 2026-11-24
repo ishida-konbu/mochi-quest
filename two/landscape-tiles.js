@@ -1,3 +1,4 @@
+import { isTimberFelled } from './living-build-trees.js';
 import * as THREE from './vendor/three.module.min.js';
 import { MOUNTAIN_STREAMS, mountainStreamWaterAt } from './mountain-streams.js';
 import { DISTRICTS, TERRAIN_TILES, TERRAIN_SUBDIVISIONS } from './geography.js';
@@ -80,6 +81,15 @@ export function createTerrainTiles(scene, mat) {
         bins.get(key).push(tree);
       }
   }
+  function canopyAt(x,z) {
+    let canopy=0;
+    for (const tree of bins.get(Math.floor(x/18)*256+Math.floor(z/18)) || []) {
+      if(isTimberFelled(tree))continue;
+      const radius=tree.h*.67+2.3;
+      canopy=max(canopy,1-((x-tree.x)**2+(z-tree.z)**2)/(radius*radius));
+    }
+    return canopy;
+  }
   const farIndices=horizonIndex(TERRAIN_SUBDIVISIONS);
   function build({row,column,x:midX,z:midZ,peachTile}, sparse) {
     // Deep ocean is a level shelf. Keep the fine lattice for shores, roads,
@@ -107,11 +117,7 @@ export function createTerrainTiles(scene, mat) {
       if(rise>0)ridgeTile=true;
       c.multiplyScalar(.96+.042*cos(x*.076+sin(z*.044))+.039*sin(z*.115+sin(x*.093)));
       c.lerp(hillPaper,ridge*.90);
-      let canopy=0;
-      for (const tree of bins.get(Math.floor(x/18)*256+Math.floor(z/18)) || []) {
-        const radius=tree.h*.67+2.3;
-        canopy=max(canopy,1-((x-tree.x)**2+(z-tree.z)**2)/(radius*radius));
-      }
+      const canopy=canopyAt(x,z);
       const lakeBank=max(0,1-abs(lakeRadius(x,z)-1)*FOREST_LAKE.rz/4.8,
         1-abs(isletRadius(x,z)-1)*LAKE_ISLET.rz/2.1);
       surface.push(canopy,max(lakeBank,max(0,1-abs(river-.2)/7.3),max(0,min(1,(7.6-coast)/8.2))),-.8);
@@ -298,5 +304,23 @@ export function createTerrainTiles(scene, mat) {
       else window.setTimeout(warmNeighbour,80);
     }
   }
-  return {prepare,update};
+  // Near and horizon LODs share this attribute. Repaint only the loaded
+  // parcels beneath the changed crowns; newly streamed tiles use canopyAt.
+  function refreshCanopy(trees) {
+    const dirty=new Set();
+    for(const t of trees){
+      const r=t.h*.67+2.3;
+      for(let row=Math.floor((t.z-r+BOUND)/span); row<=Math.floor((t.z+r+BOUND)/span);row++)
+        for(let col=Math.floor((t.x-r+BOUND)/span);col<=Math.floor((t.x+r+BOUND)/span);col++)
+          dirty.add(row*TERRAIN_TILES+col);
+    }
+    for(const id of dirty){
+      const mesh=tiles[id]?.mesh;
+      if(!mesh)continue;
+      const g=mesh.userData.nearGeometry || mesh.geometry,p=g.attributes.position,mix=g.attributes.terrainMix;
+      for(let i=0;i<p.count;i++)mix.setX(i,canopyAt(p.getX(i),p.getZ(i)));
+      mix.needsUpdate=true;
+    }
+  }
+  return {prepare,update,refreshCanopy};
 }

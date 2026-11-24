@@ -61,3 +61,52 @@ test('a stale writer, quota failure, and a corrupt file preserve the last playab
   next.write(snapshot);
   assert.equal(storage.getItem(BACKUP_KEY),good);
 });
+
+test('v13 migrates the existing purse, work, off-screen clock and notebook once', () => {
+  const old=createGame().save();
+  old.version=13;
+  const w=old.livingWorld;
+  for(const key of ['structures','felledTrees','wood','nextStructureId','market'])delete w[key];
+  w.schemaVersion=1;w.wallet=395;w.worldMinute=49367;w.revision=75;
+  craftRecipe(w,BASIC_RECIPE,{regionId:'river'});
+  const restored=createGame(old);
+  assert.ok(restored.restored);
+  const current=restored.save();
+  assert.equal(current.version,14);
+  assert.equal(current.livingWorld.schemaVersion,2);
+  for(const key of ['wallet','worldMinute','revision','recipes','batches','costs','inventory'])
+    assert.deepEqual(current.livingWorld[key],w[key],key);
+  assert.equal(current.livingWorld.market.lastBucket,Math.floor(w.worldMinute/15));
+  assert.deepEqual(current.notebook,old.notebook);
+  assert.deepEqual(createGame(current).state.livingWorld,current.livingWorld);
+  assert.equal(createGame({...current,livingWorld:w}).restored,false);
+});
+
+test('resting at a built camp settles a distant staffed region once and preserves placement on a floor', async () => {
+  const {placeStructure,syncBuildTerrain,withBuildTerrain}=await import('../two/living-build.js');
+  const {listMochi,suggestedPrice,collectSales}=await import('../two/living-market.js');
+  const game=createGame(), state=game.state, world=state.livingWorld, p=state.player;
+  world.market.seed=1717;
+  const install=(kind,x,z)=>{const r=placeStructure(world,kind,{x,z,yaw:0},{state});assert.ok(r.ok,r.reason);return r.structure;};
+  syncBuildTerrain(world);
+  try {
+    const camp=install('camp',20,87), floor=install('floor',28,96), shelf=install('stand',31,-54);
+    const batch=craftRecipe(world,BASIC_RECIPE,{regionId:'river'}).batch;
+    const price=suggestedPrice(batch);
+    assert.ok(listMochi(world,shelf.id,batch.id,4,price).ok);
+    Object.assign(p,{x:camp.x+.7,y:camp.y,z:camp.z+.9,h:0,grounded:true});
+    assert.equal(game.restSite(),'野営地の寝床');
+    assert.ok(game.waitUntil(18).ok);
+    assert.equal(world.market.stands[shelf.id].cashbox,4*price);
+    Object.assign(p,{x:floor.x,y:floor.y+.18,z:floor.z,h:0});
+    const copy=game.save();
+    const loaded=withBuildTerrain(null,()=>createGame(copy));
+    assert.ok(loaded.restored);
+    assert.ok(Math.abs(loaded.state.player.y-p.y)<.025,'standing on own floor after reload');
+    assert.deepEqual(loaded.state.livingWorld,world);
+    const purse=world.wallet;
+    assert.ok(collectSales(world,shelf.id).ok);
+    assert.equal(world.wallet,purse+4*price);
+    assert.equal(collectSales(world,shelf.id).ok,false);
+  } finally {syncBuildTerrain(null);}
+});
