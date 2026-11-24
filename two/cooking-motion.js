@@ -1,4 +1,5 @@
 import { CRAFT_OPTIONS } from './living-craft.js';
+import { MALLET_RACK } from './living-layout.js';
 
 // All points are in metres, in the worktop's frame. The cook stands on +Z.
 // A hand locked to a tool follows its rotating grip throughout a stroke.
@@ -15,16 +16,20 @@ const rest = null;
 const LID = still([.50,1.166,.02]);
 const BOWL = still([.045,.798,.31]);
 const CLOTH = still([.50,.995,.02]);
-const MALLET = still([-.68,1.378,-.28],[.059,0,0]);
-const PADDLE = still([.13,.773,-.16],[0,.88,0]);
+// Within reach of the cook at the mortar, with its handle along the front edge.
+const mortarPaddle=still([-.39,.773,.36],[0,-1.25,0]);
 const rightLid=grip('lid',[.042,.028,0]);
 const bowlHands=[grip('bowl',[.145,.072,.035]),grip('bowl',[-.145,.072,.035])];
 const clothHands=[grip('cloth',[.145,.16,.035]),grip('cloth',[-.145,.16,.035])];
 const malletHands=[grip('mallet',[.012,0,.49]),grip('mallet',[-.012,0,.24])];
 const paddleGrip=grip('paddle',[0,.01,.18]);
 const lidPark=still([.815,1.035,-.19],[0,.04,1.45]);
-const malletRack=still([-1.31,.834,-.396],[0,PI/2,0]);
+const malletRack=still(MALLET_RACK,[0,PI/2,0]);
+const receivingBowl=still([-.22,.763,-.28]);
+const spentCloth=still([receivingBowl.position[0],.789,receivingBowl.position[2]]);
 const board=[-.045,.798,.29], well=[-.68,1.187,.01];
+// Leave the blade on the board beside the cake, turned handle-first to the cook.
+const boardPaddle=still([board[0]+.181,board[1]+.009,board[2]+.016]);
 const grill=[1.36,.949,0];
 export const SERVING_POINT=[-1.48,.784,.10];
 const unwrap=(a,b,f)=>a+angleTo(a,b)*f;
@@ -36,13 +41,14 @@ function rotateXYZ(p,r) {
   return [bx,ay*Math.cos(rx)-bz*Math.sin(rx),ay*Math.sin(rx)+bz*Math.cos(rx)];
 }
 function at(object,offset) {
-  const d=rotateXYZ(offset,object.rotation);
+  const local=object.scale ? offset.map((v,i)=>v*object.scale[i]) : offset;
+  const d=rotateXYZ(local,object.rotation);
   return object.position.map((v,i)=>v+d[i]);
 }
 function makeState(start) {
   const piece={...still(board),size:0,shape:0,fill:0,toast:0,flip:0,wrap:0,top:0};
   return {stance:start,hands:[rest,rest],focus:[0,.98,.12],lean:0,lift:0,effort:0,
-    tools:{lid:LID,bowl:BOWL,cloth:CLOTH,mallet:MALLET,paddle:PADDLE},piece,
+    tools:{lid:LID,bowl:BOWL,cloth:CLOTH,mallet:malletRack,paddle:mortarPaddle},piece,
     food:{bowlRice:1,steamerRice:0,clothRice:0,mortarRice:0,steam:0,doneness:0,smooth:0,compression:0,
       mixed:0,boardDough:0,paddleDough:0,prep:0,prepIndex:0,prepCarry:0,mixLoad:0,pinch:0,pinchIndex:-1,gather:0,stretch:0,pourRice:0,tipRice:0}};
 }
@@ -114,7 +120,7 @@ export function createCookingScore(draft,layout={},entry={}) {
   sound('grain');
   beat(.36,{food:{bowlRice:0,steamerRice:1,pourRice:0}});
   beat(.38,{tools:moveTool('bowl',[.14,1.40,.16])});
-  beat(.42,{tools:moveTool('bowl',[-.07,.763,-.20]),lean:.20});
+  beat(.42,{tools:{bowl:receivingBowl},lean:.20});
   beat(.32,{hands:[rightLid,rest],focus:lidPark.position});
   beat(.38,{tools:moveTool('lid',[.50,1.52,.02],[-.12,0,0]),lean:.09});
   beat(.38,{tools:{lid:LID},food:{steam:.18}});sound('lid');
@@ -124,12 +130,14 @@ export function createCookingScore(draft,layout={},entry={}) {
   const prepHands=[rest,[.11,.846,.34]];
   if(draft.fillings.length) {
     beat(.57,{stance:stance(.035,1.15),hands:prepHands,focus:[.02,.84,.28],food:{steam:.45}});
+    const needsPaddle=f=>f && f.id!=='sakura' && f.id!=='herb';
+    let prepRight=rest;
     for(const [i,f] of draft.fillings.entries()) {
-      const pluck=f.id==='sakura'||f.id==='herb';
+      const pluck=!needsPaddle(f);
       const prepEnd=i/draft.fillings.length;
       const dishX=-.175+i*.107;
-      beat(.29,{hands:[rest,[dishX,.807,.05]],food:{prepIndex:i,prep:prepEnd,prepCarry:0},lean:.16});
-      beat(.32,{hands:[rest,[.015,.82,.27]],food:{prepCarry:1}});
+      beat(.29,{hands:[prepRight,[dishX,.807,.05]],food:{prepIndex:i,prep:prepEnd,prepCarry:0},lean:.16});
+      beat(.32,{hands:[prepRight,[.015,.82,.27]],food:{prepCarry:1}});
       beat(.34,{hands:[pluck?[.12,.91,.27]:paddleGrip,[-.10,.864,.28]],lean:.13});
       const times=pluck?2:3;
       for(let n=0;n<times;n++) {
@@ -141,13 +149,15 @@ export function createCookingScore(draft,layout={},entry={}) {
           food:{prep:(i+(n+1)/times)/draft.fillings.length}});
         if(!pluck)sound('chop');
       }
+      // Keep the tool in the working hand if the next ingredient needs it too.
+      prepRight=!pluck && needsPaddle(draft.fillings[i+1]) ? paddleGrip : rest;
       if(!pluck) {
-        beat(.28,{tools:moveTool('paddle',[.12,.995,.13]),lean:.10});
-        beat(.25,{tools:{paddle:PADDLE}});
+        beat(.28,{tools:moveTool('paddle',[-.14,.987,.32]),lean:.10});
+        if(!prepRight)beat(.30,{tools:{paddle:mortarPaddle}});
       }
-      beat(.22,{hands:[rest,[.015,.82,.27]],effort:0});
-      beat(.34,{hands:[rest,[dishX,.807,.05]],food:{prepCarry:0}});
-      beat(.22,{hands:[rest,rest]});
+      beat(.22,{hands:[prepRight,[.015,.82,.27]],effort:0});
+      beat(.34,{hands:[prepRight,[dishX,.807,.05]],food:{prepCarry:0}});
+      beat(.22,{hands:[prepRight,rest]});
     }
   }else{
     beat(.47,{stance:stance(.66,1.18),hands:[[1.02,.90,.17],rest],focus:[1.02,.90,.17],lean:.16,food:{steam:.5}});
@@ -157,13 +167,6 @@ export function createCookingScore(draft,layout={},entry={}) {
   beat(.58,{stance:stance(.50),hands:[rest,rest],focus:[.50,1.21,.02],food:{steam:1,doneness:1},effort:0});
 
   phase('transfer','蒸した米を布ごと持ち上げ、臼に移す');
-  // Free the mouth of the mortar before bringing across the hot rice.
-  beat(.87,{stance:stance(-.64,1.13),hands:[rest,rest],focus:MALLET.position});
-  beat(.38,{hands:malletHands,lean:.19});
-  beat(.39,{tools:moveTool('mallet',[-.69,1.53,-.16]),lean:.10});
-  beat(.60,{stance:stance(-1.03),tools:moveTool('mallet',[-1.31,1.47,-.396],[0,PI/2,0])});
-  beat(.36,{tools:{mallet:malletRack},lean:.19});beat(.25,{hands:[rest,rest],lean:.07});
-  beat(steer(.50,1.18),{stance:stance(.50),focus:LID.position});
   openLid();
   beat(.46,{hands:clothHands,lean:.19,food:{gather:1}});
   beat(.43,{tools:moveTool('cloth',[.50,1.235,.045]),food:{steamerRice:0,clothRice:1,steam:.75},lean:.11});
@@ -171,14 +174,14 @@ export function createCookingScore(draft,layout={},entry={}) {
   beat(.88,{tools:moveTool('cloth',[-.54,1.46,.16]),stance:stance(-.49),focus:[-.57,1.32,.05]});
   beat(.56,{tools:moveTool('cloth',[-.63,1.405,.105],[1.30,0,-.06]),lean:.16,food:{clothRice:.43,mortarRice:.57,tipRice:1}});
   beat(.35,{food:{clothRice:0,mortarRice:1,tipRice:0}});sound('grain');
-  beat(.40,{tools:moveTool('cloth',[-.43,1.50,.16],[.38,0,0]),lean:.09});
-  beat(.82,{stance:stance(.46),tools:moveTool('cloth',[.50,1.40,.10]),focus:LID.position});
-  beat(.42,{tools:{cloth:CLOTH},lean:.16});
-  beat(.32,{hands:[rest,rest],food:{steam:.32,gather:0}});
+  // Leave the spent linen in the rice bowl beside the mortar, then reach
+  // for the waiting mallet without leaving the rice.
+  beat(.44,{tools:moveTool('cloth',[-.22,1.44,-.23]),stance:stance(-.66),focus:receivingBowl.position,lean:.09});
+  beat(.45,{tools:{cloth:spentCloth},stance:stance(-.82),lean:.18});
+  beat(.28,{hands:[rest,rest],food:{steam:.32,gather:0},lean:.09});
 
   phase('pound',draft.technique==='half'?'杵で軽くつき、米粒を残す':'杵で米をつぶし、粘りが出るまでつく');
-  beat(steer(-1.04,1.18),{stance:stance(-1.04),focus:malletRack.position,lean:.08});
-  beat(.36,{hands:malletHands,lean:.21});
+  beat(.46,{stance:stance(-1.04),hands:malletHands,focus:malletRack.position,lean:.21});
   beat(.38,{tools:moveTool('mallet',[-1.31,1.49,-.396],[0,PI/2,0]),lean:.11});
   beat(.61,{stance:stance(-1.12,1.16,PI-.12),tools:moveTool('mallet',[-.68,1.55,.01],[-.12,0,-1.48]),focus:well,lean:.08});
   // Press the grains first. A long downstroke before they cohere scatters rice.
@@ -200,21 +203,25 @@ export function createCookingScore(draft,layout={},entry={}) {
   }
   beat(.39,{tools:moveTool('mallet',[-.68,1.48,-.17],[-.05,0,0]),lean:.12});
   // Set it on the rear of the bench, clear of the mortar while folding.
-  beat(.58,{tools:moveTool('mallet',[-1.31,1.49,-.396],[0,PI/2,0]),stance:stance(-1.04),lean:.10});
+  beat(.58,{tools:moveTool('mallet',[-1.31,1.49,-.396],[0,PI/2,0]),stance:stance(-1.04),focus:malletRack.position,lean:.10});
   beat(.35,{tools:{mallet:malletRack},lean:.21});
   beat(.28,{hands:[rest,rest],lean:.075,effort:0});
 
   phase('knead',mixedNames.length ? '餅を折り返し、'+mixedNames.join('と')+'を練り込む' : '餅を折り返して生地を整える');
-  beat(.55,{stance:stance(.02),hands:[paddleGrip,rest],focus:[.04,.86,.23],lean:.15});
+  beat(.43,{stance:stance(-.80,1.14),hands:[paddleGrip,rest],focus:mortarPaddle.position,lean:.15});
   const mixed=draft.fillings.some(f=>f.placement==='mixed')||draft.seasoning!=='none';
   if(mixed) {
-    beat(.35,{tools:moveTool('paddle',[-.035,.799,.09],[-.08,0,0]),hands:[paddleGrip,[-.13,.826,.05]],food:{mixLoad:1}});
-    beat(.60,{tools:moveTool('paddle',[-.55,1.42,.13],[.03,.1,0]),stance:stance(-.48),hands:[paddleGrip,rest],focus:well});
-    beat(.36,{tools:moveTool('paddle',[-.64,1.28,.06],[.49,.14,.03]),food:{mixed:.27,mixLoad:0}});
+    beat(.38,{tools:moveTool('paddle',[-.20,.99,.30],[-.10,-.45,0]),stance:stance(-.55,1.12),lean:.10});
+    beat(.30,{tools:moveTool('paddle',[-.070,.809,.09],[-.08,0,0]),hands:[paddleGrip,[-.13,.826,.05]],food:{mixLoad:1},lean:.18});
+    beat(.39,{tools:moveTool('paddle',[-.21,1.41,.14]),hands:[paddleGrip,rest],focus:well,lean:.10});
+    beat(.39,{tools:moveTool('paddle',[-.55,1.42,.13],[.03,.1,0])});
+    beat(.36,{tools:moveTool('paddle',[-.65,1.296,.022],[-.26,.09,.71]),food:{mixed:.27,mixLoad:0}});
+  }else{
+    beat(.42,{tools:moveTool('paddle',[-.36,1.40,.42],[-.20,-.42,0]),lean:.09});
   }
   beat(.57,{tools:moveTool('paddle',[-.65,1.385,.13],[-.64,.11,0]),stance:stance(-.55,1.12),focus:well,hands:[paddleGrip,[-.87,1.30,.195]],lean:.13});
   for(let n=0;n<3;n++){
-    beat(.28,{tools:moveTool('paddle',[-.73,1.17,.06],[-.82,.27,-.13]),lean:.22,effort:.56,food:{compression:.60}});
+    beat(.28,{tools:moveTool('paddle',[-.73,1.177,.06],[-.82,.27,-.13]),lean:.22,effort:.56,food:{compression:.60}});
     beat(.32,{tools:moveTool('paddle',[-.605,1.32,.12],[-.68,-.20,.20]),lean:.13,effort:.16,
       food:{compression:0,mixed:mixed?(n+1)/3:0}});sound('knead');
   }
@@ -225,7 +232,7 @@ export function createCookingScore(draft,layout={},entry={}) {
   beat(.36,{stance:stance(.02),tools:moveTool('paddle',[-.035,1.03,.30],[-.10,0,0]),hands:[paddleGrip,[-.16,1.07,.28]],focus:board});
   beat(.31,{tools:moveTool('paddle',[-.02,.833,.25],[-.12,0,-.18]),hands:[paddleGrip,[-.13,.88,.31]],food:{paddleDough:0,boardDough:1}});
   beat(.26,{tools:moveTool('paddle',[.14,.936,.32]),hands:[paddleGrip,rest]});
-  beat(.32,{tools:{paddle:PADDLE}});beat(.22,{hands:[rest,rest],lean:.07,effort:0});
+  beat(.32,{tools:{paddle:boardPaddle}});beat(.22,{hands:[rest,rest],lean:.07,effort:0});
 
   // Follow one cake from the forming board to the dish for every batch size.
   const [bx,by,bz]=board;
@@ -259,31 +266,80 @@ export function createCookingScore(draft,layout={},entry={}) {
     beat(.27,{piece:{position:dest},lean:.17});
     beat(.18,{hands:[[dest[0]+.12,dest[1]+.16,dest[2]+.08],[dest[0]-.11,dest[1]+.14,dest[2]+.07]]});
   }
-  if(draft.finish==='grill') {
+  const paddleHands=[paddleGrip,rest];
+  // A long grip keeps the cook's rounded knuckles outside the hot grate.
+  const handleEnd=[grip('paddle',[0,.011,.228]),rest];
+  const grilled=draft.finish==='grill', boardFinish=garnishNames.length>0 || draft.technique==='wrap';
+  // Slide the blade under the near edge before lifting. The left hand is
+  // clear of the grate and the wooden handle stays in the right palm.
+  function graspBesideCake() {
+    beat(.25,{hands:paddleHands,focus:board,lean:.15});
+    beat(.19,{tools:moveTool('paddle',[bx+.18,by+.075,bz+.19]),lean:.12});
+  }
+  function scoop(point) {
+    const [x,y,z]=point;
+    beat(.20,{tools:moveTool('paddle',[x,y+.078,z+.26],[-.16,0,0]),focus:point,lean:.13});
+    beat(.16,{tools:moveTool('paddle',[x,y+.012,z+.206],[-.16,0,0]),lean:.16});
+    // The leading bevel meets the near shoulder from the side. Let the
+    // shoulder climb the blade as it advances, then level the cook's wrist.
+    beat(.12,{tools:moveTool('paddle',[x,y+.014,z+.158],[-.21,0,0]),piece:{position:[x,y+.019,z]},lean:.17});
+    beat(.13,{tools:moveTool('paddle',[x,y+.014,z+.066],[-.19,0,0]),piece:{position:[x,y+.026,z]}});
+    beat(.18,{tools:moveTool('paddle',[x,y+.008,z]),piece:{position:[x,y+.0205,z]}});
+  }
+  function carryOnPaddle(dest,bodyX,seconds) {
+    const [x,,z]=state.tools.paddle.position;
+    // Both crossings clear the steamer, the water pot and the mortar.
+    // Keep the distance from cake to blade constant throughout the walk.
+    const loaded=p=>({tools:moveTool('paddle',p),piece:{position:[p[0],p[1]+.0125,p[2]]}});
+    beat(.34,{...loaded([x,1.405,z+.10]),hands:paddleHands,lean:.085});
+    beat(seconds,{...loaded([dest[0],1.405,dest[2]+.09]),stance:stance(bodyX,1.20),focus:dest,lean:.10});
+  }
+  function turnOnto(dest) {
+    const [x,y,z]=dest,from=state.piece.flip;
+    // Lift both together first, then roll off the left lip. The blade
+    // clears the far shoulder sideways before the cake lands.
+    beat(.19,{tools:moveTool('paddle',[x,y+.092,z]),piece:{position:[x,y+.1045,z]},lean:.10});
+    beat(.17,{tools:moveTool('paddle',[x+.036,y+.142,z+.006],[0,0,.67]),
+      piece:{position:[x-.006,y+.155,z],flip:from+.64},lean:.10});
+    beat(.17,{tools:moveTool('paddle',[x+.111,y+.14,z+.02],[0,0,1.21]),
+      piece:{position:[x-.021,y+.132,z],flip:from+1.58},lean:.12});
+    beat(.25,{tools:moveTool('paddle',[x+.165,y+.12,z+.10],[-.12,0,.40]),
+      piece:{position:dest,flip:from+PI},lean:.16});
+  }
+  function slideOff(dest) {
+    const [x,y,z]=dest;
+    // Keep the blade above the dish lip; the last short drop begins only
+    // as the nose clears the cake and lets it settle into the well.
+    const pass=y+(dest===SERVING_POINT ? .026 : 0);
+    beat(.27,{tools:moveTool('paddle',[x,pass+.010,z]),piece:{position:[x,pass+.0225,z]},hands:handleEnd,lean:.17});
+    // Draw out the tapered tip along the surface. The cake settles when its
+    // weight transfers to the board, grate or dish, before the blade rises.
+    beat(.19,{tools:moveTool('paddle',[x,pass+.013,z+.074],[-.16,0,0]),piece:{position:[x,pass+.027,z]},lean:.16});
+    beat(.12,{tools:moveTool('paddle',[x,pass+.015,z+.155],[-.22,0,0]),piece:{position:[x,pass+.025,z]},lean:.15});
+    beat(.12,{tools:moveTool('paddle',[x,pass+.019,z+.205],[-.24,0,0]),piece:{position:[x,pass,z]},lean:.14});
+    beat(.15,{tools:moveTool('paddle',[x,pass+.078,z+.24],[-.23,0,0]),piece:{position:dest},lean:.13});
+  }
+  if(grilled) {
     phase('grill','炭火にのせ、返して両面を焼く');
-    carry(grill,1.10,.385,.92);
+    graspBesideCake();
+    scoop(board);
+    carryOnPaddle(grill,1.08,1.04);
+    slideOff(grill);
     const [x,y,z]=grill;
-    beat(.63,{stance:stance(1.05,1.18),hands:[rest,rest],focus:grill,piece:{toast:.14}});
-    // Let the first face brown while the cook collects the paddle.
-    beat(.75,{stance:stance(.05),hands:[paddleGrip,rest],focus:[.30,.88,.15],piece:{toast:.31}});
-    // Lift on the board side before passing the steamer on the way to the grate.
-    beat(.37,{tools:moveTool('paddle',[-.02,1.38,.08]),lean:.09,piece:{toast:.36}});
-    beat(.83,{stance:stance(1.08),tools:moveTool('paddle',[1.27,1.22,.18]),focus:grill,piece:{toast:.45}});
-    beat(.22,{tools:moveTool('paddle',[x,y+.013,z+.02],[-.20,0,0]),piece:{toast:.48},lean:.17});
-    beat(.32,{tools:moveTool('paddle',[x,y+.16,z+.05],[-.4,0,-.40]),piece:{position:[x,y+.18,z],flip:1.48},lean:.09});
-    beat(.30,{piece:{position:grill,flip:PI},tools:moveTool('paddle',[x+.07,y+.055,z+.11]),lean:.15});sound('sizzle');
-    beat(.85,{tools:moveTool('paddle',[x+.10,y+.15,z+.20]),piece:{toast:.91},lean:.10});
-    // Lift clear of the coals, then roll the cooked cake right-side up onto
-    // the board, where it can be safely garnished or wrapped by hand.
-    beat(.30,{tools:moveTool('paddle',[x,y+.001,z],[-.005,0,0]),piece:{toast:1},lean:.17});
-    beat(.31,{tools:moveTool('paddle',[x,1.40,z+.12]),piece:{position:[x,1.416,z+.12]},lean:.09});
-    beat(1.02,{stance:stance(.02),tools:moveTool('paddle',[bx,1.37,bz+.04]),piece:{position:[bx,1.386,bz+.04]},focus:board});
-    beat(.24,{tools:moveTool('paddle',[bx,by+.18,bz+.025],[-.10,0,.93]),
-      piece:{position:[bx+.028,by+.23,bz],flip:PI*1.5},lean:.13});
-    beat(.29,{tools:moveTool('paddle',[bx,by+.001,bz]),piece:{position:[bx,by+.017,bz],flip:2*PI},lean:.17});
-    beat(.28,{tools:moveTool('paddle',[bx,by+.03,bz+.22]),piece:{position:board},lean:.12});
-    beat(.32,{tools:moveTool('paddle',[.12,1.02,.25])});
-    beat(.28,{tools:{paddle:PADDLE}});beat(.23,{hands:[rest,rest],lean:.07,effort:0});
+    // The cake browns on the grate. Keep the blade just off the fire.
+    beat(.81,{tools:moveTool('paddle',[x+.055,y+.16,z+.24],[-.12,.09,0]),piece:{toast:.45},lean:.09});
+    scoop(grill);
+    turnOnto(grill);sound('sizzle');
+    beat(.85,{tools:moveTool('paddle',[x+.071,y+.15,z+.23],[-.12,.09,0]),piece:{toast:1},lean:.10});
+    scoop(grill);
+    if(boardFinish) {
+      carryOnPaddle(board,.02,1.04);
+      turnOnto(board);
+      // Rest the paddle on the clear edge of the board while both hands
+      // dress the cake. Its handle is already beside the next lift.
+      beat(.24,{tools:{paddle:boardPaddle},lean:.13});
+      beat(.19,{hands:[rest,rest],lean:.08});
+    }
   }
   if(garnishNames.length){
     phase('garnish',garnishNames.join('と')+'をのせる');
@@ -298,10 +354,25 @@ export function createCookingScore(draft,layout={},entry={}) {
     beat(.24,{hands:[[bx+.13,by+.15,bz+.085],[bx-.10,by+.15,bz+.075]],lean:.13});
   }
   phase('plate','仕上げた餅を器に盛る');
-  beat(steer(.02,1.20),{stance:stance(.02,1.20),hands:[rest,rest],focus:board});
-  carry(SERVING_POINT,-1.10,.53,.93);
+  if(grilled) {
+    if(boardFinish) {
+      graspBesideCake();
+      scoop(board);
+    }
+    carryOnPaddle(SERVING_POINT,-1.10,boardFinish?1.06:1.96);
+    if(boardFinish) slideOff(SERVING_POINT);
+    else turnOnto(SERVING_POINT);
+  } else {
+    carry(SERVING_POINT,-1.10,.53,.93);
+  }
   sound('plate');
   phase('finish','盛り付けが整いました');
+  if(grilled) {
+    // Lay the tool beside the dish on the same shelf.
+    const [x,,z]=SERVING_POINT;
+    beat(.27,{tools:moveTool('paddle',[x,.872,z+.267],[0,PI/2,0]),lean:.13});
+    beat(.21,{tools:moveTool('paddle',[x,.767,z+.267],[0,PI/2,0]),lean:.17});
+  }
   beat(.62,{stance:stance(-.94,1.26,PI+.26),focus:[SERVING_POINT[0],SERVING_POINT[1]+.06,SERVING_POINT[2]],hands:[rest,rest],lean:.085,effort:0,food:{steam:.03}});
   beat(.94,{lean:.025});
   function sample(seconds) {
@@ -358,6 +429,12 @@ export function createCookingScore(draft,layout={},entry={}) {
       const first=a.tools[name],last=b.tools[name];
       tools[name]=still(blend(first.position,last.position,f),blend(first.rotation,last.rotation,f));
     }
+    // The wet linen settles inside the empty rice bowl. Its corners and the
+    // hands holding them follow the same folds as the bottom comes to rest.
+    const [cx,cy,cz]=tools.cloth.position,[qx,qy,qz]=tools.bowl.position;
+    const overBowl=ease(clamp((.18-Math.hypot(cx-qx,cz-qz))/.10));
+    const settle=qy<.80 ? overBowl*ease(clamp((qy+.18-cy)/.154)) : 0;
+    tools.cloth.scale=[1-.38*settle,1-.43*settle,1-.38*settle];
     const piece=still(blend(a.piece.position,b.piece.position,f),blend(a.piece.rotation,b.piece.rotation,f));
     for(const key of ['size','shape','fill','toast','flip','wrap','top'])piece[key]=mix(a.piece[key],b.piece[key],f);
     piece.visible=piece.size>.001;

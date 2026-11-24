@@ -1,6 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { MORTAR_PROFILE } from './festival.js';
-import { cooksPlatform, HERB_PATCH, RICE_BASKET, RICE_SHOP, WORKTOPS, marketCooktop } from './living-layout.js';
+import { cooksPlatform, HERB_PATCH, MALLET_RACK, RICE_BASKET, RICE_SHOP, WORKTOPS, marketCooktop } from './living-layout.js';
 import { MARKET_STALLS, seeded, terrainContactHeight, terrainHeight } from './terrain.js';
 
 function turned(profile,segments) {
@@ -142,9 +142,9 @@ function cookware(p,art,f,siteId,table) {
   // shaft on a low cleat behind the platter, clear of the mortar's foot.
   f.part('box',-1.06,.778,-.396,.113,.036,.079,'#a98762',0,0,0,p.wood);
   f.part('livingMortar',-.68,.76,0,.72,.72,.72,'#c49a6c',0,0,0,p.wood);
-  // The yokogine rests on both lips, with the head clear of the visitor's side.
-  f.line([-.68,1.365,-.30],[-.68,1.325,.39],.025,'#be975d',parkedWood);
-  f.line([-.83,1.378,-.28],[-.51,1.378,-.28],.071,'#a88254',parkedWood);
+  const [mx,my,mz]=MALLET_RACK;
+  f.line([mx-.07,my-.013,mz],[mx+.67,my-.013,mz],.025,'#be975d',parkedWood);
+  f.line([mx,my,mz-.16],[mx,my,mz+.16],.071,'#a88254',parkedWood);
   steamerFirebox(f,p);
   f.part('riceSteamer',.50,.987,.02,.61,.38,.61,'#bcaa83',0,0,0,p.wood);
   for(const h of [1.031,1.119]) f.part('steamerHoop',.50,h,.02,1,1,1,'#947958',0,0,0,p.wood);

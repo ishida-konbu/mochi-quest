@@ -42,15 +42,74 @@ test('one cake is shaped and plated once with every treatment selected by the re
       const flipped=score.sample(turn.time).piece;
       assert.deepEqual(flipped.position,[1.36,.949,0]);
       near(flipped.flip,Math.PI);assert.ok(flipped.toast>0 && flipped.toast<1);
-      const platedSide=score.sample(grill.end-.001).piece;
-      assert.deepEqual(platedSide.position,[-.045,.798,.29]);
-      near(platedSide.flip,2*Math.PI);near(platedSide.toast,1);
+      near(score.sample(grill.end-.001).piece.toast,1);
     }
     for(const ch of score.chapters){
       const t=ch.start+(ch.end-ch.start)*.64;
       const f=score.sample(t);
       score.sample(score.duration);assert.deepEqual(score.sample(t),f);
     }
+  }
+});
+
+test('the cook brings the rice to the mortar once and readies the mallet and paddle within reach',()=>{
+  for(const recipe of [BASIC_RECIPE, ...STARTER_RECIPES.map(r=>r.draft)]) {
+    const score=createCookingScore(recipe), initial=score.sample(0);
+    const transfer=score.chapters.find(c=>c.id==='transfer');
+    const pound=score.chapters.find(c=>c.id==='pound');
+    const knead=score.chapters.find(c=>c.id==='knead');
+    for(let t=transfer.start;t<pound.end;t+=1/60) {
+      const f=score.sample(t);
+      if(t<pound.start) {
+        assert.deepEqual(f.tools.mallet,initial.tools.mallet,'the rice can reach the empty mortar without moving the mallet');
+        if(f.hero[0]<-.28)near(f.food.clothRice+f.food.mortarRice,1);
+      }
+      if(f.food.mortarRice>.99) {
+        assert.ok(f.hero[0]<.05,'the cook returns to the steamer after emptying the rice');
+        if(t>=pound.start)assert.ok(f.tools.cloth.position[0]<0,'the empty cloth stayed on the steamer side');
+      }
+    }
+    if(recipe.seasoning==='none' && !recipe.fillings.some(f=>f.placement==='mixed')) {
+      for(let t=knead.start;t<knead.end;t+=1/60) {
+        const f=score.sample(t);
+        if(f.food.mortarRice>.999)assert.ok(f.hero[0]<-.25,'the cook left the mortar just to fetch the paddle');
+      }
+    }
+  }
+});
+
+test('the cook approaches the fire once with cake and paddle, then takes the cake to its next work surface',()=>{
+  const plain={...BASIC_RECIPE,finish:'grill'};
+  const garnish={...plain,fillings:[{id:'sakura',placement:'top',amount:4}]};
+  for(const recipe of [plain,garnish,{...plain,technique:'wrap'},STARTER_RECIPES.find(r=>r.regionId==='market').draft]) {
+    const score=createCookingScore(recipe),grill=score.chapters.find(c=>c.id==='grill');
+    const board=score.sample(grill.start).piece.position;
+    const needsBoard=recipe.technique==='wrap'||recipe.fillings.some(f=>f.placement==='top');
+    const visits=[];
+    let atFire=false;
+    for(let t=grill.start;t<score.duration;t+=1/60) {
+      const f=score.sample(t),p=f.piece.position,paddle=f.tools.paddle;
+      if(!atFire && f.hero[0]>.80) {atFire=true;visits.push('fire');}
+      if(atFire && f.hero[0]<.38) {atFire=false;visits.push('worktop');}
+      // Midway between the forming board and fire, check both the blade
+      // under the cake and the hand actually holding its rotated handle.
+      const pastSteamer=p[0]>.25 && p[0]<.95;
+      const crossingToTray=f.phase==='plate' && p[0]<-.24 && p[0]>-1.17;
+      if(pastSteamer || crossingToTray) {
+        const angles=new Euler(...paddle.rotation), origin=new Vector3(...paddle.position);
+        const grip=new Vector3(0,.01,.18).applyEuler(angles).add(origin);
+        near(dist(f.hands[0],grip.toArray()),0);
+        const blade=new Vector3(0,.016,0).applyEuler(angles).add(origin);
+        assert.ok(dist(p,blade.toArray())<.025,'the transported cake has slipped off or lifted clear of the blade');
+      }
+      if(needsBoard && (f.phase==='garnish'||f.phase==='wrap')) {
+        near(dist(p,board),0);
+      } else if(!needsBoard && f.piece.toast===1) {
+        assert.ok(dist(p,board)>.12,'plain grilled cake was set back on the forming board on its way to the tray');
+      }
+    }
+    assert.deepEqual(visits,['fire','worktop']);
+    assert.deepEqual(score.sample(Infinity).piece.position,SERVING_POINT);
   }
 });
 

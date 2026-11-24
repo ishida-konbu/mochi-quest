@@ -289,14 +289,12 @@ export function createCookingProps(draft) {
       const pose=frame.tools[key];
       if(!pose) continue;
       obj.position.fromArray(pose.position);obj.rotation.set(...pose.rotation);
+      if(pose.scale) obj.scale.fromArray(pose.scale);
       obj.visible=pose.visible!==false;
       obj.updateMatrix();
     }
     const gather=f.gather??0;
     tools.cloth.morphTargetInfluences[0]=gather;
-    // Spent linen slumps to the inside of the empty receiving bowl.
-    const parked=clamp((1.04-tools.cloth.position.y)/.25,0,1)*clamp((.26-tools.cloth.position.x)/.33,0,1);
-    tools.cloth.scale.set(1-.31*parked,1-.57*parked,1-.33*parked);
     pileMass(rawRice,f.bowlRice);
     pileMass(steaming,Math.min(1,f.steamerRice+f.clothRice),.85+.22*f.doneness);
     const steamingSize=.86+.14*f.doneness;

@@ -6,6 +6,8 @@ export const WORKTOPS = Object.freeze({
 export const HERB_PATCH = {x: -6.8, z: 67.9};
 export const RICE_BASKET = {x: 164.2, z: 97.1};
 export const RICE_SHOP = {x: 146.5, z: 90.6};
+// Centre of the cross-head on the cleat behind the serving shelf, handle along +X.
+export const MALLET_RACK = [-1.31,.834,-.396];
 export function worktopPoint(table,u,v) {
   const c=Math.cos(table.yaw), s=Math.sin(table.yaw);
   return {x:table.x+u*c+v*s,z:table.z-u*s+v*c};

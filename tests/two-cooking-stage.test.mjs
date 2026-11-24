@@ -1,16 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import * as THREE from '../two/vendor/three.module.min.js';
+import { GLTFLoader } from '../two/vendor/GLTFLoader.min.js';
+import { loadRiceModel, makeRiceModel, poseRice } from '../two/mochi-model.js';
+import { createCookingPerformer } from '../two/cooking-performer.js';
 import { createCookingStage } from '../two/cooking-stage.js';
 import { createCookingScore } from '../two/cooking-motion.js';
 import { createCookingProps } from '../two/cooking-props.js';
-import { BASIC_RECIPE, STARTER_RECIPES, craftRecipe, evaluateRecipe } from '../two/living-craft.js';
+import { BASIC_RECIPE, CRAFT_OPTIONS, STARTER_RECIPES, craftRecipe, evaluateRecipe } from '../two/living-craft.js';
 import { createGame } from '../two/game.js';
 import { LIVING_SITES, nearLivingSite } from '../two/living-sites.js';
 import { marketCookCanopy, worktopPoint } from '../two/living-layout.js';
 import { canOccupy, groundHeight } from '../two/terrain.js';
 
 const workshops=LIVING_SITES.filter(site=>site.kind==='workshop');
+
+test('the kagami cook uses its hands for tools while the traveller keeps both gohei',async t=>{
+  t.mock.method(THREE.TextureLoader.prototype,'loadAsync',async()=>new THREE.Texture());
+  t.mock.method(GLTFLoader.prototype,'loadAsync',async function(url){
+    const bytes=await readFile(new URL(url));
+    return this.parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.length),'');
+  });
+  await loadRiceModel();
+  const scene=new THREE.Group(),travel=makeRiceModel(scene),player={mode:'kagami',grounded:true,buffs:{}};
+  poseRice(travel,player,0,1/60,'curious');
+  const actor=createCookingPerformer(scene,player),score=createCookingScore(BASIC_RECIPE);
+  t.after(()=>actor.dispose());
+  for(const chapter of score.chapters) {
+    actor.update(score.sample((chapter.start+chapter.end)/2));
+    assert.ok(actor.group.getObjectByName('鏡餅・福重ね').visible);
+    for(const name of ['右手の御幣','左手の御幣']) assert.equal(actor.group.getObjectByName(name).visible,false);
+  }
+  poseRice(travel,player,2,1/60,'curious');
+  for(const wand of travel.kagami.wands) {
+    assert.ok(wand.group.visible);
+    assert.ok(wand.group.position.toArray().every(Number.isFinite));
+    assert.ok(Math.abs(wand.group.position.x)>.1);
+  }
+});
 
 test('a cooking stage replaces only the local parked tools and restores their original visibility',()=>{
   const scene=new THREE.Scene();
@@ -59,8 +87,7 @@ test('the hands, current task and face stay framed when the cook moves along eac
         const positions=detail ? [frame.focus] : [frame.focus,[x,y+1.45,z],...frame.hands];
         if(frame.piece.visible) {
           const [cx,cy,cz]=frame.piece.position;
-          // Include the shoulders of the cake while it rests on the grill and
-          // the cook walks back to fetch the paddle, as well as while carried.
+          // Include both edges of the cake on the grate and during transport.
           positions.push([cx-.12,cy,cz],[cx+.12,cy+.06,cz]);
         }
         for(const position of positions) {
@@ -205,6 +232,35 @@ test('the cook plates one blossom mochi and the recipe yields a full batch', t=>
   assert.equal(livingWorld.inventory.sakura,before.sakura-4);
 });
 
+test('the spent steaming cloth settles against the inside of the empty rice bowl', t=>{
+  t.mock.method(THREE.TextureLoader.prototype,'load',()=>new THREE.Texture());
+  const props=createCookingProps(BASIC_RECIPE);
+  t.after(()=>props.dispose());
+  const score=createCookingScore(BASIC_RECIPE);
+  const transfer=score.chapters.find(chapter=>chapter.id==='transfer');
+  props.update(score.sample(transfer.end));
+  props.group.updateMatrixWorld(true);
+  const cloth=props.group.getObjectByName('濡らした蒸し布');
+  const bowl=props.group.getObjectByName('洗い米の片口鉢');
+  const point=new THREE.Vector3(), ray=new THREE.Raycaster();
+  ray.ray.direction.set(0,-1,0);
+  let smallestGap=Infinity;
+  // Sample points from the centre to the pleated hem against the ceramic mesh.
+  for(let i=0;i<cloth.geometry.attributes.position.count;i+=7){
+    cloth.getVertexPosition(i,point).applyMatrix4(cloth.matrixWorld);
+    // The axial vertices coincide at the centre of the lathed foot.
+    if(Math.hypot(point.x-bowl.position.x,point.z-bowl.position.z)<.001) continue;
+    ray.ray.origin.copy(point);
+    ray.ray.origin.y+=.20;
+    const [surface]=ray.intersectObject(bowl,false);
+    assert.ok(surface,'cloth extends beyond the bowl');
+    const gap=point.y-surface.point.y;
+    assert.ok(gap>=-.0005,'cloth passes through the ceramic wall');
+    smallestGap=Math.min(smallestGap,gap);
+  }
+  assert.ok(smallestGap<.004,'cloth floats above the bowl');
+});
+
 test('regional servings keep their footprint when the cook finishes shaping, garnishing or turning them', t=>{
   t.mock.method(THREE.TextureLoader.prototype,'load',()=>new THREE.Texture());
   function visibleSize(serving) {
@@ -230,5 +286,43 @@ test('regional servings keep their footprint when the cook finishes shaping, gar
     props.update(frame);
     const after=visibleSize(serving);
     assert.ok(Math.abs(before.x-after.x)<.002 && Math.abs(before.z-after.z)<.002,regionId);
+  }
+});
+
+test('the underside of each grilled shape rests against the wooden blade in transit', t=>{
+  t.mock.method(THREE.TextureLoader.prototype,'load',()=>new THREE.Texture());
+  const down=new THREE.Raycaster(),up=new THREE.Raycaster();
+  down.ray.direction.set(0,-1,0);
+  up.ray.direction.set(0,1,0);
+  for(const shape of Object.keys(CRAFT_OPTIONS.shape)){
+    const draft={...BASIC_RECIPE,shape,finish:'grill'};
+    const props=createCookingProps(draft),score=createCookingScore(draft);
+    t.after(()=>props.dispose());
+    const grill=score.chapters.find(c=>c.id==='grill');
+    let frame;
+    for(let sec=grill.start;sec<grill.end;sec+=1/30){
+      const sample=score.sample(sec);
+      if(sample.piece.position[0]>.50){
+        frame=sample;
+        break;
+      }
+    }
+    assert.ok(frame,shape);
+    props.update(frame);
+    props.group.updateMatrixWorld(true);
+    const blade=props.group.getObjectByName('桜材のしゃもじ');
+    const cakeMeshes=[];
+    props.group.getObjectByName('仕立てる餅').traverseVisible(part=>{
+      if(part.isMesh) cakeMeshes.push(part);
+    });
+    let closest=Infinity;
+    for(let ix=-3;ix<=3;ix++)for(let iz=-5;iz<=5;iz++){
+      down.ray.origin.set(blade.position.x+ix*.013,blade.position.y+.20,blade.position.z+iz*.013);
+      up.ray.origin.set(down.ray.origin.x,blade.position.y-.10,down.ray.origin.z);
+      const [wood]=down.intersectObject(blade,false);
+      const [rice]=up.intersectObjects(cakeMeshes,false);
+      if(wood && rice) closest=Math.min(closest,rice.point.y-wood.point.y);
+    }
+    assert.ok(Math.abs(closest)<.002,shape+' blade contact gap '+closest);
   }
 });

@@ -360,7 +360,6 @@ function kagamiLayers(r) {
   addKagamiFern(stack);
   addKagamiMochibana(stack);
   const wands=addKagamiOrnaments(stack);
-  for (const [i,wand] of wands.entries()) wand.palm=palmSamples(r.body,r.hands[i]);
   const citrus=daidai();
   citrus.scale.setScalar(.91);
   stack.add(citrus);
@@ -391,6 +390,7 @@ function poseGohei(r, speed, stride, step, beat, dt) {
   for (const [i,wand] of kagami.wands.entries()) {
     const side=i?1:-1;
     const palm=wand.group.position;
+    wand.palm ??= palmSamples(r.body,r.hands[i]);
     r.body.getVertexPosition(wand.palm.front,palm);
     r.body.getVertexPosition(wand.palm.back,kagami.palmBack);
     palm.lerp(kagami.palmBack,.5).applyMatrix4(kagami.toStack);
@@ -488,7 +488,7 @@ function playGesture(r,name,dt,face=name,sample) {
   return cell;
 }
 
-export function poseRice(r,p,t,dt,mood,bath) {
+export function poseRice(r,p,t,dt,mood,bath,carryGohei=true) {
   const grounded=p.grounded!==false, ride=!!p.mount, speed=p.speed||0;
   const rolling=p.mode==='dango', stack=p.mode==='kagami';
   const stride=grounded && !ride && !p.activity && !rolling ? smooth(speed,.04,4.5) : 0;
@@ -643,7 +643,8 @@ export function poseRice(r,p,t,dt,mood,bath) {
     r.kagami.citrus.position.set(.013,kagamiCitrusY+2.32*(upperHeight-kagamiUpperHeight)+
       upperHeight*(1.33*pull+floatExtension*melt),-.01);
     r.kagami.citrus.rotation.z=.09+step*stride*.07;
-    poseGohei(r, !ride && !p.activity ? speed : 0, stride, step, beat, frame);
+    for(const wand of r.kagami.wands) wand.group.visible=carryGohei;
+    if(carryGohei) poseGohei(r, !ride && !p.activity ? speed : 0, stride, step, beat, frame);
   }else{
     if(r.kagami && r.kagami.stack.visible) {
       r.kagami.stack.visible=false;

@@ -51,7 +51,8 @@ export function createCookingPerformer(parent,player) {
     root.rotation.y=heading;
     skin.gestureSample.time=time;
     rice.smile=frame.phase==='finish'?1:.25;
-    poseRice(rice,skin,time,0,'curious',null);
+    // Both hands follow the kitchen tools. The travel rig carries the gohei.
+    poseRice(rice,skin,time,0,'curious',null,false);
     const breathing=.006*Math.sin(2.15*time),height=1+lift*.58-.045*effort+breathing;
     pose.scale.set(giant/Math.sqrt(height),giant*height,giant/Math.sqrt(height));
     // Shift weight towards the working hands; the soles remain independently
@@ -91,7 +92,6 @@ export function createCookingPerformer(parent,player) {
       wing.visible=player.mode==='habutae';
       wing.rotation.z=(i?1:-1)*(.10+.026*Math.sin(time*2.2));
     }
-    if(rice.kagami)for(const wand of rice.kagami.wands)wand.group.visible=false;
   }
   function dispose(){
     if(!active)return;

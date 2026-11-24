@@ -69,8 +69,7 @@ export function createCookingStage(scene,site) {
       const height=lerp(.88+.36*(clamp(action.y,.8,1.75)-.88),1.48,lifting);
       desired.set(action.x,height,.12+.24*action.z);
       if(piece) {
-        // The cook can reach back for a paddle while the cake is still on
-        // the grill. Keep both the cake and the hand's new destination in shot.
+        // Frame both the cake and the destination as the cook carries or lowers it.
         desired.x=lerp(desired.x,piece.position[0],.5*piece.size);
         desired.y=lerp(desired.y,piece.position[1]+.08,.4*piece.size);
       }
@@ -113,11 +112,10 @@ export function createCookingStage(scene,site) {
     fit=Math.max(fit,portrait && !detail ? 3.22 : 0);
     if (cut || !distance) distance=fit;
     else {
-      // A hand can cross the bench faster than the pan. Give it headroom now,
-      // then settle the lens slowly as the cook returns to the cutting board.
-      const settle=fit>distance ? 4.2 : 1.30;
-      const damped=lerp(distance,fit,1-Math.exp(-Math.max(0,dt)*settle));
-      distance=detail?damped:Math.max(fit*.91,damped);
+      // Widen smoothly as a hand reaches across the bench, then ease in
+      // more slowly when the cook settles at the next station.
+      const settle=fit>distance ? 3.1 : 1.30;
+      distance=lerp(distance,fit,1-Math.exp(-Math.max(0,dt)*settle));
     }
     priorDetail=detail;priorAspect=camera.aspect;
     eye.copy(out).multiplyScalar(distance).add(target);
