@@ -1,6 +1,7 @@
 // A single pastry study uses the same photographed food atlas and regional
 // vessels as the village worktables. Geometry dimensions are in scene metres.
 import * as T from './vendor/three.module.min.js';
+import { cookingAtlas } from './cooking-atlases.js';
 import { InkForm, surface } from './ryugu-ink.js';
 import { brushWash } from './scroll-sculpt.js';
 import { createStoryFood } from './story-crafts.js';
@@ -12,14 +13,36 @@ const tiles = { rice:0, bamboo:1, soft:3, coarse:4, roast:5, blush:9, herb:10, s
 const hues = { azuki:'#974c4d', soy:'#c59659', sakura:'#c9858e', herb:'#77964e', sesame:'#45443c' };
 const identity = [0,0,0], unit = [1,1,1];
 let pigment;
+const roastPaints=[];
 function foodPaint() {
   if (!pigment) {
-    const map = new T.TextureLoader().load(new URL('./assets/world/mochiyori-ingredients.webp',import.meta.url).href);
-    map.colorSpace = T.SRGBColorSpace;
-    map.anisotropy = 4;
+    const map=cookingAtlas('ingredients');
     pigment = brushWash(new T.MeshStandardMaterial({ map, vertexColors:true, side:T.DoubleSide, roughness:.68 }),.08);
   }
   return pigment;
+}
+// The journey and its recipe book use the same photographs. Heating blends
+// the raw rice photograph into the roast marks alongside the vertex colour.
+function browningPaint(i) {
+  if (roastPaints[i]) return roastPaints[i];
+  const base=foodPaint();
+  const browning=base.clone();
+  browning.onBeforeCompile=function(shader, renderer) {
+    base.onBeforeCompile.call(this,shader,renderer);
+    const varyings='varying vec2 bakedUv; varying float heatBlend;';
+    const angle=i*Math.PI/2;
+    shader.uniforms.roastTurn={value:new T.Vector2(Math.cos(angle),Math.sin(angle))};
+    shader.vertexShader=shader.vertexShader
+      .replace('#include <common>','#include <common>\nattribute vec2 roastUv; uniform vec2 roastTurn; '+varyings)
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nbakedUv=vec2(.375,.625)+mat2(roastTurn.x,roastTurn.y,-roastTurn.y,roastTurn.x)*(roastUv-vec2(.375,.625)); heatBlend=morphTargetInfluences[0];');
+    shader.fragmentShader=shader.fragmentShader
+      .replace('#include <common>','#include <common>\n'+varyings)
+      .replace('#include <map_fragment>',T.ShaderChunk.map_fragment.replace(
+        'texture2D( map, vMapUv )','mix(texture2D(map,vMapUv), texture2D(map,bakedUv), heatBlend)'));
+  };
+  browning.customProgramCacheKey=()=>'mochi-turning-on-charcoal';
+  roastPaints[i]=browning;
+  return browning;
 }
 function patch(form, tile, columns, rows, sample, tint, textureUV) {
   const positions=[], indices=[], uv=[];
@@ -69,7 +92,8 @@ function tintFor(recipe) {
   const tint=new T.Color(recipe.base==='brownRice'?'#d6b18a':'#fff3dd');
   for (const f of recipe.fillings.filter(f=>f.placement==='mixed')) {
     const strength=f.id==='herb'?.88:f.id==='sakura'?.75:.33;
-    tint.lerp(new T.Color(hues[f.id]),strength*(.20+f.amount/50));
+    const mixedWeight=f.id==='herb' ? .43+.50*Math.min(1,f.amount/32) : strength*(.20+f.amount/50);
+    tint.lerp(new T.Color(hues[f.id]),mixedWeight);
   }
   return tint;
 }
@@ -214,12 +238,62 @@ function toastSkin(form, profile) {
     const blister=smooth(blotch+grain,.51,.91)*smooth(y,.52,.92);
     const bars=Math.cos(15*z+2.8*x+.13*Math.sin(4*x));
     const grate=(1-smooth(y,.04,.34))*smooth(bars,.48,.94);
-    const heat=.28*blush+.59*blister+.43*grate;
+    const heat=.28*blush+.59*blister+.51*grate;
     form.c[i]*=1-.77*heat;
     form.c[i+1]*=1-.91*heat;
     form.c[i+2]*=1-.94*heat;
   }
 }
+function sculptSurface(form,recipe,profile,tint,start,end) {
+  const tile=recipe.finish==='grill'?'roast':recipe.technique==='half'?'coarse':'rice';
+  patch(form,tile,84,38,(u,v)=>profile.point(start+(end-start)*u,v),tint,
+    (p,u,v)=>{
+      const a=start+(end-start)*u;
+      // A complete cake has two faces. Both poles sample a single texel:
+      // carrying the polar rim all the way to the underside creates spokes
+      // when the first cooked face is turned towards the player.
+      const towardRim=2*Math.min(v,1-v);
+      const radial=.475*Math.sin(1.47*towardRim);
+      const [x,,z]=profile.point(a,.5);
+      return [.5+radial*x/profile.rx,.5+radial*z/profile.rz];
+    });
+  if (recipe.finish==='grill') toastSkin(form,profile);
+}
+
+// Whole servings under the cook's hands share the atlas, profile, petal folds
+// and finish of the notebook study. Its explanatory cutaway belongs in the book.
+export function makeCookingServing(recipe) {
+  const profile=doughProfile(recipe), tint=tintFor(recipe);
+  const form=new InkForm(tiles,4,4);
+  sculptSurface(form,{...recipe,finish:'steam'},profile,tint,0,tau);
+  const skin=new T.Mesh(form.geometry(),foodPaint());
+  skin.name='丸めた生地';
+  if (recipe.finish==='grill') {
+    const roasted=new InkForm(tiles,4,4);
+    sculptSurface(roasted,recipe,profile,tint,0,tau);
+    skin.material=browningPaint(0);
+    skin.geometry.setAttribute('roastUv',new T.Float32BufferAttribute(roasted.uv,2));
+    skin.geometry.morphAttributes.position=[skin.geometry.attributes.position];
+    skin.geometry.morphAttributes.color=[new T.Float32BufferAttribute(roasted.c,3)];
+    skin.updateMorphTargets();
+  }
+  const grainForm=new InkForm(tiles,4,4);
+  garnish(grainForm,{...recipe,fillings:recipe.fillings.filter(f=>f.placement==='mixed')},profile,false,0,tau);
+  const topForm=new InkForm(tiles,4,4);
+  garnish(topForm,{...recipe,technique:'none',fillings:recipe.fillings.filter(f=>f.placement==='top')},profile,false,0,tau);
+  const leafForm=new InkForm(tiles,4,4);
+  if(recipe.technique==='wrap') wrapper(leafForm,profile);
+  function layer(paint,name) {
+    const mesh=paint.ix.length ? new T.Mesh(paint.geometry(),foodPaint()) : new T.Group();
+    mesh.name=name;
+    return mesh;
+  }
+  const grains=layer(grainForm,'粒と練り込みの具'), top=layer(topForm,'仕上げの具'), leaf=layer(leafForm,'笹の包み');
+  const group=new T.Group();
+  group.add(skin,grains,top,leaf);
+  return {group,skin,top,leaf, browningPaint};
+}
+
 export function createCraftModel(draft) {
   const recipe=normalizeRecipe(draft);
   if(!recipe) return null;
@@ -230,20 +304,7 @@ export function createCraftModel(draft) {
   const form=new InkForm(tiles,4,4), profile=doughProfile(recipe), tint=tintFor(recipe);
   const inside=recipe.fillings.filter(f=>f.placement==='inside');
   const sliced=inside.length>0, start=sliced?2.25:0, end=sliced?tau+.62:tau;
-  const tile=recipe.finish==='grill'?'roast':recipe.technique==='half'?'coarse':'rice';
-  patch(form,tile,84,38,(u,v)=>profile.point(start+(end-start)*u,v),tint,
-    (p,u,v)=>{
-      const a=start+(end-start)*u;
-      if (recipe.finish==='grill') {
-        // Unfold the shoulder past the rim. A top projection stretches the
-        // pigment vertically on all four sides of a grilled square.
-        const [x,,z]=profile.point(a,.5), spread=.47*Math.sin((1-v)*1.38);
-        return [.5+spread*x/profile.rx,.5+spread*z/profile.rz];
-      }
-      const radial=.475*Math.sin((1-v)*Math.PI*.58);
-      return [.5+radial*Math.cos(a),.5+radial*Math.sin(a)];
-    });
-  if (recipe.finish==='grill') toastSkin(form,profile);
+  sculptSurface(form,recipe,profile,tint,start,end);
   if(sliced){
     cutFace(form,inside,profile,start,1,tint);
     cutFace(form,inside,profile,end,-1,tint);

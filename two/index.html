@@ -21,7 +21,7 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=living-world-1" />
+    <link rel="stylesheet" href="./game.css?v=cooking-1" />
     <script type="importmap">
       {
         "imports": {
@@ -46,7 +46,7 @@
           "./mochiyori-story.js": "./mochiyori-story.js?v=mochiyori-actions-1",
           "./story-sites.js": "./story-sites.js?v=mochiyori-dialogue-1",
           "./story-hands.js": "./story-hands.js?v=mochiyori-actions-1",
-          "./story-crafts.js": "./story-crafts.js?v=mochiyori-actions-1",
+          "./story-crafts.js": "./story-crafts.js?v=cooking-1",
           "./mochiyori-performance.js": "./mochiyori-performance.js?v=mochiyori-actions-1",
           "./story-models.js": "./story-models.js?v=mochiyori-actions-1",
           "./mochiyori-book.js": "./mochiyori-book.js?v=living-world-1",
@@ -92,7 +92,7 @@
           "./kyo-bath-layout.js": "./kyo-bath-layout.js?v=suzuri-roji-1",
           "./kyo-bath-art.js": "./kyo-bath-art.js?v=suzuri-roji-1",
           "./goemon-windbreak.js": "./goemon-windbreak.js?v=yuya-emaki-1",
-          "../sound.js": "../sound.js?v=audio-controls-1",
+          "../sound.js": "../sound.js?v=cooking-1",
           "./kiyomizu-layout.js": "./kiyomizu-layout.js?v=emaki-funatabi-1",
           "./kiyomizu.js": "./kiyomizu.js?v=emaki-funatabi-1",
           "./kiyomizu-bell.js": "./kiyomizu-bell.js?v=journey-music-1",
@@ -121,7 +121,7 @@
           "./bath-enclosures.js": "./bath-enclosures.js?v=amimoto-yudono-1",
           "./bath-pavilion-art.js": "./bath-pavilion-art.js?v=amimoto-yudono-1",
           "./regional-bath-carpentry.js": "./regional-bath-carpentry.js?v=amimoto-yudono-1",
-          "./actors.js": "./actors.js?v=mochiyori-actions-1",
+          "./actors.js": "./actors.js?v=cooking-1",
           "./animal-scale-book.js": "./animal-scale-book.js?v=dragon-60m-1",
           "./animal-scale-residents.js": "./animal-scale-residents.js?v=dragon-60m-1",
           "./animal-motion.js": "./animal-motion.js?v=sculpted-tail-1",
@@ -139,7 +139,7 @@
           "./forest-mesh.js": "./forest-mesh.js?v=kaede-nishiki-1",
           "./bamboo-culms.js": "./bamboo-culms.js?v=kyoto-groves-snow-1",
           "./forest.js": "./forest.js?v=island-horizon-2",
-          "./game.js": "./game.js?v=living-world-1",
+          "./game.js": "./game.js?v=cooking-1",
           "./handscroll-beasts.js": "./handscroll-beasts.js?v=kirin-zuiun-1",
           "./inari-rain.js": "./inari-rain.js?v=inari-rain-1",
           "./inari-weather.js": "./inari-weather.js?v=inari-rain-1",
@@ -163,7 +163,7 @@
           "./mochi-pounding.js": "./mochi-pounding.js?v=living-world-1.3",
           "./ground-print.js": "./ground-print.js?v=emaki-landscape-1",
           "./pigments.js": "./pigments.js?v=emaki-funatabi-1",
-          "./places.js": "./places.js?v=living-world-1",
+          "./places.js": "./places.js?v=cooking-1",
           "./predator-trails.js": "./predator-trails.js?v=winter-coast-1",
           "./preparation.js": "./preparation.js?v=mochiyori-actions-1",
           "./procession-view.js": "./procession-view.js?v=living-world-1",
@@ -196,7 +196,7 @@
           "./kaede-water-hare.js": "./kaede-water-hare.js?v=kaede-spring-hare-1",
           "./kaede-water-pail.js": "./kaede-water-pail.js?v=kaede-spring-hare-1",
           "./maple-crossing.js": "./maple-crossing.js?v=world-footings-1",
-          "./terrain.js": "./terrain.js?v=living-world-1",
+          "./terrain.js": "./terrain.js?v=cooking-1",
           "./trade-tools.js": "./trade-tools.js?v=mochiyori-2",
           "./turtle-art.js": "./turtle-art.js?v=3.3",
           "./village-paths.js": "./village-paths.js?v=kaede-spring-hare-1",
@@ -323,7 +323,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=living-world-1" />
+    <link rel="modulepreload" href="./main.js?v=cooking-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -581,7 +581,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=living-world-1').catch(error => {
+      import('./main.js?v=cooking-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'

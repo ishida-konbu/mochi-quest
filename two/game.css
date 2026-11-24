@@ -1963,3 +1963,47 @@ dialog[data-living] #dialog-content { padding:0 clamp(14px,4vw,28px) 20px; color
   .living-area :is(select,button,input),.living-tabs button,.living-details summary {min-height:42px;}
   #living-book {min-height:28px;}
 }
+
+/* Keep the work surface, the cook's hands and the mallet's full arc in view. */
+.cook-view {
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+  justify-content:space-between; pointer-events:none; font-family:var(--min); color:#342e24;
+}
+.cook-heading {
+  align-self:stretch; display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+  padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left));
+}
+.cook-heading > div, .cook-strip, .cook-view button {
+  background:#f5edd8 url('../assets/ui/paper.png'); border:1px solid #938469;
+}
+.cook-heading > div {padding:5px 14px 7px; border-inline-start:4px solid #934835;max-width:min(63vw,35rem);}
+.cook-place {display:block;font-size:11px;letter-spacing:.1em;color:#6f513d;}
+.cook-heading h2 {margin:1px 0 0;font:700 clamp(15px,2vw,21px)/1.3 var(--min);overflow-wrap:anywhere;}
+.cook-view button {
+  pointer-events:auto; font:600 13px/1.4 var(--min); color:inherit;
+  min-height:36px; padding:5px 10px; border-radius:2px; cursor:pointer;
+}
+.cook-view button:focus-visible {outline:3px solid #90452d;outline-offset:2px;}
+.cook-strip {
+  display:grid;grid-template-columns:minmax(140px,1fr) auto;column-gap:22px;align-items:center;
+  width:max-content;max-width:calc(100% - 20px); padding:7px 10px 7px 14px;
+  margin-bottom:max(12px,env(safe-area-inset-bottom));box-sizing:border-box;
+  box-shadow:0 2px 8px #30241744;border-inline-start:4px solid #546553;
+}
+.cook-step {font:700 15px/1.4 var(--min);}
+.cook-controls {grid-column:2;grid-row:1/3;display:flex;gap:5px;}
+.cook-progress {height:2px;margin:4px 0 1px;background:#baab92;overflow:hidden;}
+.cook-progress i {display:block;height:100%;background:#875139;transform-origin:left;}
+.cook-view [aria-pressed=true] {background:#48594a;color:#fff5dd;}
+@media(max-width:640px) {
+  .cook-heading {padding-inline:10px;}
+  .cook-strip {display:flex;flex-wrap:wrap;column-gap:6px;row-gap:3px;justify-content:center;padding:6px 8px;width:fit-content;}
+  .cook-step {width:100%;text-align:center;font-size:14px;}
+  .cook-progress {display:none;}
+  .cook-view button {min-height:40px;font-size:12px;}
+}
+@media(max-height:470px) and (orientation:landscape) {
+  .cook-heading {padding-top:4px;}
+  .cook-heading > div {padding-block:2px;}
+  .cook-strip {margin-bottom:3px;padding-block:3px;}
+}

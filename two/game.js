@@ -1489,6 +1489,14 @@ export function createGame(snapshot = null) {
     checkContact();
     updateRegion(true);
   }
+  // Keep passers-by and boats moving while the player's hands are occupied.
+  // A pause or a jump to the plated dish supplies no elapsed scenery time.
+  function stepCookingScenery(dt) {
+    if (!(dt > 0) || !Number.isFinite(dt)) return;
+    state.time += dt;
+    voyage.update(state.time, player);
+    updateNPCs(dt);
+  }
   function step(elapsed, input = {}) {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return;
     const activeSeconds = input.clockSeconds ?? elapsed;
@@ -1756,5 +1764,5 @@ export function createGame(snapshot = null) {
   }
   updateHareRider(riverRider,state.time);
   refreshCrowd();
-  return { state, act, step, nearest, teleport, save, restored, voyage, notebook, storyCollisions, restSite, waitUntil };
+  return { state, act, step, stepCookingScenery, nearest, teleport, save, restored, voyage, notebook, storyCollisions, restSite, waitUntil };
 }

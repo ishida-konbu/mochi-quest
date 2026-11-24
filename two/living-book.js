@@ -72,7 +72,7 @@ function attributes(parent, values, keys = Object.keys(ATTRIBUTE_NAMES)) {
   parent.append(dl);
 }
 
-export function createLivingBook({ dialog, body, heading, game, save, guide }) {
+export function createLivingBook({ dialog, body, heading, game, save, guide, cook }) {
   const world = game.state.livingWorld, player = game.state.player;
   let tab = 'supplies', recipeId, draft, preset, customName, customDescription, area, receipt;
   const near = kind => LIVING_SITES.find(site => site.kind === kind && nearLivingSite(player,site));
@@ -222,12 +222,28 @@ export function createLivingBook({ dialog, body, heading, game, save, guide }) {
     naming.append(field('餅の名前',name),field('餅の説明',desc));
     const footer = el('div',undefined,'living-confirm'), reason = el('p');
     const expectedBatchId = world.nextBatchId;
-    const submit = button('餅を4個作る',()=>{
-      const result = craftRecipe(world,draft,{regionId:near('workshop')?.region,name:customName,description:customDescription,expectedBatchId});
-      if (!result.ok) { updateReceipt(result);return; }
-      recipeId = result.recipe.id;
-      save();
-      choose('book',result.message);
+    const submit = button('4個分の調理を始める',()=>{
+      const site = near('workshop');
+      const preview = evaluateRecipe(world,draft,site?.region);
+      if (!preview.ok) { updateReceipt(preview);return; }
+      const name = customName, description = customDescription;
+      disposeCraftPreview();
+      const started = cook({
+        site, draft:preview.recipe, name:name || preview.name,
+        complete() {
+          const result = craftRecipe(world,preview.recipe,{regionId:near('workshop')?.region,name,description,expectedBatchId});
+          if (!result.ok) { choose('craft',result.reason);return; }
+          recipeId = result.recipe.id;
+          save();
+          choose('book',result.message);
+          area.querySelector('select')?.focus({preventScroll:true});
+        },
+        back() {
+          choose('craft');
+          area.querySelector('.living-confirm button')?.focus({preventScroll:true});
+        },
+      });
+      if (!started) choose('craft','工房の景色を開けませんでした。もう一度お試しください。');
     },'jump-link');
     footer.append(reason,submit);
     area.append(footer);

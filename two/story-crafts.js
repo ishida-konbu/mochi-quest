@@ -1,6 +1,7 @@
 // Object studies for the seventeen settlements. Each finished still life shares
 // its materials and geometry with the object examined close up in the journal.
 import * as T from './vendor/three.module.min.js';
+import { cookingAtlas } from './cooking-atlases.js';
 import { InkForm, surface } from './ryugu-ink.js';
 import { brushWash, surfaceGrain } from './scroll-sculpt.js';
 import { residentRobeSurface } from './resident-art.js';
@@ -22,10 +23,7 @@ const performParts={
 };
 function finish(form, name) {
   if (!pigment) {
-    const url = new URL('./assets/world/mochiyori-materials.webp', import.meta.url);
-    const map = new T.TextureLoader().load(url.href);
-    map.colorSpace = T.SRGBColorSpace;
-    map.anisotropy = 4;
+    const map=cookingAtlas('materials');
     pigment = brushWash(new T.MeshStandardMaterial({map, vertexColors:true, side:T.DoubleSide, roughness:.94}), .30);
   }
   const mesh = new T.Mesh(form.geometry(), pigment);
@@ -233,8 +231,7 @@ function modelFood(parent,name,scene,draw){
     mesh.updateMorphTargets();mesh.userData.foodMotion=scene===2?'open':'tie';
   }
   if(!ingredients){
-    const map=new T.TextureLoader().load(new URL('./assets/world/mochiyori-ingredients.webp',import.meta.url).href);
-    map.colorSpace=T.SRGBColorSpace;map.anisotropy=8;
+    const map=cookingAtlas('ingredients');
     ingredients=brushWash(new T.MeshPhysicalMaterial({map,vertexColors:true,side:T.DoubleSide,roughness:.58,clearcoat:.10,clearcoatRoughness:.52}),.065);
   }
   // A sectioned pastry keeps both its textured crumb and its separately inked seeds.

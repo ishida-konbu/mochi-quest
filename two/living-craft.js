@@ -95,9 +95,11 @@ function describe(r) {
   let flavor = r.base === 'rice' ? '白い' : '玄米の';
   if (first) {
     const ingredient = first.id === 'sakura' ? '桜' : first.id === 'azuki' && first.placement === 'inside' ? '小豆餡' : CRAFT_OPTIONS.filling[first.id];
-    flavor = ingredient + ({ mixed: '入りの', inside: 'を包んだ', top: 'をのせた' })[first.placement];
+    const inside = r.technique === 'wrap' ? '入り' : 'を包んだ';
+    flavor = ingredient + ({ mixed: '入りの', inside, top: 'をのせた' })[first.placement];
   }
-  const name = (r.technique === 'wrap' ? '笹包みの' : '') + flavor + CRAFT_OPTIONS.shape[r.shape] + (r.finish === 'grill' ? 'の炭火焼き' : '');
+  const name = flavor + CRAFT_OPTIONS.shape[r.shape] + (r.finish === 'grill' ? 'の炭火焼き' : '') +
+    (r.technique === 'wrap' ? '（笹包み）' : '');
   const dough = CRAFT_OPTIONS.base[r.base] + 'を蒸して' + (r.technique === 'half' ? '半搗きにした' : 'なめらかに搗いた') + '生地';
   const seasoning = r.seasoning === 'sugar' ? '砂糖で甘みを添えた。' : r.seasoning === 'salt' ? '塩をきかせた。' : '';
   const description = dough + '。' + (steps.length ? steps.join('。') + '。' : '') + seasoning +

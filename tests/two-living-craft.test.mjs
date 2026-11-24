@@ -93,3 +93,23 @@ test('save validation catches dangling references, forged counts, invalid recipe
   }
   assert.equal(normalizeRecipe({...BASIC_RECIPE,base:'__proto__'}),null);
 });
+
+test('the cook names the fillings in their actual steps and keeps leaf wrapping distinct from a filling', async () => {
+  const { createCookingScore } = await import('../two/cooking-motion.js');
+  const s=stocked();
+  const recipe={...BASIC_RECIPE, base:'brownRice', finish:'grill', technique:'wrap', seasoning:'salt', seasoningAmount:2,
+    fillings:[{id:'sesame',placement:'inside',amount:5},{id:'soy',placement:'mixed',amount:6}]};
+  const preview=evaluateRecipe(s,recipe,'market');
+  assert.equal(preview.ok,true);
+  assert.equal(preview.name,'黒胡麻入り丸餅の炭火焼き（笹包み）');
+  const score=createCookingScore(preview.recipe);
+  const label=id=>score.chapters.find(c=>c.id===id)?.label;
+  assert.match(label('steam'),/玄もち米/);
+  assert.match(label('knead'),/炒り大豆と塩/);
+  assert.match(label('shape'),/黒胡麻を包む/);
+  assert.match(label('wrap'),/笹の葉/);
+  assert.equal(label('garnish'),undefined);
+  const sakura=createCookingScore(STARTER_RECIPES[0].draft).chapters;
+  assert.match(sakura.find(c=>c.id==='shape').label,/小豆餡/);
+  assert.match(sakura.find(c=>c.id==='garnish').label,/桜の塩漬け/);
+});

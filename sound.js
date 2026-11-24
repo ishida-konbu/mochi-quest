@@ -233,6 +233,25 @@ export function createAudio(makeWorldAudio) {
     } else if (name === 'bump') {
       tone(now, 150, 57, .18, .23, 'triangle');
       rustle(now, 680, 170, .15, .20);
+    } else if (name === 'cook-pound') {
+      // A low, damped dough impact with a shorter wooden resonance.
+      tone(now, 105, 54, .15, .19);
+      tone(now, 265, 180, .065, .045, 'triangle');
+      rustle(now, 900, 215, .075, .13);
+    } else if (name === 'cook-lid' || name === 'cook-plate') {
+      tone(now, name === 'cook-lid' ? 410 : 690, name === 'cook-lid' ? 325 : 635, .10, .044);
+      rustle(now, 1330, 490, .048, .08);
+    } else if (name === 'cook-chop') {
+      rustle(now, 1910, 590, .065, .10);
+      tone(now, 315, 160, .052, .04, 'triangle');
+    } else if (name === 'cook-water' || name === 'cook-grain') {
+      const wet = name === 'cook-water';
+      for (let j = 0; j < 4; j++) {
+        rustle(now + .052*j, wet ? 1480 : 2600, wet ? 750 : 1240, .11, .042 + .006*j);
+      }
+    } else if (name === 'cook-knead' || name === 'cook-sizzle') {
+      const hot = name === 'cook-sizzle';
+      rustle(now, hot ? 2900 : 600, hot ? 1650 : 290, .17, hot ? .054 : .075);
     } else if (PHRASES[name]) {
       for (const [delay, hz] of PHRASES[name]) {
         tone(now + delay, hz * 1.012, hz, .47, .15, 'triangle');

@@ -38,6 +38,7 @@ sources:
 | D-15 | DESIGN | ゲームロジックとレンダラ分離、安定ID、バージョン付き保存と復旧 | [技術](architecture.md)・[保存](save-and-migration.md) |
 | D-16 | DESIGN | 既存「十七景もち寄り帖」はシステム先行中に削除・上書きしない。新旧を混同しない | [祭り](festival-story-boundary.md) |
 | D-17 | DESIGN | 初期の縦断ループは桜川、棚田、蔵町で作り、その後全景に展開 | [計画](implementation-roadmap.md) |
+| D-18 | REQ | 餅クラフトでは、主人公が米の加熱、下ごしらえ、餅つき、混ぜ合わせ、盛り付けまで工房で実演する | [餅](mochi-crafting.md) |
 
 ## 未確定・要検証（OPEN）
 

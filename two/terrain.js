@@ -1,4 +1,4 @@
-import { addLivingSolids } from './living-layout.js';
+import { addCooksPlatformSolids, addCookwareSolids, addLivingSolids, marketCookCanopy, marketCooktop } from './living-layout.js';
 import { rockParts } from './rock-forms.js';
 import { mountRockContact, mountScannedContact, rockRange } from './rock-contact.js';
 import {groveWood,groundedCulms,landmarkWood,pilgrimageWood,woodContact} from './wood-contacts.js';
@@ -1530,11 +1530,19 @@ putSolid(SNOW_SPRING.x,pavilionZ-1.30,4.06,.11,0,pavilionBase+3,'wall',false);
 putSolid(SNOW_SPRING.x,SNOW_SPRING.z-8.9,3.90,1.55,0,SNOW_SPRING.level+.61,'floor',true);
 for (const [index,[x, z, yaw]] of MARKET_STALLS.entries()) {
   const base=terrainHeight(x,z), c=cos(yaw), s=sin(yaw);
-  for (const u of [-1.64,1.64]) for (const v of [-.79,1.07])
-    putSolid(x+u*c+v*s,z-u*s+v*c,.059,.059,0,base+(v<0?3.28:2.53),'oval',false);
-  putSolid(x+.12*s,z+.12*c,3.83/2,1.12,yaw,base+2.65,'awning',true);
+  const cook=index===4, postX=cook?marketCookCanopy.postX:1.64, lift=cook?marketCookCanopy.lift:0;
+  for (const u of [-postX,postX]) for (const v of [-.79,1.07])
+    putSolid(x+u*c+v*s,z-u*s+v*c,.059,.059,0,base+lift+(v<0?3.28:2.53),'oval',false);
+  putSolid(x+.12*s,z+.12*c,(cook?marketCookCanopy.width:3.83)/2,1.12,yaw,base+lift+2.65,'awning',true);
   putSolid(x + 0.42 * sin(yaw), z + 0.42 * cos(yaw), 1.57, 0.42, yaw, terrainHeight(x, z) + 0.93, 'box', true);
   // A jumping visitor lands on the brazier or bean basket before the counter.
+  if (index===4) {
+    const counter=marketCooktop(MARKET_STALLS[index]);
+    addCookwareSolids(counter,base+.18,putSolid);
+    addCooksPlatformSolids(counter,'market-mortar',base+.18,putSolid);
+    // The dango seller's stock is on the low shelf behind the cooking surface.
+    putSolid(x-.38*s,z-.38*c,1.33,.32,yaw,base+.94,'box',true,0,base+.87);
+  }
   if (index===4) putSolid(x+1.36*c+.42*s,z-1.36*s+.42*c,.185,.285,yaw,base+1.13,'box',true,0,base+.93);
   if (index===5) putSolid(x-.91*c+.47*s,z+.91*s+.47*c,.30,.30,yaw,base+1.126,'oval',true,0,base+.93);
 }

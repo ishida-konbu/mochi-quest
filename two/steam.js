@@ -121,7 +121,7 @@ export function createSteam(sources, clock = { value: 0 }, phase = 0) {
       const width = s.width*(.93+.14*Math.sin(1.3*seed))*(veil?1.70:1);
       origins.push(x,s.y,z);
       plumes.push(height,width,seed,s.alpha);
-      eddies.push(.5+.5*Math.sin(3.7*seed),.5+.5*Math.cos(4.1*seed),veil?1:0);
+      eddies.push(.5+.5*Math.sin(3.7*seed),.5+.5*Math.cos(4.1*seed),veil || s.diffuse ? 1 : 0);
       bounds.expandByPoint(point.set(x,s.y,z));
       reach = Math.max(reach, 1.9*height+width);
     }

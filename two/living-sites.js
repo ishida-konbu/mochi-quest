@@ -2,10 +2,10 @@ import { groundHeight, terrainHeight, MARKET_STALLS, wrapCoord, wrapDelta, stati
 import { WORKTOPS, HERB_PATCH, RICE_BASKET, RICE_SHOP, worktopPoint } from './living-layout.js';
 import { GATHER_NODES, SHOP_STOCK } from './living-resources.js';
 
-function site(id,region,kind,name,point,label) {
+function site(id,region,kind,name,point,label,facing) {
   const {x,z}=point;
   return Object.freeze({id,region,kind,name,label,x,z,y:groundHeight(x,z,terrainHeight(x,z)+.29),
-    ...(GATHER_NODES[id]||{}), ...(SHOP_STOCK[id]?{stock:SHOP_STOCK[id]}:{})});
+    ...(facing!==undefined?{facing}:{}), ...(GATHER_NODES[id]||{}), ...(SHOP_STOCK[id]?{stock:SHOP_STOCK[id]}:{})});
 }
 function stall(index) {
   const [x,z,yaw]=MARKET_STALLS[index];
@@ -13,14 +13,14 @@ function stall(index) {
 }
 
 export const LIVING_SITES=Object.freeze([
-  site('river-mortar','river','workshop','桜川の共同臼',worktopPoint(WORKTOPS['river-mortar'],0,1.22),'共同臼で餅を作る'),
+  site('river-mortar','river','workshop','桜川の共同臼',worktopPoint(WORKTOPS['river-mortar'],0,1.22),'共同臼で餅を作る',WORKTOPS['river-mortar'].yaw),
   site('river-yomogi','river','gather','渡し場のよもぎ原',HERB_PATCH,'よもぎを摘む'),
-  site('terraces-mortar','terraces','workshop','棚田の共同臼',worktopPoint(WORKTOPS['terraces-mortar'],0,1.22),'共同臼で餅を作る'),
+  site('terraces-mortar','terraces','workshop','棚田の共同臼',worktopPoint(WORKTOPS['terraces-mortar'],0,1.22),'共同臼で餅を作る',WORKTOPS['terraces-mortar'].yaw),
   site('terraces-farmer','terraces','shop','稲架の米売り場',{x:RICE_SHOP.x,z:RICE_SHOP.z+1.12},'棚田の米を買う'),
   site('terraces-share','terraces','gather','棚田の分け米籠',{x:RICE_BASKET.x,z:RICE_BASKET.z+1.05},'分け米をいただく'),
   site('market-grocer','market','shop','蔵町の菜の露店',stall(0),'餅の材料を買う'),
   site('market-share','market','gather','茶の露店の振る舞い豆',stall(5),'炒り大豆を分けてもらう'),
-  site('market-mortar','market','workshop','蔵町の団子屋',stall(4),'団子屋で餅を作る'),
+  site('market-mortar','market','workshop','蔵町の団子屋',stall(4),'団子屋で餅を作る',MARKET_STALLS[4][2]),
 ]);
 function onFoot(p) {
   return p.grounded && !p.activity && !p.inWater && !p.mount && !p.skiff && !p.vessel;
@@ -39,8 +39,13 @@ export function clearHandReach(from,to,storyCollisions) {
 }
 
 export function nearLivingSite(player,site) {
-  return !!site && onFoot(player) && Math.abs(site.y-player.y)<.9
-    && Math.hypot(wrapDelta(player.x-site.x),wrapDelta(player.z-site.z))<=1.57 && clearHandReach(player,site);
+  if (!site || !onFoot(player) || Math.abs(site.y-player.y)>=.9) return false;
+  const dx=wrapDelta(player.x-site.x), dz=wrapDelta(player.z-site.z);
+  // The public workstation operates from its standing tread. A visitor can
+  // jump onto the mortar or the rear counter, which has a clear sightline
+  // but no footing from which to pick up hot cookware.
+  if (site.kind==='workshop' && dx*Math.sin(site.facing)+dz*Math.cos(site.facing)<-.37) return false;
+  return Math.hypot(dx,dz)<=1.57 && clearHandReach(player,site);
 }
 
 // Only local travellers who are free to stop for a bite. The short sightline

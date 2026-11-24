@@ -354,7 +354,7 @@ function habutaeWing(b, side) {
   }
 }
 
-function makeHero() {
+export function makeHero() {
   const root = new THREE.Group(),
     pose = group(root, 'mochi'),
     rolling = group(pose, 'roll');

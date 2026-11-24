@@ -1,10 +1,56 @@
 import * as THREE from './vendor/three.module.min.js';
 import { MORTAR_PROFILE } from './festival.js';
-import { HERB_PATCH, RICE_BASKET, RICE_SHOP, WORKTOPS } from './living-layout.js';
-import { seeded, terrainContactHeight } from './terrain.js';
+import { cooksPlatform, HERB_PATCH, RICE_BASKET, RICE_SHOP, WORKTOPS, marketCooktop } from './living-layout.js';
+import { MARKET_STALLS, seeded, terrainContactHeight, terrainHeight } from './terrain.js';
 
 function turned(profile,segments) {
   return new THREE.LatheGeometry(profile.map(([r,y])=>new THREE.Vector2(r,y)),segments);
+}
+
+// The lower edge of this thick ceramic shell rises into an open firebox.
+// Both the inner and outer walls follow the arch, including its underside.
+function clayStove() {
+  const profile=[
+    [.184,.002],[.197,0],[.208,.010],[.222,.067],[.224,.108],
+    [.218,.125],[.222,.130],[.219,.137],[.197,.141],
+    [.180,.138],[.177,.130],[.182,.105],[.183,.057],[.175,.012],[.178,.003],[.184,.002],
+  ];
+  const mesh=turned(profile,96), vertices=mesh.attributes.position;
+  for(let i=0;i<vertices.count;i++) {
+    const angle=Math.atan2(vertices.getX(i),vertices.getZ(i));
+    const arc=angle/.57;
+    if(Math.abs(arc)>=1)continue;
+    const y=vertices.getY(i), arch=.102*Math.sqrt(1-arc*arc);
+    vertices.setY(i,y+arch*Math.max(0,1-y/.141));
+  }
+  mesh.computeVertexNormals();
+  return mesh;
+}
+
+function steamerFirebox(f,p) {
+  // Ceramic on an insulating stone slab. The iron rice pot hangs by its
+  // flange, leaving the firebox open underneath its rounded belly.
+  f.part('box',.49,.778,.02,.61,.036,.59,'#967e63',0,0,0,p.stone);
+  const yaw=Math.PI-.10;
+  f.part('stoveBody',.50,.798,.02,1,1,1,'#a88a72',yaw,0,0,p.stone);
+  f.part('round',.50,.806,.02,.186,.010,.186,'#615953',0,0,0,p.stone);
+  f.part('waterKettle',.50,.914,.02,1,1,1,'#777974',0,0,0,p.fine);
+  // Pierced lugs are cast into either side and take the hooks used to lift
+  // the hot pot. Their feet disappear into the flange, outside the basket.
+  for(const side of [-1,1])
+    f.part('kettleLug',.50+side*.232,.978,.02,1,1,1,'#696c67',0,0,side*-.32,p.fine);
+  // Coals sit within the opening. Each fissure is drawn directly across its
+  // parent coal, so its concentrated orange does not tint the entire stove.
+  for(const [x,z] of [[-.038,-.16],[.06,-.162],[.003,-.18]]) {
+    f.part('rock',.50+x,.82,.02+z,.033,.009,.027,'#ba6743',.45,0,0,p.fine,false);
+  }
+  for(const [i,[x,z,size]] of [[-.061,-.126,.036],[.033,-.112,.047],
+    [.087,-.157,.034],[-.025,-.165,.043],[.019,-.195,.031]].entries()) {
+    const cx=.50+x, cz=.02+z, cy=.832;
+    f.part('rock',cx,cy,cz,size,size*.55,size*.71,i%2?'#423c36':'#59504a',i*.92,0,0,p.stone,false);
+    f.line([cx-size*.49,cy+.006,cz-size*.45],[cx+size*.16,cy+.012,cz-size*.53],.0038,
+      i%2?'#ce7045':'#a55436',p.fine,false,false);
+  }
 }
 
 // Toothed blades have a light felted underside, a pronounced midrib and
@@ -67,7 +113,7 @@ export function dressCharcoalGrill(f,p) {
   for (const u of [-.14,.14]) f.line([x+u,1.115,z-.21],[x+u,1.115,z+.21],.008,'#58544a',p.fine);
 }
 
-function worktop(p,art,f,t) {
+function worktop(p,f,t) {
   // A pegged trestle carries the mortar, steamer and the pot for wetting hands.
   for (const u of [-1.12,1.12]) for (const v of [-.35,.35]) {
     f.post(u,v,.69,.072,'#886745',p.wood,true);
@@ -78,25 +124,52 @@ function worktop(p,art,f,t) {
   f.part('box',0,.30,0,2.31,.073,.065,'#8f714e',0,0,0,p.wood);
   for(let j=0;j<4;j++) f.part('box',.002*Math.sin(j),.70,(j-1.5)*t.depth/4,t.width,.12,t.depth/4-.004,
     j%2?'#b79b74':'#af9068',0,0,0,p.deck);
+}
+
+function cookware(p,art,f,siteId,table) {
+  // Keep the parked tools in their own material batches. The animation lifts
+  // real replacements from these sockets without hiding nearby shop fittings.
+  const parkedWood=p.wood.clone();
+  parkedWood.onBeforeCompile=p.wood.onBeforeCompile;
+  parkedWood.userData.cookingTools=siteId;
+  // A hinged leaf carries the serving tray clear of the mortar and hot stove.
+  const edge=-table.width/2;
+  for (let j=0;j<3;j++)
+    f.part('box',(edge-1.90)/2,.727,-.165+j*.25,edge+1.90,.066,.248,j%2?'#b29a77':'#c1a27d',0,0,0,p.deck);
+  for (const z of [-.17,.34])
+    f.line([-1.15,.42,z],[-1.79,.687,z],.059,'#997b58',p.wood,true);
+  // The mallet's large end rests on the tabletop. Support its narrower
+  // shaft on a low cleat behind the platter, clear of the mortar's foot.
+  f.part('box',-1.06,.778,-.396,.113,.036,.079,'#a98762',0,0,0,p.wood);
   f.part('livingMortar',-.68,.76,0,.72,.72,.72,'#c49a6c',0,0,0,p.wood);
   // The yokogine rests on both lips, with the head clear of the visitor's side.
-  f.line([-.68,1.327,-.30],[-.68,1.327,.39],.025,'#be975d',p.wood);
-  f.line([-.83,1.343,-.28],[-.51,1.343,-.28],.071,'#a88254',p.wood);
-  f.part('box',.49,.778,.02,.61,.036,.59,'#967e63',0,0,0,p.stone);
-  f.part('stoveBody',.50,.80,.02,.61,.39,.61,'#a38370',0,0,0,p.stone);
-  // A blackened mouth and charcoal at the opening under the steamer.
-  f.part('plane',.50,.885,.251,.18,.085,1,'#42372e',0,0,0,p.fine);
-  for(let i=0;i<3;i++) f.part('rock',.46+i*.044,.856,.247,.028,.016,.025,i%2?'#a75f40':'#5a4b41',0,0,0,p.stone,false);
+  f.line([-.68,1.365,-.30],[-.68,1.325,.39],.025,'#be975d',parkedWood);
+  f.line([-.83,1.378,-.28],[-.51,1.378,-.28],.071,'#a88254',parkedWood);
+  steamerFirebox(f,p);
   f.part('riceSteamer',.50,.987,.02,.61,.38,.61,'#bcaa83',0,0,0,p.wood);
   for(const h of [1.031,1.119]) f.part('steamerHoop',.50,h,.02,1,1,1,'#947958',0,0,0,p.wood);
   // Two small bark stitches secure the overlap in the bent-wood band.
   for (const y of [1.057,1.086]) f.line([.54,y,.274],[.558,y+.004,.271],.0035,'#685239',p.fine);
-  f.part('round',.50,1.166,.02,.272,.031,.272,'#ac956d',0,0,0,p.deck);
-  f.line([.42,1.194,.02],[.58,1.194,.02],.024,'#887149',p.wood);
+  f.part('round',.50,1.166,.02,.272,.031,.272,'#ac956d',0,0,0,parkedWood);
+  f.line([.42,1.194,.02],[.58,1.194,.02],.024,'#887149',parkedWood);
   f.part('handWaterPot',1.02,.760,.14,1,1,1,'#977d68',0,0,0,p.stone);
   f.part('round',1.02,.874,.14,.150,.003,.150,'#869c92',0,0,0,p.fine,false);
+  if (siteId === 'market-mortar') return;
   f.part('box',.13,.543,.477,.39,.31,.046,'#836b51',0,0,0,p.wood);
   f.part('plane',.13,.544,.502,.35,.295,1,'#fff',0,0,0,art.sign('餅'));
+}
+
+function dressStandingSteps(p,f,id) {
+  for(const {z,depth,width,top} of cooksPlatform(id)) {
+    const rows=Math.round(depth/.23);
+    for(let j=0;j<rows;j++)
+      f.part('box',0,top-.033,z+depth*((j+.5)/rows-.5),width,.066,depth/rows-.007,
+        j%2?'#998769':'#a18d6d',0,0,0,p.deck);
+    for(const x of [-1.4,0,1.4]) {
+      f.part('box',x,top-.10,z,.083,.078,depth,'#8b7354',0,0,0,p.wood);
+      for(const side of [-1,1]) f.post(x,z+side*depth*.33,top-.13,.047,'#816346',p.wood,true);
+    }
+  }
 }
 
 export function dressLivingSites(p,art,fixture) {
@@ -105,15 +178,26 @@ export function dressLivingSites(p,art,fixture) {
   // Matching radial subdivision keeps the two thin bands clear of the rim
   // all the way around; a faceted disk sinks behind a turned wall.
   p.shapes.steamerHoop=turned([[.254,-.007],[.261,-.008],[.264,-.004],[.264,.004],[.261,.008],[.254,.007]],40);
-  p.shapes.stoveBody=turned([[.27,0],[.37,.02],[.38,.35],[.35,.45],[.41,.48],[.41,.51],[.32,.51],[.31,.10]],32);
+  p.shapes.stoveBody=clayStove();
+  p.shapes.kettleLug=new THREE.TorusGeometry(.022,.006,8,24);
+  p.shapes.waterKettle=turned([[0,-.046],[.09,-.041],[.152,-.025],[.182,.001],
+    [.197,.026],[.204,.032],[.244,.034],[.249,.037],[.246,.041],[.208,.042],
+    [.200,.048],[.202,.065],[.214,.068],[.215,.073],[.198,.074],[.192,.067],
+    [.187,.041],[.167,.009],[.139,-.013],[.082,-.031],[0,-.034]],56);
   p.shapes.handWaterPot=turned([[.080,0],[.093,.003],[.094,.012],[.120,.026],[.153,.065],
     [.167,.106],[.167,.125],[.172,.130],[.172,.136],[.166,.140],[.158,.136],[.156,.125],
     [.147,.090],[.123,.047],[.093,.024],[0,.024]],40);
   p.shapes.yomogiBlade=mugwortBlade();
-  for (const t of Object.values(WORKTOPS)) {
+  for (const [siteId,t] of Object.entries(WORKTOPS)) {
     const f=fixture(p,t.x,t.z,t.yaw,terrainContactHeight(t.x,t.z));
-    worktop(p,art,f,t);
+    worktop(p,f,t);
+    cookware(p,art,f,siteId,t);
+    dressStandingSteps(p,f,siteId);
   }
+  const stall=MARKET_STALLS[4], counter=marketCooktop(stall);
+  const shop=fixture(p,counter.x,counter.z,counter.yaw,terrainHeight(stall[0],stall[1])+.18);
+  cookware(p,art,shop,'market-mortar',counter);
+  dressStandingSteps(p,shop,'market-mortar');
   for(const [pos,scale,sign] of [[RICE_BASKET,.80,'分米'],[RICE_SHOP,.95,'米']]) {
     const f=fixture(p,pos.x,pos.z,0,terrainContactHeight(pos.x,pos.z));
     f.part('basket',0,-.014,0,scale,.65,scale,'#ead0a0',0,0,0,art.wicker);

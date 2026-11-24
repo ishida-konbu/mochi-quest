@@ -1,3 +1,4 @@
+import { createCookingPerformance } from './cooking-performance.js';
 import { createLivingBook } from './living-book.js';
 import { LIVING_SITES } from './living-sites.js';
 import { worldClockLabel } from './world-clock.js';
@@ -419,8 +420,41 @@ const notebook = createBookView({
     updateHUD();
   }
 });
+const cooking = createCookingPerformance({
+  scene, camera, dialog, player:p,
+  enter() {
+    clearInput();
+    actors.hero.visible = false;
+    sun.target.position.set(p.x,p.y,p.z);
+    audio.setPaused(false);
+    unlock();
+  },
+  draw(dt) {
+    game.stepCookingScenery(dt);
+    const time = state.time;
+    storyWorld.update(time,p);
+    actors.update(state,dt,camera);
+    world.update(time,p,camera,state.time,state.bellStrike,state.inariWeather);
+    meadow(time,p,camera);
+    bathReflection(p,time,camera);
+    ink.draw(scene,0,scrollCoverage(p.x,p.z),time);
+  },
+  leave() {
+    actors.hero.visible = true;
+    audio.setPaused(document.hidden || dialog.open || contextLost);
+    previous = 0;
+    camera.fov = camera.aspect < 1 ? 65 : 57;
+    camera.updateProjectionMatrix();
+    updateCamera(0,true);
+    world.update(state.time,p,camera,state.time,state.bellStrike,state.inariWeather);
+    meadow(state.time,p,camera);
+    if (!contextLost) drawScene();
+  },
+  playSound(name) {audio.handle({type:'sound',name:'cook-'+name});},
+});
 const livingBook = createLivingBook({
   dialog, body:$('dialog-content'), heading:$('dialog-title'), game, save,
+  cook:cooking.start,
   guide(site) {
     const destination = mapDestinations.find(d => d.id === site.id);
     if (!destination) return;
@@ -712,6 +746,7 @@ document.addEventListener('keydown', (e) => {
   if (!dialog.open && speech.handleKey(e)) return;
   if (!bindings.has(e.code)) return;
   if (dialog.open) {
+    if (cooking.active) return;
     if (dialogKind === 'living' && e.code === 'KeyL' && !e.repeat && !e.target.closest('input,textarea,select')) {
       e.preventDefault();
       dialog.close();
@@ -779,6 +814,7 @@ window.addEventListener('blur', () => {
   save();
 });
 document.addEventListener('visibilitychange', () => {
+  cooking.resetClock();
   audio.setPaused(document.hidden || dialog.open || contextLost);
   clearInput();
   previous = 0;
@@ -1205,11 +1241,12 @@ $('guide').onclick = () => openDialog('guide');
 $('story-book').onclick = () => openDialog('story');
 $('dismiss').onclick = () => dialog.close();
 dialog.addEventListener('click', (e) => {
-  if (e.target === dialog) dialog.close();
+  if (e.target === dialog && !cooking.active) dialog.close();
 });
 dialog.addEventListener('close', () => {
   if (dialog.open) return;
   previous = 0;
+  if (cooking.active) cooking.close();
   if (dialogKind === 'living') livingBook.close();
   if (dialogKind === 'story') { performancePlayer.close(); notebook.close(); }
   dialogKind = '';
@@ -1262,8 +1299,9 @@ function drawScene() {
 function frame(now) {
   requestAnimationFrame(frame);
   const paused = document.hidden || dialog.open || contextLost;
-  audio.setPaused(paused);
+  audio.setPaused(document.hidden || contextLost || (dialog.open && (!cooking.active || cooking.paused)));
   if (paused) {
+    if (cooking.active && !document.hidden && !contextLost) cooking.frame(now);
     if (performancePlayer.active && !document.hidden && !contextLost) performancePlayer.frame(now);
     previous = 0;
     return;
@@ -1408,6 +1446,7 @@ function blockGameplay(blocked) {
 function onContextLost(event) {
   event.preventDefault();
   contextLost = true;
+  cooking.resetClock();
   clearInput();
   save();
   audio.setPaused(true);

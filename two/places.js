@@ -1,3 +1,4 @@
+import { marketCookCanopy } from './living-layout.js';
 import { dressLivingSites, dressCharcoalGrill, shareBeans } from './living-site-art.js';
 import { createSteam, steamSource } from './steam.js';
 import * as THREE from './vendor/three.module.min.js';
@@ -434,18 +435,20 @@ function marketGoods(f, a, id, r) {
     pottery(f, 0.92, y, 0.29, 0.33, '#7d8475');
   } else if (id === 4) {
     dressCharcoalGrill(f,f.painter);
+    for (const u of [-1.12,1.12]) f.post(u,-.38,.90,.060,timber,f.painter.wood,true);
+    f.part('box',0,.905,-.38,2.66,.07,.64,'#a68762',0,0,0,f.painter.wood);
     for (let j = 0; j < 3; j++) {
       const x = -0.91 + j * 0.86;
-      boxLid(f, x, y + 0.05, 0.43, 0.67, 0.53);
+      boxLid(f, x, y + 0.05, -.38, 0.67, 0.53);
       for (let i = 0; i < 4; i++) {
         const xx = x - 0.2 + i * 0.124;
-        f.line([xx, y + 0.105, 0.16], [xx, y + 0.12, 0.7], 0.009, '#ac915a');
+        f.line([xx, y + 0.105, -.65], [xx, y + 0.12, -.11], 0.009, '#ac915a');
         for (let k = 0; k < 3; k++)
           f.part(
             'ball',
             xx,
             y + 0.16,
-            0.32 + k * 0.105,
+            -.49 + k * 0.105,
             0.069,
             0.066,
             0.072,
@@ -478,21 +481,23 @@ function market(p, a) {
     const f = fixture(p, x, z, yaw),
       [name, tint] = marketTypes[id],
       rng = seeded(871 + id);
-    for (const u of [-1.64, 1.64])
-      for (const s of [-0.79, 1.07]) f.post(u, s, s < 0 ? 3.28 : 2.53, 0.059, '#816649');
-    f.line([-1.72, 3.23, -0.82], [1.72, 3.23, -0.82], 0.06, timber, p.wood);
-    f.line([-1.76, 2.48, 1.05], [1.76, 2.48, 1.05], 0.049, timber, p.wood);
-    for (const u of [-1.64, 0, 1.64]) f.line([u, 3.23, -0.83], [u, 2.48, 1.1], 0.038, '#9a8059', p.wood);
-    f.part('awning', 0, 2.65, 0.12, 3.83, 1.1, 2.24, tint, 0, 0, 0, a.awning);
+    const cook=id===4, lift=cook?marketCookCanopy.lift:0, postX=cook?marketCookCanopy.postX:1.64;
+    const canopy=cook?fixture(p,x,z,yaw,terrainHeight(x,z)+lift):f;
+    for (const u of [-postX, postX])
+      for (const s of [-0.79, 1.07]) f.post(u, s, lift+(s < 0 ? 3.28 : 2.53), 0.059, '#816649');
+    canopy.line([-postX-.08, 3.23, -0.82], [postX+.08, 3.23, -0.82], 0.06, timber, p.wood);
+    canopy.line([-postX-.12, 2.48, 1.05], [postX+.12, 2.48, 1.05], 0.049, timber, p.wood);
+    for (const u of [-postX, 0, postX]) canopy.line([u, 3.23, -0.83], [u, 2.48, 1.1], 0.038, '#9a8059', p.wood);
+    canopy.part('awning', 0, 2.65, 0.12, cook?marketCookCanopy.width:3.83, 1.1, 2.24, tint, 0, 0, 0, a.awning);
     for (let i = 0; i < 4; i++) {
       const u = (i - 1.5) * 0.82;
-      f.part('box', u, 2.3, 1.16, 0.788, 0.36, 0.037, tint, 0, -0.08, Math.sin(i + id) * 0.01, a.awning);
-      f.part('box', u, 2.157, 1.18, 0.745, 0.021, 0.021, '#ddd5b5');
+      canopy.part('box', u, 2.3, 1.16, 0.788, 0.36, 0.037, tint, 0, -0.08, Math.sin(i + id) * 0.01, a.awning);
+      canopy.part('box', u, 2.157, 1.18, 0.745, 0.021, 0.021, '#ddd5b5');
       if (i === 1 || i === 2) {
-        f.part('dyeCrest', u, 2.32, 1.19, .28, .28, 1, linen, 0, -.08, 0, p.fine, false);
+        canopy.part('dyeCrest', u, 2.32, 1.19, .28, .28, 1, linen, 0, -.08, 0, p.fine, false);
         for (let k=0;k<3;k++){
           const a=k*TAU/3;
-          f.part('ball',u+.04*sin(a),2.32+.04*cos(a),1.194,.025,.034,.006,linen,0,0,-a,p.fine,false);
+          canopy.part('ball',u+.04*sin(a),2.32+.04*cos(a),1.194,.025,.034,.006,linen,0,0,-a,p.fine,false);
         }
       }
     }
@@ -502,9 +507,9 @@ function market(p, a) {
     f.part('box', 0, 0.68, 0.31, 2.64, 0.07, 0.56, '#8c7450', 0, 0, 0, p.wood);
     for (const u of [-1.1, -0.3, 0.53, 1.12])
       f.part('box', u, 0.946, 0.42, 0.008, 0.004, 0.8, '#8f7957');
-    f.line([1.61, 2.57, 0.96], [1.57, 2.09, 1.28], 0.014, rope);
-    f.part('box', 1.575, 1.89, 1.28, 0.36, 0.48, 0.045, '#be9b66');
-    f.part('plane', 1.575, 1.89, 1.307, 0.32, 0.45, 1, '#fff', 0, 0, 0, a.sign(name), false);
+    canopy.line([postX-.03, 2.57, 0.96], [postX-.07, 2.09, 1.28], 0.014, rope);
+    canopy.part('box', postX-.065, 1.89, 1.28, 0.36, 0.48, 0.045, '#be9b66');
+    canopy.part('plane', postX-.065, 1.89, 1.307, 0.32, 0.45, 1, '#fff', 0, 0, 0, a.sign(name), false);
     marketGoods(f, a, id, rng);
     if (id % 2 === 1) {
       woven(f, a, -1.7, 0.06, -0.45, 0.67);
