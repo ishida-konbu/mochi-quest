@@ -2,6 +2,7 @@
 // Only the resulting recipe and tray count go into the player's pack.
 import * as T from './vendor/three.module.min.js';
 import { cookingAtlas } from './cooking-atlases.js';
+import { SERVING_POINT } from './cooking-motion.js';
 import { MORTAR_PROFILE } from './festival.js';
 import { regionalVessel } from './story-tableware.js';
 import { createStoryFood } from './story-crafts.js';
@@ -11,12 +12,12 @@ import { createSteam, steamSource } from './steam.js';
 import { makeMallet, makeLid, makeBowl, makePaddle, makeBoard, makePrepDish, ingredientStudy, makeSteamingCloth } from './cooking-prop-models.js';
 
 const clamp=T.MathUtils.clamp, lerp=T.MathUtils.lerp;
-const mortar=[-.68,1.097,0], board=[-.04,.797,.27], plate=[-1.48,.785,.10];
+const mortar=[-.68,1.097,0], board=[-.04,.797,.27];
 const tint={azuki:'#a06b64',herb:'#829960',soy:'#caa577',sakura:'#cb9298',sesame:'#988e7f'};
 const traditionalModels = new Map(), innerProfile=MORTAR_PROFILE.slice(10).reverse();
 const jig=new T.Object3D(), point=new T.Vector3(), target=new T.Vector3();
 let kernelGeometry;
-const pi=Math.PI;
+const pi=Math.PI, servingScale=.47;
 function kernel() {
   if(kernelGeometry) return kernelGeometry;
   // Short glutinous rice swells into a plump oval. The dimple at its germ
@@ -143,7 +144,7 @@ function prepDishes(draft,group) {
   });
 }
 function servingParts(recipe) {
-  const serving=makeCookingServing(recipe);
+  const {group:raw,skin,grains,top,leaf,height}=makeCookingServing(recipe);
   const traditional=traditionFor(recipe);
   let cake;
   if(traditional) {
@@ -156,23 +157,36 @@ function servingParts(recipe) {
     cake=traditionalModels.get(traditional.number);
   }
   const fillings=recipe.fillings.filter(f=>f.placement==='inside');
-  const center=new T.Group();
+  const centerFilling=new T.Group();
   for(const [i,f] of fillings.entries()) {
     const filling=ingredientStudy(f.id,f.amount,true);
     filling.position.set((i-(fillings.length-1)*.5)*.032,0,0);
-    center.add(filling);
+    centerFilling.add(filling);
   }
-  return Array.from({length:4},(_,i)=>{
-    const raw=i ? serving.group.clone() : serving.group, portion=new T.Group();
-    if(i && recipe.finish==='grill') raw.children[0].material=serving.browningPaint(i);
-    const canonical=cake?.clone();
-    if(canonical) portion.add(canonical);
-    const centerFilling=center.clone();
-    portion.add(raw,centerFilling);
-    portion.name='取り分けた餅・'+(i+1);
-    portion.traverse(n=>{if(n.isMesh) n.castShadow=n.receiveShadow=true;});
-    return {portion,raw,centerFilling,skin:raw.children[0],grains:raw.children[1],top:raw.children[2],leaf:raw.children[3],canonical};
-  });
+  const portion=new T.Group(), canonical=cake?.clone();
+  const finishedScale=new T.Vector3(1,1,1);
+  let liner, linerBase=0;
+  if(canonical) {
+    // The broad willow-shaped leaf of the river recipe lines the dish
+    // before the cook sets the finished rice cake onto it.
+    const leafLiner=canonical.getObjectByName('桜餅に敷いた舟形の葉');
+    if(leafLiner) {
+      liner=new T.Group();liner.add(leafLiner);
+      liner.rotation.copy(canonical.rotation);liner.scale.setScalar(servingScale);
+      linerBase=new T.Box3().setFromObject(liner,true).min.y;
+      liner.position.fromArray(SERVING_POINT);
+    }
+    const regionalBounds=new T.Box3().setFromObject(canonical,true);
+    const formingSize=new T.Box3().setFromObject(raw,true).getSize(new T.Vector3());
+    regionalBounds.getSize(finishedScale).divide(formingSize);
+    canonical.position.y-=regionalBounds.min.y;
+    portion.add(canonical);
+  }
+  portion.add(raw,centerFilling);
+  portion.name='仕立てる餅';
+  portion.visible=false;
+  portion.traverse(n=>{if(n.isMesh) n.castShadow=n.receiveShadow=true;});
+  return {portion,raw,centerFilling,skin,grains,top,leaf,canonical,height,finishedScale,liner,linerBase};
 }
 
 // A small cascade consists of distinguishable damp parcels. The foot of the
@@ -215,8 +229,16 @@ export function createCookingProps(draft) {
   const tools={lid:makeLid(),mallet:makeMallet(),bowl:makeBowl(),paddle:makePaddle(),cloth:makeSteamingCloth()};
   group.add(...Object.values(tools));
   const choppingBoard=makeBoard();choppingBoard.position.fromArray(board);group.add(choppingBoard);
+  const {portion,raw,centerFilling,skin,grains,top,leaf,canonical,height,finishedScale,liner,linerBase}=servingParts(recipe);
   const tray=regionalVessel(recipe.finish==='grill'?3:5);
-  tray.scale.set(.98,.018/tray.userData.floor,.99);tray.position.fromArray(plate);group.add(tray);
+  if(liner) group.add(liner);
+  // The foot rests on the shelf. The centre of the glaze or bamboo weave
+  // meets the same serving point as the cook's hands.
+  const foot=.002, shelf=.760;
+  const well=tray.userData.floor+(recipe.finish==='grill'?.0006:.004);
+  const thickness=(SERVING_POINT[1]+linerBase-shelf)/(well-foot);
+  tray.scale.set(.60,thickness,.60);
+  tray.position.set(SERVING_POINT[0],shelf-foot*thickness,SERVING_POINT[2]);group.add(tray);
   const rawRice=grainCloud(recipe.base==='brownRice',false,630,.126,.042);
   const rawBed=makeDough(recipe,.126,.041,false);
   rawBed.material.roughness=.78;rawRice.add(rawBed);
@@ -228,9 +250,6 @@ export function createCookingProps(draft) {
   steaming.position.y=.052;tools.cloth.add(steaming);
   const paste=makeDough(recipe,.187,.129,true);
   paste.position.fromArray(mortar);group.add(paste);
-  const unsplit=makeDough(recipe,.141,.073,false);
-  unsplit.position.set(-.045,.798,.29);group.add(unsplit);
-  const scoop=makeDough(recipe,.092,.081,false);scoop.position.y=.016;tools.paddle.add(scoop);
   const inMortar=grainCloud(recipe.base==='brownRice',true,740,.161,.119);
   inMortar.position.set(mortar[0],mortar[1]+.012,mortar[2]);group.add(inMortar);
   const rimSources=[-.55,.91,2.36,4.17].map(a=>steamSource('steamer',
@@ -241,8 +260,8 @@ export function createCookingProps(draft) {
   const mortarSteam=createSteam([steamSource('food',mortar[0],1.20,mortar[2],{height:.29,width:.13,alpha:.36,diffuse:true})],clock,1.82);
   group.add(sourceSteam,rimSteam,mortarSteam);
   const neck=stickyNeck(recipe);group.add(neck.mesh);
-  const portions=servingParts(recipe), dishes=prepDishes(recipe,group), stream=grainStream(recipe);
-  group.add(stream,...portions.map(p=>p.portion));
+  const dishes=prepDishes(recipe,group), stream=grainStream(recipe);
+  group.add(stream,portion);
   const initial=paste.material.color.clone(), mixed=initial.clone();
   for(const f of recipe.fillings.filter(f=>f.placement==='mixed'))
     mixed.lerp(new T.Color(tint[f.id]),Math.min(.82,.18+f.amount*.015));
@@ -255,10 +274,11 @@ export function createCookingProps(draft) {
   function keepShared(object) {
     object?.traverse(part=>ownedGeometry.delete(part.geometry));
   }
-  for(const piece of portions) keepShared(piece.canonical);
+  keepShared(canonical);
+  keepShared(liner);
+  keepShared(tray);
   ownedGeometry.delete(kernel());
-  tray.traverse(n=>ownedGeometry.delete(n.geometry));
-  for(const mesh of [rawRice,rawBed,steaming,inMortar,paste,cloudBase,unsplit,scoop,neck.mesh,stream,sourceSteam,rimSteam,mortarSteam,tools.cloth])
+  for(const mesh of [rawRice,rawBed,steaming,inMortar,paste,cloudBase,neck.mesh,stream,sourceSteam,rimSteam,mortarSteam,tools.cloth])
     ownedMaterial.add(mesh.material);
 
   function update(frame) {
@@ -293,8 +313,6 @@ export function createCookingProps(draft) {
     paste.material.color.copy(initial).lerp(mixed,f.mixed);
     paste.material.roughness=.63-.25*f.smooth;
     neck.update(frame,tools.mallet,paste);
-    unsplit.material.color.copy(paste.material.color);scoop.material.color.copy(paste.material.color);
-    pileMass(unsplit,f.boardDough);pileMass(scoop,f.paddleDough);
     const opening=clamp((Math.hypot(tools.lid.position.x-.5,tools.lid.position.y-1.166,tools.lid.position.z-.02)-.014)/.18,0,1);
     const breath=.55+.45*(.5+.5*Math.sin(time*1.62+.31*Math.sin(time*.94)));
     const rimWarmth=f.steam*(1-opening)*breath;
@@ -316,13 +334,12 @@ export function createCookingProps(draft) {
       target.set(-.68,1.186,0);
       streamPose(stream,point,target,time,f.tipRice,false);
     }else stream.visible=false;
-    const topUsed=frame.pieces.reduce((sum,p)=>sum+p.top,0)/4;
-    const fillingUsed=frame.pieces.reduce((sum,p)=>sum+p.fill,0)/4;
+    const piece=frame.piece;
     dishes.forEach(({holder,raw,prepared,ingredient,home,pinch},i)=>{
       const local=clamp(f.prep*recipe.fillings.length-i,0,1);
       const active=frame.phase==='prep' && i===f.prepIndex && i<recipe.fillings.length;
       const transport=active?f.prepCarry:0;
-      const left=1-(ingredient.placement==='mixed'?f.mixed:ingredient.placement==='top'?topUsed:fillingUsed);
+      const left=1-(ingredient.placement==='mixed'?f.mixed:ingredient.placement==='top'?piece.top:piece.fill);
       const p=holder.position;
       p.set(lerp(home[0],.015,transport),lerp(.770,.798,transport)+.051*Math.sin(pi*transport),lerp(home[2],.270,transport));
       if(ingredient.placement==='mixed' && frame.phase==='knead'){
@@ -346,38 +363,48 @@ export function createCookingProps(draft) {
       raw.scale.setScalar(1-.92*local);prepared.scale.setScalar(Math.cbrt(local));
       prepared.position.x=.016*(1-local);
     });
-    portions.forEach(({portion,raw,centerFilling,skin,grains,top,leaf,canonical},i)=>{
-      const piece=frame.pieces[i];portion.visible=piece.visible;
-      if(!piece.visible)return;
-      portion.position.fromArray(piece.position);portion.rotation.set(...piece.rotation);
-      const shape=clamp(piece.shape,0,1), size=.47*Math.cbrt(piece.size);
-      const disk=centerFilling.children.length>0;
-      portion.scale.setScalar(size);
-      raw.scale.set(lerp(disk?1.18:.78,1,shape),lerp(disk?.30:1.19,1,shape),lerp(disk?1.1:.85,1,shape));
-      centerFilling.visible=disk && piece.fill>.002 && shape<.87;
-      centerFilling.scale.setScalar(1.15*(1-shape*.84));
-      for(const [j,part] of centerFilling.children.entries()) {
-        const arrived=clamp(piece.fill*centerFilling.children.length-j,0,1);
-        part.visible=arrived>.002;
-        part.scale.setScalar(Math.cbrt(arrived));
-      }
-      centerFilling.position.y=raw.scale.y*(recipe.shape==='round'?.156:recipe.shape==='square'?.128:.094)*(1-shape*.8);
-      const ready=shape>=.999 && (recipe.finish!=='grill'||piece.toast>.99)
-        && (recipe.technique!=='wrap'||piece.wrap>.99) &&
-        (!recipe.fillings.some(f=>f.placement==='top')||piece.top>.99);
-      if(canonical) {canonical.visible=ready;raw.visible=!ready;}
-      if(skin.morphTargetInfluences)skin.morphTargetInfluences[0]=piece.toast;
-      const flip=piece.flip??0;
-      const half=(recipe.shape==='round'?.156:recipe.shape==='square'?.128:.094)*.5;
-      for(const layer of [skin,grains]){
-        layer.rotation.z=flip;
-        layer.position.set(half*Math.sin(flip),half*(1-Math.cos(flip)),0);
-      }
-      top.visible=piece.top>.001;
-      top.scale.setScalar(Math.max(.01,Math.cbrt(piece.top)));
-      leaf.visible=piece.wrap>.001;
-      leaf.scale.set(1,Math.max(.006,piece.wrap),1);
-    });
+    // The same serving leaves the wet paddle, lands on the board and
+    // stays between the hands as it is filled, turned and finally plated.
+    const amount=f.paddleDough+f.boardDough+piece.size;
+    portion.visible=amount>.002;
+    if(!portion.visible) return;
+    portion.position.fromArray(piece.position);portion.rotation.set(...piece.rotation);
+    if(f.paddleDough>0) {
+      const onPaddle=f.paddleDough/amount;
+      point.set(0,.016,0).applyMatrix4(tools.paddle.matrix);
+      portion.position.lerp(point,onPaddle);
+      portion.quaternion.slerp(tools.paddle.quaternion,onPaddle);
+    }
+    portion.scale.setScalar(servingScale*Math.cbrt(amount));
+    const shape=clamp(piece.shape,0,1), disk=centerFilling.children.length>0;
+    // Spread a filled cake into a disc and draw its edges together around the
+    // filling. Widening the disc compensates for the loss of height.
+    const squash=lerp(1.12,1,shape)-(disk ? .58*piece.size*(1-shape) : 0);
+    const width=1/Math.sqrt(squash);
+    raw.scale.set(width*lerp(1,finishedScale.x,shape),squash*lerp(1,finishedScale.y,shape),
+      width*lerp(1,finishedScale.z,shape));
+    centerFilling.visible=disk && piece.fill>.002 && shape<.87;
+    centerFilling.scale.setScalar(1.15*(1-shape*.84));
+    for(const [j,part] of centerFilling.children.entries()) {
+      const arrived=clamp(piece.fill*centerFilling.children.length-j,0,1);
+      part.visible=arrived>.002;
+      part.scale.setScalar(Math.cbrt(arrived));
+    }
+    centerFilling.position.y=raw.scale.y*height*(1-shape*.8);
+    const ready=shape>=.999 && (recipe.finish!=='grill'||(piece.toast>.99&&piece.flip>=2*pi-1e-4))
+      && (recipe.technique!=='wrap'||piece.wrap>.99) &&
+      (!recipe.fillings.some(f=>f.placement==='top')||piece.top>.99);
+    if(canonical) {canonical.visible=ready;raw.visible=!ready;}
+    if(skin.morphTargetInfluences)skin.morphTargetInfluences[0]=piece.toast;
+    const flip=piece.flip??0, half=height*.5;
+    for(const layer of [skin,grains]){
+      layer.rotation.z=flip;
+      layer.position.set(half*Math.sin(flip),half*(1-Math.cos(flip)),0);
+    }
+    top.visible=piece.top>.001;
+    top.scale.setScalar(Math.max(.01,Math.cbrt(piece.top)));
+    leaf.visible=piece.wrap>.001;
+    leaf.scale.set(1,Math.max(.006,piece.wrap),1);
   }
   return {group, update,dispose(){
     group.removeFromParent();

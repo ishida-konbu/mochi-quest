@@ -144,7 +144,7 @@ export function craftRecipe(living, draft, { regionId, name, description, expect
   const batch = { id, recipeId: recipe.id, quantity: p.quantity, attributes: p.attributes, appearanceKey: p.key, craftedMinute: minute, cost: cost.cost };
   living.batches.push(batch);
   living.nextBatchId++;
-  return { ok: true, recipe, batch, message: title + 'が4個できました。' };
+  return { ok: true, recipe, batch, message: title + 'が' + batch.quantity + '個できました。' };
 }
 export function renameRecipe(living, id, name, description) {
   const recipe = living.recipes.find(r => r.id === id);

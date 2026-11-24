@@ -12,8 +12,7 @@ const tau = Math.PI * 2;
 const tiles = { rice:0, bamboo:1, soft:3, coarse:4, roast:5, blush:9, herb:10, sesame:13 };
 const hues = { azuki:'#974c4d', soy:'#c59659', sakura:'#c9858e', herb:'#77964e', sesame:'#45443c' };
 const identity = [0,0,0], unit = [1,1,1];
-let pigment;
-const roastPaints=[];
+let pigment,roastPaint;
 function foodPaint() {
   if (!pigment) {
     const map=cookingAtlas('ingredients');
@@ -23,26 +22,23 @@ function foodPaint() {
 }
 // The journey and its recipe book use the same photographs. Heating blends
 // the raw rice photograph into the roast marks alongside the vertex colour.
-function browningPaint(i) {
-  if (roastPaints[i]) return roastPaints[i];
+function browningPaint() {
+  if (roastPaint) return roastPaint;
   const base=foodPaint();
-  const browning=base.clone();
-  browning.onBeforeCompile=function(shader, renderer) {
+  roastPaint=base.clone();
+  roastPaint.onBeforeCompile=function(shader, renderer) {
     base.onBeforeCompile.call(this,shader,renderer);
     const varyings='varying vec2 bakedUv; varying float heatBlend;';
-    const angle=i*Math.PI/2;
-    shader.uniforms.roastTurn={value:new T.Vector2(Math.cos(angle),Math.sin(angle))};
     shader.vertexShader=shader.vertexShader
-      .replace('#include <common>','#include <common>\nattribute vec2 roastUv; uniform vec2 roastTurn; '+varyings)
-      .replace('#include <begin_vertex>','#include <begin_vertex>\nbakedUv=vec2(.375,.625)+mat2(roastTurn.x,roastTurn.y,-roastTurn.y,roastTurn.x)*(roastUv-vec2(.375,.625)); heatBlend=morphTargetInfluences[0];');
+      .replace('#include <common>','#include <common>\nattribute vec2 roastUv; '+varyings)
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nbakedUv=roastUv; heatBlend=morphTargetInfluences[0];');
     shader.fragmentShader=shader.fragmentShader
       .replace('#include <common>','#include <common>\n'+varyings)
       .replace('#include <map_fragment>',T.ShaderChunk.map_fragment.replace(
         'texture2D( map, vMapUv )','mix(texture2D(map,vMapUv), texture2D(map,bakedUv), heatBlend)'));
   };
-  browning.customProgramCacheKey=()=>'mochi-turning-on-charcoal';
-  roastPaints[i]=browning;
-  return browning;
+  roastPaint.customProgramCacheKey=()=>'mochi-turning-on-charcoal';
+  return roastPaint;
 }
 function patch(form, tile, columns, rows, sample, tint, textureUV) {
   const positions=[], indices=[], uv=[];
@@ -271,7 +267,7 @@ export function makeCookingServing(recipe) {
   if (recipe.finish==='grill') {
     const roasted=new InkForm(tiles,4,4);
     sculptSurface(roasted,recipe,profile,tint,0,tau);
-    skin.material=browningPaint(0);
+    skin.material=browningPaint();
     skin.geometry.setAttribute('roastUv',new T.Float32BufferAttribute(roasted.uv,2));
     skin.geometry.morphAttributes.position=[skin.geometry.attributes.position];
     skin.geometry.morphAttributes.color=[new T.Float32BufferAttribute(roasted.c,3)];
@@ -291,7 +287,7 @@ export function makeCookingServing(recipe) {
   const grains=layer(grainForm,'粒と練り込みの具'), top=layer(topForm,'仕上げの具'), leaf=layer(leafForm,'笹の包み');
   const group=new T.Group();
   group.add(skin,grains,top,leaf);
-  return {group,skin,top,leaf, browningPaint};
+  return {group,skin,grains,top,leaf,height:profile.height};
 }
 
 export function createCraftModel(draft) {

@@ -1,6 +1,6 @@
 # 設計Wiki索引
 
-設計版 v0.1.0 / 2026-11-25 JST。全18設計ページ。実装状況は[フェーズ1・2の検版記録](../raw/2026-11-25-phase-1-2-verification.md)と[工房での調理実演](../raw/2026-11-25-cooking-performance.md)を参照。
+設計版 v0.1.0 / 2026-11-25 JST。全18設計ページ。実装状況は[フェーズ1・2の検版記録](../raw/2026-11-25-phase-1-2-verification.md)と[餅を一つ仕上げる調理実演](../raw/2026-11-25-single-mochi.md)を参照。
 
 最新のユーザー要件は[決定記録](decisions.md)と[原指示](../raw/2026-11-25-user-direction.md)。メインストーリー詳細は保留。実装時はまず[AGENTS.md](../AGENTS.md)と[SCHEMA.md](../SCHEMA.md)を読み、対象ページ・依存先・受け入れ条件だけを開く。
 

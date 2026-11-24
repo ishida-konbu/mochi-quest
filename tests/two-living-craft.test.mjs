@@ -18,7 +18,9 @@ test('a tray preserves the exact preview, shares acquired cost, and has a single
     const r=craftRecipe(s,draft,{regionId,expectedBatchId:next});
     assert.equal(r.recipe.name,name); assert.deepEqual(r.batch.attributes,p.attributes);
     assert.equal(r.batch.appearanceKey,p.key);assert.equal(r.batch.cost,p.cost);
-    assert.equal(r.batch.quantity,4);assert.equal(s.inventory.rice,300-next*100);
+    assert.equal(p.quantity,4);assert.equal(r.batch.quantity,p.quantity);
+    assert.equal(r.message,name+'が'+p.quantity+'個できました。');
+    assert.equal(s.inventory.rice,300-next*100);
     const before=structuredClone(s);
     assert.equal(craftRecipe(s,draft,{regionId,expectedBatchId:next}).ok,false);
     assert.deepEqual(s,before);

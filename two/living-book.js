@@ -158,7 +158,7 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
     const options = { blossom:'桜をのせた平餅', plain:'白い丸餅', ...recipes, free:'自由に配合する' };
     if (!draft) resetDraft(firstMochi,'blossom');
     const stationInfo = el('div',undefined,'living-station');
-    if (station) stationInfo.append(el('strong',station.name));
+    if (station) stationInfo.append(el('strong',station.name),el('span','実演では餅を一つ仕上げます。'));
     else {
       const dest = nearest(LIVING_SITES.filter(s=>s.kind==='workshop'));
       stationInfo.append(el('span','仕上がりを試せます。作るには公共工房へ。'), route(dest));
@@ -222,7 +222,7 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
     naming.append(field('餅の名前',name),field('餅の説明',desc));
     const footer = el('div',undefined,'living-confirm'), reason = el('p');
     const expectedBatchId = world.nextBatchId;
-    const submit = button('4個分の調理を始める',()=>{
+    const submit = button('調理を始める',()=>{
       const site = near('workshop');
       const preview = evaluateRecipe(world,draft,site?.region);
       if (!preview.ok) { updateReceipt(preview);return; }
@@ -251,6 +251,7 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
       const v = evaluateRecipe(world,draft,station?.region);
       reason.textContent = v.reason || '';
       submit.disabled = !v.ok;
+      submit.textContent = v.quantity ? v.quantity+'個分の調理を始める' : '調理を始める';
       if (!v.recipe) { summary.replaceChildren(); title.textContent = '分量を確かめてください'; canvas.hidden=true;return; }
       canvas.hidden=false;
       canvas.hidden = !renderCraftPreview(canvas,v.recipe);

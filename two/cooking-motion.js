@@ -10,7 +10,7 @@ const blend = (a,b,f) => a.map((v,i)=>mix(v,b[i],f));
 const angleTo = (a,b) => Math.atan2(Math.sin(b-a),Math.cos(b-a));
 const still = (position,rotation=[0,0,0]) => ({position,rotation});
 const grip = (tool,offset) => ({tool,offset});
-const onPiece = (index,offset) => ({index,offset});
+const onPiece = offset => ({piece:true,offset});
 const rest = null;
 const LID = still([.50,1.166,.02]);
 const BOWL = still([.045,.798,.31]);
@@ -25,6 +25,8 @@ const paddleGrip=grip('paddle',[0,.01,.18]);
 const lidPark=still([.815,1.035,-.19],[0,.04,1.45]);
 const malletRack=still([-1.31,.834,-.396],[0,PI/2,0]);
 const board=[-.045,.798,.29], well=[-.68,1.187,.01];
+const grill=[1.36,.949,0];
+export const SERVING_POINT=[-1.48,.784,.10];
 const unwrap=(a,b,f)=>a+angleTo(a,b)*f;
 
 function rotateXYZ(p,r) {
@@ -37,16 +39,12 @@ function at(object,offset) {
   const d=rotateXYZ(offset,object.rotation);
   return object.position.map((v,i)=>v+d[i]);
 }
-function traySlot(i) {return [-1.48+(i%2 ? .109 : -.109),.803,.10+(i<2 ? -.086 : .086)];}
-function grillSlot(i) {return [1.36+(i%2 ? .078 : -.078),.949,(i<2 ? -.112 : .112)];}
-function boardSlot(i) {return [board[0]+(i%2 ? .098 : -.098),board[1],board[2]+(i<2 ? -.089 : .089)];}
-
 function makeState(start) {
-  const piece = ()=>({position:board.slice(),rotation:[0,0,0],size:0,shape:0,fill:0,toast:0,flip:0,wrap:0,top:0});
+  const piece={...still(board),size:0,shape:0,fill:0,toast:0,flip:0,wrap:0,top:0};
   return {stance:start,hands:[rest,rest],focus:[0,.98,.12],lean:0,lift:0,effort:0,
-    tools:{lid:LID,bowl:BOWL,cloth:CLOTH,mallet:MALLET,paddle:PADDLE},pieces:[0,1,2,3].map(piece),
+    tools:{lid:LID,bowl:BOWL,cloth:CLOTH,mallet:MALLET,paddle:PADDLE},piece,
     food:{bowlRice:1,steamerRice:0,clothRice:0,mortarRice:0,steam:0,doneness:0,smooth:0,compression:0,
-      mixed:0,boardDough:0,paddleDough:0,prep:0,prepIndex:0,prepCarry:0,mixLoad:0,pinch:0,pinchIndex:-1,pinchPortion:0,gather:0,stretch:0,pourRice:0,tipRice:0}};
+      mixed:0,boardDough:0,paddleDough:0,prep:0,prepIndex:0,prepCarry:0,mixLoad:0,pinch:0,pinchIndex:-1,gather:0,stretch:0,pourRice:0,tipRice:0}};
 }
 
 // Each entry is a physical transition. Props stay precisely where they were
@@ -61,13 +59,8 @@ export function createCookingScore(draft,layout={},entry={}) {
     chapter={id,label,start:end,end};chapters.push(chapter);
   }
   function beat(seconds,change={},curve='soft') {
-    const next={...state,...change,food:{...state.food,...change.food},tools:{...state.tools,...change.tools}};
-    if(change.piece) {
-      const {index,...fields}=change.piece;
-      next.pieces=state.pieces.slice();
-      next.pieces[index]={...state.pieces[index],...fields};
-      delete next.piece;
-    }
+    const next={...state,...change,food:{...state.food,...change.food},tools:{...state.tools,...change.tools},
+      piece:change.piece ? {...state.piece,...change.piece} : state.piece};
     steps.push({start:end,duration:seconds,a:state,b:next,curve,chapter});
     end+=seconds;chapter.end=end;state=next;
   }
@@ -227,105 +220,89 @@ export function createCookingScore(draft,layout={},entry={}) {
   }
   beat(.29,{tools:moveTool('paddle',[-.66,1.19,.034],[-.70,0,0]),hands:[paddleGrip,[-.81,1.24,.10]]});
   beat(.46,{tools:moveTool('paddle',[-.58,1.41,.15],[-.23,0,0]),hands:[paddleGrip,[-.72,1.47,.12]],food:{paddleDough:1,mortarRice:0}});
-  beat(.66,{stance:stance(.02),tools:moveTool('paddle',[-.035,1.03,.30],[-.10,0,0]),hands:[paddleGrip,[-.16,1.07,.28]],focus:board});
+  // Clear the thick wooden rim before lowering the loaded paddle to the board.
+  beat(.47,{stance:stance(-.19),tools:moveTool('paddle',[-.19,1.40,.32],[-.13,0,0]),hands:[paddleGrip,[-.33,1.45,.27]],focus:board});
+  beat(.36,{stance:stance(.02),tools:moveTool('paddle',[-.035,1.03,.30],[-.10,0,0]),hands:[paddleGrip,[-.16,1.07,.28]],focus:board});
   beat(.31,{tools:moveTool('paddle',[-.02,.833,.25],[-.12,0,-.18]),hands:[paddleGrip,[-.13,.88,.31]],food:{paddleDough:0,boardDough:1}});
   beat(.26,{tools:moveTool('paddle',[.14,.936,.32]),hands:[paddleGrip,rest]});
   beat(.32,{tools:{paddle:PADDLE}});beat(.22,{hands:[rest,rest],lean:.07,effort:0});
 
-  phase('shape',insideNames.length ? '四つに分け、'+insideNames.join('と')+'を包む' : '四つにちぎり、形を整える');
-  function seasonPortion(i,placement) {
+  // Follow one cake from the forming board to the dish for every batch size.
+  const [bx,by,bz]=board;
+  phase('shape',insideNames.length ? '生地を広げ、'+insideNames.join('と')+'を包む' : '生地を手に取り、形を整える');
+  function addFilling(placement) {
     const ingredients=draft.fillings.map((f,index)=>({f,index})).filter(item=>item.f.placement===placement);
     for(const [n,{index}] of ingredients.entries()){
       const dishX=-.175+index*.107;
-      const steady=onPiece(i,[-.07,.047,.01]);
-      beat(.28,{hands:[[dishX,.81,.05],steady],food:{pinchIndex:index,pinchPortion:i,pinch:1},effort:.14});
+      const steady=onPiece([-.07,.047,.01]);
+      beat(.28,{hands:[[dishX,.81,.05],steady],food:{pinchIndex:index,pinch:1},effort:.14});
       beat(.22,{hands:[[dishX,.956,.15],steady]});
-      beat(.30,{hands:[onPiece(i,[0,.078,0]),steady]});
-      beat(.18,{food:{pinch:0},piece:{index:i,[placement==='inside'?'fill':'top']:(n+1)/ingredients.length}});
+      beat(.30,{hands:[onPiece([0,.078,0]),steady]});
+      beat(.18,{food:{pinch:0},piece:{[placement==='inside'?'fill':'top']:(n+1)/ingredients.length}});
     }
   }
-  for(let i=0;i<4;i++){
-    const [x,y,z]=boardSlot(i);
-    const h=.10;
-    beat(.25,{hands:[[board[0]+.09,y+h,board[2]+.028],[board[0]-.09,y+h,board[2]+.028]],focus:board,lean:.16});
-    beat(.32,{piece:{index:i,position:[x,y+.048,z],size:1},hands:[onPiece(i,[.071,.052,.014]),onPiece(i,[-.071,.052,.014])],
-      food:{boardDough:(3-i)/4},effort:.34});
-    seasonPortion(i,'inside');
-    beat(.30,{piece:{index:i,position:[x,y+.032,z],shape:.55},hands:[onPiece(i,[.070,.03,.04]),onPiece(i,[-.061,.047,-.028])],lean:.195});
-    beat(.32,{piece:{index:i,position:[x,y,z],shape:1},hands:[onPiece(i,[.070,.038,-.005]),onPiece(i,[-.068,.035,.012])],lean:.13,effort:.08});
-    beat(.16,{hands:[[x+.11,y+.13,z+.06],[x-.12,y+.13,z+.05]]});
-  }
-  function carry(i,dest,bodyX,restAt,seconds) {
-    const p=state.pieces[i].position;
-    const hands=[onPiece(i,[.061,.037,.01]),onPiece(i,[-.061,.037,.01])];
+  beat(.25,{hands:[[bx+.09,by+.10,bz+.028],[bx-.09,by+.10,bz+.028]],focus:board,lean:.16});
+  beat(.38,{piece:{size:1},hands:[onPiece([.071,.038,.014]),onPiece([-.071,.038,.014])],
+    food:{boardDough:0},effort:.34});
+  addFilling('inside');
+  beat(.34,{piece:{position:[bx,by+.032,bz],shape:.55},hands:[onPiece([.070,.03,.04]),onPiece([-.061,.047,-.028])],lean:.195});
+  beat(.36,{piece:{position:board,shape:1},hands:[onPiece([.070,.038,-.005]),onPiece([-.068,.035,.012])],lean:.13,effort:.08});
+  beat(.19,{hands:[[bx+.11,by+.13,bz+.06],[bx-.12,by+.13,bz+.05]]});
+
+  function carry(dest,bodyX,clearance,seconds) {
+    const p=state.piece.position;
+    const hands=[onPiece([.061,.037,.01]),onPiece([-.061,.037,.01])];
     beat(.24,{hands,lean:.17,focus:p});
-    const high=Math.max(p[1],dest[1])+restAt;
-    beat(.27,{piece:{index:i,position:[p[0],high,p[2]+.06]},lean:.09});
-    beat(seconds,{stance:stance(bodyX,1.20),piece:{index:i,position:[dest[0],high,dest[2]+.08]},focus:dest,lean:.105});
-    beat(.27,{piece:{index:i,position:dest},lean:.17});
+    const high=Math.max(p[1],dest[1])+clearance;
+    beat(.27,{piece:{position:[p[0],high,p[2]+.06]},lean:.09});
+    beat(seconds,{stance:stance(bodyX,1.20),piece:{position:[dest[0],high,dest[2]+.08]},focus:dest,lean:.105});
+    beat(.27,{piece:{position:dest},lean:.17});
     beat(.18,{hands:[[dest[0]+.12,dest[1]+.16,dest[2]+.08],[dest[0]-.11,dest[1]+.14,dest[2]+.07]]});
   }
-  const grilled=draft.finish==='grill';
-  if(grilled) {
-    phase('grill','炭火に並べ、返して焼く');
-    for(let i=0;i<4;i++) {
-      if(i) beat(.80,{stance:stance(.04),hands:[rest,rest],focus:board});
-      carry(i,grillSlot(i),1.10,.385,.92);
-    }
-    beat(.63,{stance:stance(1.05,1.18),hands:[rest,rest],focus:[1.35,1.00,0]});
-    // Turn with the blade underneath the hot rice, avoiding the live coals.
-    beat(.75,{stance:stance(.05),hands:[paddleGrip,rest],focus:[.30,.88,.15]});
-    beat(.87,{stance:stance(1.08),tools:moveTool('paddle',[1.27,1.22,.18]),focus:[1.34,1.02,.01]});
-    for(let i=0;i<4;i++){
-      const [x,y,z]=grillSlot(i);
-      beat(.22,{tools:moveTool('paddle',[x,y+.013,z+.02],[-.20,0,0]),piece:{index:i,toast:.48},lean:.17});
-      beat(.32,{tools:moveTool('paddle',[x,y+.16,z+.05],[-.4,0,-.40]),piece:{index:i,position:[x,y+.18,z],flip:1.48},lean:.09});
-      beat(.30,{piece:{index:i,position:[x,y,z],flip:PI,toast:1},tools:moveTool('paddle',[x+.07,y+.055,z+.11]),lean:.15});sound('sizzle');
-    }
-    // Return each hot cake to the board on the same paddle. Only after it
-    // leaves the charcoal does the cook handle the decorations and leaf.
-    for(let i=0;i<4;i++){
-      const [x,y,z]=grillSlot(i),[u,v,w]=boardSlot(i);
-      if(i) beat(.91,{stance:stance(1.08),tools:moveTool('paddle',[x,1.26,z+.13]),focus:[x,y,z]});
-      beat(.30,{tools:moveTool('paddle',[x,y+.001,z],[-.005,0,0]),lean:.17});
-      beat(.31,{tools:moveTool('paddle',[x,1.40,z+.12]),piece:{index:i,position:[x,1.416,z+.12]},lean:.09});
-      beat(1.02,{stance:stance(.02),tools:moveTool('paddle',[u,1.37,w+.04]),piece:{index:i,position:[u,1.386,w+.04]},focus:board});
-      // Roll the cake across the paddle onto its base. The marked upper
-      // shoulder is presented for the garnish and the fresh leaf.
-      beat(.24,{tools:moveTool('paddle',[u,v+.18,w+.025],[-.10,0,.93]),
-        piece:{index:i,position:[u+.028,v+.23,w],flip:PI*1.5},lean:.13});
-      beat(.29,{tools:moveTool('paddle',[u,v+.001,w]),piece:{index:i,position:[u,v+.017,w],flip:2*PI},lean:.17});
-      beat(.28,{tools:moveTool('paddle',[u,v+.03,w+.22]),piece:{index:i,position:[u,v,w]},lean:.12});
-    }
+  if(draft.finish==='grill') {
+    phase('grill','炭火にのせ、返して両面を焼く');
+    carry(grill,1.10,.385,.92);
+    const [x,y,z]=grill;
+    beat(.63,{stance:stance(1.05,1.18),hands:[rest,rest],focus:grill,piece:{toast:.14}});
+    // Let the first face brown while the cook collects the paddle.
+    beat(.75,{stance:stance(.05),hands:[paddleGrip,rest],focus:[.30,.88,.15],piece:{toast:.31}});
+    // Lift on the board side before passing the steamer on the way to the grate.
+    beat(.37,{tools:moveTool('paddle',[-.02,1.38,.08]),lean:.09,piece:{toast:.36}});
+    beat(.83,{stance:stance(1.08),tools:moveTool('paddle',[1.27,1.22,.18]),focus:grill,piece:{toast:.45}});
+    beat(.22,{tools:moveTool('paddle',[x,y+.013,z+.02],[-.20,0,0]),piece:{toast:.48},lean:.17});
+    beat(.32,{tools:moveTool('paddle',[x,y+.16,z+.05],[-.4,0,-.40]),piece:{position:[x,y+.18,z],flip:1.48},lean:.09});
+    beat(.30,{piece:{position:grill,flip:PI},tools:moveTool('paddle',[x+.07,y+.055,z+.11]),lean:.15});sound('sizzle');
+    beat(.85,{tools:moveTool('paddle',[x+.10,y+.15,z+.20]),piece:{toast:.91},lean:.10});
+    // Lift clear of the coals, then roll the cooked cake right-side up onto
+    // the board, where it can be safely garnished or wrapped by hand.
+    beat(.30,{tools:moveTool('paddle',[x,y+.001,z],[-.005,0,0]),piece:{toast:1},lean:.17});
+    beat(.31,{tools:moveTool('paddle',[x,1.40,z+.12]),piece:{position:[x,1.416,z+.12]},lean:.09});
+    beat(1.02,{stance:stance(.02),tools:moveTool('paddle',[bx,1.37,bz+.04]),piece:{position:[bx,1.386,bz+.04]},focus:board});
+    beat(.24,{tools:moveTool('paddle',[bx,by+.18,bz+.025],[-.10,0,.93]),
+      piece:{position:[bx+.028,by+.23,bz],flip:PI*1.5},lean:.13});
+    beat(.29,{tools:moveTool('paddle',[bx,by+.001,bz]),piece:{position:[bx,by+.017,bz],flip:2*PI},lean:.17});
+    beat(.28,{tools:moveTool('paddle',[bx,by+.03,bz+.22]),piece:{position:board},lean:.12});
     beat(.32,{tools:moveTool('paddle',[.12,1.02,.25])});
-    beat(.28,{tools:{paddle:PADDLE}});beat(.23,{hands:[rest,rest]});
+    beat(.28,{tools:{paddle:PADDLE}});beat(.23,{hands:[rest,rest],lean:.07,effort:0});
   }
-  if(draft.fillings.some(f=>f.placement==='top')){
-    phase('garnish','ひとつずつ、'+garnishNames.join('と')+'をのせる');
-    for(let i=0;i<4;i++){
-      beat(.24,{hands:[rest,rest],focus:state.pieces[i].position});
-      seasonPortion(i,'top');
-    }
+  if(garnishNames.length){
+    phase('garnish',garnishNames.join('と')+'をのせる');
+    beat(.24,{hands:[rest,rest],focus:board});
+    addFilling('top');
   }
   if(draft.technique==='wrap'){
-    phase('wrap','笹の葉を折り、ひとつずつ包む');
-    for(let i=0;i<4;i++){
-      const [x,y,z]=state.pieces[i].position;
-      beat(.34,{stance:stance(.02),hands:[[x+.13,y+.043,z+.035],[x-.13,y+.045,z-.012]],focus:[x,y+.05,z]});
-      beat(.28,{hands:[[x+.012,y+.099,z],[x-.11,y+.043,z]],piece:{index:i,wrap:.52},lean:.19});
-      beat(.32,{hands:[[x+.01,y+.096,z],[x-.015,y+.10,z]],piece:{index:i,wrap:1},lean:.18});
-      beat(.24,{hands:[[x+.13,y+.15,z+.085],[x-.10,y+.15,z+.075]],lean:.13});
-    }
+    phase('wrap','笹の葉を折って餅を包む');
+    beat(.34,{stance:stance(.02),hands:[[bx+.13,by+.043,bz+.035],[bx-.13,by+.045,bz-.012]],focus:[bx,by+.05,bz]});
+    beat(.28,{hands:[[bx+.012,by+.099,bz],[bx-.11,by+.043,bz]],piece:{wrap:.52},lean:.19});
+    beat(.32,{hands:[[bx+.01,by+.096,bz],[bx-.015,by+.10,bz]],piece:{wrap:1},lean:.18});
+    beat(.24,{hands:[[bx+.13,by+.15,bz+.085],[bx-.10,by+.15,bz+.075]],lean:.13});
   }
-  phase('plate','仕上げた餅をひとつずつ器に盛る');
-  for(let i=0;i<4;i++){
-    const p=state.pieces[i].position, sourceX=.02;
-    beat(steer(sourceX,1.20),{stance:stance(sourceX,1.20),hands:[rest,rest],focus:p});
-    carry(i,traySlot(i),-1.10,.53,.93);
-    sound('plate');
-  }
-  phase('finish','四つの餅ができあがりました');
-  beat(.62,{stance:stance(-.94,1.26,PI+.26),focus:[-1.35,1.02,.15],hands:[rest,rest],lean:.085,effort:0,food:{steam:.03}});
+  phase('plate','仕上げた餅を器に盛る');
+  beat(steer(.02,1.20),{stance:stance(.02,1.20),hands:[rest,rest],focus:board});
+  carry(SERVING_POINT,-1.10,.53,.93);
+  sound('plate');
+  phase('finish','盛り付けが整いました');
+  beat(.62,{stance:stance(-.94,1.26,PI+.26),focus:[SERVING_POINT[0],SERVING_POINT[1]+.06,SERVING_POINT[2]],hands:[rest,rest],lean:.085,effort:0,food:{steam:.03}});
   beat(.94,{lean:.025});
   function sample(seconds) {
     const t=Math.max(0,Math.min(end,seconds));
@@ -381,14 +358,12 @@ export function createCookingScore(draft,layout={},entry={}) {
       const first=a.tools[name],last=b.tools[name];
       tools[name]=still(blend(first.position,last.position,f),blend(first.rotation,last.rotation,f));
     }
-    const pieces=a.pieces.map((v,i)=>{
-      const w=b.pieces[i],p=still(blend(v.position,w.position,f),blend(v.rotation,w.rotation,f));
-      for(const key of ['size','shape','fill','toast','flip','wrap','top'])p[key]=mix(v[key],w[key],f);
-      p.visible=p.size>.001;return p;
-    });
+    const piece=still(blend(a.piece.position,b.piece.position,f),blend(a.piece.rotation,b.piece.rotation,f));
+    for(const key of ['size','shape','fill','toast','flip','wrap','top'])piece[key]=mix(a.piece[key],b.piece[key],f);
+    piece.visible=piece.size>.001;
     function palm(target,i) {
       if(target?.tool)return at(tools[target.tool],target.offset);
-      if(target?.index!==undefined)return at(pieces[target.index],target.offset);
+      if(target?.piece)return at(piece,target.offset);
       if(target)return target;
       const side=i?1:-1,flight=walk?.085*Math.sin(2*PI*f*strides)*side:0;
       const dx=side*.75,dz=.54+flight;
@@ -396,11 +371,11 @@ export function createCookingScore(draft,layout={},entry={}) {
     }
     const hands=a.hands.map((v,i)=>blend(palm(v,i),palm(b.hands[i],i),f));
     const food={};
-    for(const k of Object.keys(a.food))food[k]=['prepIndex','pinchIndex','pinchPortion'].includes(k)?b.food[k]:mix(a.food[k],b.food[k],f);
+    for(const k of Object.keys(a.food))food[k]=(k==='prepIndex'||k==='pinchIndex')?b.food[k]:mix(a.food[k],b.food[k],f);
     const ch=s.chapter;
     return {time:t,phase:ch.id,label:ch.label,progress:(t-ch.start)/(ch.end-ch.start),hero:[x,footCentre+bounce,z],heading,
       focus:blend(a.focus,b.focus,f),lean:mix(a.lean,b.lean,f),lift:mix(a.lift,b.lift,f),effort:mix(a.effort,b.effort,f),
-      feet,hands,tools,pieces,food};
+      feet,hands,tools,piece,food};
   }
   return {duration:end,chapters,cues,sample};
 }

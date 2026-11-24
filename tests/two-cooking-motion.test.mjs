@@ -2,42 +2,54 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Euler, Vector3 } from '../two/vendor/three.module.min.js';
 import { BASIC_RECIPE, STARTER_RECIPES } from '../two/living-craft.js';
-import { createCookingScore } from '../two/cooking-motion.js';
+import { createCookingScore, SERVING_POINT } from '../two/cooking-motion.js';
 
 const riceWithEverything={...BASIC_RECIPE,finish:'grill',technique:'wrap',seasoning:'salt',seasoningAmount:2,
   fillings:[{id:'azuki',amount:20,placement:'inside'},{id:'herb',amount:12,placement:'mixed'},{id:'sakura',amount:4,placement:'top'}]};
 const dist=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
 const near=(a,b,tol=1e-8)=>assert.ok(Math.abs(a-b)<tol,`expected ${a} to be within ${tol} of ${b}`);
 
-test('each portion goes from the dough to its own well, with every requested treatment',()=>{
+test('one cake is shaped and plated once with every treatment selected by the recipe',()=>{
   for(const r of [BASIC_RECIPE,...STARTER_RECIPES.map(s=>s.draft),riceWithEverything]){
     const score=createCookingScore(r),last=score.sample(Infinity),ids=score.chapters.map(c=>c.id);
     for(const id of ['approach','steam','prep','transfer','pound','knead','shape','plate','finish'])assert.ok(ids.includes(id));
     for(const [phase,requested] of [['grill',r.finish==='grill'],['garnish',r.fillings.some(f=>f.placement==='top')],['wrap',r.technique==='wrap']])
       assert.equal(ids.includes(phase),requested);
-    near(last.food.mortarRice+last.food.boardDough+last.food.paddleDough,0);
-    const xyz=last.pieces.map(p=>p.position);
-    for(const [i,p] of last.pieces.entries()){
-      near(p.size,1);near(p.shape,1);assert.ok(p.visible);
-      near(p.toast,Number(r.finish==='grill'));near(p.flip,r.finish==='grill'?2*Math.PI:0);
-      near(p.wrap,Number(r.technique==='wrap'));near(p.fill,Number(r.fillings.some(f=>f.placement==='inside')));
-      near(p.top,Number(r.fillings.some(f=>f.placement==='top')));
-      near(p.position[1],.803);assert.ok(p.position[0]<-1.30);
-      for(let j=0;j<i;j++)assert.ok(dist(xyz[i],xyz[j])>=.17);
+    assert.equal(score.cues.filter(c=>c.name==='plate').length,1);
+    assert.equal(score.cues.filter(c=>c.name==='sizzle').length,Number(r.finish==='grill'));
+    assert.equal(score.sample(0).piece.visible,false);
+    const p=last.piece;
+    near(p.size,1);near(p.shape,1);assert.ok(p.visible);
+    near(p.toast,Number(r.finish==='grill'));near(p.flip,r.finish==='grill'?2*Math.PI:0);
+    near(p.wrap,Number(r.technique==='wrap'));near(p.fill,Number(r.fillings.some(f=>f.placement==='inside')));
+    near(p.top,Number(r.fillings.some(f=>f.placement==='top')));
+    assert.deepEqual(p.position,SERVING_POINT);
+    near(last.focus[0],p.position[0]);near(last.focus[2],p.position[2]);
+    let previousSize=0, plated=false;
+    for(let t=0;t<=score.duration;t+=1/30){
+      const f=score.sample(t),food=f.food;
+      near(food.bowlRice+food.steamerRice+food.clothRice+food.mortarRice+food.paddleDough+food.boardDough+f.piece.size,1);
+      assert.ok(f.piece.size>=previousSize);
+      previousSize=f.piece.size;
+      const onTray=dist(f.piece.position,SERVING_POINT)<1e-6;
+      if(plated)assert.ok(onTray,'the cook left the tray to repeat the serving movement');
+      plated=onTray;
     }
+    assert.ok(plated);
     if(r.finish==='grill'){
       const grill=score.chapters.find(c=>c.id==='grill');
-      for(const p of score.sample(grill.end-.0001).pieces){assert.ok(Math.abs(p.position[0])<.30);near(p.position[1],.798);}
+      const turn=score.cues.find(c=>c.name==='sizzle');
+      const flipped=score.sample(turn.time).piece;
+      assert.deepEqual(flipped.position,[1.36,.949,0]);
+      near(flipped.flip,Math.PI);assert.ok(flipped.toast>0 && flipped.toast<1);
+      const platedSide=score.sample(grill.end-.001).piece;
+      assert.deepEqual(platedSide.position,[-.045,.798,.29]);
+      near(platedSide.flip,2*Math.PI);near(platedSide.toast,1);
     }
     for(const ch of score.chapters){
       const t=ch.start+(ch.end-ch.start)*.64;
       const f=score.sample(t);
       score.sample(score.duration);assert.deepEqual(score.sample(t),f);
-    }
-    for(let t=0;t<=score.duration;t+=.109){
-      const f=score.sample(t),food=f.food;
-      near(food.bowlRice+food.steamerRice+food.clothRice+food.mortarRice+
-        food.paddleDough+food.boardDough+f.pieces.reduce((sum,p)=>sum+p.size/4,0),1);
     }
   }
 });
@@ -74,6 +86,7 @@ test('hands, tools and feet move continuously and the walking stride has a plant
     near(Math.min(...heights),0);
     for(const [i,p] of f.hands.entries())assert.ok(dist(p,previous.hands[i])<.14,`hand popped at ${t}`);
     for(const [i,p] of f.feet.entries())assert.ok(dist(p,previous.feet[i])<.14,`foot popped at ${t}`);
+    assert.ok(dist(f.piece.position,previous.piece.position)<.14,`cake popped at ${t}`);
     for(const [k,o] of Object.entries(f.tools))assert.ok(dist(o.position,previous.tools[k].position)<.14,`${k} popped at ${t}`);
     previous=f;
   }

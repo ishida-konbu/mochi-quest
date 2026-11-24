@@ -47,12 +47,16 @@ export function createCookingStage(scene,site) {
   const right=new THREE.Vector3(),up=new THREE.Vector3();
   const target=new THREE.Vector3(), action=new THREE.Vector3(), hero=new THREE.Vector3();
   const desired=new THREE.Vector3(), eye=new THREE.Vector3(), offset=new THREE.Vector3(), subject=new THREE.Vector3();
-  const clamp=THREE.MathUtils.clamp;
+  const {clamp,lerp,smoothstep}=THREE.MathUtils;
   let distance=0,priorDetail=null,priorAspect=null;
   function positionCamera(camera,frame,{detail=false,reducedMotion=false,dt=0,cut:snap=false}={}) {
     action.fromArray(frame.focus);
     hero.fromArray(frame.hero);
     const portrait=camera.aspect<.85;
+    // Reserve space for the whole stroke as the cook brings the mallet from
+    // its rack to the mortar. Changing chapter alone must not move the lens.
+    const lifting=frame.phase==='pound'?smoothstep(frame.tools?.mallet?.position[0]??-1.31,-1.31,-.69):0;
+    const piece=frame.piece?.visible?frame.piece:null;
     out.fromArray(viewingDirections[layout.id]);
     if(detail)out.set(layout.market?.10:.12,layout.market?.64:.98,-1);
     out.normalize();right.set(out.z,0,-out.x).normalize();up.crossVectors(out,right);
@@ -62,8 +66,14 @@ export function createCookingStage(scene,site) {
     if (detail) {
       // A fixed midpoint between the bowl and the lifted mallet keeps the
       // close view steady through repeated strikes without zooming out.
-      const height=frame.phase==='pound'?1.48:.88+.36*(clamp(action.y,.8,1.75)-.88);
+      const height=lerp(.88+.36*(clamp(action.y,.8,1.75)-.88),1.48,lifting);
       desired.set(action.x,height,.12+.24*action.z);
+      if(piece) {
+        // The cook can reach back for a paddle while the cake is still on
+        // the grill. Keep both the cake and the hand's new destination in shot.
+        desired.x=lerp(desired.x,piece.position[0],.5*piece.size);
+        desired.y=lerp(desired.y,piece.position[1]+.08,.4*piece.size);
+      }
     }
     if (reducedMotion && !detail) desired.set(0,1.20,.46);
     const cut=snap || priorDetail!==detail || priorAspect!==camera.aspect;
@@ -84,7 +94,8 @@ export function createCookingStage(scene,site) {
     if (detail) {
       include(action.x-.39,.78,action.z-.22,.035);
       include(action.x+.39,Math.max(1.23,action.y),action.z+.14,.035);
-      if(frame.phase==='pound') include(-.68,2.03,.27);
+      if(piece) include(...piece.position,.13*piece.size);
+      if(lifting) include(action.x,lerp(action.y,2.07,lifting),lerp(action.z,.27,lifting));
     } else if (reducedMotion) {
       for(const x of [-1.70,1.46]) {
         include(x,.74,.05);include(x,2.18,.98);
@@ -97,7 +108,7 @@ export function createCookingStage(scene,site) {
       include(hero.x,hero.y+.24,hero.z+.20);
       include(action.x-.31,Math.max(.83,action.y),action.z);
       include(action.x+.31,Math.max(.83,action.y),action.z);
-      if(frame.phase==='pound') include(-.65,2.07,.28);
+      if(lifting) include(action.x,lerp(action.y,2.07,lifting),lerp(action.z,.28,lifting));
     }
     fit=Math.max(fit,portrait && !detail ? 3.22 : 0);
     if (cut || !distance) distance=fit;
@@ -105,7 +116,8 @@ export function createCookingStage(scene,site) {
       // A hand can cross the bench faster than the pan. Give it headroom now,
       // then settle the lens slowly as the cook returns to the cutting board.
       const settle=fit>distance ? 4.2 : 1.30;
-      distance=Math.max(fit*.91,THREE.MathUtils.lerp(distance,fit,1-Math.exp(-Math.max(0,dt)*settle)));
+      const damped=lerp(distance,fit,1-Math.exp(-Math.max(0,dt)*settle));
+      distance=detail?damped:Math.max(fit*.91,damped);
     }
     priorDetail=detail;priorAspect=camera.aspect;
     eye.copy(out).multiplyScalar(distance).add(target);

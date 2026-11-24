@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import * as THREE from '../two/vendor/three.module.min.js';
 import { createCookingStage } from '../two/cooking-stage.js';
 import { createCookingScore } from '../two/cooking-motion.js';
-import { STARTER_RECIPES } from '../two/living-craft.js';
+import { createCookingProps } from '../two/cooking-props.js';
+import { BASIC_RECIPE, STARTER_RECIPES, craftRecipe, evaluateRecipe } from '../two/living-craft.js';
 import { createGame } from '../two/game.js';
 import { LIVING_SITES, nearLivingSite } from '../two/living-sites.js';
 import { marketCookCanopy, worktopPoint } from '../two/living-layout.js';
@@ -56,6 +57,12 @@ test('the hands, current task and face stay framed when the cook moves along eac
         stage.positionCamera(camera,frame,{detail,dt:1/12});
         const [x,y,z]=frame.hero;
         const positions=detail ? [frame.focus] : [frame.focus,[x,y+1.45,z],...frame.hands];
+        if(frame.piece.visible) {
+          const [cx,cy,cz]=frame.piece.position;
+          // Include the shoulders of the cake while it rests on the grill and
+          // the cook walks back to fetch the paddle, as well as while carried.
+          positions.push([cx-.12,cy,cz],[cx+.12,cy+.06,cz]);
+        }
         for(const position of positions) {
           stage.group.localToWorld(point.fromArray(position)).project(camera);
           assert.ok(Math.abs(point.x)<1 && Math.abs(point.y)<1 && point.z<1,
@@ -65,6 +72,25 @@ test('the hands, current task and face stay framed when the cook moves along eac
     }
     stage.dispose();
   }
+});
+
+test('the close lens eases into the first mallet stroke',()=>{
+  const site=workshops.find(s=>s.region==='market');
+  const stage=createCookingStage(new THREE.Scene(),site);
+  const score=createCookingScore(STARTER_RECIPES.find(r=>r.regionId===site.region).draft,stage.layout);
+  const pound=score.chapters.find(c=>c.id==='pound');
+  const previous=new THREE.Vector3();
+  for(const aspect of [390/740,896/530]) {
+    const camera=new THREE.PerspectiveCamera(60,aspect,.04,200);
+    const from=pound.start-1;
+    stage.positionCamera(camera,score.sample(from),{detail:true,cut:true});
+    for(let t=from+1/60;t<pound.end;t+=1/60) {
+      previous.copy(camera.position);
+      stage.positionCamera(camera,score.sample(t),{detail:true,dt:1/60});
+      assert.ok(camera.position.distanceTo(previous)<.16,'abrupt close-up at '+t);
+    }
+  }
+  stage.dispose();
 });
 
 test('reduced motion holds one viewpoint and skipping cuts directly to the finished platter',()=>{
@@ -148,5 +174,61 @@ test('the cook starts on the visitor side and keeps both soles on a narrow stand
       assert.ok(canOccupy(world.x,world.z,layout.y+y,.36,1.47),site.id);
     }
     stage.dispose();
+  }
+});
+
+test('the cook plates one blossom mochi and the recipe yields a full batch', t=>{
+  t.mock.method(THREE.TextureLoader.prototype,'load',()=>new THREE.Texture());
+  const {livingWorld}=createGame().state;
+  const draft={...BASIC_RECIPE,shape:'flat',fillings:[{id:'sakura',amount:4,placement:'top'}]};
+  const preview=evaluateRecipe(livingWorld,draft,'river');
+  assert.ok(preview.ok);
+  const before={...livingWorld.inventory};
+  const props=createCookingProps(preview.recipe);
+  t.after(()=>props.dispose());
+  const score=createCookingScore(preview.recipe);
+  const serving=props.group.getObjectByName('仕立てる餅');
+  assert.ok(serving);
+  for(const phase of ['shape','garnish','plate','finish']){
+    const chapter=score.chapters.find(c=>c.id===phase);
+    const frame=score.sample(chapter.end);
+    props.update(frame);
+    assert.equal(serving.visible,true,phase);
+    assert.deepEqual(serving.position.toArray(),frame.piece.position,phase);
+  }
+  assert.equal(score.cues.filter(cue=>cue.name==='plate').length,1);
+  assert.deepEqual(livingWorld.inventory,before);
+  const result=craftRecipe(livingWorld,draft,{regionId:'river'});
+  assert.ok(result.ok);
+  assert.equal(result.batch.quantity,4);
+  assert.equal(livingWorld.inventory.rice,before.rice-100);
+  assert.equal(livingWorld.inventory.sakura,before.sakura-4);
+});
+
+test('regional servings keep their footprint when the cook finishes shaping, garnishing or turning them', t=>{
+  t.mock.method(THREE.TextureLoader.prototype,'load',()=>new THREE.Texture());
+  function visibleSize(serving) {
+    serving.updateWorldMatrix(true,true);
+    const bounds=new THREE.Box3(), point=new THREE.Vector3();
+    serving.traverseVisible(part=>{
+      if(!part.isMesh) return;
+      for(let i=0;i<part.geometry.attributes.position.count;i++){
+        part.getVertexPosition(i,point).applyMatrix4(part.matrixWorld);
+        bounds.expandByPoint(point);
+      }
+    });
+    return bounds.getSize(new THREE.Vector3());
+  }
+  for(const {draft,regionId} of STARTER_RECIPES){
+    const props=createCookingProps(draft);
+    t.after(()=>props.dispose());
+    const score=createCookingScore(draft), frame=score.sample(score.duration);
+    const serving=props.group.getObjectByName('仕立てる餅');
+    const lastTouch=regionId==='market'?{flip:2*Math.PI-.0002}:regionId==='river'?{top:.989}:{shape:.998};
+    props.update({...frame,piece:{...frame.piece,...lastTouch}});
+    const before=visibleSize(serving);
+    props.update(frame);
+    const after=visibleSize(serving);
+    assert.ok(Math.abs(before.x-after.x)<.002 && Math.abs(before.z-after.z)<.002,regionId);
   }
 });
