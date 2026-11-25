@@ -29,6 +29,21 @@ function carryRotation(r,face) {
   partQ.setFromEuler(euler.set(...r,'XYZ')).premultiply(yawQ.setFromAxisAngle(up,face));
   euler.setFromQuaternion(partQ,'XYZ');return [euler.x,euler.y,euler.z];
 }
+// Long timbers travel narrow end first. The shoulder is near the bearing
+// end, so turning the far end upwards clears walls without raising the hands
+// above the carpenter's reach. At the receiving joint it is lowered onto
+// the opposite bearing before the near end is seated.
+function transportAttitude(s) {
+  if(s.id==='roof.ridge'||s.id==='roof.ridge-cap')return [0,0,-pi*.49];
+  if(s.id.startsWith('roof.trestle-'))return [-pi*.48,0,0];
+  // Each framed roof panel is carried on its eave edge; the upper shingle
+  // edge stays above the carpenter before rolling down onto the ridge.
+  if(s.id.startsWith('roof.back-'))return [-pi*.33,0,0];
+  if(s.id.startsWith('roof.front-'))return [pi*.33,0,0];
+  if(s.id==='posts.left-plate'||s.id==='posts.right-plate')return [pi*.49,0,0];
+  if(s.id==='fence.left-stake'||s.id==='fence.right-stake')return zero;
+  return null;
+}
 const pinsJoint=s=>s.method==='raise' || (s.method==='seat' && /sill|bent|plate|joist|trestle|deck-|ridge|front-|back-|lattice/.test(s.id));
 const collisionMeshes=new WeakMap();
 function hitsPiece(step,p,y,size) {
@@ -330,7 +345,7 @@ function makeJob(player,site,steps,canStand,variant) {
     for(const a of [0,.47,-.47,.91,-.91,1.48,-1.48,pi]){
       const n=turn(s.normal,a),station=add(goal,n,1.12*size);
       const sy=ground(station),gap=g[1]-sy;
-      if(gap<-.015 || gap>1.94*size || !avoidFittings(station,sy) || (s.bounds && hitsPiece(s,station,sy,size)))continue;
+      if(gap<(s.id.startsWith('wall.')?-.26:-.015) || gap>1.94*size || !avoidFittings(station,sy) || (s.bounds && hitsPiece(s,station,sy,size)))continue;
       const fixedYaw=Math.atan2(-n[0],-n[1]);
       let carryPath;
       if(s.id==='stand.rafters'){
@@ -343,16 +358,44 @@ function makeJob(player,site,steps,canStand,variant) {
         const outer=ways(pick,corner,wide),front=outer && ways(corner,landing,avoidFittings);
         const approach=front && ways(landing,station,avoidFittings);
         if(approach)carryPath=[...outer,...front.slice(1),...approach.slice(1)];
+      }else if(s.id.startsWith('roof.') || /posts\.(left|right)-plate/.test(s.id)){
+        // The traveller alone fits through an open bay, but not with a long
+        // rafter above the shoulder. First clear the nearest outer face,
+        // skirt the building, then ascend the stair on the receiving face.
+        if(a!==0)continue;
+        const margin=3.62*size,tangent=[n[1],-n[0]];
+        const leave=Math.abs(pick[0])/1.85>Math.abs(pick[1])/1.65?[Math.sign(pick[0]),0]:[0,Math.sign(pick[1])];
+        const dot=(p,v)=>p[0]*v[0]+p[1]*v[1];
+        const entry=add(pick,leave,Math.max(0,margin+.42-dot(pick,leave)));
+        const gate=add(station,n,Math.max(.7,margin+.42-dot(station,n)));
+        const escape=(p,y)=>avoidFittings(p,y) && dot(p,leave)>=dot(pick,leave)-.18;
+        const outboard=(p,y)=>avoidFittings(p,y) && Math.max(Math.abs(p[0]),Math.abs(p[1]))>=margin;
+        const approach=(p,y)=>avoidFittings(p,y) && dot(p,n)>=dot(station,n)-.20 &&
+          Math.abs(dot(p,tangent)-dot(station,tangent))<2.55*size;
+        const lead=ways(pick,entry,escape),around=lead && ways(entry,gate,outboard);
+        const inward=around && ways(gate,station,approach);
+        if(inward)carryPath=[...lead,...around.slice(1),...inward.slice(1)];
+      }else if(s.id.startsWith('wall.')){
+        // A full-width panel only clears the two pillar rebates when both
+        // ends are squared to the opening. Take it around the rear outside
+        // corner, square the panel, then slide it straight into its rebates.
+        if(a!==0)continue;
+        const apron=add(station,n,1.53*size),side=pick[0]<0?-1:1;
+        const corner=[side*Math.max(Math.abs(pick[0]),3.72*size),apron[1]];
+        const outside=(p,y)=>avoidFittings(p,y) && (pick[1]<=-2.25 || Math.abs(p[0])>=Math.min(3.25*size,Math.abs(pick[0])) || p[1]<=-2.9);
+        const lead=ways(pick,corner,outside),square=lead && ways(corner,apron,avoidFittings);
+        const final=square && ways(apron,station,avoidFittings);
+        if(final)carryPath=[...lead,...square.slice(1),...final.slice(1)];
       }else carryPath=ways(pick,station,avoidFittings);
       if(!carryPath)continue;
-      op={n,g,station,pick,sy,py,stock:pile.grip,rotation:pile.rotation,fixedYaw,pickYaw,route,carryPath,step:s};break;
+      op={n,g,station,pick,sy,py,stock:pile.grip,rotation:pile.rotation,transport:transportAttitude(s),fixedYaw,pickYaw,route,carryPath,step:s};break;
     }
     if(!op)return null;
     op.pickY=routeSampler([op.pick,op.pick],op.pickYaw,op.pickYaw,size,ground)(0).hero[1];
     op.standY=routeSampler([op.station,op.station],op.fixedYaw,op.fixedYaw,size,ground)(0).hero[1];
     operations.push(op);
-    walk(op.route,op.pickYaw,index);pause(index,'grasp',.64);
-    walk(op.carryPath,op.fixedYaw,index,true);pause(index,'seat',s.method==='spread'?.99:.71);
+    walk(op.route,op.pickYaw,index);pause(index,'grasp',op.transport?1.05:.64);
+    walk(op.carryPath,op.fixedYaw,index,true);pause(index,'seat',op.transport?1.72:s.method==='spread'?.99:.71);
     pause(index,'fasten',pinsJoint(s)?1.94:s.method==='lash'?1.16:.68);pause(index,'release',.36);
   }
   // End on the nearest clear piece of earth with a view back to the finished
@@ -396,8 +439,9 @@ function makeJob(player,site,steps,canStand,variant) {
     const [hx,hy,hz]=f.hero;
     const loose=[-1,1].map(side=>bodyPoint(f.hero,f.heading,side*.78*size,.75*size,.54*size));
     const held=bodyPoint(f.hero,f.heading,0,.83*size,1.12*size);
-    const hanging=s.method==='hang',nose=hanging?.48:0;
-    const liftAtJoint=hanging ? g[1]-.07 : Math.max(op.standY+.83*size,g[1]+(s.id==='stand.rafters'?.43:.21));
+    const hanging=s.method==='hang',panel=s.id.startsWith('wall.'),nose=hanging?.48:panel?.40:0;
+    const lateralFit=hanging||panel;
+    const liftAtJoint=lateralFit ? g[1]+(hanging?-.07:0) : Math.max(op.standY+.83*size,g[1]+(s.id==='stand.rafters'?.43:.21));
     const picked=[op.stock[0],op.pickY+.83*size,op.stock[2]],near=[g[0]+n[0]*nose,liftAtJoint,g[2]+n[1]*nose];
     const envelope=op.clearance;
     const clearance=v=>{
@@ -409,16 +453,21 @@ function makeJob(player,site,steps,canStand,variant) {
     let grip=op.stock,rot=op.rotation,engage=0,work=0;
     if(action==='grasp'){
       engage=ease(q/.58);const k=ease((q-.54)/.46);
-      grip=blend(op.stock,picked,k);grip[1]+=clearance(0)*k;rot=op.rotation.map(v=>v*(1-.16*k));
+      grip=blend(op.stock,picked,k);grip[1]+=clearance(0)*k;rot=op.transport?blend(op.rotation,op.transport,k):op.rotation.map(v=>v*(1-.16*k));
     }else if(action==='carry'){
       engage=1;
       const align=ease((q-.34)/.55),lift=ease((q-.43)/.42);
       grip=held;grip[0]+=n[0]*nose*lift;grip[2]+=n[1]*nose*lift;
       grip[1]+=(liftAtJoint-op.standY-.83*size)*lift+clearance(q);
-      rot=carryRotation(op.rotation.map(v=>v*.84*(1-align)),(angle(op.pickYaw,f.heading,1)-op.pickYaw)*(1-align));
+      rot=op.transport || carryRotation(op.rotation.map(v=>v*.84*(1-align)),(angle(op.pickYaw,f.heading,1)-op.pickYaw)*(1-align));
     }else if(action==='seat'){
       engage=1;work=e;grip=blend(near,g,e);grip[1]+=extra*Math.sin(pi*e)+(1-e)*clearance(1);
-      rot=zero;
+      if(op.transport){
+        const lower=ease(q/.78),seat=ease((q-.65)/.35);
+        grip=blend(near,g,seat);
+        grip[1]+=(1-seat)*clearance(1);
+        rot=op.transport.map(v=>v*(1-lower));
+      }else rot=zero;
     }else if(action==='fasten' || action==='release' || finished){
       work=1;grip=g;rot=zero;engage=finished?0:action==='release'?1-e:1;
     }

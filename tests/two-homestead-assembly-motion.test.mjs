@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Euler,Vector3 } from '../two/vendor/three.module.min.js';
+import { Box3,Euler,Ray,Triangle,Vector3 } from '../two/vendor/three.module.min.js';
 import { terrainContactHeight } from '../two/terrain.js';
 import { assemblyParts } from '../two/homestead-assembly-parts.js';
 import { planAssembly } from '../two/homestead-assembly-motion.js';
@@ -56,4 +56,47 @@ test('during loaded travel both hands stay at the authored contacts and a wooden
   assert.ok(strikes>0);
   assert.equal(planAssembly({...player,mount:'bike'},site,parts),null);
   assert.equal(planAssembly(player,site,parts,()=>false),null);
+});
+
+function transformedFaces(part,frame) {
+  const pos=part.geometry.attributes.position,ix=part.geometry.index.array;
+  const origin=new Vector3(...part.grip),rotation=new Euler(...(frame?.rotation??[0,0,0]));
+  const final=origin.clone().add(new Vector3(...(frame?.offset??[0,0,0])));
+  const vertices=Array.from({length:pos.count},(_,i)=>new Vector3().fromBufferAttribute(pos,i).sub(origin).applyEuler(rotation).add(final));
+  const faces=[];
+  for(let i=0;i<ix.length;i+=3)faces.push(new Triangle(vertices[ix[i]],vertices[ix[i+1]],vertices[ix[i+2]]));
+  return {faces,box:new Box3().setFromPoints(vertices)};
+}
+
+function crosses(a,b){
+  const overlap=a.box.clone().intersect(b.box);
+  if(overlap.isEmpty())return false;
+  const left=a.faces.filter(f=>overlap.intersectsTriangle(f)),right=b.faces.filter(f=>overlap.intersectsTriangle(f));
+  const ray=new Ray(),dir=new Vector3(),hit=new Vector3();
+  function edgeThrough(t,f) {
+    for(const [start,end] of [[t.a,t.b],[t.b,t.c],[t.c,t.a]]){
+      const length=dir.subVectors(end,start).length();
+      if(length<.006)continue;
+      ray.set(start,dir.multiplyScalar(1/length));
+      if(ray.intersectTriangle(f.a,f.b,f.c,false,hit) &&
+          hit.distanceTo(start)>.003 && hit.distanceTo(start)<length-.003)return true;
+    }
+    return false;
+  }
+  return left.some(a=>right.some(b=>edgeThrough(a,b)||edgeThrough(b,a)));
+}
+
+test('loaded ridge, roof trusses and full wall panels clear the earlier three-dimensional frame throughout transport',()=>{
+  const {parts,plan}=job('hut');
+  assert.ok(plan);
+  const fixed=parts.map(part=>transformedFaces(part));
+  const largeMembers=new Set(['wall.wainscot','wall.screen','posts.left-plate','roof.trestle-0','roof.trestle-1','roof.ridge','roof.ridge-cap','roof.back-1']);
+  for(const a of plan.actions.filter(a=>a.type==='carry' && largeMembers.has(parts[a.index].id))){
+    for(let i=0;i<32;i++){
+      const f=plan.sample(a.start+(i+.5)/32*(a.end-a.start)),load=transformedFaces(parts[a.index],f);
+      for(let j=0;j<a.index;j++){
+        assert.ok(!crosses(load,fixed[j]),parts[a.index].id+' through '+parts[j].id+' at '+Math.round(100*(i+.5)/32)+'%');
+      }
+    }
+  }
 });
