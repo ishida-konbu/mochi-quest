@@ -4,6 +4,7 @@ type: governance
 status: active
 updated: 2026-11-25
 sources:
+  - ../raw/2026-11-25-interactive-building.md
   - ../raw/2026-11-25-open-forestry-level-foundations.md
   - ../raw/2026-11-25-construction-performance.md
   - ../raw/2026-11-25-user-direction.md
@@ -45,6 +46,7 @@ sources:
 | D-18 | REQ | 工房で主人公が米の加熱、下ごしらえ、餅つき、混ぜ合わせを実演する。一仕込みの出来高にかかわらず、一個の成形から盛り付けまでを見せる。次に使う道具は作業場所に用意するか、餅とともに運ぶ | [餅](mochi-crafting.md) |
 | D-19 | REQ | 販売所と拠点の新築は主人公のお餅が現地で行う。材料に手を掛けてから組み付けて離すまでをつなげ、用のない往復を省く | [拠点](building.md) |
 | D-20 | REQ | 伐採の条件を撤廃する。斜面にも建てられ、勾配が大きいほど水平な基礎に多くの木材を使う | [拠点](building.md) |
+| D-21 | REQ | 建築を独立した「建てる」モードにする。絵札と見積もりで選び、現地の枠で配置・高さ調整・範囲編集を行う。D-19の実演を各建物の部品1〜3点の加工カットに短縮する | [拠点](building.md) |
 
 ## 未確定・要検証（OPEN）
 

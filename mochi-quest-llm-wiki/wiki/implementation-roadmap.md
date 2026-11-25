@@ -4,6 +4,7 @@ type: implementation
 status: active
 updated: 2026-11-25
 sources:
+  - ../raw/2026-11-25-interactive-building.md
   - ../raw/2026-11-25-open-forestry-level-foundations.md
   - ../raw/2026-11-25-construction-performance.md
   - ../raw/2026-11-25-user-direction.md
@@ -83,6 +84,8 @@ sources:
 ## フェーズ3・4の実装記録
 
 桜川・棚田・蔵町の無人販売、土地の見立て、伐採、野営地、小屋、竹垣、収納、移設・撤去を実装。公共工房から出品、売上回収、米と建材の購入、伐採、建築、収納、保存・再開までをブラウザで検版した。その後、土地を決めた主人公自身が売り棚と拠点を組み上げる[主人公の建築実演](../raw/2026-11-25-construction-performance.md)をフェーズ4に加えた。伐採を全域に広げ、斜面では高低差に応じた基礎を普請する。[伐採と水平な基礎の検版](../raw/2026-11-25-open-forestry-level-foundations.md)
+
+フェーズ4の追加要件として、絵札による新築、傾斜と高さの見積もり、直接配置と範囲編集、部品1〜3点の普請を実装した。[「建てる」モードの検版記録](../raw/2026-11-25-interactive-building.md)
 
 次はフェーズ5の栽培・住民の日常・十七景への地域展開。
 
