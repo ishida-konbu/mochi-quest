@@ -233,6 +233,14 @@ export function createAudio(makeWorldAudio) {
     } else if (name === 'bump') {
       tone(now, 150, 57, .18, .23, 'triangle');
       rustle(now, 680, 170, .15, .20);
+    } else if (name === 'build-knock' || name === 'build-seat') {
+      const strike = name === 'build-knock';
+      rustle(now, strike ? 2200 : 1150, 360, strike ? .046 : .09, .10);
+      tone(now, strike ? 406 : 171, strike ? 290 : 95, .09, .075, 'triangle');
+      tone(now, strike ? 685 : 330, strike ? 592 : 246, .052, .033);
+    } else if (name === 'build-lash' || name === 'build-spread') {
+      const rope = name === 'build-lash';
+      rustle(now, rope ? 1350 : 880, rope ? 660 : 1930, rope ? .15 : .23, .065);
     } else if (name === 'cook-pound') {
       // A low, damped dough impact with a shorter wooden resonance.
       tone(now, 105, 54, .15, .19);

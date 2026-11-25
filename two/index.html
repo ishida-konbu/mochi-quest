@@ -26,8 +26,13 @@
       {
         "imports": {
           "./living-save.js": "./living-save.js?v=homestead-1",
+          "./living-build.js": "./living-build.js?v=construction-1",
+          "./living-build-land.js": "./living-build-land.js?v=construction-1",
+          "./living-homestead-book.js": "./living-homestead-book.js?v=construction-1",
+          "./homestead-world.js": "./homestead-world.js?v=construction-1",
+          "./homestead-carpentry.js": "./homestead-carpentry.js?v=construction-1",
           "./living-resources.js": "./living-resources.js?v=homestead-1",
-          "./living-book.js": "./living-book.js?v=homestead-1",
+          "./living-book.js": "./living-book.js?v=construction-1",
           "./atlas-destinations.js": "./atlas-destinations.js?v=homestead-1",
           "./scenery-quality.js": "./scenery-quality.js?v=island-horizon-2",
           "./travel-camera.js": "./travel-camera.js?v=travel-camera-1",
@@ -96,7 +101,7 @@
           "./kyo-bath-layout.js": "./kyo-bath-layout.js?v=suzuri-roji-1",
           "./kyo-bath-art.js": "./kyo-bath-art.js?v=suzuri-roji-1",
           "./goemon-windbreak.js": "./goemon-windbreak.js?v=yuya-emaki-1",
-          "../sound.js": "../sound.js?v=cooking-1",
+          "../sound.js": "../sound.js?v=construction-1",
           "./kiyomizu-layout.js": "./kiyomizu-layout.js?v=emaki-funatabi-1",
           "./kiyomizu.js": "./kiyomizu.js?v=emaki-funatabi-1",
           "./kiyomizu-bell.js": "./kiyomizu-bell.js?v=journey-music-1",
@@ -125,7 +130,7 @@
           "./bath-enclosures.js": "./bath-enclosures.js?v=amimoto-yudono-1",
           "./bath-pavilion-art.js": "./bath-pavilion-art.js?v=amimoto-yudono-1",
           "./regional-bath-carpentry.js": "./regional-bath-carpentry.js?v=amimoto-yudono-1",
-          "./actors.js": "./actors.js?v=cooking-1",
+          "./actors.js": "./actors.js?v=construction-1",
           "./animal-scale-book.js": "./animal-scale-book.js?v=dragon-60m-1",
           "./animal-scale-residents.js": "./animal-scale-residents.js?v=dragon-60m-1",
           "./animal-motion.js": "./animal-motion.js?v=sculpted-tail-1",
@@ -261,7 +266,7 @@
           "./scroll-fauna.js": "./scroll-fauna.js?v=homestead-1",
           "./wayside-baths.js": "./wayside-baths.js?v=handscroll-arrival-1",
           "./costume-distance.js": "./costume-distance.js?v=5.0",
-          "./world.js": "./world.js?v=homestead-1",
+          "./world.js": "./world.js?v=construction-1",
           "./court-patrol.js": "./court-patrol.js?v=living-world-1",
           "./court-watch.js": "./court-watch.js?v=living-world-1",
           "./flowering-peaches.js": "./flowering-peaches.js?v=island-horizon-2",
@@ -327,7 +332,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=homestead-1" />
+    <link rel="modulepreload" href="./main.js?v=construction-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -585,7 +590,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=homestead-1').catch(error => {
+      import('./main.js?v=construction-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'

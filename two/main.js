@@ -1,6 +1,8 @@
 import { createCookingPerformance } from './cooking-performance.js';
 import { createForestryView } from './living-forestry-view.js';
+import { createConstructionView } from './living-construction-view.js';
 import { syncBuildTerrain } from './living-build.js';
+import { routeBlocked } from './living-build-land.js';
 import { createLivingBook } from './living-book.js';
 import { LIVING_SITES } from './living-sites.js';
 import { worldClockLabel } from './world-clock.js';
@@ -461,7 +463,7 @@ const cooking = createCookingPerformance({
   },
   playSound(name) {audio.handle({type:'sound',name:'cook-'+name});},
 });
-const forestry=createForestryView({
+const outdoorWork={
   scene,camera,player:p,dialog,
   canStand(x,z,y,radius,height) {
     if (game.storyCollisions.penetration(x,z,y,height,radius)>0) return false;
@@ -473,14 +475,50 @@ const forestry=createForestryView({
     meadow(state.time,p,camera);drawScene();
   },
   leave(){
-    actors.hero.visible=true;previous=0;updateCamera(0,true);
+    actors.hero.visible=true;previous=0;
+    camera.clearViewOffset();
+    camera.fov=camera.aspect<1?65:57;camera.updateProjectionMatrix();
+    updateCamera(0,true);
     world.update(state.time,p,camera,state.time,state.bellStrike,state.inariWeather);
     meadow(state.time,p,camera);if(!contextLost)drawScene();
   },
+};
+const forestry=createForestryView(outdoorWork);
+const construction=createConstructionView({...outdoorWork,
+  canStand(x,z,y,radius,height) {
+    return game.storyCollisions.penetration(x,z,y,height,radius)<=0 &&
+      !routeBlocked({npcs:state.nearbyNpcs}, {x,z}, radius);
+  },
+  enter(site){ world.setConstructionSite(site);outdoorWork.enter();unlock();audio.setPaused(false); },
+  draw(dt){
+    game.stepCookingScenery(dt);
+    actors.update(state,dt,camera);storyWorld.update(state.time,p);
+    outdoorWork.draw();
+  },
+  leave(){
+    world.setConstructionSite(null);
+    actors.faceHeading(p.heading);actors.update(state,0,camera);
+    outdoorWork.leave();
+  },
+  playSound(name){audio.handle({type:'sound',name:'build-'+name});},
 });
 const livingBook = createLivingBook({
   dialog, body:$('dialog-content'), heading:$('dialog-title'), game, save,
   cook:cooking.start, saw:forestry.start, preview:showLandSurvey, bearing:()=>yaw,
+  construct(site,commit,done) {
+    return construction.start(site,exit=>{
+      dissolveView();
+      const result=commit(exit);
+      if(result.ok){
+        yaw=Math.atan2(-Math.sin(exit.heading),-Math.cos(exit.heading));
+        persistSettings();
+      }
+      return result;
+    },done);
+  },
+  returnToSite(text) {
+    lastFocus=canvas;dialog.close();message(text,6);updateHUD();
+  },
   guide(site) {
     const destination = mapDestinations.find(d => d.id === site.id) ?? {...mapPoint(site.x,site.z),name:site.name};
     if (!destination) return;
@@ -813,7 +851,7 @@ document.addEventListener('keydown', (e) => {
   if (!dialog.open && speech.handleKey(e)) return;
   if (!bindings.has(e.code)) return;
   if (dialog.open) {
-    if (cooking.active || forestry.active) return;
+    if (cooking.active || forestry.active || construction.active) return;
     if (dialogKind === 'living' && e.code === 'KeyL' && !e.repeat && !e.target.closest('input,textarea,select')) {
       e.preventDefault();
       dialog.close();
@@ -883,6 +921,7 @@ window.addEventListener('blur', () => {
 document.addEventListener('visibilitychange', () => {
   cooking.resetClock();
   forestry.resetClock();
+  construction.resetClock();
   audio.setPaused(document.hidden || dialog.open || contextLost);
   clearInput();
   previous = 0;
@@ -1309,13 +1348,14 @@ $('guide').onclick = () => openDialog('guide');
 $('story-book').onclick = () => openDialog('story');
 $('dismiss').onclick = () => dialog.close();
 dialog.addEventListener('click', (e) => {
-  if (e.target === dialog && !cooking.active && !forestry.active) dialog.close();
+  if (e.target === dialog && !cooking.active && !forestry.active && !construction.active) dialog.close();
 });
 dialog.addEventListener('close', () => {
   if (dialog.open) return;
   previous = 0;
   if (cooking.active) cooking.close();
   if (forestry.active) forestry.close();
+  if (construction.active) construction.close();
   if (dialogKind === 'living') livingBook.close();
   if (dialogKind === 'story') { performancePlayer.close(); notebook.close(); }
   dialogKind = '';
@@ -1344,6 +1384,7 @@ function resize(force = false) {
   camera.fov = w < h ? 65 : 57;
   camera.updateProjectionMatrix();
   ink?.resize();
+  if (construction.active) construction.resize();
   if (lastSurvey) requestAnimationFrame(()=>{if(lastSurvey)showLandSurvey(lastSurvey);});
 }
 function settingsForLighting() {
@@ -1369,9 +1410,11 @@ function drawScene() {
 function frame(now) {
   requestAnimationFrame(frame);
   const paused = document.hidden || dialog.open || contextLost;
-  audio.setPaused(document.hidden || contextLost || (dialog.open && (!cooking.active || cooking.paused)));
+  const workAudible=(cooking.active && !cooking.paused) || (construction.active && !construction.paused);
+  audio.setPaused(document.hidden || contextLost || (dialog.open && !workAudible));
   if (paused) {
     if (forestry.active && !document.hidden && !contextLost) forestry.frame(now);
+    if (construction.active && !document.hidden && !contextLost) construction.frame(now);
     if (cooking.active && !document.hidden && !contextLost) cooking.frame(now);
     if (performancePlayer.active && !document.hidden && !contextLost) performancePlayer.frame(now);
     previous = 0;
@@ -1519,6 +1562,7 @@ function onContextLost(event) {
   contextLost = true;
   cooking.resetClock();
   forestry.resetClock();
+  construction.resetClock();
   clearInput();
   save();
   audio.setPaused(true);

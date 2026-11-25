@@ -75,7 +75,7 @@ function occupiedRoots(a,kind,b) {
   }
   return overlaps(a,da.width,da.depth,db.width,db.depth) && overlaps(b,db.width,db.depth,da.width,da.depth);
 }
-function routeBlocked(state,p,r) {
+export function routeBlocked(state,p,r) {
   if(state?.objects?.some(o=>buildDistance(o,p)<r+(o.type==='onsen'?5:2.5)))return true;
   for(const n of state?.npcs??[]) {
     if(['dragon','kirin','bird','hawk'].includes(n.type))continue;

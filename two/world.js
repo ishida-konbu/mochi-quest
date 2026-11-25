@@ -2023,6 +2023,7 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
   const homestead = createHomesteadWorld(scene,terrain.refreshCanopy,pruneUnderstory);
   return {
     setLivingWorld:homestead.setLivingWorld,
+    setConstructionSite:homestead.setConstructionSite,
     setBuildingPreview:homestead.setBuildingPreview,
     textures: [...Object.values(art), atmosphere.panorama, atmosphere.winterWash],
     setSceneryQuality(value) {

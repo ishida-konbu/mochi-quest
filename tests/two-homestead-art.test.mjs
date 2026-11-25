@@ -35,6 +35,14 @@ test('the placement study shares its local mesh and clears out when its object r
   assert.ok(ghost.children[0].isLineSegments);
   view.setBuildingPreview(null);
   assert.equal(ghost.parent,null);
+  const builtPlots=scene.userData.homesteadPlots;
+  view.setConstructionSite({...s,kind:'hut',x:9});
+  view.update(0,{x:0,z:0});
+  assert.equal(scene.userData.homesteadPlots.length,2);
+  assert.equal(world.structures.length,1);
+  view.setConstructionSite(null);
+  view.update(0,{x:0,z:0});
+  assert.deepEqual(scene.userData.homesteadPlots,builtPlots);
   view.update(1,{x:200,z:5});assert.equal(owned.parent,null);
   view.update(2,{x:0,z:0});assert.equal(group.getObjectByName('無人の餅売り棚').geometry,owned.geometry);
 });

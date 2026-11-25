@@ -2069,5 +2069,7 @@ export function createActors(scene, renderer) {
         else root.remove(m);
       }
   }
-  return { update, prepare, hero: h.root, riceBody: h.rice.body, visible(value) { root.visible=value; } };
+  return { update, prepare, hero: h.root, riceBody: h.rice.body,
+    faceHeading(heading) { h.angle=heading;h.root.rotation.y=heading; },
+    visible(value) { root.visible=value; } };
 }

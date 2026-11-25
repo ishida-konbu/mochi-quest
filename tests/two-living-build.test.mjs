@@ -4,7 +4,7 @@ import { createLivingWorld, validLivingWorld } from '../two/living-save.js';
 import { BASIC_RECIPE, craftRecipe } from '../two/living-craft.js';
 import { listMochi, withdrawMochi } from '../two/living-market.js';
 import { buildContacts } from '../two/living-build-contacts.js';
-import { buyTimber, fellTree, moveStructure, nearBuildStructure, nearestTimberTree, placeStructure,
+import { buyTimber, constructionSite, fellTree, finishConstruction, moveStructure, nearBuildStructure, nearestTimberTree, placeStructure,
   removeStructure, surveySite, timberTree, transferBatchStorage, transferStorage, validBuildLand, withBuildTerrain } from '../two/living-build.js';
 import { timberCut } from '../two/homestead-timber-section.js';
 import { isTimberFelled, timberId, timberRevision } from '../two/living-build-trees.js';
@@ -34,6 +34,31 @@ test('land survey is a dry run, protects roads, water, other people, old story s
   assert.match(surveySite(world,'stand',campAt,{state}).reason,/住人/);
   assert.equal(surveySite(world,'camp',campAt,{state:{player:campAt}}).ok,false);
   assert.deepEqual(world,before);
+});
+
+test('a construction rehearsal reserves nothing and the last joint must still qualify for placement',()=>{
+  const w=owned();
+  safe(placeStructure(w,'camp',campAt));
+  const before=structuredClone(w);
+  const site=constructionSite(w,'hut',hutAt);
+  assert.ok(site.ok,site.reason);
+  assert.deepEqual(w,before);
+  w.wood=9;
+  const insufficient=structuredClone(w);
+  const state={player:footing(27,100)}, previous=structuredClone(state.player);
+  const exit={...footing(30.6,96),heading:-Math.PI/2};
+  assert.match(finishConstruction(w,'hut',hutAt,state,exit).reason,/木材10本/);
+  assert.deepEqual(w,insufficient);
+  assert.deepEqual(state.player,previous);
+  w.wood=10;
+  assert.equal(finishConstruction(w,'hut',hutAt,state,{...exit,x:NaN}).ok,false);
+  assert.equal(w.wood,10);
+  safe(finishConstruction(w,'hut',hutAt,state,exit));
+  assert.equal(state.player.x,exit.x);assert.equal(state.player.heading,exit.heading);
+  assert.equal(w.wood,0);
+  const finished=structuredClone(w);
+  assert.equal(placeStructure(w,'hut',hutAt).ok,false);
+  assert.deepEqual(w,finished);
 });
 
 test('a surveyed tree is felled once; near and far render state and contact share the same ID across a reload',()=>{

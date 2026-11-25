@@ -94,7 +94,11 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
   scene.add(group);
   const resident=new Map(),stumps=new Map(),cells=new Map();
   const chips=new T.Group();
-  let planted;
+  let planted, worksite=null, clearedGround;
+  function setConstructionSite(site) {
+    worksite=site && !site.parentId ? {...site,kind:site.kind==='hut'?'floor':site.kind} : null;
+    planted=null;
+  }
   let world=null,knownCuts=null,count=0,preview=null,previewInk,burstAt=0;
   const chipD=new T.TetrahedronGeometry(.035),chipM=new T.MeshLambertMaterial({color:0xc9ab80});
   for(let i=0;i<7;i++){
@@ -165,8 +169,8 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     const stump=kind==='stump',at=stump?s.cut:s;
     const dx=wrapDelta(at.x-viewer.x), dz=wrapDelta(at.z-viewer.z), d2=dx*dx+dz*dz;
     if(stump){
-      if(s.checked!==world.structures){
-        s.checked=world.structures;s.covered=stumpCovered(world,s);
+      if(s.checked!==clearedGround){
+        s.checked=clearedGround;s.covered=stumpCovered(clearedGround,s);
       }
       if(s.covered)return;
     }
@@ -192,7 +196,8 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     if(!world)return;
     if(planted!==world.structures){
       planted=world.structures;
-      const plots=plantedFootprints(planted);
+      clearedGround={structures:worksite ? [...planted,worksite] : planted};
+      const plots=plantedFootprints(clearedGround.structures);
       scene.userData.homesteadPlots=plots;
       pruneUnderstory?.(plots);
     }
@@ -223,5 +228,5 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
       removeGoods(mesh);mesh.removeFromParent();resident.delete(id);
     }
   }
-  return {setLivingWorld,setBuildingPreview,update};
+  return {setLivingWorld,setBuildingPreview,setConstructionSite,update};
 }

@@ -1,0 +1,120 @@
+// Each grip is a joint, rail, or free edge in the same metre coordinates as
+// the finished building. The normal points towards the carpenter's footing.
+import { Vector3, Triangle } from './vendor/three.module.min.js';
+import { hokoraCarpentry } from './kaede-hokora-mesh.js';
+import { drawHomesteadModule, HUT_MODULES } from './homestead-carpentry.js';
+
+const fore=[0,1], rear=[0,-1], left=[-1,0], right=[1,0];
+const step=(id,label,method,grip,normal,pivot)=>({id,label,method,grip,normal,pivot});
+function joints(kind,terrain){
+  switch(kind){
+    case 'stand':return [
+      step('left-bent','左の脚組を立てる','raise',[-.75,.69,.33],fore,[-.75,0,-.38]),
+      step('right-bent','右の脚組を立てる','raise',[.75,.69,.33],fore,[.75,0,-.38]),
+      step('counter','棚板を脚組にはめる','seat',[.34,.844,.39],fore),
+      step('cashbox','銭箱を棚の奥へ据える','seat',[.70,1.00,-.21],right),
+      step('tray','餅の並べ盆を置く','seat',[-.17,.917,.31],fore),
+      step('rafters','日よけの支柱を棚のほぞ穴に差す','raise',[.69,1.99,.39],fore),
+      {...step('fly','日よけ布を庇に張る','spread',[.83,2.013,.51],fore),unfurl:{axis:'x',sign:-1}},
+      step('curtain','藍の暖簾を掛ける','hang',[.53,1.99,.537],fore)
+    ];
+    case 'camp':return [
+      step('bed','竹の寝台を据える','seat',[.53,.07,.58],right),
+      {...step('mat','寝台にむしろを敷く','spread',[.51,.125,.88],fore),unfurl:{axis:'z',sign:-1}},
+      step('pillow','枕を寝床の端へ置く','seat',[.462,.27,-.54],right),
+      step('staff','旅の旗を立てる','raise',[-.809,.86,-.72],left,[-.78,0,-.72])
+    ];
+    case 'floor':return [
+      step('rear-sill','奥の束を据える','seat',[1.43,.10,-1.23],right),
+      step('joist','中央の根太を渡す','seat',[1.44,.125,0],right),
+      step('fore-sill','手前の束を据える','seat',[1.43,.10,1.23],right),
+      ...[.90,0,-.90].map((z,i)=>step('deck-'+(2-i),['手前','中央','奥'][i]+'の床板を納める','seat',[1.56,.17,z],right))
+    ];
+    case 'posts':return [
+      step('rear-bent','奥の柱組を起こす','raise',[1.505,.88,-1.23],right,[0,.18,-1.23]),
+      step('fore-bent','手前の柱組を起こす','raise',[1.505,.88,1.23],right,[0,.18,1.23]),
+      step('right-plate','右の桁を柱頭に納める','seat',[1.509,2.28,.93],right),
+      step('left-plate','左の桁を柱頭に納める','seat',[-1.509,2.28,.93],left)
+    ];
+    case 'wall':return [
+      step('wainscot','腰板を溝に落とす','seat',[-.71,.90,-1.24],rear),
+      step('screen','明かり障子をはめる','raise',[-.80,1.54,-1.24],rear,[-.80,.91,-1.24])
+    ];
+    case 'roof':{
+      const ridge=terrain==='snow'?3.39:3.03;
+      return [
+        ...[-1.44,0,1.44].map((x,i)=>step('trestle-'+i,['左','中央','右'][i]+'の小屋梁と棟束を納める','raise',[x,2.27,-1.357],rear)),
+        step('ridge','棟木を束に渡す','seat',[1.762,ridge-.10,0],right),
+        ...[-1,1].flatMap(side=>[0,1,2].map((index)=>{
+          const i=side===1?index:2-index;
+          const edge=(side<0?'奥側':'手前側')+'の'+['左端','中央','右端'][i];
+          return step((side<0?'back-':'front-')+i,edge+'に屋根板を引き上げる','seat',[(i-1)*1.24,2.23,side*1.62],side<0?rear:fore);
+        })),
+        step('ridge-cap','棟の押さえ竹を納める','seat',[1.839,ridge+.047,0],right)
+      ];
+    }
+    case 'chest':return [
+      step('base','櫃の台を据える','seat',[.39,.07,.24],fore),
+      step('case','持ち手に手を掛け、櫃を台へ載せる','seat',[.586,.414,0],right),
+      step('lid','蓋を納めて掛け緒を留める','seat',[0,.65,.35],fore)
+    ];
+    case 'fence':return [
+      step('left-stake','左の親竹を立てる','raise',[-.84,.71,.038],fore,[-.84,0,0]),
+      step('right-stake','右の親竹を立てる','raise',[.84,.71,.038],fore,[.84,0,0]),
+      step('lattice','竹の組子を親竹へ寄せる','seat',[.51,.79,.05],fore),
+      step('right-tie','右の縄を結び締める','lash',[.84,.79,.047],fore),
+      step('left-tie','左の縄を結び締める','lash',[-.84,.79,.047],fore)
+    ];
+    default:throw new RangeError('Unknown construction module '+kind);
+  }
+}
+
+// Find a real bearing for each hand. On a narrow upright the two hands
+// wrap around the shaft at different heights, not either side of empty air.
+function handContacts(spec,geometry){
+  const {normal,grip}=spec;
+  const tangent=[-normal[1],normal[0]],triangle=new Triangle(),nearest=new Vector3();
+  const ix=geometry.index.array,vertices=geometry.attributes.position;
+  function contact(side,height){
+    const target=new Vector3(grip[0]+side*.16*tangent[0],grip[1]+side*height,grip[2]+side*.16*tangent[1]);
+    let gap=Infinity;
+    const best=new Vector3();
+    for(let k=0;k<ix.length;k+=3){
+      triangle.setFromAttributeAndIndices(vertices,ix[k],ix[k+1],ix[k+2]);
+      triangle.closestPointToPoint(target,nearest);
+      const distance=nearest.distanceToSquared(target);
+      if(distance<gap){gap=distance;best.copy(nearest);}
+    }
+    return best;
+  }
+  let a=contact(-1,0),b=contact(1,0);
+  if(a.distanceTo(b)<.15){a=contact(-1,.13);b=contact(1,.13);}
+  return [a.toArray(),b.toArray()];
+}
+
+const cached=new Map();
+function moduleParts(kind,terrain){
+  const key=kind+(kind==='roof' && terrain==='snow'?'-snow':'');
+  if(cached.has(key))return cached.get(key);
+  const specs=joints(kind,terrain);
+  const writers=new Map(specs.map(s=>[s.id,hokoraCarpentry()]));
+  drawHomesteadModule(kind,terrain,id=>writers.get(id));
+  const parts=specs.map(spec=>{
+    const geometry=writers.get(spec.id).finish();
+    geometry.computeBoundingBox();
+    const {min,max}=geometry.boundingBox;
+    return {...spec,id:kind+'.'+spec.id,bounds:{min:min.toArray(),max:max.toArray()},handholds:handContacts(spec,geometry),geometry};
+  });
+  cached.set(key,parts);
+  return parts;
+}
+
+export function assemblyParts(kind,terrain='plain'){
+  if(kind!=='hut')return moduleParts(kind,terrain);
+  const key=terrain==='snow'?'hut-snow':'hut';
+  if(!cached.has(key))cached.set(key,HUT_MODULES.flatMap(k=>moduleParts(k,terrain)));
+  return cached.get(key);
+}
+// Uses the same measured bounds for motion-only planners and the WebGL view.
+// Geometry is immutable and shared; callers own only their scene objects.
+export const assemblySteps=assemblyParts;

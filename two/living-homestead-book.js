@@ -1,4 +1,4 @@
-import { BUILD_MODULES, surveySite, placeStructure, moveStructure, removeStructure, nearestTimberTree, fellTree,
+import { BUILD_MODULES, surveySite, constructionSite, finishConstruction, moveStructure, removeStructure, nearestTimberTree, fellTree,
   transferStorage, transferBatchStorage, nearBuildStructure } from './living-build.js';
 import { marketLocation } from './living-market.js';
 import { RESOURCES } from './living-resources.js';
@@ -12,7 +12,7 @@ const onFoot = p => p.grounded && p.h < .15 && !p.inWater && !p.mount && !p.vess
 const price = d => [d.wood && '木材'+d.wood+'本', d.coins && d.coins+'文'].filter(Boolean).join('・');
 const where = id => REGIONS.find(r=>r.id===id)?.name ?? '';
 
-export function createHomesteadBook({game,dialog,body,heading,save,preview,bearing,saw,el,button,section,field,select,number,details,route,choose}) {
+export function createHomesteadBook({game,dialog,body,heading,save,preview,bearing,saw,construct,returnToSite,el,button,section,field,select,number,details,route,choose}) {
   const world=game.state.livingWorld, p=game.state.player;
   let kind='camp', selectedId=null;
   const dist=s=>Math.hypot(wrapDelta(s.x-p.x),wrapDelta(s.z-p.z));
@@ -26,10 +26,10 @@ export function createHomesteadBook({game,dialog,body,heading,save,preview,beari
       preview(null);
     }
   }
-  function survey(type, existing) {
+  function survey(type, existing, retry) {
     if (!onFoot(p)) {choose('build','地面に降りて足を止めると、土地を見立てられます。');return;}
     const angle=bearing(), sin=Math.sin(angle), cos=Math.cos(angle);
-    let side=0, forward=3.7, turn=existing?.yaw ?? angle;
+    let side=retry?.side ?? 0, forward=retry?.forward ?? 3.7, turn=retry?.turn ?? existing?.yaw ?? angle;
     if (existing) {
       const dx=wrapDelta(existing.x-p.x),dz=wrapDelta(existing.z-p.z);
       side=dx*cos-dz*sin;forward=-dx*sin-dz*cos;
@@ -44,13 +44,41 @@ export function createHomesteadBook({game,dialog,body,heading,save,preview,beari
     const actions=el('div',undefined,'survey-actions');
     const options={state:game.state,excludeId:existing?.id};
     let pose, viewYaw=angle;
-    const commit=button(existing?'ここに移す':'ここに設置する',()=>{
-      const r=existing ? moveStructure(world,existing.id,pose,options) : placeStructure(world,type,pose,options);
-      if (!r.ok) {tip.textContent=r.reason;return;}
-      selectedId=r.structure?.id ?? existing?.id ?? world.structures.at(-1)?.id;
-      const nextStep={stand:'棚のそばで「商い」を開くと、餅を並べたり売上を受け取ったりできます。',camp:'寝床のそばで「ひと休み」を開くと、いつまで休むかを選べます。',chest:'櫃のそばで「家づくり」を開くと、食材や餅を預けられます。'};
-      result({...r,message:r.message+(!existing ? nextStep[type] ?? '' : '')});
+    const commit=button(existing?'ここに移す':'ここで建て始める',()=>{
+      if (existing) {
+        const moved=moveStructure(world,existing.id,pose,options);
+        if (!moved.ok) {tip.textContent=moved.reason;return;}
+        selectedId=moved.structure.id;
+        result(moved);
+        return;
+      }
+      const site=constructionSite(world,type,pose,options);
+      if (!site.ok) {tip.textContent=site.reason;return;}
+      commit.disabled=true;
+      for (const control of nav.querySelectorAll('button')) control.disabled=true;
+      tip.textContent='材料をそろえ、作業の足場を確かめています。';
+      // Let the status paint before planning routes for a whole house. The
+      // traveller may still leave the survey while the browser is waiting.
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if (dialog.open && commit.isConnected && dialog.hasAttribute('data-survey')) begin(site);
+      }));
     },'jump-link');
+    function begin(site) {
+      clearPreview();
+      construct({...site,kind:type,structures:world.structures},exit=>{
+        const built=finishConstruction(world,type,pose,game.state,exit);
+        if (built.ok) {
+          selectedId=built.structure.id;
+          save();
+        }
+        return built;
+      },built=>{
+        const nextStep={stand:'棚のそばで「商い」を開くと、餅を並べたり売上を受け取ったりできます。',camp:'寝床のそばで「ひと休み」を開くと、いつまで休むかを選べます。',chest:'櫃のそばで「家づくり」を開くと、食材や餅を預けられます。'};
+        if (built.ok) returnToSite(built.message+(nextStep[type] ?? ''));
+        else if (built.retrySite) survey(type,null,{side,forward,turn,reason:built.reason});
+        else choose('build',built.reason);
+      });
+    }
     function refresh() {
       pose={x:wrapCoord(p.x+side*cos-forward*sin),z:wrapCoord(p.z-side*sin-forward*cos),yaw:turn};
       const site=surveySite(world,type,pose,options),def=BUILD_MODULES[type];
@@ -82,6 +110,7 @@ export function createHomesteadBook({game,dialog,body,heading,save,preview,beari
     nav.append(button('回す',()=>{turn=Math.atan2(Math.sin(turn+Math.PI/4),Math.cos(turn+Math.PI/4));refresh();}));
     actions.append(footnote,button('戻る',()=>choose('build')),commit);
     body.append(tip,nav,actions);dialog.scrollTop=0; refresh();
+    if (retry) {tip.textContent=retry.reason;commit.disabled=true;}
     nav.firstElementChild.focus({preventScroll:true});
   }
   function storage(chest,area) {

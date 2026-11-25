@@ -75,7 +75,7 @@ function attributes(parent, values, keys = Object.keys(ATTRIBUTE_NAMES)) {
   parent.append(dl);
 }
 
-export function createLivingBook({ dialog, body, heading, game, save, guide, cook, saw, preview, bearing }) {
+export function createLivingBook({ dialog, body, heading, game, save, guide, cook, saw, construct, returnToSite, preview, bearing }) {
   const world = game.state.livingWorld, player = game.state.player;
   let tab = 'supplies', recipeId, draft, preset, customName, customDescription, area, receipt;
   const near = kind => LIVING_SITES.find(site => site.kind === kind && nearLivingSite(player,site));
@@ -85,7 +85,7 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
     return button(text || (site.name + 'へ　' + Math.round(distance(site)) + ' m'), () => guide(site), 'living-route');
   }
   const shared = {world,game,save,el,button,section,field,details,select,number,route,choose};
-  const homestead = createHomesteadBook({...shared,dialog,body,heading,preview,bearing,saw});
+  const homestead = createHomesteadBook({...shared,dialog,body,heading,preview,bearing,saw,construct,returnToSite});
   function updateReceipt(result) {
     receipt.textContent = result.message || result.reason;
     if (result.ok) save();

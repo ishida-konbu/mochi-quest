@@ -53,14 +53,23 @@ const onFoot=p=>p?.grounded && !p.activity && !p.mount && !p.skiff && !p.vessel 
 const hasStock=s=>Object.values(s.inventory).some(n=>n>0) || s.batches.length>0;
 const transform=s=>({x:s.x,y:s.y,z:s.z,yaw:s.yaw,terrain:s.terrain,regionId:s.regionId});
 const costText=(w,c)=>'木材'+w+'本'+(c?'と'+c+'文':'');
-export function placeStructure(world,kind,pose,options={}) {
+const partsFor = kind => kind==='hut' ? ['floor','posts','wall','roof'] : [kind];
+
+export function constructionSite(world,kind,pose,options={}) {
   const site=surveySite(world,kind,pose,{...options,excludeId:undefined});
   if(!site.ok)return site;
-  const def=BUILD_MODULES[kind],parts=kind==='hut'?['floor','posts','wall','roof']:[kind];
-  if(world.structures.length+parts.length>MAX_STRUCTURES || world.nextStructureId>Number.MAX_SAFE_INTEGER-parts.length)
+  const def=BUILD_MODULES[kind], count=partsFor(kind).length;
+  if(world.structures.length+count>MAX_STRUCTURES || world.nextStructureId>Number.MAX_SAFE_INTEGER-count)
     return fail('建てられる部材は全部で'+MAX_STRUCTURES+'点です。使わない部材を片付けてください。');
   if(kind==='camp' && world.structures.filter(s=>s.kind==='camp').length>=MAX_CAMPS)return fail('野営地は三か所までです。使わない野営地を片付けてください。');
   if(world.wood<def.wood || world.wallet<def.coins)return fail(def.name+'には'+costText(def.wood,def.coins)+'が要ります。');
+  return site;
+}
+
+export function placeStructure(world,kind,pose,options={}) {
+  const site=constructionSite(world,kind,pose,options);
+  if(!site.ok)return site;
+  const def=BUILD_MODULES[kind],parts=partsFor(kind);
   const floorId='build-'+world.nextStructureId;
   const structures=parts.map((part,i)=>({
     id:'build-'+(world.nextStructureId+i),kind:part,...transform(site),
@@ -74,6 +83,19 @@ export function placeStructure(world,kind,pose,options={}) {
   changed(world);
   return {...ok(def.name+'を設けました。'),structure:structures[0]};
 }
+
+// The performance is transient. Publish its final footing and the paid-for
+// structure together before the caller writes the next journey snapshot.
+export function finishConstruction(world,kind,pose,state,exit) {
+  if (!onFoot(state?.player) || !exit || ![exit.x,exit.y,exit.z,exit.heading].every(Number.isFinite))
+    return fail('作業を終える足場を確かめて、もう一度建ててください。');
+  const arrival={x:exit.x,y:exit.y,z:exit.z,heading:exit.heading,h:0,
+    vx:0,vy:0,vz:0,speed:0,grounded:true,idleTime:0};
+  const result=placeStructure(world,kind,pose,{state:{...state,player:{...state.player,...arrival}}});
+  if (result.ok) Object.assign(state.player,arrival);
+  return result;
+}
+
 export function moveStructure(world,id,pose,options={}) {
   const source=world.structures.find(s=>s.id===id);
   if(!source)return fail('移す設備を選んでください。');
