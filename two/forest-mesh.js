@@ -127,7 +127,7 @@ export function forestGeometry(index, perchOnly = false, omitCulms = false, wood
     // Bury a flared heel below the steepest surveyed tree sites, so the
     // uphill and downhill sides meet the same earth as the far silhouette.
     if(!cane){points[0].y-=.035;radii[0]*=1.14;}
-    const firstVertex=p.length/3;
+    const firstVertex=p.length/3,firstIndex=ix.length;
     if(!cane || !omitCulms)stick(points,radii,cane?5:8,true);
     if(cane && !omitCulms) {
       for(let j=1;j<=7;j++) {
@@ -136,7 +136,7 @@ export function forestGeometry(index, perchOnly = false, omitCulms = false, wood
       }
     }
     if(cane){
-      culms.push({points,radii,thickness,firstVertex,endVertex:p.length/3});
+      culms.push({points,radii,thickness,firstVertex,endVertex:p.length/3,firstIndex});
       // Moso bears paired branches at successive nodes. Long open internodes
       // give way to loose sprays, each tilting away from its own culm.
       const firstNode=stem%3===0?3:4;
@@ -158,6 +158,7 @@ export function forestGeometry(index, perchOnly = false, omitCulms = false, wood
         }
         bambooFan(end,az,scale*(.078+.029*random()),hue);
       }
+      culms[stem].endIndex=ix.length;
       continue;
     }
     const layers=cone ? 8 : 7;

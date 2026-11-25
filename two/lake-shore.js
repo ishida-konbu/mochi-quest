@@ -366,7 +366,7 @@ export function createLakeShore(scene,art){
   for(const tree of LAKE_WILLOWS){
     const brush=new Brush();willow(tree,brush);
     const geometry=brush.geometry(),wood=new T.Mesh(geometry,mat),shadow=new T.Mesh(geometry,mirror);
-    wood.castShadow=wood.receiveShadow=true;
+    wood.userData.timberSource=tree;wood.castShadow=wood.receiveShadow=true;
     // Projection changes the reflected crown's bounds with the camera angle.
     shadow.frustumCulled=false;shadow.renderOrder=2;
     shore.add(wood,shadow);reflections.push({wood,shadow});

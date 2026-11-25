@@ -1,6 +1,7 @@
 import { renderMarket } from './living-market-book.js';
 import { createHomesteadBook } from './living-homestead-book.js';
-import { buyTimber } from './living-build.js';
+import { BEDDING_NAMES, setBeddingGrade } from './camp-bedding.js';
+import { buyTimber, nearBuildStructure } from './living-build.js';
 import { RESOURCES, buyResource, shopOffer } from './living-resources.js';
 import { LIVING_SITES, nearLivingSite, nearGiftRecipient } from './living-sites.js';
 import { REST_SITES } from './rest-sites.js';
@@ -75,7 +76,7 @@ function attributes(parent, values, keys = Object.keys(ATTRIBUTE_NAMES)) {
   parent.append(dl);
 }
 
-export function createLivingBook({ dialog, body, heading, game, save, guide, cook, saw, editor }) {
+export function createLivingBook({ dialog, body, heading, game, save, guide, cook, sleep, editor }) {
   const world = game.state.livingWorld, player = game.state.player;
   let tab = 'supplies', recipeId, draft, preset, customName, customDescription, area, receipt;
   const near = kind => LIVING_SITES.find(site => site.kind === kind && nearLivingSite(player,site));
@@ -85,7 +86,7 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
     return button(text || (site.name + 'へ　' + Math.round(distance(site)) + ' m'), () => guide(site), 'living-route');
   }
   const shared = {world,game,save,el,button,section,field,details,select,number,route,choose};
-  const homestead = createHomesteadBook({...shared,saw});
+  const homestead = createHomesteadBook(shared);
   function updateReceipt(result) {
     receipt.textContent = result.message || result.reason;
     if (result.ok) save();
@@ -361,11 +362,24 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
       if(camps.length) place.append(route({...nearest(camps),name:'自分の野営地'}));
       return;
     }
-    place.append(el('p','休み終える時刻を選んでください。'));
+    const bed=nearBuildStructure(world,player,'camp');
+    if(bed){
+      const bedding=select(Object.fromEntries(BEDDING_NAMES.entries()),String(bed.beddingGrade??0),grade=>{
+        updateReceipt(setBeddingGrade(world,bed.id,Number(grade)));
+      },'この寝床の寝具');
+      place.append(field('この寝床の寝具',bedding));
+    }
+    place.append(el('p',bed?'起きる時刻を選ぶと、この寝床で眠ります。':'休み終える時刻を選んでください。'));
     const times = el('div',undefined,'actions');
     for (const hour of WAIT_HOURS) {
       const nextDay = Math.floor(waitTargetMinute(world.worldMinute,hour)/DAY_MINUTES) > Math.floor(world.worldMinute/DAY_MINUTES);
       times.append(button((nextDay?'翌日 ':'今日 ')+hour+'時まで',()=>{
+        if(bed){
+          const current=nearBuildStructure(world,player,'camp');
+          if(current?.id!==bed.id){choose('rest','寝床のそばで開き直してください。');return;}
+          sleep(current,hour,r=>{if(dialog.open)choose('rest',r.message||r.reason);});
+          return;
+        }
         const result = game.waitUntil(hour);
         if (result.ok) save();
         choose('rest',result.ok ? name+'で休みました。' : result.reason);

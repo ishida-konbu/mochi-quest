@@ -79,7 +79,7 @@ export function createCookingPerformer(parent,player) {
       root.worldToLocal(rice.model.localToWorld(shoulder));
       pad.fromArray(frame.hands[i]);
       root.worldToLocal(parent.localToWorld(pad));
-      arms[i].update(shoulder,pad,giant*(player.mode==='kagami'?.85:1),torso);
+      arms[i].update(shoulder,pad,giant*(player.mode==='kagami'?.85:1),torso,time,effort,frame.index??frame.phase);
     }
     hero.wrap.visible=player.buffs?.wrap>0;
     hero.wrap.scale.set(1.075,1,1.042);

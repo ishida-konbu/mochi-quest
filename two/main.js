@@ -1,19 +1,20 @@
 import { createCookingPerformance } from './cooking-performance.js';
-import { createForestryView } from './living-forestry-view.js';
+import { createExplorationFelling } from './exploration-felling.js';
+import { createCampSleepView } from './camp-sleep-view.js';
 import { createConstructionView } from './living-construction-view.js';
-import { syncBuildTerrain } from './living-build.js';
+import { syncBuildTerrain, fellTree } from './living-build.js';
 import { routeBlocked } from './living-build-land.js';
 import { createBuildEditor } from './build-editor.js';
 import { createBuildEditorViewport } from './build-editor-viewport.js';
 import { createLivingBook } from './living-book.js';
 import { LIVING_SITES } from './living-sites.js';
-import { worldClockLabel } from './world-clock.js';
+import { worldClockLabel, waitTargetMinute } from './world-clock.js';
 import { claimJourneyWriter, openJourneyStorage } from './journey-storage.js';
 import { showJourneyFiles } from './journey-files.js';
 import * as THREE from './vendor/three.module.min.js';
 import { applyClimateLights } from './atmosphere.js';
 import { createWake } from './wake.js';
-import { canFollowTravel, createTravelCamera } from './travel-camera.js';
+import { canFollowTravel, createTravelCamera, chopCameraArc } from './travel-camera.js';
 import { prepareWorld } from './world.js';
 import { DEFAULT_SCENERY_QUALITY, sceneryQualityPreference } from './scenery-quality.js';
 import { finishInSlices, watchArrivalPaint } from './preparation.js';
@@ -147,6 +148,7 @@ let travelCameraEnabled = travelCameraPreference(savedSettings) ?? true;
 audio.setVolumes(volumes);
 let yaw = Number.isFinite(savedSettings.yaw) ? savedSettings.yaw : 0;
 const travelCamera = createTravelCamera();
+let chopOrbit = null;
 let pitch = 0.23,
   distance = 6.55,
   priorCamera = null,
@@ -287,6 +289,14 @@ function dispatchEvents() {
   for (const e of state.events.splice(0)) {
     audio.handle(e);
     if (e.type === 'livingChanged') save();
+    if(e.type==='chop' && !chopping.active){
+      clearInput();
+      if(chopping.start(e.tree)){
+        const stem=e.tree.stem??e.tree;
+        const axis=Math.atan2(wrapDelta(p.x-stem.x),wrapDelta(p.z-stem.z));
+        chopOrbit=chopCameraArc(yaw,axis,chopCameraClearance);
+      }
+    }
     if (e.type === 'living') {
       const site = LIVING_SITES.find(s => s.id === e.siteId);
       if (e.section) openDialog('living',e.section==='build'?'materials':e.section);
@@ -454,7 +464,7 @@ const cooking = createCookingPerformance({
   },
   leave() {
     actors.hero.visible = true;
-    audio.setPaused(document.hidden || dialog.open || contextLost);
+    audio.setPaused(quietWorld());
     previous = 0;
     camera.fov = camera.aspect < 1 ? 65 : 57;
     camera.updateProjectionMatrix();
@@ -485,10 +495,39 @@ const outdoorWork={
     meadow(state.time,p,camera);if(!contextLost)drawScene();
   },
 };
-const forestry=createForestryView({...outdoorWork,draw(detail){
-  if(detail)ink.draw(detail,0,0,state.time);
-  else outdoorWork.draw();
-}});
+const chopping=createExplorationFelling({
+  scene,player:p,hero:()=>actors.hero,
+  canStand:(x,z,y,radius,height)=>outdoorWork.canStand(x,z,y,radius,height),
+  commit(tree){
+    const result=fellTree(state.livingWorld,tree.id);
+    if(result.ok)save();
+    return result;
+  },
+  impact(){audio.handle({type:'sound',name:'axe-chop'});},
+  done(result){chopOrbit=null;clearInput();if(result?.ok)save();if(result)message(result.message||result.reason);updateHUD();},
+});
+const sleepingViewer=Object.create(p,{worldMinute:{value:0,writable:true}});
+const sleepingWorld=Object.create(state,{player:{value:sleepingViewer}});
+const sleeping=createCampSleepView({scene,camera,player:p,dialog,canStand:outdoorWork.canStand,
+  enter(bed){clearInput();actors.hero.visible=false;world.setOccupiedBed(bed.id);},
+  draw(visualMinute,dt=0){
+    sleepingViewer.worldMinute=visualMinute;
+    game.stepCookingScenery(dt);
+    const time=state.time;
+    sun.target.position.set(p.x,p.y,p.z);
+    applyClimateLights(hemisphere,sun,bounce,sleepingViewer);
+    actors.update(state,dt,camera);storyWorld.update(time,p);
+    world.update(time,sleepingViewer,camera,time,state.bellStrike,state.inariWeather);
+    meadow(time,sleepingViewer,camera);
+    audio.updateWorld(sleepingWorld,time,yaw,false);
+    if(!contextLost)drawScene();
+  },
+  leave(){
+    world.setOccupiedBed(null);
+    applyClimateLights(hemisphere,sun,bounce,p);
+    outdoorWork.leave();
+  },
+});
 const construction=createConstructionView({...outdoorWork,
   canStand(x,z,y,radius,height) {
     return game.storyCollisions.penetration(x,z,y,height,radius)<=0 &&
@@ -512,7 +551,8 @@ const makeBuildViewport=()=>createBuildEditorViewport({scene,camera,canvas,world
   world.update(state.time,p,camera,state.time,state.bellStrike,state.inariWeather);
   meadow(state.time,p,camera);if(!contextLost)drawScene();
 }});
-const editor=createBuildEditor({dialog,game,makeViewport:makeBuildViewport,bearing:()=>yaw,save,saw:forestry.start,
+const editor=createBuildEditor({dialog,game,makeViewport:makeBuildViewport,bearing:()=>yaw,save,
+  guideTree(tree){guideTo({...tree,name:'伐る木'});},
   openMaterials(){livingBook.open('materials');},
   construct(site,commit,done) {
     return construction.start(site,exit=>{
@@ -528,18 +568,28 @@ const editor=createBuildEditor({dialog,game,makeViewport:makeBuildViewport,beari
 });
 const livingBook = createLivingBook({
   dialog, body:$('dialog-content'), heading:$('dialog-title'), game, save, editor,
-  cook:cooking.start, saw:forestry.start,
-  guide(site) {
-    const destination = mapDestinations.find(d => d.id === site.id) ?? {...mapPoint(site.x,site.z),name:site.name};
-    if (!destination) return;
-    applyAtlasGoal(destination);
-    lastFocus = canvas;
-    dialog.close();
-    message(site.name + 'に道しるべを付けました。');
+  cook:cooking.start,
+  sleep(bed,hour,back){
+    const startMinute=state.livingWorld.worldMinute,targetMinute=waitTargetMinute(startMinute,hour);
+    sleeping.start(bed,{startMinute,targetMinute,
+      commit(){const r=game.waitUntil(hour);if(r.ok)save();return r;},
+      done(r){
+        if(r.ok){dialog.close();message(worldClockLabel(state.livingWorld.worldMinute)+'　寝床で目を覚ましました。');}
+        else back(r);
+      },
+    });
   },
+  guide:guideTo,
 });
+function guideTo(site){
+  const destination=mapDestinations.find(d=>d.id===site.id)??{...mapPoint(site.x,site.z),name:site.name};
+  applyAtlasGoal(destination);
+  lastFocus=canvas;
+  dialog.close();
+  message(site.name+'に道しるべを付けました。');
+}
 function action(name) {
-  if (dialog.open || photoMode) return;
+  if (dialog.open || photoMode || chopping.active) return;
   unlock();
   const found = (name === 'interact' || name === 'story') && nearbyAction();
   if (speech.active && (name === 'interact' || name === 'story')) { speech.advance(); return; }
@@ -641,7 +691,7 @@ function clearInput() {
   $('stick').firstElementChild.style.transform = '';
 }
 function togglePhoto() {
-  if (!actors || dialog.open) return;
+  if (!actors || dialog.open || chopping.active) return;
   speech.stop();
   clearInput();
   if (!photoMode) {
@@ -699,7 +749,10 @@ function moveCamera(dx, dy) {
     conversationShot.pitch = clamp(conversationShot.pitch + dy * .004, .04, .92);
     return;
   }
-  if (dx || dy) travelCamera.manualLook(turn);
+  if (dx || dy) {
+    chopOrbit=null;
+    travelCamera.manualLook(turn);
+  }
   yaw += turn;
   pitch = clamp(pitch + dy * 0.004, photoMode ? -0.06 : -1.25, 1.08);
 }
@@ -747,7 +800,7 @@ function moveStick(e) {
     'translate(' + stick.x * limit + 'px,' + stick.y * limit + 'px)';
 }
 joystick.onpointerdown = (e) => {
-  if (stick.id !== null) return;
+  if (stick.id !== null || chopping.active) return;
   e.preventDefault();
   unlock();
   joystick.setPointerCapture(e.pointerId);
@@ -820,8 +873,9 @@ document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
   if (!dialog.open && speech.handleKey(e)) return;
   if (!bindings.has(e.code)) return;
+  if(chopping.active && e.code!=='KeyQ' && e.code!=='KeyR'){e.preventDefault();return;}
   if (dialog.open) {
-    if (cooking.active || forestry.active || construction.active) return;
+    if (cooking.active || sleeping.active || construction.active) return;
     if(editor.active && e.code==='KeyB' && !e.repeat){e.preventDefault();dialog.close();return;}
     if (dialogKind === 'living' && e.code === 'KeyL' && !e.repeat && !e.target.closest('input,textarea,select')) {
       e.preventDefault();
@@ -892,9 +946,9 @@ window.addEventListener('blur', () => {
 });
 document.addEventListener('visibilitychange', () => {
   cooking.resetClock();
-  forestry.resetClock();
+  sleeping.resetClock();
   construction.resetClock();
-  audio.setPaused(document.hidden || dialog.open || contextLost);
+  audio.setPaused(quietWorld());
   clearInput();
   previous = 0;
   save();
@@ -906,6 +960,15 @@ window.addEventListener('pagehide', event => {
   // promptly on an actual navigation away, including repeated reloads.
   if (event.persisted === false && renderer && !renderer.getContext().isContextLost()) renderer.forceContextLoss();
 });
+function chopCameraClearance(angle) {
+  const dx=Math.sin(angle), dz=Math.cos(angle), reach=Math.min(distance,6.5);
+  const rise=Math.tan(Math.max(0,pitch))+.62/distance;
+  for(let r=.4;r<reach;r+=.26){
+    const x=p.x+r*dx,z=p.z+r*dz,y=focus.y+rise*r;
+    if(staticVolumeAt(x,z,y-.16,.16,.32) || landscapeFloor(x,z)+.18>y)return r/reach;
+  }
+  return 1;
+}
 function updateCamera(dt, snap = false) {
   // Staying by the counter keeps the same shot through the last set-down.
   // Walking away, looking around, or opening the map immediately frees it.
@@ -1118,7 +1181,7 @@ function updateHUD() {
   $('story-volume').textContent = chapter ? chapterLabel(game.notebook.index+1) + (game.notebook.index ? '　·　もち寄り帖' : '　·　旅控え') : '結び　·　もち寄り帖';
   $('story-title').textContent = chapter?.title || '祭のあとの一服';
   const near = nearbyAction();
-  $('context').hidden = !near || dialog.open || photoMode || speech.active;
+  $('context').hidden = !near || chopping.active || dialog.open || photoMode || speech.active;
   if (near) $('context').querySelector('span').textContent = near.label;
   const deg = -THREE.MathUtils.radToDeg(yaw),
     base = Math.round(deg / 15),
@@ -1155,7 +1218,7 @@ function redrawMiniMap(targetSite) {
   drawMap(miniMap.canvas, state, yaw, region, false, pin, tracked, '', miniMap.projection(tracked || goal));
 }
 function openDialog(kind, section) {
-  if (!playable || dialog.open) return;
+  if (!playable || dialog.open || chopping.active) return;
   speech.stop();
   const folio = kind === 'story' || kind === 'inventory';
   if (folio || kind === 'living') unlock();
@@ -1321,13 +1384,13 @@ $('guide').onclick = () => openDialog('guide');
 $('story-book').onclick = () => openDialog('story');
 $('dismiss').onclick = () => dialog.close();
 dialog.addEventListener('click', (e) => {
-  if (e.target === dialog && !cooking.active && !forestry.active && !construction.active) dialog.close();
+  if (e.target === dialog && !cooking.active && !sleeping.active && !construction.active) dialog.close();
 });
 dialog.addEventListener('close', () => {
   if (dialog.open) return;
   previous = 0;
   if (cooking.active) cooking.close();
-  if (forestry.active) forestry.close();
+  if (sleeping.active) sleeping.close();
   if (construction.active) construction.close();
   if (dialogKind === 'living') livingBook.close();
   if (dialogKind === 'story') { performancePlayer.close(); notebook.close(); }
@@ -1358,6 +1421,7 @@ function resize(force = false) {
   camera.updateProjectionMatrix();
   ink?.resize();
   if (construction.active) construction.resize();
+  if (sleeping.active) sleeping.resize();
   if (editor.active) editor.resize();
 }
 function settingsForLighting() {
@@ -1380,13 +1444,16 @@ function drawScene() {
   const focusDistance = photoMode ? Math.max(0.3, camera.position.distanceTo(aim) - 0.55) : 0;
   ink.draw(scene, focusDistance, scrollCoverage(p.x,p.z), photoMode ? photoTime : state.time);
 }
+function quietWorld() {
+  return document.hidden || contextLost || (dialog.open && dialogKind!=='living');
+}
 function frame(now) {
   requestAnimationFrame(frame);
   const paused = document.hidden || dialog.open || contextLost;
-  const workAudible=(cooking.active && !cooking.paused) || (construction.active && !construction.paused);
-  audio.setPaused(document.hidden || contextLost || (dialog.open && !workAudible));
+  audio.setPaused(quietWorld());
   if (paused) {
-    if (forestry.active && !document.hidden && !contextLost) forestry.frame(now);
+    if(!sleeping.active && !quietWorld())audio.updateWorld(state,state.time,yaw,false);
+    if (sleeping.active && !document.hidden && !contextLost) sleeping.frame(now);
     if (construction.active && !document.hidden && !contextLost) construction.frame(now);
     if (cooking.active && !document.hidden && !contextLost) cooking.frame(now);
     if (performancePlayer.active && !document.hidden && !contextLost) performancePlayer.frame(now);
@@ -1417,10 +1484,14 @@ function frame(now) {
   const orbit = (Number(keys.has('KeyQ')) - Number(keys.has('KeyR'))) * delta * 1.65;
   if (orbit && speech.active && conversationShot) conversationShot.yaw += orbit;
   else if (orbit) {
+    chopOrbit=null;
     travelCamera.manualLook(orbit);
     yaw += orbit;
   }
-  if (!photoMode) {
+  if(chopping.active){
+    if(chopOrbit && look.id===null)yaw=chopOrbit(delta);
+    game.stepCookingScenery(delta,activeSeconds);
+  }else if (!photoMode) {
     const side = right - left + stick.x,
       assist = travelCameraEnabled && !speech.active,
       following = assist && canFollowTravel(p),
@@ -1466,6 +1537,7 @@ function frame(now) {
       state.time = playTime;
     }
   } else actors.update(state, delta, camera);
+  if(chopping.active)chopping.update(delta);
   wake(p, sceneTime, actors.riceBody);
   speech.update(photoMode);
   drawScene();
@@ -1534,7 +1606,7 @@ function onContextLost(event) {
   event.preventDefault();
   contextLost = true;
   cooking.resetClock();
-  forestry.resetClock();
+  sleeping.resetClock();
   construction.resetClock();
   clearInput();
   save();

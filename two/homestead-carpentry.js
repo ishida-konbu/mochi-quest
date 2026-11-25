@@ -282,9 +282,10 @@ function stand(part) {
   for(const z of [-.279,.319])plank(b,-.17,.918,z,1.00,.044,.026,grey);
   for(const x of [-.658,.318])plank(b,x,.918,.02,.022,.044,.58,grey,'z');
 }
-function camp(part) {
+function camp(part,terrain,indoors=false) {
   let b=part('bed');
-  for(const x of [-.44,.44])plank(b,x,-.08,.06,.127,.26,1.83,dark,'z');
+  // Ground runners have buried toes. Indoors their flat soles rest on the floorboards.
+  for(const x of [-.44,.44])plank(b,x,indoors?.026:-.08,.06,.127,indoors?.052:.26,1.83,dark,'z');
   // The split-bamboo sleeping platform drains through its interstices.
   for(let i=0;i<18;i++)spindle(b,[-.567,.071,-.75+i*.098],[.567,.071,-.75+i*.098],.047,.045,wood);
   b=part('mat');
@@ -318,6 +319,7 @@ function camp(part) {
     spindle(b,edge(j/28),edge((j+1)/28),.009,.008,straw,'rope',7);
   }
   for(const start of [.14,.80])panel(b,'paper','#827e65',5,36,(u,v)=>roll(start+u*.052,v,1.025));
+  if(indoors)return;
   b=part('staff');
   const x=-.78,z=-.72;
   spindle(b,[x,-.21,z],[x,1.79,z],.038,.025,wood);
@@ -431,7 +433,8 @@ export function drawHomesteadModule(kind,terrain,writer) {
 }
 export function homesteadGeometry(kind,terrain='plain',species) {
   const b=hokoraCarpentry();
-  if(kind==='stump')stump(b,terrain,species);
+  if(kind==='camp' && species==='indoors')camp(()=>b,terrain,true);
+  else if(kind==='stump')stump(b,terrain,species);
   else for(const module of kind==='hut'?HUT_MODULES:[kind])drawHomesteadModule(module,terrain,()=>b);
   return b.finish();
 }

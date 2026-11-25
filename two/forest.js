@@ -222,6 +222,8 @@ export function* prepareForest(scene, clock, boughs) {
     shape.setAttribute('crownStyle',new THREE.InstancedBufferAttribute(new Float32Array(totals[i]*4),4)
       .setUsage(THREE.DynamicDrawUsage));
     const mesh=new THREE.InstancedMesh(shape,denseMaterial,totals[i]);
+    mesh.userData.timberForm=i;
+    mesh.userData.timberRecord=t=>groves.get(key(cellAt(t.x),cellAt(t.z)))?.trees.find(r=>r.tree===t);
     mesh.name='Grove • '+i;
     mesh.count=0;mesh.frustumCulled=false;mesh.receiveShadow=true;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

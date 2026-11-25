@@ -4,7 +4,9 @@
 // enough cross-sections for an elbow roll and a rounded pad around a grip.
 import { BufferGeometry, Float32BufferAttribute, Mesh, Vector3, DynamicDrawUsage } from './vendor/three.module.min.js';
 
-const rings=34, sides=18, tau=Math.PI*2;
+const rings=40, sides=24, tau=Math.PI*2;
+const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
+const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
 function armMaterial(rice) {
   const mat=rice.plainSkin.clone();
   // Reuse the traveller's cheek material, including the brushed colour,
@@ -15,7 +17,7 @@ function armMaterial(rice) {
       .replace('#include <common>','#include <common>\nattribute vec3 cookRiceSkin;')
       .replace('vRiceRest=position;', 'vRiceRest=cookRiceSkin;');
   };
-  mat.customProgramCacheKey=()=>'mochi-cooking-hand-1';
+  mat.customProgramCacheKey=()=>'mochi-cooking-hand-2';
   return mat;
 }
 // Blend the little resting palm pads back into the cheek on this copy of
@@ -48,11 +50,11 @@ function smoothShoulders(rice) {
   }
   rice.body.geometry=geo;
 }
-function makeArm(root,side,material) {
+export function makeDoughArm(root,side,material) {
   const geo=new BufferGeometry(),uv=[],rest=[],indices=[];
   for(let j=0;j<=rings;j++){
     const t=j/rings;
-    for(let i=0;i<=sides;i++){
+    for(let i=0;i<=(j===rings?0:sides);i++){
       const a=tau*i/sides;
       // This UV island is the unpainted palm of the source model. The
       // three-dimensional rest coordinate keeps grains steady as it bends.
@@ -60,7 +62,8 @@ function makeArm(root,side,material) {
       rest.push(side*(.88+.13*Math.cos(a)),.54+t*.48,.20+.13*Math.sin(a));
       if(j<rings && i<sides){
         const k=j*(sides+1)+i,n=k+sides+1;
-        indices.push(k,k+1,n,n,k+1,n+1);
+        if(j+1===rings)indices.push(k,k+1,rings*(sides+1));
+        else indices.push(k,k+1,n,n,k+1,n+1);
       }
     }
   }
@@ -78,26 +81,29 @@ function makeArm(root,side,material) {
   const toTip=new Float32Array(rings+1);
   const tangent=new Vector3(),horizontal=new Vector3(),cross=new Vector3(),point=new Vector3();
   const out=new Vector3(side,0,0);
-  const radius=t=>{
-    // The wrist narrows before the soft working pad. The final quarter is
-    // a curved fingertip; it can cup the side of a small cake independently.
-    return .11+.053*Math.exp(-((t-.11)**2)/.062)-.021*Math.sin(t*Math.PI)+.023*Math.exp(-((t-.83)**2)/.009);
-  };
-  function update(shoulder,target,scale,torso) {
+  const lagged=new Vector3(),drag=new Vector3(),padAxis=new Vector3(),up=new Vector3(0,1,0);
+  const lastTip=new Vector3();
+  let lastTime,previousBeat;
+  function update(shoulder,target,scale,torso,time=0,pressure=0,beat) {
     p0.copy(shoulder);p3.copy(target);
-    const reach=p0.distanceTo(p3);
-    p1.copy(p0).addScaledVector(out,.075*scale).lerp(p3,.24);
-    p1.y-=Math.min(.15,reach*.17);
-    p1.z+=.19*scale;
+    const reach=p0.distanceTo(p3),dt=time-lastTime,load=clamp(pressure,0,1);
+    // The middle of a pulled piece of dough takes a fraction of a beat to
+    // follow the palm. Both ends remain attached, including on a quick strike.
+    if(lastTime===undefined || dt<0 || dt>.18 || beat!==previousBeat || lastTip.distanceTo(target)>.55*scale)lagged.copy(target);
+    else lagged.lerp(target,-Math.expm1(-dt/.085));
+    lastTime=time;previousBeat=beat;lastTip.copy(target);
+    drag.subVectors(lagged,target).clampLength(0,.09*scale);
+    const slack=1-smooth((reach/scale-.45)/1.05);
+    p1.copy(p0).lerp(p3,.26).addScaledVector(out,(.10+.16*slack)*scale);
+    p1.y-=(.045+.11*slack)*scale;p1.z+=.14*scale;
     p2.copy(p3).lerp(p0,.23);
-    p2.x+=side*Math.min(.09,.14*reach);
-    p2.y+=Math.max(.006,reach*.046);
-    // Aim the fingertip slightly inwards so the two pads meet opposite sides.
-    p2.z+=.05*scale;
+    p2.x+=side*(.035+.083*slack)*scale;
+    p2.y+=(.018+.065*slack)*scale;p2.z+=.04*scale;
     for(let j=0;j<=rings;j++){
       const t=j/rings,u=1-t,center=spine[j];
       center.copy(p0).multiplyScalar(u*u*u).addScaledVector(p1,3*u*u*t)
-        .addScaledVector(p2,3*u*t*t).addScaledVector(p3,t*t*t);
+        .addScaledVector(p2,3*u*t*t).addScaledVector(p3,t*t*t)
+        .addScaledVector(drag,Math.sin(t*Math.PI)**2);
       // When a mitt crosses to the opposite side, trace the convex skin
       // outside the belly. The rig has no shoulder cavity to pass through.
       const xel=center.x/(torso.width*.82),yel=(center.y-torso.mid)/torso.height;
@@ -109,22 +115,47 @@ function makeArm(root,side,material) {
     // Transport each section along the finished curve. Taking the tangent
     // before the cheek clearance would fold a resting palm in on itself.
     for(let j=rings-1;j>=0;j--)toTip[j]=toTip[j+1]+spine[j].distanceTo(spine[j+1]);
+    const length=toTip[0]/scale;
+    // Preserve dough through the forearm as it stretches. The dough gathered
+    // at the heel of the palm stays broad enough to carry a dish or grip wood.
+    const girth=clamp(Math.sqrt(.92/Math.max(.20,length)),.64,1.24);
     horizontal.copy(out);
-    for(let j=0;j<=rings;j++){
-      const t=j/rings,center=spine[j];
-      tangent.subVectors(spine[Math.min(j+1,rings)],spine[Math.max(0,j-1)]).normalize();
-      horizontal.addScaledVector(tangent,-horizontal.dot(tangent)).normalize();
+    for(let j=0;j<rings;j++){
+      const t=j/rings,center=spine[j],distance=toTip[j]/scale;
+      tangent.subVectors(spine[j+1],spine[Math.max(0,j-1)]).normalize();
+      horizontal.addScaledVector(tangent,-horizontal.dot(tangent));
+      if(horizontal.lengthSq()<1e-8)horizontal.crossVectors(tangent,Math.abs(tangent.y)<.94?up:out);
+      horizontal.normalize();
       cross.crossVectors(tangent,horizontal).normalize();
-      // Measure the round end in metres. A fraction of a short, bending
-      // reach would leave a flat, sawn-off face on the resting palm.
-      const cap=Math.max(0,1-toTip[j]/(.14*scale));
-      const span=radius(t)*scale*Math.sqrt(1-cap*cap),flat=.82+.11*Math.sin(t*Math.PI)-.10*t;
+      // A forearm flows out of a flared shoulder, narrows at the wrist, then
+      // gathers into a flattened palm. Measure the palm in metres so its size
+      // does not balloon when the performer reaches across the table.
+      const palm=Math.exp(-((distance-.105)**2)/.0105);
+      const neck=Math.exp(-((distance-.29)**2)/.012);
+      const root=.105*Math.exp(-((t-.045)**2)/.030);
+      const belly=.020*Math.sin(Math.PI*t);
+      const shaft=(.091+root+belly-.023*neck)*girth;
+      const radius=(shaft+(.048+.014*load)*palm)*scale;
+      const cap=clamp(1-distance/.125,0,1),span=radius*Math.sqrt(1-cap*cap);
+      // The underside meets the handle like a thumb pad. Orient the broad
+      // face towards the work independently of how the shoulder has rolled.
+      padAxis.crossVectors(up,tangent);
+      const horizontalPalm=padAxis.lengthSq()>.0001?padAxis.normalize().dot(horizontal):1;
+      const crossPalm=padAxis.dot(cross);
+      const flat=.16+.13*palm+.09*load*palm;
       for(let i=0;i<=sides;i++){
-        const a=tau*i/sides,r=span*(1+.015*Math.cos(3*a+t*1.7));
-        point.copy(center).addScaledVector(horizontal,Math.cos(a)*r).addScaledVector(cross,Math.sin(a)*r*flat);
+        const a=tau*i/sides,ca=Math.cos(a),sa=Math.sin(a);
+        const across=ca*horizontalPalm+sa*crossPalm;
+        const thickness=ca*(-crossPalm)+sa*horizontalPalm;
+        const spread=1+.11*palm,depth=1-flat;
+        const h=across*spread*horizontalPalm-thickness*depth*crossPalm;
+        const v=across*spread*crossPalm+thickness*depth*horizontalPalm;
+        const r=span*(1+.027*slack*Math.cos(2*a+.55)*Math.sin(t*Math.PI));
+        point.copy(center).addScaledVector(horizontal,h*r).addScaledVector(cross,v*r);
         pos.setXYZ(j*(sides+1)+i,point.x,point.y,point.z);
       }
     }
+    pos.setXYZ(rings*(sides+1),p3.x,p3.y,p3.z);
     pos.needsUpdate=true;geo.computeVertexNormals();
     // Smooth the circumferential UV seam; give the capped distal pole its
     // tangent normal rather than the normals of its coincident vertices.
@@ -136,7 +167,7 @@ function makeArm(root,side,material) {
       normals.setXYZ(k,horizontal.x,horizontal.y,horizontal.z);
       normals.setXYZ(k+sides,horizontal.x,horizontal.y,horizontal.z);
     }
-    for(let i=0;i<=sides;i++)normals.setXYZ(rings*(sides+1)+i,tangent.x,tangent.y,tangent.z);
+    normals.setXYZ(rings*(sides+1),tangent.x,tangent.y,tangent.z);
     normals.needsUpdate=true;
   }
   return {update};
@@ -144,5 +175,5 @@ function makeArm(root,side,material) {
 export function makeCookingArms(hero) {
   smoothShoulders(hero.rice);
   const material=armMaterial(hero.rice);
-  return [-1,1].map(side=>makeArm(hero.root,side,material));
+  return [-1,1].map(side=>makeDoughArm(hero.root,side,material));
 }

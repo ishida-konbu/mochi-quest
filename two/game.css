@@ -2064,7 +2064,7 @@ dialog[data-builder] .sheet {display:none;}
 .build-cards button[aria-pressed=true] {border-color:var(--forest);background:#e3e8d6;box-shadow:inset 0 0 0 1px var(--forest);}
 .build-cards button[aria-pressed=true]::before {content:'✓';position:absolute;right:4px;top:3px;border-radius:50%;height:17px;width:17px;text-align:center;font:700 12px/17px sans-serif;color:#fff9e9;background:var(--forest);}
 .build-owned {display:grid;gap:8px;align-content:start;flex:1 1 auto;}
-.build-owned label {font-size:13px;}.build-owned select,.build-owned button,.build-choice-actions button,.build-confirm button,.build-help button,.build-ticket [data-act=fell] {border:1px solid #93846b;border-radius:3px;background:#fff7e4;min-height:42px;padding:5px 10px;font-size:14px;font-weight:600;}
+.build-owned label {font-size:13px;}.build-owned select,.build-owned button,.build-choice-actions button,.build-confirm button,.build-help button,.build-ticket [data-act=mark-tree] {border:1px solid #93846b;border-radius:3px;background:#fff7e4;min-height:42px;padding:5px 10px;font-size:14px;font-weight:600;}
 .build-owned select {width:100%;}.build-owned button[aria-pressed=true] {color:#fff8e7;background:var(--forest);}
 .build-ticket {border-top:2px solid #817557;padding:9px 1px 0;}
 .build-ticket h3,.build-help h3 {margin:0 0 5px;font:700 18px/1.35 var(--min);}
@@ -2108,7 +2108,7 @@ dialog[data-builder] .sheet {display:none;}
   .build-ticket tbody {font-size:13px;}.build-ticket th,.build-ticket td {padding:0 2px;}
   .build-ticket .build-ground {grid-column:1;font-size:11px;margin:0;}
   .build-ticket .build-verdict {grid-column:1/-1;margin:1px 0;font-size:12px;}
-  .build-ticket .build-confirm,.build-ticket .build-choice-actions,.build-ticket [data-act=fell] {grid-column:1/-1;}
+  .build-ticket .build-confirm,.build-ticket .build-choice-actions,.build-ticket [data-act=mark-tree] {grid-column:1/-1;}
   .build-stock-link {grid-column:1/-1;font-size:11px;padding:2px;min-height:25px;}
   .build-tools,.build-adjust {margin:5px;}.build-tools {margin-top:max(6px,env(safe-area-inset-top));}
 }
@@ -2133,3 +2133,4 @@ dialog[data-builder] .sheet {display:none;}
 }
 .build-ticket th:first-child {width:max(63px,30%);white-space:nowrap;}
 .build-ticket td {overflow-wrap:anywhere;}
+.camp-sleep-time {display:block;font-size:12px;font-variant-numeric:tabular-nums;text-align:center;}

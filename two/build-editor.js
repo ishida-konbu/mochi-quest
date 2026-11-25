@@ -1,7 +1,7 @@
 // An edit is a draft until its explicit commit. The preview and the journey
 // share the survey, including its terrain-dependent material receipt.
 import {BUILD_MODULES,surveySite,constructionSite,finishConstruction,HEIGHT_STEP,MAX_HEIGHT_STEPS,
-  getMoveRoots,surveyMoveGroup,moveStructureGroup,surveyRemoveGroup,removeStructureGroup,timberTree,fellTree} from './living-build.js';
+  getMoveRoots,surveyMoveGroup,moveStructureGroup,surveyRemoveGroup,removeStructureGroup,timberTree} from './living-build.js';
 import {wrapCoord,wrapDelta,terrainContactHeight} from './terrain.js';
 import {marketLocation} from './living-market.js';
 import {buildName,createBuildPanel} from './build-editor-panel.js';
@@ -13,7 +13,7 @@ const orderedAngle=a=>(Math.round(a*180/Math.PI)%360+360)%360;
 const neutral=()=>({dx:0,dz:0,yaw:0,heightSteps:0});
 const onFoot=p=>p.grounded && !p.activity && !p.mount && !p.vessel && !p.skiff && !p.inWater && (p.h??0)<.2;
 
-export function createBuildEditor({dialog,game,makeViewport,bearing,save,construct,saw,openMaterials}){
+export function createBuildEditor({dialog,game,makeViewport,bearing,save,construct,guideTree,openMaterials}){
   const p=game.state.player,world=game.state.livingWorld;
   const panel=createBuildPanel(action);
   let opened=false, busy=false, tool='new', kind='camp', ids=[], range=false, grid=true;
@@ -94,10 +94,11 @@ export function createBuildEditor({dialog,game,makeViewport,bearing,save,constru
       allow=preflight.ok && onFoot(p);activeTree=site.treeId?timberTree(site.treeId):null;
       title=buildName(kind);
       status=preflight.reason || (onFoot(p)?'この位置に建てられます。':'地面に降りると着工できます。');
-      if(site.parentId)grounds='板床に取り付けます。高さは板床で調整します。';
+      if(site.parentId)grounds=kind==='camp'?'板床に寝床を敷きます。高さは板床に合わせます。':'板床に取り付けます。高さは板床で調整します。';
       else if(site.ok){
         grounds='高低差 '+site.relief.toFixed(2)+' m ／ うち基礎材 '+site.foundationWood+'本';
         if(kind==='stand')grounds+=' ／ '+marketLocation(site).footfall;
+        if(kind==='camp')grounds+='。小屋に敷くには、枠を板床に重ねてください。';
       }else grounds='本体の費用です。土地が決まると基礎材を加えます。';
       ghosts=[{...draft,y:terrainContactHeight(draft.x,draft.z)+draft.heightSteps*HEIGHT_STEP,...site,kind,ok:allow}];
       angle=orderedAngle(ghosts[0].yaw);height=site.parentId?'板床と同じ':level(draft.heightSteps*HEIGHT_STEP)+' m';
@@ -191,9 +192,9 @@ export function createBuildEditor({dialog,game,makeViewport,bearing,save,constru
     if(name==='range'){range=!range;notice='';refresh();return;}
     if(name==='lower'||name==='raise'){shiftHeight(name==='raise'?1:-1);return;}
     if(name==='turn-left'||name==='turn-right'){turnBy(name==='turn-right'?1:-1);return;}
-    if(name==='fell' && activeTree){
-      const tree=activeTree;suspend();
-      saw(tree,()=>{const r=fellTree(world,tree.id);if(r.ok)save();return r;},r=>{notice=r.message||r.reason;mount();});
+    if(name==='mark-tree' && activeTree){
+      const tree=activeTree;
+      detach();guideTree(tree);
     }
   }
   function keydown(e){

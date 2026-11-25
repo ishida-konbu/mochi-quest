@@ -173,7 +173,7 @@ function washTexture(file){
 }
 function gateBlossoms(scene){
   const {x,z}=MOON_GATE,root=new T.Group(),tree=sculpture();
-  root.name='月門の老桃';root.rotation.y=PI/2;root.position.set(x,terrainHeight(x,z),z);scene.add(root);
+  root.userData.timberSource=GATE_PEACH;root.name='月門の老桃';root.rotation.y=PI/2;root.position.set(x,terrainHeight(x,z),z);scene.add(root);
   // An old spreading tree takes root beside the moon gate. Its hollowed trunk
   // turns the corner of the roof and the high boughs enclose a patch of sky.
   const timber=[

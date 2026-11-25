@@ -8,17 +8,18 @@ import { hokoraCarpentry } from './kaede-hokora-mesh.js';
 import { foundationMembers, drawFoundationMember } from './homestead-foundation.js';
 import { plantedFootprints } from './homestead-groundcover.js';
 import { makePriceTag } from './homestead-price-tags.js';
+import { campCover } from './camp-cover.js';
 import { homesteadFinish } from './homestead-pigment.js';
 import { makeCookingServing } from './living-craft-art.js';
 
 const shared = new Map(), ranges = {building:100,stump:35,food:20};
 const geometry = (kind,terrain,species) => {
-  const key=kind==='stump' ? kind+'-'+species : kind+(terrain==='snow' && (kind==='roof' || kind==='hut')?'-snow':'');
+  const key=kind==='stump' || (kind==='camp' && species) ? kind+'-'+species : kind+(terrain==='snow' && (kind==='roof' || kind==='hut')?'-snow':'');
   if(!shared.has(key))shared.set(key,homesteadGeometry(kind,terrain,species));
   return shared.get(key);
 };
 const previewColors = [0xc57561,0xc1d9c2];
-function surveyFrame(kind,ok,terrain) {
+function surveyFrame(kind,ok,terrain,indoors) {
   const {width,depth}=BUILD_MODULES[kind];
   const w=width/2,d=depth/2,y=.052, coords=[];
   const line=(a,c)=>coords.push(...a,...c);
@@ -41,7 +42,10 @@ function surveyFrame(kind,ok,terrain) {
     for(const x of [-1.85,1.85])for(const z of [-1.65,1.65])line([x,2.23,z],[x,top,0]);
   }
   if(kind==='wall')for(const y of [.18,2.23])line([-1.375,y,-1.23],[1.375,y,-1.23]);
-  if(kind==='camp'){line([-.78,0,-.72],[-.78,1.79,-.72]);rectangle(.57,.86,.13);}
+  if(kind==='camp'){
+    if(!indoors)line([-.78,0,-.72],[-.78,1.79,-.72]);
+    rectangle(.57,.86,.13);
+  }
   if(kind==='stand'){rectangle(.86,.43,.88);rectangle(.89,.54,1.98);}
   if(kind==='chest'){rectangle(.56,.35,.78);}
   if(kind==='fence'){line([-.90,.79,0],[.90,.79,0]);}
@@ -81,7 +85,7 @@ function displayedStock(stock) {
 }
 function removeGoods(mesh) {
   for(const group of [...mesh.children]){
-    if(group===mesh.userData.foundation)continue;
+    if(group===mesh.userData.foundation || group===mesh.userData.cover)continue;
     group.traverse(part=>part.geometry?.dispose());
     group.removeFromParent();
   }
@@ -123,6 +127,11 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     worksite=site && !site.parentId ? {...site,kind:site.kind==='hut'?'floor':site.kind} : null;
     planted=null;
   }
+  let occupiedBed=null;
+  function setOccupiedBed(id){
+    occupiedBed=id;
+    for(const [key,mesh] of resident)if(mesh.userData.cover)mesh.userData.cover.visible=key!==id;
+  }
   let world=null,knownCuts=null,count=0,previewInk,burstAt=0;
   const previews=[];
   let editorHidden=new Set();
@@ -162,14 +171,14 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     let count=0;
     for(const p of sites){
       if(!p || !Object.hasOwn(BUILD_MODULES,p.kind) || ![p.x,p.y,p.z].every(Number.isFinite))continue;
-      const form=[p.kind,p.terrain,Boolean(p.ok)].join('/');
+      const form=[p.kind,p.terrain,Boolean(p.ok),Boolean(p.parentId)].join('/');
       let mesh=previews[count];
       if(mesh?.userData.previewForm!==form){
         if(mesh)dropPreview(mesh);
-        mesh=new T.Mesh(geometry(p.kind,p.terrain),previewInk[Number(Boolean(p.ok))]);
+        mesh=new T.Mesh(geometry(p.kind,p.terrain,p.parentId?'indoors':undefined),previewInk[Number(Boolean(p.ok))]);
         mesh.name='仮置き・'+BUILD_MODULES[p.kind].name;
         mesh.userData.previewForm=form;
-        mesh.add(surveyFrame(p.kind,p.ok,p.terrain));mesh.renderOrder=2;
+        mesh.add(surveyFrame(p.kind,p.ok,p.terrain,Boolean(p.parentId)));mesh.renderOrder=2;
         previews[count]=mesh;group.add(mesh);
       }
       mesh.position.set(p.x,p.y,p.z);mesh.rotation.y=p.yaw||0;
@@ -243,7 +252,7 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     visible.add(s.id);
     let mesh=resident.get(s.id);
     if(!mesh){
-      const stock=geometry(kind,s.terrain,stump?s.kind:undefined);
+      const stock=geometry(kind,s.terrain,stump?s.kind:s.parentId?'indoors':undefined);
       if(stump && s.cut.culms){
         mesh=new T.InstancedMesh(stock,homesteadFinish(),s.cut.culms.length);
         const stem=new T.Object3D();
@@ -262,9 +271,16 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
         mesh.position.y=s.cut.y-.42;
         mesh.scale.set(scale,1,scale);
       }
-    } else if(!stump) mesh.geometry=geometry(kind,s.terrain);
+    } else if(!stump) mesh.geometry=geometry(kind,s.terrain,s.parentId?'indoors':undefined);
     mesh.position.x=viewer.x+dx;mesh.position.z=viewer.z+dz;
     if(!stump){mesh.visible=!editorHidden.has(s.id);mesh.position.y=s.y;mesh.rotation.y=s.yaw;fitFoundation(mesh,kind,s);}
+    if(kind==='camp'){
+      if(!mesh.userData.cover || mesh.userData.beddingGrade!==(s.beddingGrade??0)){
+        mesh.userData.cover?.removeFromParent();
+        mesh.userData.beddingGrade=s.beddingGrade??0;mesh.userData.cover=campCover(mesh.userData.beddingGrade);mesh.add(mesh.userData.cover);
+      }
+      mesh.userData.cover.visible=s.id!==occupiedBed;
+    }
     if(kind==='stand')putGoods(mesh,world,world.market?.stands[s.id]?.stock,d2<ranges.food**2);
   }
   function update(time,eye) {
@@ -303,5 +319,5 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
       removeFoundation(mesh);removeGoods(mesh);mesh.removeFromParent();if(mesh.isInstancedMesh)mesh.dispose();resident.delete(id);
     }
   }
-  return {setLivingWorld,setBuildingPreview,setBuildingPreviews,getBuildEditorObjects,setBuildEditorHidden,setConstructionSite,update};
+  return {setOccupiedBed,setLivingWorld,setBuildingPreview,setBuildingPreviews,getBuildEditorObjects,setBuildEditorHidden,setConstructionSite,update};
 }

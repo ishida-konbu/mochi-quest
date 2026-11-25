@@ -31,6 +31,7 @@ export function createInkPass(renderer, camera) {
       lens: { value: new THREE.Vector2() },
       clip: { value: new THREE.Vector2(camera.near, camera.far) },
       focus: { value: 0 },
+      joineryFaceDistance: { value: 0 },
       scroll: { value: 0 },
       inkFogDensity: { value: 0 },
       submergedWater: { value: new THREE.Vector3() },
@@ -45,7 +46,7 @@ export function createInkPass(renderer, camera) {
       varying vec2 paperUV;
       uniform sampler2D painted,depthMap,paperFibre;
       uniform vec2 pixel,lens,clip;
-      uniform float focus,scroll,inkFogDensity,daylight;
+      uniform float focus,joineryFaceDistance,scroll,inkFogDensity,daylight;
       ${peachHazeShader}
       ${submergedLightGLSL}
       float meters(vec2 uv) {
@@ -117,6 +118,25 @@ export function createInkPass(renderer, camera) {
             count+=accepted;
           }
           c=sum/count;
+        }
+        // On a face insert, the blade and grip lie ahead of the plane of
+        // focus. Integrate a small aperture in linear colour before laying
+        // down the ink; keep the crisp eyes and mouth behind that plane.
+        if(joineryFaceDistance>0.){
+          float defocus=smoothstep(.13,.70,(joineryFaceDistance-z)*joineryFaceDistance/max(.1,z));
+          vec3 sum=c;float count=1.;
+          for(int i=0;i<12;i++){
+            float t=float(i)+.5;
+            vec2 disk=sqrt(t/12.)*vec2(cos(t*2.39996),sin(t*2.39996));
+            vec2 tap=clamp(uv+pixel*disk*7.*max(.68,defocus),pixel,1.-pixel);
+            float source=meters(tap);
+            // Light from a defocused near edge may spread over the focused
+            // face just behind it. Other in-focus pixels retain their ink.
+            float spread=smoothstep(.16,.74,(joineryFaceDistance-source)*joineryFaceDistance/max(.1,source));
+            float weight=max(defocus,spread*smoothstep(.075,.24,z-source));
+            sum+=weight*texture2D(painted,tap).rgb;count+=weight;
+          }
+          c=sum/count;brush*=1.-defocus;ridge*=1.-defocus;
         }
         c=valleyMist(c,viewPoint(uv,1.),z);
         c=underwaterLight(c,viewPoint(uv,1.),z);
@@ -192,6 +212,7 @@ export function createInkPass(renderer, camera) {
       material.uniforms.scroll.value = scroll;
       material.uniforms.inkFogDensity.value = scene.fog?.density || 0;
       material.uniforms.focus.value = focusDistance;
+      material.uniforms.joineryFaceDistance.value=camera.userData.joineryFaceDistance??0;
       renderer.setRenderTarget(target);
       renderer.render(scene, camera);
       renderer.setRenderTarget(null);

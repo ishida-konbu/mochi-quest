@@ -11,7 +11,7 @@ export function buildContacts(structures) {
     for(const member of foundationMembers(s.kind,s))addFoundationContacts(add,member);
     switch(s.kind) {
       case 'camp':
-        add(-.78,-.72,.11,.11,-.2,1.79,'oval');
+        if(!s.parentId)add(-.78,-.72,.11,.11,-.2,1.79,'oval');
         add(0,.11,1.13,1.72,.018,.13,'floor',true);
         add(0,-.54,1.0,.26,.12,.396);
         break;

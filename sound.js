@@ -233,6 +233,10 @@ export function createAudio(makeWorldAudio) {
     } else if (name === 'bump') {
       tone(now, 150, 57, .18, .23, 'triangle');
       rustle(now, 680, 170, .15, .20);
+    } else if (name === 'axe-chop') {
+      tone(now,245,86,.16,.16,'triangle');
+      tone(now+.006,610,370,.047,.046);
+      rustle(now,2200,480,.076,.16);
     } else if (name === 'build-knock' || name === 'build-seat') {
       const strike = name === 'build-knock';
       rustle(now, strike ? 2200 : 1150, 360, strike ? .046 : .09, .10);

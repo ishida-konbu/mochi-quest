@@ -1,5 +1,5 @@
 import { BOUND, REGIONS, TIMBER_TREES, timberWood, BUILDINGS, nearRoad, terrainContactHeight, waterSurfaceAt, staticVolumeAt, terrainMeshHeight, treeGround, regionAt, wrapDelta } from './terrain.js';
-import { BUILD_MODULES, CAMP_REGIONS, MARKET_REGIONS, CAMP_RADIUS, ATTACHMENTS, HEIGHT_STEP, MAX_HEIGHT_STEPS, chestOnFloor } from './living-build-state.js';
+import { BUILD_MODULES, CAMP_REGIONS, MARKET_REGIONS, CAMP_RADIUS, ATTACHMENTS, HEIGHT_STEP, MAX_HEIGHT_STEPS, bedOnFloor, chestOnFloor } from './living-build-state.js';
 import { LIVING_SITES } from './living-sites.js';
 import { STORY_SITES } from './story-sites.js';
 import { WAYSIDE_SITES } from './wayside-hut-layout.js';
@@ -10,6 +10,7 @@ import { buildContacts, frameTouchesPlayer } from './living-build-contacts.js';
 import { entryFlight,entryFlights,outsideTreads } from './homestead-foundation.js';
 import { foundationPiers, foundationWood } from './living-foundation.js';
 import { timberId } from './living-build-trees.js';
+import { timberCut } from './homestead-timber-section.js';
 
 const failure = reason => ({ok:false,reason});
 export const buildDistance = (a,b)=>Math.hypot(wrapDelta(a.x-b.x),wrapDelta(a.z-b.z));
@@ -54,6 +55,34 @@ export function closestTimberTrees(world,p,count=8,range=Infinity,offset=0) {
   return choices.slice(offset,offset+count).map(({id,distance})=>({...timberTree(id),distance}));
 }
 export const nearestTimberTree=(world,p,range=Infinity)=>closestTimberTrees(world,p,1,range)[0]??null;
+// Measure to the particular bole facing the traveller, including an individual
+// culm on the edge of a wide bamboo stand. The 12 m bins avoid scanning the island.
+export function reachableTimberTree(world,p,collisions){
+  if(p.activity)return null;
+  const palm=p.y+.64+(p.mount?.48:0);
+  let best=null;
+  for(const source of nearbyTrees(p,6)){
+    const id=timberId(source);
+    if(world.felledTrees.includes(id))continue;
+    const t=timberTree(id),cut=timberCut(t);
+    for(const stem of cut.culms??[cut]){
+      const dx=p.x-stem.x,dz=p.z-stem.z,r=Math.hypot(dx,dz);
+      const distance=Math.max(0,r-stem.radius);
+      if(distance>2.28 || distance>=(best?.distance??Infinity) || Math.abs(cut.y-palm)>1.5)continue;
+      // Stop the reach test just outside the bark: the tree itself is a solid.
+      const count=Math.ceil(Math.max(0,distance-.22)/.14);
+      let blocked=false;
+      for(let i=1;i<=count;i++){
+        const k=i/(count+1)*(distance-.22)/Math.max(.001,r);
+        const x=p.x-dx*k,z=p.z-dz*k,y=palm+(cut.y+.09-palm)*k;
+        if(staticVolumeAt(x,z,y,.045,.10) || collisions?.penetration(x,z,y,.10,.045)>0){blocked=true;break;}
+      }
+      if(!blocked)best={...t,stem,distance};
+    }
+  }
+  return best;
+}
+
 const nearest=(list,p,limit)=>list.reduce((best,s)=>{
   const d=buildDistance(p,s);
   return d<=limit && (!best || d<buildDistance(p,best))?s:best;
@@ -153,7 +182,7 @@ function groundSurvey(world,kind,p,state,legacyFoundation) {
   return {ok:true,...p,y,regionId:region.id,terrain,relief,
     foundationWood:legacyFoundation?0:foundationWood(kind,relief,p.heightSteps),...(legacyFoundation?{legacyFoundation:true}:{})};
 }
-export function surveySite(world,kind,pose,{excludeId,state,sourceRecord,snapChest=true,reservedRoots=[]}={}) {
+export function surveySite(world,kind,pose,{excludeId,state,sourceRecord,snapChest=true,reservedRoots=[],carriedCamp}={}) {
   if(!Object.hasOwn(BUILD_MODULES,kind) || !pose || ![pose.x,pose.z,pose.yaw??0].every(Number.isFinite))return failure('地面を選んでください。');
   const source=sourceRecord ?? (excludeId && world.structures.find(s=>s.id===excludeId));
   const heightSteps=pose.heightSteps??source?.heightSteps??0;
@@ -163,6 +192,16 @@ export function surveySite(world,kind,pose,{excludeId,state,sourceRecord,snapChe
   const quote=site=>({...site,foundationWoodDelta:site.foundationWood-(source?.foundationWood??0)});
   const legacyFoundation=source && !source.parentId && source.foundationWood===undefined && !heightSteps &&
     buildDistance(source,p)<1e-7 && Math.abs(Math.sin((source.yaw-p.yaw)*.5))<1e-9;
+  if(kind==='camp' && snapChest){
+    const floor=nearest(existing.filter(s=>s.kind==='floor'),p,1.7);
+    if(floor){
+      if(existing.some(s=>s.parentId===floor.id && s.kind==='camp'))return failure('この板床にはすでに寝床があります。');
+      const anchor=bedOnFloor(floor);
+      if(state?.player && inRectangle(state.player,anchor,1.13,1.72,.32) && Math.abs(state.player.y-anchor.y)<1.8)
+        return failure('寝床を敷く側から少し離れてください。');
+      return quote({ok:true,...anchor,relief:0,foundationWood:0});
+    }
+  }
   if(kind==='chest' && snapChest) {
     const floor=nearest(existing.filter(s=>s.kind==='floor'),p,1.7);
     if(floor) {
@@ -184,7 +223,13 @@ export function surveySite(world,kind,pose,{excludeId,state,sourceRecord,snapChe
   }
   const site=groundSurvey(world,kind,p,state,legacyFoundation);
   if(!site.ok)return site;
-  const camp=nearest(existing.filter(s=>s.kind==='camp'),p,CAMP_RADIUS);
+  const ownBed=carriedCamp ?? (source?.kind==='floor' && world.structures.find(s=>s.kind==='camp' && s.parentId===source.id));
+  const camps=existing.filter(s=>s.kind==='camp');
+  // A deck may carry the very bed that claims this lot; that bed is
+  // temporarily absent from the candidate world while the deck is surveyed.
+  if(ownBed)camps.push(ownBed);
+  const previous=camps.find(s=>s.id===source?.campId && buildDistance(s,p)<=CAMP_RADIUS);
+  const camp=previous??nearest(camps,p,CAMP_RADIUS);
   if(kind!=='camp' && kind!=='stand' && !camp)return failure('近くに野営地がありません。先に野営地を設け、その周り24 m以内を選んでください。');
   const root=footprint(site,kind), neighbours=reservedRoots.map(s=>footprint(s,s.kind));
   for(const s of existing){

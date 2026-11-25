@@ -16,7 +16,7 @@ export function timberCut(tree) {
       if(part.dy<=0 || level<part.y || level>=part.y+part.dy)continue;
       const t=(level-part.y)/part.dy, u=(part.x+part.dx*t)*scale,v=(part.z+part.dz*t)*scale;
       if(!isBambooStock(tree.kind) && Math.hypot(u,v)>tree.h*.13)continue;
-      rings.push({x:tree.x+u*c+v*s,z:tree.z-u*s+v*c,radius:part.r*scale,y});
+      rings.push({x:tree.x+u*c+v*s,z:tree.z-u*s+v*c,radius:part.r*scale,y,...(part.culm===undefined?{}:{culm:part.culm})});
     }
   }
   if(!rings.length)rings.push({x:tree.x+(source.sx??0)*height/tree.h,z:tree.z+(source.sz??0)*height/tree.h,

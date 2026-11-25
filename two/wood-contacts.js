@@ -33,7 +33,10 @@ export function groveWood(form) {
       }
       culms.push({root,next:points[1],r:(radii[0]+radii[1])*.5,corners});
     }
-    for(let i=culm?2:1;i<points.length;i++)segment(parts,points[i-1],points[i],(radii[i-1]+radii[i])*.5);
+    for(let i=culm?2:1;i<points.length;i++){
+      segment(parts,points[i-1],points[i],(radii[i-1]+radii[i])*.5);
+      if(culms.length)parts.at(-1).culm=culms.length-1;
+    }
   });
   if(culms.length)parts.culms=culms;
   measureWood(parts);
@@ -42,13 +45,14 @@ export function groveWood(form) {
 }
 export function groundedCulms(parts,tree,base,yaw,soil){
   const result=[],c=Math.cos(yaw),s=Math.sin(yaw);
-  for(const {root,next,r,corners} of parts.culms){
+  for(const [slot,{root,next,r,corners}] of parts.culms.entries()){
     let drop=0;
     for(const q of corners){
       const x=tree.x+tree.h*(c*q.x+s*q.z),z=tree.z+tree.h*(-s*q.x+c*q.z);
       drop=min(drop,(soil(x,z)-.105-base)/tree.h-q.y);
     }
     segment(result,{x:root.x,y:root.y+drop,z:root.z},next,r);
+    result.at(-1).culm=slot;
   }
   measureWood(result);
   return result;
@@ -57,8 +61,10 @@ export function landmarkWood(tree,random,height,elder,near) {
   const parts=[],ground=height(tree.x,tree.z);
   const local=q=>({x:q.x-tree.x,y:q.y-ground,z:q.z-tree.z});
   if(tree.kind==='bamboo'){
-    for(const {x,z,high,lean} of landmarkCulms(tree,random).stems)
+    for(const [slot,{x,z,high,lean}] of landmarkCulms(tree,random).stems.entries()){
       segment(parts,{x:x-tree.x,y:-.02,z:z-tree.z},{x:x+lean-tree.x,y:high-.02,z:z+.12-tree.z},.075);
+      parts.at(-1).culm=slot;
+    }
   }else{
     const brush={stroke(points,radii,sides,steps){
       // Sample the very same spline that carries the trunk and root rings.

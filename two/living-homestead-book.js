@@ -1,4 +1,4 @@
-import { closestTimberTrees, fellTree, transferStorage, transferBatchStorage, nearBuildStructure } from './living-build.js';
+import { nearestTimberTree, transferStorage, transferBatchStorage, nearBuildStructure } from './living-build.js';
 import { RESOURCES } from './living-resources.js';
 import { wrapDelta } from './terrain.js';
 
@@ -8,19 +8,12 @@ const treeNames={pine:'松',maple:'楓',willow:'柳',oak:'樫',bamboo:'竹',moso
 const openGround = [
   {name:'桜川の里はずれ',x:20,z:87}, {name:'棚田の畦の外',x:158,z:131}, {name:'蔵町のはずれ',x:31,z:-54},
 ];
-export function createHomesteadBook({game,save,saw,el,button,section,field,select,number,details,route,choose}) {
+export function createHomesteadBook({game,save,el,button,section,field,select,number,details,route,choose}) {
   const world=game.state.livingWorld,p=game.state.player;
   const dist=s=>Math.hypot(wrapDelta(s.x-p.x),wrapDelta(s.z-p.z));
   function result(r) {
     if (r.ok) save();
     choose('materials',r.message || r.reason);
-  }
-  function cutTree(tree,done) {
-    saw(tree,()=>{
-      const cut=fellTree(world,tree.id);
-      if(cut.ok)save();
-      return cut;
-    },done);
   }
   function storage(chest,area) {
     const stock=section('道具櫃の中身',area);
@@ -58,38 +51,14 @@ export function createHomesteadBook({game,save,saw,el,button,section,field,selec
     for(const site of [...openGround].sort((a,b)=>dist(a)-dist(b))) routes.append(route(site));
     hints.append(routes);
     const forest=section('木材を集める',area);
-    const pageSize=8;
-    let skip=0;
-    const choices=el('div');
-    const forestNote=el('p');
-    forest.append(forestNote,choices);
-    function showTrees(){
-      const batch=closestTimberTrees(world,p,pageSize+1,Infinity,skip),trees=batch.slice(0,pageSize);
-      choices.replaceChildren();
-      if(!trees.length){
-        forestNote.textContent='島の木はすべて伐り終えました。棚田の米売り場と蔵町の菜の露店でも、木材四本を六文で買えます。';
-        return;
-      }
-      forestNote.textContent=(skip || batch.length>pageSize?'近い木から八本ずつ選べます。':'近い木から順に選べます。')+'一本伐ると木材六本が手に入り、切り株が残ります。';
-      const label=tree=>{
-        const angle=Math.atan2(wrapDelta(tree.x-p.x),-wrapDelta(tree.z-p.z));
-        const bearing=['北','北東','東','南東','南','南西','西','北西'][(Math.round(angle/(Math.PI/4))+8)%8];
-        return (treeNames[tree.kind]??'立木')+'　'+bearing+' '+tree.distance.toFixed(1)+' m';
-      };
-      let selected=trees[0];
-      const picker=select(Object.fromEntries(trees.map(t=>[t.id,label(t)])),selected.id,
-        id=>{selected=trees.find(t=>t.id===id);},'伐る木');
-      choices.append(field('伐る木',picker),
-        button('この木を伐って木材を取る',()=>cutTree(selected,r=>choose('materials',r.message||r.reason))));
-      if(skip || batch.length>pageSize){
-        const nav=el('div',undefined,'living-waypoints');
-        function turnPage(delta){skip+=delta;showTrees();choices.querySelector('select').focus({preventScroll:true});}
-        if(skip)nav.append(button('前の木を見る',()=>turnPage(-pageSize)));
-        if(batch.length>pageSize)nav.append(button('次の木を見る',()=>turnPage(pageSize)));
-        choices.append(nav);
-      }
+    forest.append(el('p','木のそばでEキーを押すか、「手斧で木を伐る」をタップします。ひと押しで三度斧を入れ、木材が六本手に入ります。'));
+    const tree=nearestTimberTree(world,p);
+    if(tree){
+      const name=treeNames[tree.kind]??'立木';
+      forest.append(route({...tree,name},'近くの'+name+'へ道しるべ　'+Math.round(tree.distance)+' m'));
     }
-    showTrees();
+    forest.append(el('p','旅の中で丸一日たつと、木はまた生えてきます。木が建物にぶつかる場所では、切り株のまま残ります。'));
+    forest.append(el('p','棚田の米売り場と蔵町の菜の露店では、木材四本を六文で買えます。'));
   }
   return {render};
 }

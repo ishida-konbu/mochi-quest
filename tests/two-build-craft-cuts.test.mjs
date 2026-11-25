@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BUILD_MODULES } from '../two/living-build-state.js';
 import { constructionCuts,craftMotion,findWorkBench,BENCH_LEGS,benchPoint } from '../two/build-craft-motion.js';
-import { craftLens,visibleWorkArea } from '../two/build-craft-scene.js';
+import { visibleWorkArea } from '../two/build-craft-scene.js';
+import { composeCraftLens,craftShotOrder,craftShotSeed } from '../two/build-craft-lenses.js';
+import { makeJoinerySite } from '../two/build-craft-site.js';
 import { PerspectiveCamera,Vector3,Group,Mesh,Scene,SphereGeometry,MeshBasicMaterial,InstancedMesh,Matrix4 } from '../two/vendor/three.module.min.js';
 import { terrainContactHeight,groundHeight } from '../two/terrain.js';
 
@@ -76,22 +78,49 @@ test('the pull saw reaches the offcut before it drops, the plane lifts on return
     assert.ok(near(hit.hands[0][2],hit.position[2]+.223));
   }
 });
-test('one locked tripod fits the worker, both hands and the cutting edge above landscape and portrait controls',()=>{
+test('reproducible coverage varies across jobs and across cuts, with distinct eye lines',()=>{
+  const observed=new Set();
+  for(let take=0;take<24;take++){
+    const seed=craftShotSeed(site,take),plan=craftShotOrder(seed,3);
+    assert.deepEqual(plan,craftShotOrder(seed,3));assert.equal(new Set(plan).size,3);
+    for(const shot of plan)observed.add(shot);
+    assert.ok(plan[0]!=='face');
+  }
+  assert.equal(observed.size,5);
   for(const size of [1,1.28]){
     const motion=craftMotion(site,{...player,buffs:{full:size>1?15:0}},detail);
-    for(const [w,h,open] of [[320,640,440],[390,844,668],[1000,680,500]]){
-      const lens=craftLens(detail,size,w,h,open);
-      const camera=new PerspectiveCamera(39,w/h,.03,200);
-      camera.position.copy(lens.eye);camera.lookAt(lens.focus);camera.setViewOffset(w,h,0,lens.offset,w,h);
-      camera.updateMatrixWorld();
-      for(let t=0;t<=motion.duration;t+=.065){
-        const f=motion.sample(t);
-        for(const p of [...f.hands,...f.feet,f.position,[0,1.73*size,f.hero[2]]]){
-          const s=new Vector3(...p).project(camera);
-          assert.ok(Math.abs(s.x)<.98 && s.y<.99 && s.y>1-2*open/h);
+    const siteFrame=makeJoinerySite(new Group(),site);siteFrame.position(detail);siteFrame.advance(1,3);
+    const stage=siteFrame.extents();
+    for(const [w,h,open] of [[320,640,440],[390,844,668],[844,390,290],[1000,680,500]]){
+      for(const style of observed){
+        const lens=composeCraftLens(style,detail,size,w,h,open,1,()=>true,stage);
+        const camera=new PerspectiveCamera(lens.fov,w/h,.03,200);
+        camera.position.copy(lens.eye);camera.lookAt(lens.focus);camera.setViewOffset(w,h,0,lens.offset,w,h);
+        camera.updateMatrixWorld();
+        const visible=p=>{
+          const s=p.clone().project(camera);
+          assert.ok(Math.abs(s.x)<.99 && s.y<.995 && s.y>1-2*open/h,
+            style+' at '+w+' point '+p.toArray()+' projected to '+s.toArray());
+        };
+        if(style==='wide')stage.forEach(visible);
+        if(style==='eye')assert.ok(Math.abs(lens.eye.y-size)<.007);
+        if(style==='low')assert.ok(lens.eye.y<.70*size && lens.eye.y>.64*size);
+        for(let t=0;t<=motion.duration;t+=.15){
+          const f=motion.sample(t);
+          if(style==='face'){
+            visible(new Vector3(.25*size,1.01*size,.86*size));
+            visible(new Vector3(-.25*size,.73*size,.90*size));
+            assert.ok(lens.faceDistance>0);
+          }else{
+            const points=style==='eye'?[...f.hands,f.position,[0,1.60*size,1.4*size]]:
+              [...f.hands,...f.feet,f.position,[0,1.73*size,f.hero[2]]];
+            for(const p of points)visible(new Vector3(...p));
+            assert.equal(lens.faceDistance,0);
+          }
         }
       }
     }
+    siteFrame.dispose();
   }
 });
 

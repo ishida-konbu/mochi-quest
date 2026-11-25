@@ -1,5 +1,5 @@
 import { settleMarket } from './living-market.js';
-import { nearBuildStructure, withBuildTerrain, validBuildLand } from './living-build.js';
+import { reachableTimberTree, regrowTimber, nearBuildStructure, withBuildTerrain, validBuildLand } from './living-build.js';
 import { createLivingWorld, readLivingWorld, JOURNEY_VERSION } from './living-save.js';
 import { SKIFFS, skiffPose, skiffDeck, skiffApproaches } from './skiff-travel.js';
 import { LIVING_SITES, nearLivingSite } from './living-sites.js';
@@ -462,9 +462,12 @@ function openGame(snapshot) {
     return target.grand?springRadius(player.x,player.z)<=1:wetRetreatRadius(site,player.x,player.z)<=1.07;
   }
   function nearest() {
-    if (player.activity || !player.grounded) return null;
-    if (player.mount === 'turtle') return { target: turtle, label: 'カメから降りる', action: 'dismount', distance: 0 };
-    if (passengerBoat) return {target:passengerBoat,label:'小舟から降りる',action:'dismount',distance:0};
+    if (player.activity) return null;
+    const tree=reachableTimberTree(state.livingWorld,player,storyCollisions);
+    const chopping=tree?{target:{timberTree:tree},label:'手斧で木を伐る',action:'interact',distance:tree.distance}:null;
+    if (!player.grounded) return chopping;
+    if (player.mount === 'turtle') return chopping??{target:turtle,label:'カメから降りる',action:'dismount',distance:0};
+    if (passengerBoat) return chopping??{target:passengerBoat,label:'小舟から降りる',action:'dismount',distance:0};
     let best=null;
     if (!player.mount) {
       for (const boat of SKIFFS) {
@@ -531,6 +534,7 @@ function openGame(snapshot) {
       const label = {stand:'販売棚を開く',camp:'寝床で休む',chest:'収納箱を開ける'}[owned.kind];
       best = {target:{livingSection:section}, label, action:'interact', distance:gap(owned)};
     }
+    if(chopping && (!best || chopping.distance+.08<best.distance))best=chopping;
     return best;
   }
   function beginActivity(activity, duration) {
@@ -747,8 +751,12 @@ function openGame(snapshot) {
     return true;
   }
   function interact(facing) {
-    if (passengerBoat || player.mount) return dismount();
     const found = nearest();
+    if (found?.target.timberTree) {
+      player.vx=player.vz=player.speed=0;
+      emit('chop',{tree:found.target.timberTree});return true;
+    }
+    if (passengerBoat || player.mount) return dismount();
     if (!found) return false;
     const target = found.target;
     if (target.livingSection) { emit('living',{section:target.livingSection}); return true; }
@@ -1505,8 +1513,15 @@ function openGame(snapshot) {
   }
   // Keep passers-by and boats moving while the player's hands are occupied.
   // A pause or a jump to the plated dish supplies no elapsed scenery time.
-  function stepCookingScenery(dt) {
+  function advanceLivingClock(activeSeconds){
+    if (Number.isFinite(activeSeconds) && activeSeconds > 0)
+      state.livingWorld.worldMinute += activeSeconds / SECONDS_PER_MINUTE;
+    regrowTimber(state.livingWorld,player);
+    settleMarket(state.livingWorld);
+  }
+  function stepCookingScenery(dt,clockSeconds=0) {
     if (!(dt > 0) || !Number.isFinite(dt)) return;
+    if(clockSeconds>0)advanceLivingClock(clockSeconds);
     state.time += dt;
     voyage.update(state.time, player);
     updateNPCs(dt);
@@ -1514,9 +1529,7 @@ function openGame(snapshot) {
   function step(elapsed, input = {}) {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return;
     const activeSeconds = input.clockSeconds ?? elapsed;
-    if (!input.pauseClock && Number.isFinite(activeSeconds) && activeSeconds > 0)
-      state.livingWorld.worldMinute += activeSeconds / SECONDS_PER_MINUTE;
-    settleMarket(state.livingWorld);
+    advanceLivingClock(input.pauseClock?0:activeSeconds);
     if (input.jump && !input.dive && !heldJump) jump();
     heldJump = !!input.jump;
     // Bounded substeps preserve contacts, landings and projectiles on a slow frame.
@@ -1536,6 +1549,7 @@ function openGame(snapshot) {
     const target = waitTargetMinute(player.worldMinute, hour);
     if (target === null) return {ok: false, reason: '休み終える時刻を選んでください。'};
     state.livingWorld.worldMinute = target;
+    regrowTimber(state.livingWorld,player);
     settleMarket(state.livingWorld);
     updateRegion(false);
     return {ok: true};

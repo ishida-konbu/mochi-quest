@@ -895,6 +895,7 @@ class Painter {
     if(this.treeSource){
       b.treeSources??=new Map();
       b.treeSources.set(b.count,this.treeSource);
+      if(this.treeCulm!=null)(b.culmSlots??=new Map()).set(b.count,this.treeCulm);
     }
     const offset=b.count*19;
     if(offset===b.instances.length) {
@@ -953,10 +954,15 @@ class Painter {
       const stride=sprays.has(mat)?5:1;
       for(let pass=0;pass<stride;pass++) for(let i=pass;i<count;i+=stride) {
         const source=batch.treeSources?.get(i);
-        if(source)recordTreeSpan(treeSlots,source,index*16,(index+1)*16);
+        if(source){
+          recordTreeSpan(treeSlots,source,index*16,(index+1)*16);
+          const stem=batch.culmSlots?.get(i);
+          if(stem!=null)(m.userData.culmSlots??=new Map()).set(index,stem);
+        }
         m.setMatrixAt(index, this.dummy.matrix.fromArray(instances,i*19));
         m.setColorAt(index++, this.color.fromArray(instances,i*19+16));
       }
+      if(treeSlots.size)m.userData.timberMatrices=treeSlots;
       if(treeSlots.size) m.userData.updateTimber=timberBatchMask(m.instanceMatrix,treeSlots,(matrices,start,end)=>{
         // Collapse the basis while retaining translation and homogeneous w.
         for(let index=start;index<end;index+=16)matrices.fill(0,index,index+12);
@@ -986,7 +992,8 @@ function* woodland(p, art, boughs) {
     if(kind==='bamboo') {
       p.treeSource=tree;
       const {angle:a,stems}=landmarkCulms(tree,seeded(tree.seed));
-      for(const {x:bx,z:bz,high,lean} of stems){
+      for(const [slot,{x:bx,z:bz,high,lean}] of stems.entries()){
+        p.treeCulm=slot;
         p.link(V(bx, y, bz), V(bx + lean, y + high, bz + 0.12), 0.075, '#788458', false, true, true,bambooStems);
         for (let k = 1; k < 7; k++)
           p.part(
@@ -1026,7 +1033,7 @@ function* woodland(p, art, boughs) {
           );
         }
       }
-      p.treeSource=null;
+      p.treeSource=null;p.treeCulm=null;
     }
   }
 }
@@ -2006,6 +2013,7 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
   return {
     setLivingWorld:homestead.setLivingWorld,
     setConstructionSite:homestead.setConstructionSite,
+    setOccupiedBed:homestead.setOccupiedBed,
     setBuildingPreview:homestead.setBuildingPreview,
     setBuildingPreviews:homestead.setBuildingPreviews,
     getBuildEditorObjects:homestead.getBuildEditorObjects,

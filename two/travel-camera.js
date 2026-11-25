@@ -84,3 +84,26 @@ export function createTravelCamera() {
   }
   return { movementYaw, manualLook, follow, reset, get lead() { return lead; } };
 }
+
+// A view along the line from the traveller to the cut hides the blade behind
+// the dough or the trunk. Ease to the nearest clear three-quarter view once.
+export function chopCameraArc(yaw, axeLine, clearance) {
+  const relative = angleBetween(yaw, axeLine);
+  if (Math.abs(Math.sin(relative)) >= .79) return null;
+  const axis = axeLine + (Math.cos(relative) < 0 ? Math.PI : 0);
+  let chosen, best = -Infinity;
+  for (const side of [-1, 1]) {
+    const turn = angleBetween(axis + side * 1.29, yaw);
+    if (Math.abs(turn) > 1.55) continue;
+    const room = Math.min(clearance(yaw + turn / 2), clearance(yaw + turn));
+    const score = room * 1.55 - Math.abs(turn);
+    if (score > best) { best = score; chosen = turn; }
+  }
+  if (chosen === undefined) return null;
+  const duration = Math.max(.65, Math.abs(chosen) * 1.53);
+  let elapsed = 0;
+  return dt => {
+    elapsed = Math.min(duration, elapsed + dt);
+    return yaw + chosen * ramp(elapsed, 0, duration);
+  };
+}

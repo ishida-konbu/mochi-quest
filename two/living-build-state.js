@@ -24,8 +24,15 @@ export function chestOnFloor(floor) {
   return {x:floor.x+.69*c-.57*s,z:floor.z-.69*s-.57*c,y:floor.y+.18,yaw:floor.yaw,
     terrain:floor.terrain,regionId:floor.regionId,campId:floor.campId,parentId:floor.id};
 }
+// The bed occupies the opposite side of the room to the chest. Its claim
+// remains identified by the camp's own id; only parentId carries geometry.
+export function bedOnFloor(floor) {
+  const c=Math.cos(floor.yaw),s=Math.sin(floor.yaw);
+  return {x:floor.x-.64*c+.05*s,z:floor.z+.64*s+.05*c,y:floor.y+.18,yaw:floor.yaw,
+    terrain:floor.terrain,regionId:floor.regionId,parentId:floor.id};
+}
 export function buildState() {
-  return {structures:[],felledTrees:[],wood:8,nextStructureId:1};
+  return {structures:[],felledTrees:[],treeReadyAt:{},wood:8,nextStructureId:1};
 }
 const amount = (value,lo,hi) => Number.isSafeInteger(value) && value>=lo && value<=hi;
 function validChest(s,world) {
@@ -44,6 +51,11 @@ export function validBuildState(world) {
       !Array.isArray(world.felledTrees) ||
       world.felledTrees.some(id=>typeof id!=='string' || !/^[a-zA-Z-]+:\d{1,10}:-?\d{1,6}:-?\d{1,6}$/.test(id)) ||
       new Set(world.felledTrees).size!==world.felledTrees.length) return false;
+  if(world.treeReadyAt!==undefined){
+    if(!world.treeReadyAt || Array.isArray(world.treeReadyAt) || typeof world.treeReadyAt!=='object')return false;
+    const cut=new Set(world.felledTrees);
+    if(Object.entries(world.treeReadyAt).some(([id,time])=>!cut.has(id) || !Number.isSafeInteger(time) || time<0))return false;
+  }
   const byId=new Map(), occupied=new Set();
   let camps=0;
   for (const s of world.structures) {
@@ -61,13 +73,21 @@ export function validBuildState(world) {
     }
     if (s.foundationWood!==undefined && (s.parentId || !amount(s.foundationWood,0,MAX_WOOD))) return false;
     if (s.kind==='chest' && !validChest(s,world)) return false;
+    if (s.beddingGrade!==undefined && (s.kind!=='camp' || !amount(s.beddingGrade,0,3)))return false;
     if (s.kind==='camp') camps++;
     byId.set(s.id,s);
   }
   if(camps>MAX_CAMPS)return false;
   for(const s of world.structures) {
     if (s.kind==='camp' || s.kind==='stand') {
-      if(s.campId || s.parentId) return false;
+      if(s.campId)return false;
+      if(s.parentId){
+        const floor=byId.get(s.parentId),key=s.parentId+'/camp';
+        if(s.kind!=='camp' || floor?.kind!=='floor' || occupied.has(key))return false;
+        const at=bedOnFloor(floor);
+        if(['x','y','z','yaw','terrain','regionId'].some(k=>s[k]!==at[k]))return false;
+        occupied.add(key);
+      }
       continue;
     }
     const camp=byId.get(s.campId);

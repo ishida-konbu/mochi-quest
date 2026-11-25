@@ -1,15 +1,16 @@
-import { BUILD_MODULES, ATTACHMENTS, CAMP_RADIUS, MAX_CAMPS, MAX_STRUCTURES, MAX_WOOD, HEIGHT_STEP, chestOnFloor } from './living-build-state.js';
+import { BUILD_MODULES, ATTACHMENTS, CAMP_RADIUS, MAX_CAMPS, MAX_STRUCTURES, MAX_WOOD, HEIGHT_STEP, bedOnFloor, chestOnFloor } from './living-build-state.js';
 import { buildDistance, surveySite, stumpCovered, timberTree } from './living-build-land.js';
 import { timberCut } from './homestead-timber-section.js';
 import { buildContacts } from './living-build-contacts.js';
 import { bindFelledTrees } from './living-build-trees.js';
+import { DAY_MINUTES } from './world-clock.js';
 import { clearHandReach } from './living-sites.js';
 import { RESOURCES } from './living-resources.js';
 import { forgetMarketStand, marketRemovalReason, settleMarket } from './living-market.js';
 import { replaceBuildContacts, terrainContactHeight, wrapDelta } from './terrain.js';
 export { HEIGHT_STEP, MAX_HEIGHT_STEPS } from './living-build-state.js';
 export { BUILD_MODULES, buildState, validBuildState } from './living-build-state.js';
-export { surveySite, closestTimberTrees, nearestTimberTree, timberTree } from './living-build-land.js';
+export { surveySite, closestTimberTrees, nearestTimberTree, reachableTimberTree, timberTree } from './living-build-land.js';
 
 let active=null;
 export function syncBuildTerrain(world) {
@@ -140,6 +141,7 @@ function checkedSelection(world,ids){
   return Array.isArray(ids) && ids.length && ids.every(id=>world.structures.some(s=>s.id===id));
 }
 function familyPose(source,floor){
+  if(source.kind==='camp')return {...source,...bedOnFloor(floor)};
   return {...source,...(source.kind==='chest'?chestOnFloor(floor):transform(floor)),campId:floor.campId};
 }
 function groupTargets(world,roots,delta){
@@ -175,9 +177,10 @@ export function surveyMoveGroup(world,ids,delta={},options={}){
   for(const [i,s] of ordered.entries()){
     const pose=targets.get(s.id);
     const future=ordered.slice(i+1).map(r=>targets.get(r.id));
-    const snapChest=roots.length===1 || (s.kind==='chest' && draft.structures.some(f=>
-      f.kind==='floor' && buildDistance(chestOnFloor(f),pose)<1e-6 && Math.abs(Math.sin((f.yaw-pose.yaw)/2))<1e-7));
-    const site=surveySite(draft,s.kind,pose,{state:options.state,sourceRecord:s,reservedRoots:future,snapChest});
+    const snapChest=roots.length===1 || (['camp','chest'].includes(s.kind) && draft.structures.some(f=>
+      f.kind==='floor' && buildDistance(s.kind==='camp'?bedOnFloor(f):chestOnFloor(f),pose)<1e-6 && Math.abs(Math.sin((f.yaw-pose.yaw)/2))<1e-7));
+    const site=surveySite(draft,s.kind,pose,{state:options.state,sourceRecord:s,reservedRoots:future,snapChest,
+      carriedCamp:proposed().find(v=>v.kind==='camp' && v.parentId===s.id)});
     if(!site.ok)return {...blocked(site.reason),...(site.treeId?{treeId:site.treeId}:{})};
     const moved=movedStructure(s,site);
     woodDelta+=site.foundationWoodDelta;
@@ -288,10 +291,41 @@ export function buyTimber(world,site) {
 export function fellTree(world,id) {
   if(!timberTree(id) || world.felledTrees.includes(id))return fail('この木はすでに伐り終えています。');
   if(!Number.isSafeInteger(world.wood+6))return fail('これ以上の木材は記録できません。');
-  world.felledTrees=[...world.felledTrees,id];world.wood+=6;
+  world.felledTrees=[...world.felledTrees,id];world.treeReadyAt={...world.treeReadyAt,[id]:Math.ceil(world.worldMinute)+DAY_MINUTES};world.wood+=6;
   changed(world);
   return ok('木を伐り、木材を六本取りました。');
 }
+const regrowthChecks=new WeakMap();
+export function regrowTimber(world,player){
+  if(!world.felledTrees.length)return 0;
+  const minute=Math.floor(world.worldMinute),last=regrowthChecks.get(world);
+  if(last?.minute===minute && last.plots===world.structures && last.cuts===world.felledTrees)return 0;
+  const due=world.treeReadyAt??={},ready=[];
+  world.treeReadyAt=due;
+  for(const id of world.felledTrees){
+    const when=due[id]??=Math.ceil(world.worldMinute)+DAY_MINUTES;
+    if(when>minute)continue;
+    const tree=timberTree(id);
+    if(!tree)continue;
+    if(player && buildDistance(tree,player)<Math.max(1.9,tree.h*.3) && player.y<tree.ground+tree.h+1)continue;
+    // Reuse the actual plot and stair surveys, including branches and piers.
+    // Distant trees need no temporary change to the active terrain index.
+    if(world.structures.some(s=>buildDistance(s,tree)<tree.h+16)){
+      const trial={...world,felledTrees:world.felledTrees.filter(key=>key!==id)};
+      if(!validBuildLand(trial))continue;
+    }
+    ready.push(id);
+  }
+  if(ready.length){
+    const grown=new Set(ready);
+    world.felledTrees=world.felledTrees.filter(id=>!grown.has(id));
+    for(const id of grown)delete due[id];
+    changed(world);
+  }
+  regrowthChecks.set(world,{minute,plots:world.structures,cuts:world.felledTrees});
+  return ready.length;
+}
+
 export function transferStorage(world,chestId,id,grams,deposit) {
   const chest=world.structures.find(s=>s.id===chestId && s.kind==='chest');
   if(!chest || !Object.hasOwn(RESOURCES,id) || !Number.isSafeInteger(grams) || grams<=0 || typeof deposit!=='boolean')return fail('食材と分量を確かめてください。');

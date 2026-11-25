@@ -16,7 +16,7 @@ const icons={
 function icon(name){
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">'+icons[name]+'</svg>';
 }
-const short={camp:'野営地',stand:'餅売り棚',hut:'板張りの小屋',chest:'道具櫃',floor:'板床',posts:'四本柱',wall:'板壁',roof:'板葺き屋根',fence:'竹垣'};
+const short={camp:'野営地の寝床',stand:'餅売り棚',hut:'板張りの小屋',chest:'道具櫃',floor:'板床',posts:'四本柱',wall:'板壁',roof:'板葺き屋根',fence:'竹垣'};
 export const buildName=kind=>short[kind]??BUILD_MODULES[kind]?.name??'部材';
 
 export function createBuildPanel(onAction){
@@ -37,7 +37,7 @@ export function createBuildPanel(onAction){
         <p class="build-verdict" role="status" aria-live="polite"></p>
         <div class="build-choice-actions"><button data-act="move">${icon('move')}${icon('turn')}移動・回転</button><button data-act="remove">${icon('close')}撤去</button></div>
         <div class="build-confirm"><button data-act="cancel">戻る</button><button data-act="confirm"></button></div>
-        <button data-act="fell" hidden>敷地の木を伐る</button>
+        <button data-act="mark-tree" hidden>敷地の木へ道しるべ</button>
       </div>
       <button class="build-stock-link" data-act="materials">${icon('materials')}木材・収納を開く</button>
     </div>
@@ -52,7 +52,7 @@ export function createBuildPanel(onAction){
   const act=name=>find('[data-act="'+name+'"]');
   for(const kind of order){
     const b=document.createElement('button'),img=document.createElement('img'),label=document.createElement('strong'),cost=document.createElement('small');
-    b.type='button';b.dataset.kind=kind;b.setAttribute('aria-label',BUILD_MODULES[kind].name);
+    b.type='button';b.dataset.kind=kind;b.setAttribute('aria-label',kind==='camp'?buildName(kind):BUILD_MODULES[kind].name);
     img.alt='';img.width=160;img.height=96;img.draggable=false;img.src=new URL('./assets/build-cards/'+kind+'.webp',import.meta.url).href;
     const d=BUILD_MODULES[kind],onFoundation=!['posts','wall','roof'].includes(kind);
     label.textContent=buildName(kind);cost.textContent='木材'+d.wood+(onFoundation?'本〜':'本')+(d.coins?'・'+d.coins+'文':'');
@@ -104,7 +104,7 @@ export function createBuildPanel(onAction){
     find('.build-confirm').hidden=tool==='select';
     act('cancel').hidden=isNew;act('confirm').disabled=!allowed||busy;
     act('confirm').textContent=isNew?'ここに建てる':moving?'ここに移す':'撤去を確定';
-    act('fell').hidden=!data.blockingTree;
+    act('mark-tree').hidden=!data.blockingTree;
     find('.build-adjust').hidden=!editing;
     find('[data-angle]').textContent=angle+'°';find('[data-height]').textContent='高さ '+height;
     act('lower').disabled=!canLower;act('raise').disabled=!canRaise;

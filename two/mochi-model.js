@@ -357,14 +357,16 @@ function kagamiLayers(r) {
   bottom.castShadow=true;
   bottom.scale.z=.94;
   stack.add(bottom);
-  addKagamiFern(stack);
-  addKagamiMochibana(stack);
-  const wands=addKagamiOrnaments(stack);
+  const ornaments=new T.Group();
+  stack.add(ornaments);
+  addKagamiFern(ornaments);
+  addKagamiMochibana(ornaments);
+  const wands=addKagamiOrnaments(ornaments);
   const citrus=daidai();
   citrus.scale.setScalar(.91);
   stack.add(citrus);
   stack.visible=false;
-  return { stack, citrus, wands, lowerSkin:bottom.material, lowerColor:bottom.material.color.clone(),
+  return { stack, citrus, wands, ornaments, lower:bottom, lowerSkin:bottom.material, lowerColor:bottom.material.color.clone(),
     upperSkin:riceFinish(r.plainSkin), wind:0, windPhase:0,
     stroke:0, spread:0, toStack:new T.Matrix4(), palmBack:new T.Vector3() };
 }

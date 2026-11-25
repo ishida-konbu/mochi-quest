@@ -44,6 +44,7 @@ function raisedFlights(kind,site){
 // The stairs follow the deck edge. Return the shorter flights first so a
 // neighbour need only change the entrance when the preferred flight overlaps.
 export function entryFlights(kind,site){
+  if(site.parentId)return [];
   if(site.heightSteps>0)return raisedFlights(kind,site);
   const camp=kind==='camp',floor=kind==='floor'||kind==='hut';
   if(!camp && !floor)return [];

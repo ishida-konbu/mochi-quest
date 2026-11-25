@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canFollowTravel, createTravelCamera } from '../two/travel-camera.js';
+import { canFollowTravel, createTravelCamera, chopCameraArc } from '../two/travel-camera.js';
 import { isGroundedDango } from '../two/dango-roll.js';
 import { SKIFFS, skiffApproaches } from '../two/skiff-travel.js';
 import { createGame } from '../two/game.js';
@@ -198,4 +198,19 @@ test('roll effects still belong to a grounded dango after camera tracking is gen
   for (const change of [
     {mode:'normal'}, {grounded:false}, {inWater:true}, {activity:'fall'}, {mount:'bike'}, {skiff:'boat'},
   ]) assert.equal(isGroundedDango({...northbound,...change}),false);
+});
+
+test('the axe clears the silhouette without moving a side view or crossing the camera seam', () => {
+  const line=2.98;
+  assert.equal(chopCameraArc(line+1.2,line,()=>1),null);
+  const q=chopCameraArc(line,line,a=>angle(a-line)>0?1:.14);
+  let yaw=line;
+  for(let i=0;i<260;i++){
+    const next=q(1/120);
+    assert.ok(next>=yaw && next-yaw<1/120);
+    yaw=next;
+  }
+  assert.ok(Math.abs(yaw-line-1.29)<.02);
+  const front=chopCameraArc(line+Math.PI,line,()=>1);
+  assert.ok(Math.abs(front(3)-line-Math.PI)<1.3);
 });

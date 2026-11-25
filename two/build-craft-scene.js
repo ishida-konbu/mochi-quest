@@ -1,15 +1,14 @@
 import { Group,Scene,Mesh,Color,Vector3,PlaneGeometry,MeshLambertMaterial,HemisphereLight,DirectionalLight,FogExp2,Raycaster,Sphere,Matrix4 } from './vendor/three.module.min.js';
 import { staticVolumeAt,terrainContactHeight } from './terrain.js';
 import { createCookingPerformer } from './cooking-performer.js';
-import { benchPoint,findWorkBench,craftMotion } from './build-craft-motion.js';
+import { findWorkBench,craftMotion } from './build-craft-motion.js';
 import { makeCraftBay } from './build-craft-art.js';
 import { hokoraCarpentry } from './kaede-hokora-mesh.js';
 import { homesteadFinish } from './homestead-pigment.js';
 
-const up=new Vector3(0,1,0), fov=39,tan=Math.tan(fov*Math.PI/360);
-function worldPoint(frame,v){
-  const [x,z]=benchPoint(frame,v.x,v.z);return new Vector3(x,v.y+frame.y,z);
-}
+import {composeCraftLens,craftShotSeed,craftShotOrder} from './build-craft-lenses.js';
+import {makeJoinerySite} from './build-craft-site.js';
+
 function clearSight(a,b){
   const n=Math.ceil(a.distanceTo(b)/.19);
   for(let i=1;i<=n;i++){
@@ -61,32 +60,10 @@ export function visibleWorkArea(scene,rig,bench,canStand=()=>true,reach=12){
     return true;
   };
 }
-// A locked, slightly elevated tripod keeps the face, tool edge and work in
-// the same composition. The bottom strip is reserved before fitting portrait.
-export function craftLens(bench,size,width,height,available,sight=clearSight){
-  const open=Math.max(.24,Math.min(1,available/height)),aspect=width/height;
-  const target=new Vector3(0,.82*size,.65*size);
-  const points=[];
-  for(const x of [-.92*size,.92*size])for(const y of [-.035,1.75*size])
-    for(const z of [.85*size,2.50*size])points.push(new Vector3(x,y,z));
-  for(const x of [-.88,.88])for(const z of [-.72,.70])points.push(new Vector3(x,.53*size,z));
-  const targets=[new Vector3(0,.82*size,.83*size),new Vector3(-.24*size,1.04*size,.93*size),new Vector3(.24*size,1.04*size,.93*size),new Vector3(.31,.55*size,.03),new Vector3(-.24,.61*size,.02),
-    new Vector3(0,.54*size+.10,-.39),new Vector3(0,.54*size+.11,.34),new Vector3(.32,.54*size+.23,.65)];
-  for(const y of [.76,1.02])for(const angle of [.47,-.47,.18,-.18]){
-    const dir=new Vector3(Math.sin(angle),y,-Math.cos(angle)).normalize(),right=up.clone().cross(dir).normalize(),vertical=dir.clone().cross(right);
-    let distance=2.67*size;
-    for(const p of points){
-      const v=p.clone().sub(target),front=v.dot(dir);
-      distance=Math.max(distance,front+(Math.abs(v.dot(right))+.04)/(tan*aspect*.92),
-        front+(Math.abs(v.dot(vertical))+.04)/(tan*open*.92));
-    }
-    const eye=worldPoint(bench,target.clone().addScaledVector(dir,distance)),focus=worldPoint(bench,target);
-    if(bench.detail || targets.every(p=>sight(worldPoint(bench,p),eye)))return {eye,focus,offset:(height-available)/2,width,height};
-  }
-  return null;
-}
-function closeWorkroom(){
-  const scene=new Scene();scene.background=new Color('#e3dec9');scene.fog=new FogExp2('#e3dec9',.055);
+function closeWorkroom(field){
+  const scene=new Scene();
+  const sky=field.fog?.color??(field.background?.isColor?field.background:new Color('#c7d9db'));
+  scene.background=sky.clone();scene.fog=new FogExp2(sky,.070);
   scene.add(new HemisphereLight('#fff6db','#a69a78',2));
   const sun=new DirectionalLight('#ffefd2',2.1);sun.position.set(-3,5,4);scene.add(sun);
   const floor=new Mesh(new PlaneGeometry(64,64),new MeshLambertMaterial({color:'#d8cbbb'}));
@@ -96,29 +73,63 @@ function closeWorkroom(){
   const mat=new Mesh(b.finish(),homesteadFinish());scene.add(mat);
   return {scene,dispose(){floor.geometry.dispose();floor.material.dispose();mat.geometry.dispose();}};
 }
-export function makeCraftScene(scene,camera,player,site,canStand=()=>true) {
+export function makeCraftScene(scene,camera,player,site,canStand=()=>true,take=0) {
   const original={position:camera.position.clone(),quaternion:camera.quaternion.clone(),fov:camera.fov,
-    view:camera.view?.enabled?{...camera.view}:null};
+    view:camera.view?.enabled?{...camera.view}:null,nearFocus:camera.userData.joineryFaceDistance};
   const field=findWorkBench(site,player,canStand),size=player.buffs?.full>0?1.28:1;
   const group=new Group();group.name='配達人の普請場';
-  let bench,motion,bays=[],performer,detail,closed=false;
+  const siteFrame=makeJoinerySite(group,site),seed=craftShotSeed(site,take);
+  let bench,motion,bays=[],performer,detail,closed=false,lenses=[],activeIndex=-1;
+  function applyLens(index){
+    if(!lenses[index])return;
+    const lens=lenses[index];
+    siteFrame.advance(index,motion.cuts.length);
+    camera.position.copy(lens.eye);camera.lookAt(lens.focus);camera.fov=lens.fov;
+    camera.userData.joineryFaceDistance=lens.faceDistance;
+    camera.setViewOffset(lens.width,lens.height,0,lens.offset,lens.width,lens.height);
+    camera.updateMatrixWorld();activeIndex=index;
+  }
+  function planLenses(w,h,available){
+    const order=craftShotOrder(seed,motion.cuts.length),choices=[];
+    const check=bench.detail?()=>true:visibleWorkArea(scene,group,bench,canStand,27);
+    const sight=(target,eye)=>siteFrame.clear(target,eye) && check(target,eye);
+    const side=seed&32?1:-1;
+    for(const [i,desired] of order.entries()){
+      siteFrame.advance(i,order.length);
+      const stage=siteFrame.extents(),previous=choices.at(-1)?.style;
+      const alternatives=[desired,'eye','master','low','wide','face'].filter(k=>k!==previous);
+      let lens=null;
+      for(const style of new Set([...alternatives,previous].filter(Boolean))){
+        // Look past the bracing palm for the low/eye hammer shots; the
+        // working sleeve and raised mallet otherwise pass across both eyes.
+        const gripSide=motion.cuts[i].tool==='mallet' && (style==='low' || style==='eye')?-1:side;
+        lens=composeCraftLens(style,bench,size,w,h,available,gripSide,sight,stage);
+        if(lens)break;
+      }
+      if(!lens)return null;
+      choices.push(lens);
+    }
+    return choices;
+  }
   function prepare(useDetail){
     bench=useDetail?{x:0,y:0,z:0,yaw:0,detail:true,feet:[0,0],legs:[0,0,0,0]}:field;
     group.position.set(bench.x,bench.y,bench.z);group.rotation.y=bench.yaw;
-    if(useDetail)detail??=closeWorkroom();
+    if(useDetail)detail??=closeWorkroom(scene);
     (useDetail?detail.scene:scene).add(group);
     for(const b of bays){b.group.removeFromParent();b.dispose();}
     motion=craftMotion(site,player,bench);
     bays=motion.cuts.map(cut=>makeCraftBay(cut,motion.height,bench.legs));
     for(const b of bays)group.add(b.group);
-    group.updateMatrixWorld(true);
+    group.updateMatrixWorld(true);siteFrame.position(bench);
   }
   function dispose(){
     if(closed)return;closed=true;
-    performer?.dispose();group.removeFromParent();for(const b of bays)b.dispose();detail?.dispose();
+    siteFrame.dispose();performer?.dispose();group.removeFromParent();for(const b of bays)b.dispose();detail?.dispose();
     camera.position.copy(original.position);camera.quaternion.copy(original.quaternion);camera.fov=original.fov;
     if(original.view){const v=original.view;camera.setViewOffset(v.fullWidth,v.fullHeight,v.offsetX,v.offsetY,v.width,v.height);}
     else camera.clearViewOffset();
+    if(original.nearFocus===undefined)delete camera.userData.joineryFaceDistance;
+    else camera.userData.joineryFaceDistance=original.nearFocus;
     camera.updateProjectionMatrix();camera.updateMatrixWorld();
   }
   try{
@@ -130,18 +141,19 @@ export function makeCraftScene(scene,camera,player,site,canStand=()=>true) {
     get detail(){return bench.detail?detail.scene:null;},
     endPose:{x:player.x,y:player.y,z:player.z,heading:player.heading},
     layout(w,h,available){
-      const first=craftLens(bench,size,w,h,available,()=>true);
-      const check=bench.detail?clearSight:visibleWorkArea(scene,group,bench,canStand,first.eye.distanceTo(first.focus)+2.5);
-      let lens=craftLens(bench,size,w,h,available,check);
-      if(!lens){prepare(true);lens=craftLens(bench,size,w,h,available);}
-      camera.position.copy(lens.eye);camera.lookAt(lens.focus);camera.fov=fov;
-      camera.setViewOffset(w,h,0,lens.offset,w,h);camera.updateMatrixWorld();
+      lenses=planLenses(w,h,available);
+      if(!lenses){
+        prepare(true);lenses=planLenses(w,h,available);
+      }
+      if(!lenses)throw new Error('普請を見渡せる撮影位置を選べません。');
+      applyLens(Math.max(0,activeIndex));
     },
     update(t){
       const f=motion.sample(t);
+      if(f.index!==activeIndex)applyLens(f.index);
       for(let i=0;i<bays.length;i++)bays[i].group.visible=i===f.index;
       bays[f.index].update(f);performer.update(f);
-      return f;
+      return {...f,shotStyle:lenses[f.index]?.style};
     },dispose,
   };
 }

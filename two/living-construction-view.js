@@ -17,7 +17,7 @@ export function createConstructionView({scene,camera,player,dialog,canStand,ente
   const button=key=>overlay.querySelector('[data-assembly="'+key+'"]');
   const pause=button('pause'),speed=button('speed'),stage=document.getElementById('stage');
   overlay.querySelector('.cook-controls').style.cssText='flex-wrap:wrap;justify-content:center';
-  let run=null;
+  let run=null,take=0;
 
   function end(outcome) {
     const r=run;
@@ -64,7 +64,7 @@ export function createConstructionView({scene,camera,player,dialog,canStand,ente
   function start(site,commit,done) {
     if(run || !dialog.open)return false;
     let shot;
-    try{shot=makeCraftScene(scene,camera,player,site,canStand);}
+    try{shot=makeCraftScene(scene,camera,player,site,canStand,take++);}
     catch(error){
       console.error('普請の支度ができませんでした。',error);
       done({ok:false,reason:'普請の道具を用意できませんでした。もう一度試してください。'});

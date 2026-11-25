@@ -101,7 +101,10 @@ export function createPeachOrchard(scene) {
     mesh.count=0;mesh.frustumCulled=false;mesh.receiveShadow=true;mesh.castShadow=shadow;
     mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);root.add(mesh);return mesh;
   }
-  const crowns=formCounts.map((capacity,i)=>peachModel(i).map(([geo,mat],j)=>batch(geo,mat,capacity,j===0)));
+  const crowns=formCounts.map((capacity,i)=>peachModel(i).map(([geo,mat],j)=>{
+    const model=batch(geo,mat,capacity,j===0);
+    model.userData.timberPeach=i;return model;
+  }));
   const map=new T.TextureLoader().load(new URL('./assets/world/peach-crowns.webp?v=painted-boughs-426',import.meta.url).href);
   map.colorSpace=T.SRGBColorSpace;map.anisotropy=4;
   // The crown impressions already contain directional light and twig shadows.

@@ -2,7 +2,7 @@ import { createHoldings, validHoldings } from './living-resources.js';
 import { craftState, validCraftState } from './living-craft.js';
 import { buildState, validBuildState } from './living-build-state.js';
 import { createMarketState, validMarketState } from './living-market.js';
-import { INITIAL_WORLD_MINUTE } from './world-clock.js';
+import { DAY_MINUTES, INITIAL_WORLD_MINUTE } from './world-clock.js';
 
 export const JOURNEY_VERSION = 14;
 
@@ -25,5 +25,11 @@ export function readLivingWorld(version, record) {
   if (version === 13 && record?.schemaVersion === 1 && validProvisions(record)) {
     return {...structuredClone(record), schemaVersion:2, ...buildState(), ...createMarketState(record.worldMinute)};
   }
-  return version === JOURNEY_VERSION && validLivingWorld(record) ? structuredClone(record) : null;
+  if(version!==JOURNEY_VERSION || !validLivingWorld(record))return null;
+  const world=structuredClone(record);
+  world.treeReadyAt??={};
+  // Old journeys kept only the stump ID. Give each one a full day, and
+  // persist its due time so subsequent loads do not restart the grace period.
+  for(const id of world.felledTrees)world.treeReadyAt[id]??=Math.ceil(world.worldMinute)+DAY_MINUTES;
+  return world;
 }
