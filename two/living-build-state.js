@@ -45,6 +45,11 @@ function validChest(s,world) {
   return Object.entries(s.costs).every(([id,n])=>n<=(s.inventory[id]??0)) &&
     Array.isArray(s.batches) && validCraftState({...world,batches:s.batches});
 }
+function matchesAnchor(part,anchor){
+  // Browsers can round the sin/cos of an imported floor angle differently.
+  return part.regionId===anchor.regionId && part.terrain===anchor.terrain &&
+    ['x','y','z','yaw'].every(axis=>Math.abs(part[axis]-anchor[axis])<1e-9);
+}
 export function validBuildState(world) {
   if (!world || !amount(world.wood,0,MAX_WOOD) || !amount(world.nextStructureId,1,Number.MAX_SAFE_INTEGER) ||
       !Array.isArray(world.structures) || world.structures.length>MAX_STRUCTURES ||
@@ -84,8 +89,7 @@ export function validBuildState(world) {
       if(s.parentId){
         const floor=byId.get(s.parentId),key=s.parentId+'/camp';
         if(s.kind!=='camp' || floor?.kind!=='floor' || occupied.has(key))return false;
-        const at=bedOnFloor(floor);
-        if(['x','y','z','yaw','terrain','regionId'].some(k=>s[k]!==at[k]))return false;
+        if(!matchesAnchor(s,bedOnFloor(floor)))return false;
         occupied.add(key);
       }
       continue;
@@ -99,7 +103,7 @@ export function validBuildState(world) {
     const floor=byId.get(s.parentId), key=s.parentId+'/'+s.kind;
     if (floor?.kind!=='floor' || floor.campId!==s.campId || occupied.has(key)) return false;
     const anchor=s.kind==='chest'?chestOnFloor(floor):floor;
-    if (['x','y','z','yaw','terrain','regionId'].some(k=>s[k]!==anchor[k])) return false;
+    if (!matchesAnchor(s,anchor)) return false;
     occupied.add(key);
   }
   return world.structures.every(s=>(s.kind!=='roof' && s.kind!=='wall') || occupied.has(s.parentId+'/posts'));

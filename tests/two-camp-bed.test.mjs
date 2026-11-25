@@ -36,6 +36,18 @@ test('the founding bed moves inside its own hut, travels with the deck and retai
   assert.equal(restored.wood,90);assert.equal(restored.wallet,40);
   assert.ok(moveStructureGroup(w,[c.id],{dx:-7,dz:-8}).ok);assert.equal(w.structures.find(s=>s.id===c.id).parentId,undefined);
 });
+test('imported furniture accepts engine rounding on a turned floor and rejects a displaced anchor',()=>{
+  const {w,c,deck}=campRoom();
+  assert.ok(moveStructureGroup(w,[c.id],{dx:deck.x-c.x,dz:deck.z-c.z}).ok);
+  assert.ok(placeStructure(w,'chest',deck).ok);
+  for(const kind of ['camp','chest']){
+    const exported=structuredClone(w),part=exported.structures.find(s=>s.kind===kind);
+    part.x+=4*Number.EPSILON*Math.abs(part.x);
+    assert.ok(readLivingWorld(14,exported));
+    part.x+=.00001;
+    assert.equal(readLivingWorld(14,exported),null);
+  }
+});
 test('hut doors, graded covers and the night clock preserve the walk up, lie down, tuck and wake sequence',()=>{
   const {w,c,deck}=campRoom();moveStructureGroup(w,[c.id],{dx:deck.x-c.x,dz:deck.z-c.z});
   const bed=w.structures.find(s=>s.id===c.id);
