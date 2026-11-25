@@ -50,7 +50,7 @@
 | 素材の種類、栽培 | [resources-and-farming.md](resources-and-farming.md) |
 | 17景の餅や特産品 | [world-regions.md](world-regions.md) |
 | 配合、形状、技法、属性 | [mochi-crafting.md](mochi-crafting.md) |
-| 土地条件、拠点、伐採 | [building.md](building.md) |
+| 斜面の基礎と材料費、拠点、伐採 | [building.md](building.md) |
 | 販売所、価格、需要 | [market-and-trade.md](market-and-trade.md) |
 | NPC、交流、好み | [npc-simulation.md](npc-simulation.md) |
 | AI文章の種類、モデル、費用 | [generative-ai.md](generative-ai.md) |
