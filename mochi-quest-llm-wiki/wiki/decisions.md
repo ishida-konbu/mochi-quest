@@ -4,6 +4,7 @@ type: governance
 status: active
 updated: 2026-11-26
 sources:
+  - ../raw/2026-11-26-action-revision.md
   - ../raw/2026-11-26-work-and-rest.md
   - ../raw/2026-11-25-interactive-building.md
   - ../raw/2026-11-25-open-forestry-level-foundations.md
@@ -51,6 +52,7 @@ sources:
 | D-22 | REQ | 探索中、立木のそばで手斧を三度入れ、倒木と切り株を現地に描く。時が経ち、建築と干渉しない木は再生する | [立木](building.md) |
 | D-23 | REQ | 餅作りと普請では地域音が続き、主人公の手が弾力を保つ。普請は仕事に応じた複数の画角を組み合わせる | [工房](mochi-crafting.md)・[普請](building.md) |
 | D-24 | REQ | 小屋の板床に寝床を置き、伸び、あくび、掛け物、時の移ろい、起床を現地で描く。寝具は四段階。各地の技法による習得条件は全域への展開時に決める | [野営](building.md)・[時計](world-clock.md) |
+| D-25 | REQ | 工作では旅姿の丸い手が伸び縮みする。伐採は一打ごとに幹を深く欠き、三打目で上下に割る。就寝は温泉の伸びを生かし、元の体格を保って寝台に横たわる | [餅作り](mochi-crafting.md)・[拠点](building.md)・[就寝](world-clock.md) |
 
 ## 未確定・要検証（OPEN）
 

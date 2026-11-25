@@ -10,7 +10,8 @@ import { timberId } from '../two/living-build-trees.js';
 import { DAY_MINUTES } from '../two/world-clock.js';
 import { fellingMotion } from '../two/exploration-felling.js';
 import { forestGeometry } from '../two/forest-mesh.js';
-import { fallingTimber } from '../two/falling-timber.js';
+import { isTimberHidden,isTimberFelled } from '../two/living-build-trees.js';
+import {fallingTimber,rootedTimber} from '../two/falling-timber.js';
 
 const birch=timberTree('birch:39941:2333:9507');
 function footing(x,z){
@@ -147,7 +148,7 @@ test('a low hanging birch branch clears an eave outside the falling bole',()=>{
   });
 });
 
-test('the split above every moso culm hinges on its own planted ring, including its individual branches and caps',()=>{
+test('each severed moso culm rolls about the lip of its own stump without pushing its bottom into the earth',()=>{
   const tree=timberTree(timberId(TREES.find(t=>t.kind==='moso'))),cut=timberCut(tree);
   const frame=timberWood(tree.source),scene=new T.Scene(),geometry=forestGeometry(tree.source.form);
   const mat=new T.MeshLambertMaterial(),grove=new T.InstancedMesh(geometry,mat,1);
@@ -166,12 +167,53 @@ test('the split above every moso culm hinges on its own planted ring, including 
         const source=geometry.userData.culms[stem.culm];
         assert.equal(part.geometry.index.count,source.endIndex-source.firstIndex);
         assert.ok(stalk.children.some(m=>!m.isInstancedMesh && m.geometry.index.count>=96));
-        const pivot=new T.Vector3(stem.x-cut.x,0,stem.z-cut.z);
-        pivot.applyMatrix4(stalk.matrixWorld);
-        assert.ok(pivot.distanceTo(new T.Vector3(stem.x,stem.y,stem.z))<1e-7);
+        const center=new T.Vector3(stem.x-cut.x,0,stem.z-cut.z),levels=[];
+        for(let k=0;k<180;k++){
+          const a=k*Math.PI/90;
+          levels.push(center.clone().add(new T.Vector3(Math.sin(a)*stem.radius,0,Math.cos(a)*stem.radius)).applyMatrix4(stalk.matrixWorld).y);
+        }
+        assert.ok(Math.min(...levels)>=stem.y-1e-7);
+        assert.ok(Math.min(...levels)<stem.y+.00002);
+        if(t>.4)assert.ok(center.applyMatrix4(stalk.matrixWorld).y>stem.y+.004);
       }
     }
     assert.ok(top.group.quaternion.angleTo(new T.Quaternion())>.2);top.dispose();
   });
   grove.dispose();geometry.dispose();mat.dispose();
+});
+
+test('the axe opens a measurable V at both strikes while the planted trunk remains solid, then releases the sloping upper cut',()=>{
+  const cut=timberCut(birch),w=createLivingWorld(),scene=new T.Scene();
+  const g=new T.CylinderGeometry(cut.radius,cut.radius,3,32),m=new T.MeshStandardMaterial(),stem=new T.Mesh(g,m);
+  stem.position.set(cut.x,cut.y+.95,cut.z);stem.userData.timberSource=birch.source;scene.add(stem);
+  withBuildTerrain(w,()=>{
+    const player=footing(cut.x,cut.z+1.7);
+    const falling=fallingTimber(scene,birch,player),mouth=falling.beginCut();
+    const cutMesh=falling.group.getObjectByName('斧が割り開いた木口'),plan=fellingMotion(birch,player,()=>true,mouth);
+    assert.ok(isTimberHidden(birch.source));assert.equal(isTimberFelled(birch.source),false);
+    const native=stem.geometry.attributes.position.array.slice();
+    let last=0;
+    for(const [i,t] of plan.impactTimes.entries()){
+      const f=plan.sample(t);close(f.at[2],mouth.edges[i]);close(f.biteDepth,i+1);
+      assert.ok(mouth.front-mouth.edges[i]>last);last=mouth.front-mouth.edges[i];
+      falling.bite(f.biteDepth);
+      const a=cutMesh.geometry.attributes.position;
+      let low=Infinity,high=-Infinity;
+      for(let j=0;j<a.count;j++){low=Math.min(low,a.getZ(j));high=Math.max(high,a.getY(j));}
+      close(low,mouth.edges[i],1e-6);
+      assert.ok(high>.13*cut.radius);
+    }
+    assert.ok(fellTree(w,birch.id).ok);falling.update(.56);
+    const a=cutMesh.geometry.attributes.position;
+    cutMesh.geometry.computeBoundingBox();
+    assert.ok(cutMesh.geometry.boundingBox.min.z<-.9*cut.radius);
+    const point=new T.Vector3();cutMesh.updateWorldMatrix(true,false);
+    for(let i=0;i<a.count;i++)assert.ok(point.fromBufferAttribute(a,i).applyMatrix4(cutMesh.matrixWorld).y>=cut.y-.0001);
+    const stump=rootedTimber(scene,{...birch,cut});
+    assert.ok(stump?.children.length>=2);
+    stump.children.at(-1).geometry.computeBoundingBox();
+    assert.ok(stump.children.at(-1).geometry.boundingBox.min.z<-.9*cut.radius);
+    stump.userData.releaseStump();falling.dispose();
+    assert.deepEqual(stem.geometry.attributes.position.array,native);
+  });g.dispose();m.dispose();
 });

@@ -1,4 +1,4 @@
-import { isTimberFelled } from './living-build-trees.js';
+import { isTimberHidden } from './living-build-trees.js';
 import { blossomGeometry, peachMaterials, createPeachOrchard } from './flowering-peaches.js';
 import { DISTRICTS } from './geography.js';
 import { summitJoinery, orchardCarving } from './pilgrimage-carving.js';
@@ -228,7 +228,7 @@ function gateBlossoms(scene){
   return camera=>{
     if(!camera)return;
     const dx=wrapDelta(x-camera.position.x),dz=wrapDelta(z-camera.position.z);
-    root.visible=!isTimberFelled(GATE_PEACH) && dx*dx+dz*dz<166**2;
+    root.visible=!isTimberHidden(GATE_PEACH) && dx*dx+dz*dz<166**2;
     if(root.visible)root.position.set(camera.position.x+dx,root.position.y,camera.position.z+dz);
   };
 }
@@ -389,7 +389,7 @@ function fallingPetals(scene) {
   return (time,player)=>{
     let count=0;
     function scatter(tree){
-      if(count===capacity || isTimberFelled(tree))return;
+      if(count===capacity || isTimberHidden(tree))return;
       if(!soil.has(tree))soil.set(tree,terrainMeshHeight(tree.x,tree.z));
       const y=soil.get(tree),height=tree.size*4.6;
       if(Math.abs(player.y-y-height*.6)>22)return;

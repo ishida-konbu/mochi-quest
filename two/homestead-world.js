@@ -2,12 +2,14 @@ import * as T from './vendor/three.module.min.js';
 import { wrapDelta } from './terrain.js';
 import { timberTree, stumpCovered } from './living-build-land.js';
 import { BUILD_MODULES } from './living-build-state.js';
+import {rootedTimber} from './falling-timber.js';
 import { timberCut } from './homestead-timber-section.js';
 import { homesteadGeometry } from './homestead-carpentry.js';
 import { hokoraCarpentry } from './kaede-hokora-mesh.js';
 import { foundationMembers, drawFoundationMember } from './homestead-foundation.js';
 import { plantedFootprints } from './homestead-groundcover.js';
 import { makePriceTag } from './homestead-price-tags.js';
+import {bedLayoutKey,campMattress,matEdges,campStaff} from './camp-bedding.js';
 import { campCover } from './camp-cover.js';
 import { homesteadFinish } from './homestead-pigment.js';
 import { makeCookingServing } from './living-craft-art.js';
@@ -19,7 +21,7 @@ const geometry = (kind,terrain,species) => {
   return shared.get(key);
 };
 const previewColors = [0xc57561,0xc1d9c2];
-function surveyFrame(kind,ok,terrain,indoors) {
+function surveyFrame(kind,ok,terrain,layout) {
   const {width,depth}=BUILD_MODULES[kind];
   const w=width/2,d=depth/2,y=.052, coords=[];
   const line=(a,c)=>coords.push(...a,...c);
@@ -43,8 +45,14 @@ function surveyFrame(kind,ok,terrain,indoors) {
   }
   if(kind==='wall')for(const y of [.18,2.23])line([-1.375,y,-1.23],[1.375,y,-1.23]);
   if(kind==='camp'){
-    if(!indoors)line([-.78,0,-.72],[-.78,1.79,-.72]);
-    rectangle(.57,.86,.13);
+    const m=campMattress(layout);
+    if(layout!==true)for(const [from,to] of campStaff)line(from,to);
+    const outline=(z,side)=>[matEdges(m,z)[side],.14,z];
+    for(const z of [m.head,m.foot])line(outline(z,0),outline(z,1));
+    for(let i=0;i<12;i++)for(const side of [0,1]){
+      const z=m.head+(m.foot-m.head)*i/12;
+      line(outline(z,side),outline(z+(m.foot-m.head)/12,side));
+    }
   }
   if(kind==='stand'){rectangle(.86,.43,.88);rectangle(.89,.54,1.98);}
   if(kind==='chest'){rectangle(.56,.35,.78);}
@@ -121,31 +129,32 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
   group.name='旅人の野営地と餅売り棚';
   scene.add(group);
   const resident=new Map(),stumps=new Map(),cells=new Map();
-  const chips=new T.Group();
   let planted, worksite=null, clearedGround;
   function setConstructionSite(site) {
     worksite=site && !site.parentId ? {...site,kind:site.kind==='hut'?'floor':site.kind} : null;
     planted=null;
+  }
+  function getBedRoof(bed){
+    if(!bed.parentId)return null;
+    const roof=world?.structures.find(s=>s.kind==='roof' && s.parentId===bed.parentId);
+    return roof?resident.get(roof.id):null;
   }
   let occupiedBed=null;
   function setOccupiedBed(id){
     occupiedBed=id;
     for(const [key,mesh] of resident)if(mesh.userData.cover)mesh.userData.cover.visible=key!==id;
   }
-  let world=null,knownCuts=null,count=0,previewInk,burstAt=0;
+  let world=null,knownCuts=null,count=0,previewInk;
   const previews=[];
   let editorHidden=new Set();
-  const chipD=new T.TetrahedronGeometry(.035),chipM=new T.MeshLambertMaterial({color:0xc9ab80});
-  for(let i=0;i<7;i++){
-    const chip=new T.Mesh(chipD,chipM);
-    chip.scale.set(1.6,.24,.72);
-    chips.add(chip);
+  function releaseResident(mesh){
+    if(mesh.userData.releaseStump)mesh.userData.releaseStump();
+    else {removeFoundation(mesh);removeGoods(mesh);if(mesh.isInstancedMesh)mesh.dispose();}
+    mesh.removeFromParent();
   }
-  chips.visible=false;group.add(chips);
-
   function clearResident() {
     for(const child of resident.values()){
-      removeFoundation(child);removeGoods(child);child.removeFromParent();if(child.isInstancedMesh)child.dispose();
+      releaseResident(child);
     }
     resident.clear();
   }
@@ -171,14 +180,15 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     let count=0;
     for(const p of sites){
       if(!p || !Object.hasOwn(BUILD_MODULES,p.kind) || ![p.x,p.y,p.z].every(Number.isFinite))continue;
-      const form=[p.kind,p.terrain,Boolean(p.ok),Boolean(p.parentId)].join('/');
+      const layout=p.kind==='camp'?bedLayoutKey(p):undefined;
+      const form=[p.kind,p.terrain,Boolean(p.ok),layout].join('/');
       let mesh=previews[count];
       if(mesh?.userData.previewForm!==form){
         if(mesh)dropPreview(mesh);
-        mesh=new T.Mesh(geometry(p.kind,p.terrain,p.parentId?'indoors':undefined),previewInk[Number(Boolean(p.ok))]);
+        mesh=new T.Mesh(geometry(p.kind,p.terrain,layout),previewInk[Number(Boolean(p.ok))]);
         mesh.name='仮置き・'+BUILD_MODULES[p.kind].name;
         mesh.userData.previewForm=form;
-        mesh.add(surveyFrame(p.kind,p.ok,p.terrain,Boolean(p.parentId)));mesh.renderOrder=2;
+        mesh.add(surveyFrame(p.kind,p.ok,p.terrain,layout));mesh.renderOrder=2;
         previews[count]=mesh;group.add(mesh);
       }
       mesh.position.set(p.x,p.y,p.z);mesh.rotation.y=p.yaw||0;
@@ -204,7 +214,7 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     }
     return objects;
   }
-  function readCuts(showBurst) {
+  function readCuts() {
     const ids=world?.felledTrees || [];
     if(knownCuts===ids && ids.length===count)return;
     const previous=new Map(stumps);
@@ -217,13 +227,7 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
         if(!standing)continue;
         tree={...standing,cut:timberCut(standing)};
       }
-      if(!previous.delete(id)){
-        changed.push(tree);
-        if(showBurst && ids.length===count+1){
-          chips.position.set(tree.cut.x,tree.cut.y,tree.cut.z);
-          chips.visible=true;burstAt=performance.now();
-        }
-      }
+      if(!previous.delete(id))changed.push(tree);
       stumps.set(id,tree);
       const key=stumpKey(tree.x,tree.z);
       if(!cells.has(key))cells.set(key,[]);
@@ -234,10 +238,10 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
   }
   function setLivingWorld(living) {
     if(world===living)return;
-    clearResident();clearPreview();chips.visible=false;
+    clearResident();clearPreview();
     world=living;
     knownCuts=null;
-    readCuts(false);
+    readCuts();
   }
   function draw(s,kind,viewer,visible) {
     const stump=kind==='stump',at=stump?s.cut:s;
@@ -250,10 +254,12 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     }
     if(d2>(stump?ranges.stump:ranges.building)**2)return;
     visible.add(s.id);
+    const layout=kind==='camp'?bedLayoutKey(s):undefined;
     let mesh=resident.get(s.id);
     if(!mesh){
-      const stock=geometry(kind,s.terrain,stump?s.kind:s.parentId?'indoors':undefined);
-      if(stump && s.cut.culms){
+      const stock=geometry(kind,s.terrain,stump?s.kind:layout);
+      if(stump)mesh=rootedTimber(scene,s);
+      if(!mesh && stump && s.cut.culms){
         mesh=new T.InstancedMesh(stock,homesteadFinish(),s.cut.culms.length);
         const stem=new T.Object3D();
         s.cut.culms.forEach((ring,i)=>{
@@ -262,22 +268,23 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
           stem.updateMatrix();mesh.setMatrixAt(i,stem.matrix);
         });
         mesh.computeBoundingSphere();
-      } else mesh=new T.Mesh(stock,homesteadFinish());
+      } else if(!mesh)mesh=new T.Mesh(stock,homesteadFinish());
       mesh.castShadow=mesh.receiveShadow=true;
       mesh.name=stump?'木口の残る切り株':BUILD_MODULES[kind].name;
       group.add(mesh);resident.set(s.id,mesh);
-      if(stump){
+      if(stump && !mesh.userData.releaseStump){
         const scale=s.cut.culms?1:s.cut.radius/.31;
         mesh.position.y=s.cut.y-.42;
         mesh.scale.set(scale,1,scale);
       }
-    } else if(!stump) mesh.geometry=geometry(kind,s.terrain,s.parentId?'indoors':undefined);
+    } else if(!stump) mesh.geometry=geometry(kind,s.terrain,layout);
     mesh.position.x=viewer.x+dx;mesh.position.z=viewer.z+dz;
     if(!stump){mesh.visible=!editorHidden.has(s.id);mesh.position.y=s.y;mesh.rotation.y=s.yaw;fitFoundation(mesh,kind,s);}
     if(kind==='camp'){
-      if(!mesh.userData.cover || mesh.userData.beddingGrade!==(s.beddingGrade??0)){
+      if(!mesh.userData.cover || mesh.userData.beddingGrade!==(s.beddingGrade??0) || mesh.userData.bedLayout!==layout){
         mesh.userData.cover?.removeFromParent();
-        mesh.userData.beddingGrade=s.beddingGrade??0;mesh.userData.cover=campCover(mesh.userData.beddingGrade);mesh.add(mesh.userData.cover);
+        mesh.userData.bedLayout=layout;mesh.userData.beddingGrade=s.beddingGrade??0;
+        mesh.userData.cover=campCover(mesh.userData.beddingGrade,false,layout);mesh.add(mesh.userData.cover);
       }
       mesh.userData.cover.visible=s.id!==occupiedBed;
     }
@@ -292,17 +299,7 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
       scene.userData.homesteadPlots=plots;
       pruneUnderstory?.(plots);
     }
-    readCuts(true);
-    if(chips.visible){
-      const age=Math.max(0,(performance.now()-burstAt)/1000);
-      chips.visible=age<.46;
-      for(let i=0;i<chips.children.length && chips.visible;i++){
-        const a=i*2.40,s=.13+(.61+.11*(i%3))*age;
-        const chip=chips.children[i];
-        chip.position.set(Math.cos(a)*s,Math.max(-.40,(1.28+i*.09)*age-6*age*age),Math.sin(a)*s);
-        chip.rotation.set(i+age*2.1,age*3.5,age*5.8);
-      }
-    }
+    readCuts();
     if(!world.structures.length && !stumps.size && !resident.size)return;
     const visible=new Set();
     for(const s of world.structures)draw(s,s.kind,eye,visible);
@@ -316,8 +313,8 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     }
     for(const [id,mesh] of resident){
       if(visible.has(id))continue;
-      removeFoundation(mesh);removeGoods(mesh);mesh.removeFromParent();if(mesh.isInstancedMesh)mesh.dispose();resident.delete(id);
+      releaseResident(mesh);resident.delete(id);
     }
   }
-  return {setOccupiedBed,setLivingWorld,setBuildingPreview,setBuildingPreviews,getBuildEditorObjects,setBuildEditorHidden,setConstructionSite,update};
+  return {setOccupiedBed,getBedRoof,setLivingWorld,setBuildingPreview,setBuildingPreviews,getBuildEditorObjects,setBuildEditorHidden,setConstructionSite,update};
 }

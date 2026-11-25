@@ -1,6 +1,7 @@
 // Dimensions in metres, measured in the same local frame as the placement
 // survey. +Z is the entrance. Timber UVs follow each beam even on the roof.
 import * as T from './vendor/three.module.min.js';
+import {campMattress,matEdges,campPennon,campStaff} from './camp-bedding.js';
 import { TREE_FAMILIES } from './forest-forms.js';
 import { hokoraCarpentry } from './kaede-hokora-mesh.js';
 
@@ -282,23 +283,32 @@ function stand(part) {
   for(const z of [-.279,.319])plank(b,-.17,.918,z,1.00,.044,.026,grey);
   for(const x of [-.658,.318])plank(b,x,.918,.02,.022,.044,.58,grey,'z');
 }
-function camp(part,terrain,indoors=false) {
+function camp(part,terrain,layout=false) {
+  const indoors=layout===true || layout==='indoors',m=campMattress(layout),length=m.foot-m.head,mid=(m.foot+m.head)/2;
   let b=part('bed');
   // Ground runners have buried toes. Indoors their flat soles rest on the floorboards.
-  for(const x of [-.44,.44])plank(b,x,indoors?.026:-.08,.06,.127,indoors?.052:.26,1.83,dark,'z');
-  // The split-bamboo sleeping platform drains through its interstices.
-  for(let i=0;i<18;i++)spindle(b,[-.567,.071,-.75+i*.098],[.567,.071,-.75+i*.098],.047,.045,wood);
+  for(const x of [-.44,.44])plank(b,x,indoors?.026:-.08,mid,.127,indoors?.052:.26,length-.07,dark,'z');
+  const slats=Math.ceil(length/.08),pitch=length/slats;
+  for(let i=0;i<slats;i++){
+    const z=m.head+(i+.5)*pitch,[left,right]=matEdges(m,z);
+    spindle(b,[left,.082,z],[right,.082,z],pitch*.47,pitch*.46,wood,'wood',12);
+    // Dark lashings bind the canes to the lengthwise sleepers beneath.
+    for(const x of [-.44,.44])spindle(b,[x-.008,.082,z],[x+.008,.082,z],pitch*.49,pitch*.49,straw,'rope',10);
+  }
   b=part('mat');
-  const mat=(u,v,dy=0)=>[(u-.5)*1.09,.125+.007*Math.sin(Math.PI*u)*Math.sin(Math.PI*v)+dy,-.75+1.72*v];
-  panel(b,'rush','#b9a67b',8,12,mat);
-  for(const s of [0,.944])panel(b,'paper','#696f5b',1,12,(u,v)=>mat(s+u*.056,v,.0017),[.22,7]);
+  const mat=(u,v,dy=0)=>{
+    const z=m.head+.015+v*(length-.030),[left,right]=matEdges(m,z);
+    return [left+.014+u*(right-left-.028),.130+.004*Math.sin(Math.PI*u)*Math.sin(Math.PI*v)+dy,z];
+  };
+  panel(b,'rush','#b9a67b',12,27,mat,[1.45,1.28]);
+  for(const s of [0,.958])panel(b,'paper','#696f5b',1,27,(u,v)=>mat(s+u*.042,v,.0017),[.22,8]);
   // The pillow is a rolled textile; both ends have recessed spiral seams.
   b=part('pillow');
   const roll=(u,v,r=1)=>{
     const a=tau*v;
     const tie=t=>Math.exp(-((u-t)**2)/.00049);
     const c=.90+.10*Math.sin(Math.PI*u)+.019*Math.sin(4*a+.8*u)-.058*(tie(.16)+tie(.82));
-    return [(u-.5)*.925,.266+Math.sin(a)*.129*r*c,-.54+Math.cos(a)*.133*r*c];
+    return [m.x+(u-.5)*m.pillowWidth,.266+Math.sin(a)*.129*r*c,m.pillowZ+Math.cos(a)*.133*r*c];
   };
   panel(b,'paper','#c7b38d',32,36,roll,[1.3,1.1]);
   for(const end of [0,1]){
@@ -306,7 +316,7 @@ function camp(part,terrain,indoors=false) {
       const rim=[roll(end,j/36),roll(end,(j+1)/36)];
       if(end===1)rim.reverse();
       const tri=[roll(end,0,0),...rim];
-      b.face('paper',straw,tri,{uvs:tri.map(([,y,z])=>[.5+(y-.266)*3,.5+(z+.54)*3])});
+      b.face('paper',straw,tri,{uvs:tri.map(([,y,z])=>[.5+(y-.266)*3,.5+(z-m.pillowZ)*3])});
     }
     for(let k=0;k<24;k++){
       const p=t=>roll(end,t*1.6,.18+.60*t).map((v,i)=>v+(i===0?(end-.5)*.003:0));
@@ -321,14 +331,17 @@ function camp(part,terrain,indoors=false) {
   for(const start of [.14,.80])panel(b,'paper','#827e65',5,36,(u,v)=>roll(start+u*.052,v,1.025));
   if(indoors)return;
   b=part('staff');
-  const x=-.78,z=-.72;
-  spindle(b,[x,-.21,z],[x,1.79,z],.038,.025,wood);
-  spindle(b,[x-.032,1.63,z],[x+.493,1.63,z],.016,.012,wood);
-  const pennon=(u,v)=>[x+.041+.39*u,1.63-v*(.48-.16*u)-.012*Math.sin(u*Math.PI),
-    z+.020+.054*Math.sin(1.7*Math.PI*u+.9*v)*u];
-  panel(b,'paper','#ac7963',10,6,pennon,[1.3,1.4]);
-  panel(b,'paper',flax,8,1,(u,v)=>{const p=pennon(u,.22+.044*v);p[2]+=.006;return p;});
-  for(const y of [1.60,1.66])spindle(b,[x,y,z],[x,y+.022,z],.043,.042,straw,'rope');
+  for(const [from,to,r] of campStaff)spindle(b,from,to,r,r*.86,wood,'wood',12);
+  panel(b,'paper','#ac7963',10,6,campPennon,[1.3,1.4]);
+  panel(b,'paper',flax,8,1,(u,v)=>{const p=campPennon(u,.22+.05*v);p[2]+=.004;return p;});
+  const [heel,head]=campStaff[2];
+  for(const [height,r] of [[.055,.039],[.397,.037],[.432,.036],[1.845,.034],[1.890,.032]]){
+    const point=dy=>{
+      const t=(height+dy-heel[1])/(head[1]-heel[1]);
+      return heel.map((v,i)=>v+(head[i]-v)*t);
+    };
+    spindle(b,point(0),point(.020),r,r,straw,'rope',12);
+  }
 }
 function fence(part) {
   // Yotsume-gaki. The slim vertical culms cross the horizontal ones,
@@ -428,12 +441,12 @@ export const HUT_MODULES=['floor','posts','wall','roof'];
 // The permanent world batches the complete carpentry into one draw call.
 // During construction each removable member is built by the same drawing
 // instructions into its own buffer, retaining its joints, grain, and fasteners.
-export function drawHomesteadModule(kind,terrain,writer) {
-  builders[kind](writer,terrain);
+export function drawHomesteadModule(kind,terrain,writer,layout) {
+  builders[kind](writer,terrain,layout);
 }
 export function homesteadGeometry(kind,terrain='plain',species) {
   const b=hokoraCarpentry();
-  if(kind==='camp' && species==='indoors')camp(()=>b,terrain,true);
+  if(kind==='camp')camp(()=>b,terrain,species);
   else if(kind==='stump')stump(b,terrain,species);
   else for(const module of kind==='hut'?HUT_MODULES:[kind])drawHomesteadModule(module,terrain,()=>b);
   return b.finish();

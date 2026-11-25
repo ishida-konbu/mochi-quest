@@ -27,13 +27,14 @@ export function createCookingPerformer(parent,player) {
   const {root,pose,rice}=hero;
   const arms=hero.cookingArms ??= makeCookingArms(hero);
   const sole=hero.cookingSoles ??= rice.legs.map(leg=>soleContact(rice.body,leg));
-  const shoulder=new Vector3(),pad=new Vector3();
+  const pad=new Vector3(),restPad=new Vector3();
   root.name='台所に立つお餅の配達人';
   parent.add(root);
   const goal=new Vector3(),point=new Vector3(),mean=new Vector3(),aim=new Vector3();
   const skin={mode:player.mode,buffs:player.buffs,grounded:true,gestureSample:{time:0,weight:1}};
   const giant=player.buffs?.full>0?1.28:1;
-  let active=true;
+  let active=true,previousTime,previousCut;
+  const previousPlace=new Vector3();
   function solve(probe,where) {
     mean.set(0,0,0);
     for(const i of probe.vertices)mean.add(rice.body.getVertexPosition(i,point));
@@ -50,11 +51,22 @@ export function createCookingPerformer(parent,player) {
     root.position.fromArray(position);
     root.rotation.y=heading;
     skin.gestureSample.time=time;
-    rice.smile=frame.phase==='finish'?1:.25;
-    // Both hands follow the kitchen tools. The travel rig carries the gohei.
-    poseRice(rice,skin,time,0,'curious',null,false);
-    const breathing=.006*Math.sin(2.15*time),height=1+lift*.58-.045*effort+breathing;
-    pose.scale.set(giant/Math.sqrt(height),giant*height,giant/Math.sqrt(height));
+    skin.gestureSample.smile=frame.phase==='finish'?1:.25;
+    // A planted stroke loads the same damped squash as a landing. The tool
+    // can stop at the board while the weight behind it is still settling.
+    skin.workStrain=clamp(.60*lift-.083*effort,-.15,.09);
+    const elapsed=time-previousTime;
+    const seek=previousTime===undefined || elapsed<0 || elapsed>.30 || previousCut!==frame.index;
+    const dt=seek?0:elapsed;
+    if(seek){
+      rice.press=skin.workStrain;rice.velocity=0;rice.pull=0;rice.pullV=0;
+      rice.step=time*2.4;skin.speed=0;
+    }else if(dt>0){
+      skin.speed=clamp(Math.hypot(position[0]-previousPlace.x,position[2]-previousPlace.z)/dt,0,4.5);
+    }
+    previousTime=time;previousCut=frame.index;previousPlace.copy(root.position);
+    const weight=poseRice(rice,skin,time,dt,'curious',null,false);
+    pose.scale.set(giant*weight.width,giant*weight.stretch,giant*weight.width);
     // Shift weight towards the working hands; the soles remain independently
     // planted and the head turns to follow the bowl, mallet or serving dish.
     const dx=frame.focus[0]-position[0],dz=frame.focus[2]-position[2];
@@ -68,18 +80,14 @@ export function createCookingPerformer(parent,player) {
     rice.head.rotateX(clamp((position[1]+giant*1.20-aim.y)*.20,-.13,.17)+lean*.18);
     root.updateWorldMatrix(true,false);
     root.updateMatrixWorld(true);
-    const torso={width:giant,mid:giant*.82,height:giant*.83,depth:giant*.77,front:.065+work*.115};
-    if(player.mode==='kagami'){torso.mid=.59*giant;torso.height=.59*giant;}
+    const c=Math.cos(heading),s=Math.sin(heading);
+    const surface=frame.supportHeight?(x,z)=>frame.supportHeight(position[0]+x*c+z*s,position[2]-x*s+z*c)-position[1]:null;
     for(let i=0;i<2;i++){
       solve(sole[i],frame.feet[i]);
-      const side=i?1:-1;
-      // Start the limb inside the cheek. The shoulder ring must stay buried
-      // even when a resting wrist folds back towards its attachment.
-      shoulder.set(side*.66,.85,.42);
-      root.worldToLocal(rice.model.localToWorld(shoulder));
       pad.fromArray(frame.hands[i]);
       root.worldToLocal(parent.localToWorld(pad));
-      arms[i].update(shoulder,pad,giant*(player.mode==='kagami'?.85:1),torso,time,effort,frame.index??frame.phase);
+      if(frame.restHands)root.worldToLocal(parent.localToWorld(restPad.fromArray(frame.restHands[i])));
+      arms[i].update(pad,giant,time,frame.index??frame.phase,surface,restPad,frame.handWork?.[i]);
     }
     hero.wrap.visible=player.buffs?.wrap>0;
     hero.wrap.scale.set(1.075,1,1.042);

@@ -9,18 +9,18 @@ import { homesteadFinish } from './homestead-pigment.js';
 import {composeCraftLens,craftShotSeed,craftShotOrder} from './build-craft-lenses.js';
 import {makeJoinerySite} from './build-craft-site.js';
 
-function clearSight(a,b){
+function clearSight(a,b,baseOnly){
   const n=Math.ceil(a.distanceTo(b)/.19);
   for(let i=1;i<=n;i++){
     const u=i/n,x=a.x+(b.x-a.x)*u,y=a.y+(b.y-a.y)*u,z=a.z+(b.z-a.z)*u;
-    if(y<terrainContactHeight(x,z)+.06 || staticVolumeAt(x,z,y-.022,.06,.11))return false;
+    if(y<terrainContactHeight(x,z)+.06 || staticVolumeAt(x,z,y-.022,.06,.11,baseOnly))return false;
   }
   return true;
 }
 // Colliders describe trunks and walls; the actual paint includes overhanging
 // crowns, grass, awnings and people. Ray-test those visible surfaces as well.
 // Limit instanced batches to individual objects inside the tripod's reach.
-export function visibleWorkArea(scene,rig,bench,canStand=()=>true,reach=12){
+export function visibleWorkArea(scene,rig,bench,canStand=()=>true,reach=12,baseOnly=false){
   const middle=new Vector3(bench.x,bench.y+.75,bench.z),sphere=new Sphere();
   const matrix=new Matrix4(),instance=new Matrix4(),meshes=[],ray=new Raycaster(),hits=[];
   const near=s=>s.center.distanceToSquared(middle)<(reach+s.radius)**2;
@@ -28,7 +28,7 @@ export function visibleWorkArea(scene,rig,bench,canStand=()=>true,reach=12){
   const previous=rig.visible;rig.visible=false;
   try{
     scene.traverseVisible(m=>{
-      if(!m.isMesh || !m.geometry.attributes.position)return;
+      if(!m.isMesh || !m.geometry.attributes.position || m.material?.colorWrite===false)return;
       if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();
       if(m.isInstancedMesh || m.isSkinnedMesh){
         if(!m.boundingSphere)m.computeBoundingSphere();
@@ -45,7 +45,7 @@ export function visibleWorkArea(scene,rig,bench,canStand=()=>true,reach=12){
     });
   }finally{rig.visible=previous;}
   return (target,eye)=>{
-    if(!clearSight(target,eye))return false;
+    if(!clearSight(target,eye,baseOnly))return false;
     const range=eye.distanceTo(target);
     ray.set(eye,target.clone().sub(eye).normalize());ray.near=.035;ray.far=range-.025;
     // Leave the audience side of the lens clear of passing villagers too.
@@ -102,8 +102,9 @@ export function makeCraftScene(scene,camera,player,site,canStand=()=>true,take=0
       for(const style of new Set([...alternatives,previous].filter(Boolean))){
         // Look past the bracing palm for the low/eye hammer shots; the
         // working sleeve and raised mallet otherwise pass across both eyes.
-        const gripSide=motion.cuts[i].tool==='mallet' && (style==='low' || style==='eye')?-1:side;
-        lens=composeCraftLens(style,bench,size,w,h,available,gripSide,sight,stage);
+        const tool=motion.cuts[i].tool;
+        const gripSide=tool==='mallet'?(style==='low'?1:-1):side;
+        lens=composeCraftLens(style,bench,size,w,h,available,gripSide,sight,stage,tool,player.mode==='kagami');
         if(lens)break;
       }
       if(!lens)return null;

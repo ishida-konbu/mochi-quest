@@ -35,19 +35,22 @@ function subjectBox(lo,hi){
 
 // A face insert intentionally crops the soles and shoulders. The mouth and
 // eyes stay sharp above the foreground tool. All other shots cover the work.
-export function composeCraftLens(style,bench,size,width,height,available,side,sight,stage=[]){
+export function composeCraftLens(style,bench,size,width,height,available,side,sight,stage=[],tool,stacked=false){
   const aspect=width/height,open=Math.max(.24,Math.min(1,available/height));
-  const face=v(0,.94*size,.87*size);
+  const face=stacked?v(0,.74*size,1.10*size):v(0,.90*size,.91*size);
   const close=style==='face',wide=style==='wide' && stage.length>0;
   const fov=close?32:wide?43:style==='low'?49:38, tan=Math.tan(fov*Math.PI/360);
   const toolMarks=[v(-.24,.64*size,.03),v(.31,.71*size,.03),v(0,.61*size,-.36),v(.28,.83*size,.52)];
-  const faceMarks=[face.clone(),v(-.23*size,.97*size,.94*size),v(.23*size,.97*size,.94*size)];
+  const eyeSpan=(stacked?.15:.23)*size;
+  const faceMarks=[face.clone(),face.clone().add(v(-eyeSpan,0,0)),face.clone().add(v(eyeSpan,0,0))];
   const targets=close?faceMarks:[...faceMarks,...toolMarks];
   if(style==='low')for(const x of [-.65*size,.65*size])targets.push(v(x,.72*size,.67*size));
   let focus,points,minDistance;
   if(close){
-    focus=v(.035*size,.98*size,.84*size);
-    points=subjectBox(v(-.51*size,.65*size,.80*size),v(.51*size,1.31*size,1.01*size));
+    focus=face.clone();
+    points=subjectBox(face.clone().add(v(-.55,-.36,-.16).multiplyScalar(size)),
+      face.clone().add(v(.55,.42,.17).multiplyScalar(size)));
+    points.push(v(0,.76*size,.24));
     minDistance=1.96*size;
   }else if(style==='eye'){
     // A waist-up conversation distance gives the joiner's eyes and grip
@@ -69,12 +72,17 @@ export function composeCraftLens(style,bench,size,width,height,available,side,si
       minDistance=4.0*size;
     }
   }
-  const angles=style==='master'?[.48,.72,.20]:style==='eye'?[.28,.10,.48]:style==='low'?[.60,.82,.38]:
-    style==='wide'?(aspect<.78?[1.94,2.18,1.48,1.19,.90]:[1.24,1.66,1.01,1.94]):[.29,.45,.08];
+  // With both hands on the mouth of the plane the low line of sight
+  // passes through the stretched dough for almost the entire pull.
+  // Let the planner try another style on this cut before choosing a tripod.
+  if((tool==='plane' || stacked && tool==='mallet') && (style==='low' || style==='eye'))return null;
+  const angles=style==='master'?[.48,.72,.20]:style==='eye'?(tool==='mallet'?[.91,1.03,.055]:[.055,.16,.28]):style==='low'?[.09,.18,.31]:
+    style==='wide'?(aspect<.78?[1.94,2.18,1.48,1.19,.90]:[1.24,1.66,1.01,1.94]):[.22,.33,.10];
   // A tall viewport can arrange the workmen and the structure from foot to
   // head of the page. Climb above nearby eaves if the shallower tripod fails.
-  const pitches=wide?(aspect<.78?[.72,1.05,.41]:[.41,.72,1.05]):[style==='master'?.76:close?.035:0];
-  for(const slope of pitches)for(const angle of angles)for(const hand of [side,-side]){
+  const pitches=wide?(aspect<.78?[.72,1.05,.41]:[.41,.72,1.05]):[style==='master'?.76:close?.48:0];
+  const sides=tool==='mallet' && style==='eye'?[side]:[side,-side];
+  for(const slope of pitches)for(const angle of angles)for(const hand of sides){
     const bearing=angle*hand;
     // Dir.y is the slope of the sightline, not the lens height. The eye and
     // low tripods use an absolute height so a narrow handset cannot sink

@@ -1,6 +1,6 @@
 import * as THREE from './vendor/three.module.min.js';
 import { MORTAR_PROFILE } from './festival.js';
-import { cooksPlatform, HERB_PATCH, MALLET_RACK, RICE_BASKET, RICE_SHOP, WORKTOPS, marketCooktop } from './living-layout.js';
+import { cooksPlatform, HERB_PATCH, MALLET_HANDLE_END, MALLET_RACK, RICE_BASKET, RICE_SHOP, WORKTOPS, marketCooktop } from './living-layout.js';
 import { MARKET_STALLS, seeded, terrainContactHeight, terrainHeight } from './terrain.js';
 
 function turned(profile,segments) {
@@ -138,13 +138,19 @@ function cookware(p,art,f,siteId,table) {
     f.part('box',(edge-1.90)/2,.727,-.165+j*.25,edge+1.90,.066,.248,j%2?'#b29a77':'#c1a27d',0,0,0,p.deck);
   for (const z of [-.17,.34])
     f.line([-1.15,.42,z],[-1.79,.687,z],.059,'#997b58',p.wood,true);
-  // The mallet's large end rests on the tabletop. Support its narrower
-  // shaft on a low cleat behind the platter, clear of the mortar's foot.
-  f.part('box',-1.06,.778,-.396,.113,.036,.079,'#a98762',0,0,0,p.wood);
   f.part('livingMortar',-.68,.76,0,.72,.72,.72,'#c49a6c',0,0,0,p.wood);
   const [mx,my,mz]=MALLET_RACK;
-  f.line([mx-.07,my-.013,mz],[mx+.67,my-.013,mz],.025,'#be975d',parkedWood);
-  f.line([mx,my,mz-.16],[mx,my,mz+.16],.071,'#a88254',parkedWood);
+  // Two saddles keep the cross-head and narrower grip level above the
+  // counter. The cook can take the free length of the handle from below.
+  f.part('box',mx,.778,mz+.14,.21,.036,.43,'#997b58',0,0,0,p.wood);
+  for (const [z,top] of [[mz,my-.071],[mz+.29,my-.038]]) {
+    f.part('box',mx,(.796+top)/2,z,.075,top-.796,.056,'#ab8960',0,0,0,p.wood);
+    f.part('box',mx,top-.017,z,.14,.034,.07,'#be9b6a',0,0,0,p.wood);
+    for(const side of [-1,1])
+      f.line([mx+.037*side,top-.020,z],[mx+.062*side,top+.025,z],.009,'#987450',p.wood);
+  }
+  f.line([mx,my-.013,mz-.07],[mx,my-.013,mz+MALLET_HANDLE_END],.025,'#be975d',parkedWood);
+  f.line([mx-.16,my,mz],[mx+.16,my,mz],.071,'#a88254',parkedWood);
   steamerFirebox(f,p);
   f.part('riceSteamer',.50,.987,.02,.61,.38,.61,'#bcaa83',0,0,0,p.wood);
   for(const h of [1.031,1.119]) f.part('steamerHoop',.50,h,.02,1,1,1,'#947958',0,0,0,p.wood);

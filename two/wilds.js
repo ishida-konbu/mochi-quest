@@ -137,6 +137,7 @@ class BarkBrush {
       const nearMask=timberBatchMask(geo.index,b.nearTrees,erase),farMask=timberBatchMask(distant.index,b.farTrees,erase);
       tree.userData.updateTimber=()=>{nearMask();farMask();};
       tree.userData.timberIndices=b.nearTrees;
+      tree.userData.savedTimberIndices=nearMask.savedRanges;
       tree.userData.nearGeometry=geo;
       tree.userData.farGeometry=distant;
       tree.castShadow = true;

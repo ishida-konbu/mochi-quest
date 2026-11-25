@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Euler, Vector3 } from '../two/vendor/three.module.min.js';
 import { BASIC_RECIPE, STARTER_RECIPES } from '../two/living-craft.js';
+import { MALLET_HANDLE_END } from '../two/living-layout.js';
 import { createCookingScore, SERVING_POINT } from '../two/cooking-motion.js';
 
 const riceWithEverything={...BASIC_RECIPE,finish:'grill',technique:'wrap',seasoning:'salt',seasoningAmount:2,
@@ -121,7 +122,7 @@ test('both grips remain attached to the turned mallet and the food compresses at
     for(const {time} of impacts){
       for(let t=time-.68;t<=time+.13;t+=.015){
         const f=score.sample(t),m=f.tools.mallet,rotation=new Euler(...m.rotation);
-        for(const [i,local] of [[.012,0,.49],[-.012,0,.24]].entries()){
+        for(const [i,local] of [[.012,0,.87],[-.012,0,.61]].entries()){
           const predicted=new Vector3(...local).applyEuler(rotation).add(new Vector3(...m.position));
           near(dist(predicted.toArray(),f.hands[i]),0);
         }
@@ -160,9 +161,9 @@ test('the mallet clears the outside of the mortar as it descends to its rack and
     const {position,rotation:angles}=score.sample(t).tools.mallet;
     if(position[0]>-1.15 || position[1]>1.31)continue;
     rotation.set(...angles);
-    // The front end of the 67 cm handle comes closest to the wall of the
+    // The front end of the long handle comes closest to the wall of the
     // mortar. Include its thickness and the full radius of the raised rim.
-    tip.set(0,-.013,.672).applyEuler(rotation);
+    tip.set(0,-.013,MALLET_HANDLE_END).applyEuler(rotation);
     assert.ok(Math.hypot(tip.x+position[0]+.68,tip.z+position[2])>.365+.026);
   }
 });

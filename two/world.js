@@ -2014,6 +2014,7 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
     setLivingWorld:homestead.setLivingWorld,
     setConstructionSite:homestead.setConstructionSite,
     setOccupiedBed:homestead.setOccupiedBed,
+    getBedRoof:homestead.getBedRoof,
     setBuildingPreview:homestead.setBuildingPreview,
     setBuildingPreviews:homestead.setBuildingPreviews,
     getBuildEditorObjects:homestead.getBuildEditorObjects,

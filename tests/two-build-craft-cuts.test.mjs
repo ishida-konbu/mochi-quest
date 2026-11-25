@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createCookingPerformer } from '../two/cooking-performer.js';
 import { BUILD_MODULES } from '../two/living-build-state.js';
 import { constructionCuts,craftMotion,findWorkBench,BENCH_LEGS,benchPoint } from '../two/build-craft-motion.js';
 import { visibleWorkArea } from '../two/build-craft-scene.js';
 import { composeCraftLens,craftShotOrder,craftShotSeed } from '../two/build-craft-lenses.js';
 import { makeJoinerySite } from '../two/build-craft-site.js';
-import { PerspectiveCamera,Vector3,Group,Mesh,Scene,SphereGeometry,MeshBasicMaterial,InstancedMesh,Matrix4 } from '../two/vendor/three.module.min.js';
+import { PerspectiveCamera,Vector3,Group,Mesh,Scene,SphereGeometry,MeshBasicMaterial,InstancedMesh,Matrix4,Raycaster } from '../two/vendor/three.module.min.js';
 import { terrainContactHeight,groundHeight } from '../two/terrain.js';
 
 const player={x:25,y:0,z:92,heading:Math.PI,buffs:{}};
@@ -28,6 +29,8 @@ test('each building has one to three short joinery shots; a paid pier is shown a
       if(wood)assert.match(cuts[0].label,/束柱/);
     }
   }
+  const indoors=constructionCuts({...site,kind:'camp',parentId:'build-2'});
+  assert.deepEqual(indoors.map(c=>c.label),['寝台の横竹を挽く']);
   const p=findWorkBench(site,player);
   assert.equal(p.detail,false);
   assert.ok(p.feet.every(Number.isFinite));
@@ -136,4 +139,93 @@ test('overhanging instanced leaves obstruct the field shot and the working rig i
   assert.equal(visibleWorkArea(scene,rig,site,()=>true)(target,eye),true);
   assert.equal(rig.visible,true);
   geometry.dispose();material.dispose();
+});
+
+async function loadBuilderSkin(t){
+  const {GLTFLoader}=await import('../two/vendor/GLTFLoader.min.js');
+  const {Texture,TextureLoader}=await import('../two/vendor/three.module.min.js');
+  const {readFile}=await import('node:fs/promises');
+  const {loadRiceModel}=await import('../two/mochi-model.js');
+  t.mock.method(TextureLoader.prototype,'loadAsync',async()=>new Texture());
+  t.mock.method(GLTFLoader.prototype,'loadAsync',async function(url){
+    const bytes=await readFile(new URL(url));
+    return this.parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
+  });
+  await loadRiceModel();
+}
+
+test('the two rounded working mitts clear the table and timber across the three joinery cuts',async t=>{
+  await loadBuilderSkin(t);
+  const scene=new Group(),v=new Vector3();
+  for(const mode of ['normal','kagami'])for(const full of [0,1]){
+    const builder={mode,buffs:{full},grounded:true},performer=createCookingPerformer(scene,builder);
+    const arms=performer.group.getObjectsByProperty('isMesh',true).filter(m=>m.name.endsWith('餅の手'));
+    assert.equal(arms.length,2);
+    for(const kind of ['hut','fence']){
+      const motion=craftMotion({kind,foundationWood:0},builder,detail),h=motion.height;
+      for(let t=0;t<motion.duration;t+=.31){
+        const f=motion.sample(t);performer.update(f);scene.updateMatrixWorld(true);
+        for(const [side,m] of arms.entries()){
+          const a=m.geometry.attributes.position,tip=new Vector3(...f.hands[side]);let gap=Infinity;
+          for(let k=0;k<a.count;k++){
+            v.fromBufferAttribute(a,k).applyMatrix4(m.matrixWorld);
+            gap=Math.min(gap,v.distanceToSquared(tip));
+            let top=-Infinity;
+            if(Math.abs(v.x)<.879 && Math.abs(v.z)<.598){
+              top=f.tool==='saw' && v.x>.31?h-.059:h;
+            }
+            if(f.tool==='plane'){
+              if(Math.abs(v.x)<.123 && Math.abs(v.z)<.64)top=h+.080;
+              const u=v.z-f.position[2];
+              if(Math.abs(v.x)<.09 && u>-.167 && u<.164)top=f.position[1]+.08;
+            }else if(f.tool==='mallet'){
+              if((Math.abs(v.x)<.58 && Math.abs(v.z+.015)<.095) ||
+                (Math.abs(v.x-.06)<.095 && Math.abs(v.z-.01)<.33))top=h+.20;
+            }else if(v.x>-.79 && v.x<.67 && (v.x<.318 || v.x>.322)){
+              const drop=v.x>.322?.059*f.fall:0;
+              if(kind==='hut' && Math.abs(v.z)<.0825)top=h+.142-drop;
+              if(kind==='fence' && Math.abs(v.z)<.0725)top=h+.0725+Math.sqrt(.0725**2-v.z**2)-drop;
+            }
+            assert.ok(v.y>=top-.001,'skin below '+kind+'/'+f.tool+' at '+t+' s');
+          }
+          if(f.handWork[side]===1)assert.ok(gap<1e-10,'lost the grip point');
+        }
+      }
+    }
+    performer.dispose();
+  }
+});
+
+
+test('the plane insert shows the eyes and mouth between the hands through the whole pull',async t=>{
+  await loadBuilderSkin(t);
+  const scene=new Group(),dir=new Vector3(),point=new Vector3(),ray=new Raycaster();
+  for(const mode of ['normal','kagami'])for(const full of [0,1]){
+    const size=full?1.28:1,builder={mode,buffs:{full},grounded:true};
+    const actor=createCookingPerformer(scene,builder),motion=craftMotion({kind:'floor'},builder,detail);
+    const body=actor.group.getObjectByName('Nikkori'),skin=body.geometry.attributes.position;
+    const hands=actor.group.getObjectsByProperty('isMesh',true).filter(m=>m.name.includes('餅の手'));
+    const lens=composeCraftLens('face',detail,size,1000,680,555,1,()=>true,[],'plane',mode==='kagami');
+    // Positions of the eyes and mouth in the portrait atlas projected onto
+    // the original GLB. Use their actual deformed surface on every stroke.
+    const landmarks=[[-.35,1.38],[.35,1.38],[.012,1.165]].map(([x,y])=>{
+      let best=Infinity,id=-1;
+      for(let i=0;i<skin.count;i++){
+        if(skin.getZ(i)<.60)continue;
+        const d=(skin.getX(i)-x)**2+(skin.getY(i)-y)**2;
+        if(d<best){best=d;id=i;}
+      }
+      return id;
+    });
+    for(let time=.12;time<motion.duration;time+=.13){
+      actor.update(motion.sample(time));scene.updateMatrixWorld(true);
+      for(const m of hands){m.geometry.computeBoundingSphere();m.geometry.computeBoundingBox();}
+      for(const id of landmarks){
+        body.getVertexPosition(id,point).applyMatrix4(body.matrixWorld);
+        dir.subVectors(point,lens.eye);ray.far=dir.length()-.012;ray.set(lens.eye,dir.normalize());
+        assert.equal(ray.intersectObjects(hands,false).length,0,'hand covers the face at '+time);
+      }
+    }
+    actor.dispose();
+  }
 });

@@ -10,7 +10,7 @@ const blend=(a,b,t)=>a.map((v,i)=>mix(v,b[i],t));
 const saw=(label,bamboo=false)=>({tool:'saw',label,bamboo,duration:4.75});
 const plane=label=>({tool:'plane',label,duration:4.05});
 const peg=label=>({tool:'mallet',label,duration:3.90});
-const foundation=saw('束柱を斜面に合わせた長さに挽く');
+const foundation=saw('束柱を基礎の高さに合わせて挽く');
 const work={
   camp:[saw('寝台の横竹を挽く',true),peg('旗竿の受けに木栓を打つ')],
   fence:[saw('竹垣の横竹を挽く',true)],
@@ -25,6 +25,7 @@ const work={
 export function constructionCuts(site){
   const cuts=work[site.kind];
   if(!cuts)throw new Error('未知の部材');
+  if(site.kind==='camp' && site.parentId)return [cuts[0]];
   if(!(site.foundationWood>0))return cuts;
   return site.kind==='hut'?[foundation,...cuts.slice(1)]:[foundation,...cuts].slice(0,3);
 }
@@ -66,6 +67,28 @@ export function craftMotion(site,player,bench) {
   const feet=[[.30*size,bench.feet[0],hero[2]-.085],[-.30*size,bench.feet[1],hero[2]+.085]];
   const free=[[.65*size,.73*size,hero[2]-.45*size],[-.65*size,.73*size,hero[2]-.45*size]];
   const duration=cuts.reduce((s,c)=>s+c.duration,0);
+  // Clearance beneath the whole soft mitt, in bench coordinates. Around a
+  // board edge the clearance falls away gradually, so the hand can wrap
+  // over the edge without acquiring a sharp crease.
+  function workSurface(cut,x,z,tool,fall){
+    const top=(l,r,n,f,y)=>y-1.5*Math.hypot(Math.max(0,l-x,x-r),Math.max(0,n-z,z-f));
+    let h=top(-.88,.88,-.602,.602,height);
+    if(cut.tool==='saw'){
+      h=Math.max(top(-.88,.31,-.602,.602,height),top(.345,.88,-.602,.602,height-.059));
+      if(cut.bamboo){
+        const dz=Math.min(.0725,Math.abs(z)),crown=.0725+Math.sqrt(.0725**2-dz**2);
+        return Math.max(h,top(-.79,.318,-.0725,.0725,height+crown),top(.322,.67,-.0725,.0725,height+crown-.059*fall));
+      }
+      return Math.max(h,top(-.79,.318,-.0825,.0825,height+.142),top(.322,.67,-.0825,.0825,height+.142-.059*fall));
+    }
+    if(cut.tool==='plane'){
+      // The palm draws the toe while the other hand steadies the heel.
+      const [tx,ty,tz]=tool;
+      return Math.max(h,top(-.123,.123,-.64,.64,height+.080),top(-.127,.127,.642,.685,height+.046),
+        top(tx-.0905,tx+.0905,tz-.169,tz+.165,ty+.080));
+    }
+    return Math.max(h,top(-.58,.58,-.11,.08,height+.20),top(-.035,.155,-.32,.34,height+.20));
+  }
   function sample(time){
     time=Math.max(0,Math.min(duration,time));
     let index=0,t=time;
@@ -85,7 +108,7 @@ export function craftMotion(site,player,bench) {
       const along=z/.91,teeth=-.020+.05+.052*Math.sin(along*pi*.69)+.012;
       position=[.32,workTop+teeth-.002-cutProgress*(workTop-height+.003)+back*.19,z];
       rotation=[0,0,pi/2];
-      holds=[[.32-.011,position[1]-.004,z+.22],[-.235,workTop+.022,.029]];
+      holds=[[.32-.011,position[1]-.004,z+.22],[-.235,workTop+.0015,0]];
       effort=wave;
       // At the end of the third pull the end is free. Drop it the 59 mm to
       // the receiving board while the saw travels out of the cut.
@@ -100,7 +123,7 @@ export function craftMotion(site,player,bench) {
       const forward=ease(phase/.40);
       const raised=.067*Math.sin(pi*back);
       position=[0,workTop+raised,-.40+.74*(forward-back+second)];
-      holds=[[.084,position[1]+.077,position[2]+.118],[-.084,position[1]+.072,position[2]-.055]];
+      holds=[[.087,position[1]+.0815,position[2]+.118],[-.087,position[1]+.0815,position[2]-.055]];
       effort=(phase<.4?Math.sin(pi*forward):Math.sin(pi*second))*.8;
       shave=phase<.4?forward:phase<.6?0:second;
       shed=phase>=.40?ease((phase-.40)/.17):0;
@@ -117,13 +140,13 @@ export function craftMotion(site,player,bench) {
       position=blend(rest,impact,ready);rotation=[-.57*lift*ready,0,0];
       const [rx]=rotation;
       holds=[[position[0],position[1]-.223*Math.sin(rx),position[2]+.223*Math.cos(rx)],
-        [-.24,workTop+.024,.026]];
+        [-.24,workTop+.0015,.026]];
       effort=.50*lift;if(phase>0 && u>=.82 && u<=1)cue='knock-'+number;
     }
     const hands=holds.map((h,i)=>blend(free[i],h,grasp));
     const cutOpacity=Math.max(index>0?1-ease((t-.065)/.185):0,
       index<cuts.length-1?ease((t-cut.duration+.24)/.175):0);
-    return {hero,heading,feet,hands,time,index,label:cut.label,tool:cut.tool,t,workTop,position,rotation,cutOpacity,cue,
+    return {hero,heading,feet,hands,restHands:free,handWork:[grasp,grasp],time,index,supportHeight:(x,z)=>workSurface(cut,x,z,position,fall),label:cut.label,tool:cut.tool,t,workTop,position,rotation,cutOpacity,cue,
       focus:[0,workTop,0],lean:.018+grasp*(.034+.032*effort),lift:-.014*grasp,effort:grasp*(.29+.25*effort),
       phase:q>.94?'finish':'craft',grasp,fall,shave,shed,pin,progress:phase};
   }

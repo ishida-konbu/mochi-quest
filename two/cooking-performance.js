@@ -62,7 +62,7 @@ export function createCookingPerformance({scene, camera, dialog, player, enter, 
       stage.group.updateWorldMatrix(true,false);
       stage.group.worldToLocal(startPoint.set(player.x,player.y,player.z));
       run.score = createCookingScore(draft,stage.layout,{
-        start:startPoint.toArray(), heading:player.heading - stage.group.rotation.y,
+        start:startPoint.toArray(), heading:player.heading - stage.group.rotation.y, full:player.buffs?.full>0,
       });
       run.performer = createCookingPerformer(stage.group,player);
       run.props = createCookingProps(draft,stage.layout);

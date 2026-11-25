@@ -2,13 +2,14 @@
 // the finished building. The normal points towards the carpenter's footing.
 import { Vector3, Triangle } from './vendor/three.module.min.js';
 import { hokoraCarpentry } from './kaede-hokora-mesh.js';
+import { bedLayoutKey, campMattress, campStaff } from './camp-bedding.js';
 import { drawHomesteadModule, HUT_MODULES } from './homestead-carpentry.js';
 
 import { foundationMembers, foundationJoint, drawFoundationMember } from './homestead-foundation.js';
 
 const fore=[0,1], rear=[0,-1], left=[-1,0], right=[1,0];
 const step=(id,label,method,grip,normal,pivot)=>({id,label,method,grip,normal,pivot});
-function joints(kind,terrain){
+function joints(kind,terrain,layout){
   switch(kind){
     case 'stand':return [
       step('left-bent','左の脚組を立てる','raise',[-.75,.69,.33],fore,[-.75,0,-.38]),
@@ -20,12 +21,17 @@ function joints(kind,terrain){
       {...step('fly','日よけ布を庇に張る','spread',[.83,2.013,.51],fore),unfurl:{axis:'x',sign:-1}},
       step('curtain','藍の暖簾を掛ける','hang',[.53,1.99,.537],fore)
     ];
-    case 'camp':return [
-      step('bed','竹の寝台を据える','seat',[.53,.07,.58],right),
-      {...step('mat','寝台にむしろを敷く','spread',[.51,.125,.88],fore),unfurl:{axis:'z',sign:-1}},
-      step('pillow','枕を寝床の端へ置く','seat',[.462,.27,-.54],right),
-      step('staff','旅の旗を立てる','raise',[-.809,.86,-.72],left,[-.78,0,-.72])
-    ];
+    case 'camp':{
+      const m=campMattress(layout),edge=m.x+m.width/2;
+      const [heel,head,r]=campStaff[2],grip=heel.map((v,i)=>v+(head[i]-v)*.425);
+      grip[0]-=r;
+      return [
+        step('bed','竹の寝台を据える','seat',[edge-.025,.078,m.foot-.42],right),
+        {...step('mat','寝台にむしろを敷く','spread',[m.x+.32*m.width,.13,m.foot-.09],fore),unfurl:{axis:'z',sign:-1}},
+        step('pillow','枕を寝床の端へ置く','seat',[m.x+m.pillowWidth/2,.266,m.pillowZ],right),
+        ...(layout===true?[]:[step('staff','旅の旗を立てる','raise',grip,left,campStaff[0][0])])
+      ];
+    }
     case 'floor':return [
       step('rear-sill','奥の束を据える','seat',[1.43,.10,-1.23],right),
       step('joist','中央の根太を渡す','seat',[1.44,.125,0],right),
@@ -101,12 +107,12 @@ function measuredPart(id,spec,geometry){
 }
 
 const cached=new Map();
-function moduleParts(kind,terrain){
-  const key=kind+(kind==='roof' && terrain==='snow'?'-snow':'');
+function moduleParts(kind,terrain,layout=false){
+  const key=kind+(kind==='roof' && terrain==='snow'?'-snow':layout?'-'+layout:'');
   if(cached.has(key))return cached.get(key);
-  const specs=joints(kind,terrain);
+  const specs=joints(kind,terrain,layout);
   const writers=new Map(specs.map(s=>[s.id,hokoraCarpentry()]));
-  drawHomesteadModule(kind,terrain,id=>writers.get(id));
+  drawHomesteadModule(kind,terrain,id=>writers.get(id),layout);
   const parts=specs.map(spec=>{
     return measuredPart(kind+'.'+spec.id,spec,writers.get(spec.id).finish());
   });
@@ -120,7 +126,7 @@ export function assemblyParts(kind,terrain='plain',site){
     const key=terrain==='snow'?'hut-snow':'hut';
     if(!cached.has(key))cached.set(key,HUT_MODULES.flatMap(k=>moduleParts(k,terrain)));
     parts=cached.get(key);
-  }else parts=moduleParts(kind,terrain);
+  }else parts=moduleParts(kind,terrain,kind==='camp' && site?bedLayoutKey(site):false);
   const foundation=foundationMembers(kind,site);
   if(!foundation.length)return parts;
   const cut=foundation.map(member=>{

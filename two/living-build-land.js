@@ -10,6 +10,7 @@ import { buildContacts, frameTouchesPlayer } from './living-build-contacts.js';
 import { entryFlight,entryFlights,outsideTreads } from './homestead-foundation.js';
 import { foundationPiers, foundationWood } from './living-foundation.js';
 import { timberId } from './living-build-trees.js';
+import {campMattress} from './camp-bedding.js';
 import { timberCut } from './homestead-timber-section.js';
 
 const failure = reason => ({ok:false,reason});
@@ -197,7 +198,8 @@ export function surveySite(world,kind,pose,{excludeId,state,sourceRecord,snapChe
     if(floor){
       if(existing.some(s=>s.parentId===floor.id && s.kind==='camp'))return failure('この板床にはすでに寝床があります。');
       const anchor=bedOnFloor(floor);
-      if(state?.player && inRectangle(state.player,anchor,1.13,1.72,.32) && Math.abs(state.player.y-anchor.y)<1.8)
+      const m=campMattress(true),centre={...anchor,...localPoint(anchor,m.x,(m.head+m.foot)/2)};
+      if(state?.player && inRectangle(state.player,centre,m.width,m.foot-m.head,.32) && Math.abs(state.player.y-anchor.y)<1.8)
         return failure('寝床を敷く側から少し離れてください。');
       return quote({ok:true,...anchor,relief:0,foundationWood:0});
     }

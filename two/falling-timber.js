@@ -1,6 +1,8 @@
 // Detach the painted crown and bole from the same geometry used by the island.
 // The cut plane belongs to the hinge, so it stays attached as the crown turns.
 import * as T from './vendor/three.module.min.js';
+import {axeMouth,stumpFace} from './timber-axe-mouth.js';
+import {showTimberCut} from './living-build-trees.js';
 import { timberCut } from './homestead-timber-section.js';
 import { terrainContactHeight, staticVolumeAt, timberWood } from './terrain.js';
 import { GATE_PEACH } from './pilgrimage-layout.js';
@@ -11,10 +13,10 @@ const tau=2*Math.PI;
 const tints=['#ffffff','#fff3f3','#ffe5eb','#fff3e0','#f7d5e4','#fff8f2'];
 // Copy only the chosen bark triangles from a grove-wide brush batch. Whole
 // models and foliage sprays can keep their original geometry and GPU atlas.
-function woodSection(g,ranges){
+function woodSection(g,ranges,saved){
   const used=new Map(),order=[],ix=[];
-  for(const [lo,hi] of ranges)for(let j=lo;j<hi;j++){
-    const old=g.index?g.index.getX(j):j;
+  for(const [k,[lo,hi]] of ranges.entries())for(let j=lo;j<hi;j++){
+    const old=saved?.[k]?.[j-lo]??(g.index?g.index.getX(j):j);
     if(!used.has(old)){used.set(old,order.length);order.push(old);}
     ix.push(used.get(old));
   }
@@ -27,50 +29,78 @@ function woodSection(g,ranges){
   }
   cut.setIndex(ix);return cut;
 }
-function cutShader(material,original,plane,fade){
+// Long marks follow the standing grain as the tree tips. The shadow pass
+// uses the very same local points so the wash leaves the painted silhouette.
+const timberWash=`
+  float timberHash(vec2 id){
+    vec3 q=fract(vec3(id.xyx)*vec3(.1031,.1030,.0973));
+    q+=dot(q,q.yzx+33.33);
+    return fract((q.x+q.y)*q.z);
+  }
+  float timberNoise(vec2 p){
+    vec2 id=floor(p),f=fract(p); f=f*f*(3.-2.*f);
+    return mix(mix(timberHash(id),timberHash(id+vec2(1,0)),f.x),
+               mix(timberHash(id+vec2(0,1)),timberHash(id+1.),f.x),f.y);
+  }
+`;
+function cutShader(material,original,plane,fade,incision,opens){
   material.onBeforeCompile=(shader,renderer)=>{
     original.onBeforeCompile(shader,renderer);
-    shader.uniforms.timberPresence=fade;shader.uniforms.timberPlane={value:plane};
-    shader.vertexShader='uniform vec4 timberPlane; varying float timberSection;\n'+shader.vertexShader.replace('#include <project_vertex>',`
+    shader.uniforms.timberPresence=fade;
+    shader.uniforms.timberHeight={value:fade.height??1};
+    shader.uniforms.timberPlane={value:plane};
+    shader.uniforms.timberMouth=incision;
+    shader.vertexShader='uniform mat4 timberPlane; varying vec3 timberPoint;\n'+shader.vertexShader.replace('#include <project_vertex>',`
       vec4 timberVertex=vec4(transformed,1.);
       #ifdef USE_INSTANCING
         timberVertex=instanceMatrix*timberVertex;
       #endif
-      timberSection=dot(timberPlane,timberVertex);
+      timberPoint=(timberPlane*timberVertex).xyz;
       #include <project_vertex>`);
-    shader.fragmentShader='varying float timberSection; uniform float timberPresence;\n'+shader.fragmentShader.replace('#include <alphatest_fragment>',`#include <alphatest_fragment>
-      if(timberSection<-.001 || fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715))))>=timberPresence)discard;`);
+    shader.fragmentShader='varying vec3 timberPoint; uniform float timberPresence; uniform float timberHeight; uniform vec4 timberMouth;\n'+timberWash+shader.fragmentShader.replace('#include <alphatest_fragment>',`#include <alphatest_fragment>
+      ${opens===null?'':`float roof=0.;
+      ${opens?'if(abs(timberPoint.x)<timberMouth.z && abs(timberPoint.z)<timberMouth.z)roof=max(0.,(timberPoint.z-timberMouth.x)*timberMouth.y);':''}
+      if(timberMouth.w<-.5){if(timberPoint.y>.00012)discard;}
+      else if(timberPoint.y<roof && (timberMouth.w>.5 || timberPoint.y>=0.))discard;`}
+      if(timberPresence<1.){
+        vec2 p=vec2(timberPoint.x+.73*timberPoint.z,timberPoint.y+.22*timberPoint.z);
+        float wash=timberNoise(p*vec2(5.,2.1));
+        float fibres=timberNoise(p*vec2(41.,7.)+2.8*wash);
+        float height=clamp(timberPoint.y/timberHeight,0.,1.);
+        if(.67*height+.26*wash+.07*fibres>=timberPresence)discard;
+      }`);
   };
-  material.customProgramCacheKey=()=>original.customProgramCacheKey()+'/timber-cut';
+  material.customProgramCacheKey=()=>original.customProgramCacheKey()+'/timber-mouth/'+opens;
 }
-function copyWood(scene,tree,group,hinge,fade,disposable,stalks){
+function copyWood(scene,tree,group,hinge,fade,disposable,stalks,stem,bearing,incision){
   const source=tree.source,base=new T.Object3D(),matrix=new T.Matrix4(),tint=new T.Color();
   const shift=new T.Matrix4().makeTranslation(-hinge.x,-hinge.y,-hinge.z);
+  const local=new T.Matrix4().makeRotationY(-bearing).multiply(new T.Matrix4().makeTranslation(-stem.x,-stem.y,-stem.z));
   scene.updateMatrixWorld(true);
   function add(node,geometry,count=0,parent=group){
-    const sourceMat=node.material,m=sourceMat.clone(),basis=node.matrixWorld.elements;
-    const plane=new T.Vector4(basis[1],basis[5],basis[9],basis[13]-hinge.y);
+    const sourceMat=node.material,m=sourceMat.clone(),plane=local.clone().multiply(node.matrixWorld);
+    const opens=!(stalks.size && parent!==stalks.get(stem.culm)?.group);
     m.defaultAttributeValues=sourceMat.defaultAttributeValues;
-    cutShader(m,sourceMat,plane,fade);
+    cutShader(m,sourceMat,plane,fade,incision,opens);
     const part=count?new T.InstancedMesh(geometry,m,count):new T.Mesh(geometry,m);
     const rawDepth=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking,map:m.map,alphaTest:m.alphaTest,side:m.side});
-    const depth=rawDepth.clone();cutShader(depth,rawDepth,plane,fade);part.customDepthMaterial=depth;
+    const depth=rawDepth.clone();cutShader(depth,rawDepth,plane,fade,incision,opens);part.customDepthMaterial=depth;
     part.matrix.multiplyMatrices(shift,node.matrixWorld);part.matrixAutoUpdate=false;
     part.castShadow=part.receiveShadow=true;part.frustumCulled=false;
     parent.add(part);disposable.push(m,depth,rawDepth);if(count)disposable.push(part);
     return part;
   }
   function stamps(node,ranges){
-    const batches=new Map();
-    for(const [lo,hi] of ranges)for(let i=lo/16;i<hi/16;i++){
+    const batches=new Map(),saved=node.userData.updateTimber?.savedRanges?.(source);
+    for(const [k,[lo,hi]] of ranges.entries())for(let i=lo/16;i<hi/16;i++){
       const parent=stalks.get(node.userData.culmSlots?.get(i))?.group??group;
       if(!batches.has(parent))batches.set(parent,[]);
-      batches.get(parent).push(i);
+      batches.get(parent).push([i,saved?.[k],i*16-lo]);
     }
     for(const [parent,indices] of batches){
       const part=add(node,node.geometry,indices.length,parent);
-      for(const [j,i] of indices.entries()){
-        node.getMatrixAt(i,matrix);part.setMatrixAt(j,matrix);
+      for(const [j,[i,original,start]] of indices.entries()){
+        if(original)matrix.fromArray(original,start);else node.getMatrixAt(i,matrix);part.setMatrixAt(j,matrix);
         if(node.instanceColor){node.getColorAt(i,tint);part.setColorAt(j,tint);}
       }
     }
@@ -85,7 +115,7 @@ function copyWood(scene,tree,group,hinge,fade,disposable,stalks){
     if(!node.isMesh)return;
     const ranges=a.timberMatrices?.get(source),indices=a.timberIndices?.get(source);
     if(ranges)stamps(node,ranges);
-    if(indices){const g=woodSection(a.nearGeometry,indices);disposable.push(g);add(node,g);}
+    if(indices){const g=woodSection(a.nearGeometry,indices,a.savedTimberIndices?.(source));disposable.push(g);add(node,g);}
     if(source.form!==undefined && a.timberForm===source.form){
       const r=a.timberRecord(source);
       if(!r)return;
@@ -142,31 +172,108 @@ function timberProbes(tree,hinge,stalks){
       const radius=Math.max(.045,part.r*solid.scale)+Math.min(step*.35,.16);
       const q=cells.get(key);
       if(q)q.r=Math.max(q.r,Math.hypot(x-q.x,y-q.y,z-q.z)+radius);
-      else cells.set(key,{x,y,z,r:radius,origin:stalks.get(part.culm)?.offset});
+      else cells.set(key,{x,y,z,r:radius,stalk:stalks.get(part.culm)});
     }
   }
   return [...cells.values()];
 }
+// Build the resident stump from the planted bark. Masked landmark batches
+// retain their original slices, so loading a journey reconstructs the same
+// taper, lean, paint and growth-ring contour as the instant it separated.
+export function rootedTimber(scene,tree){
+  const cut=tree.cut??timberCut(tree),hinge=new T.Vector3(cut.x,cut.y,cut.z);
+  const extracted=new T.Group(),saved=[],root=new T.Group(),owned=[];
+  copyWood(scene,tree,extracted,hinge,{value:1},saved,new Map(),cut,0,{value:new T.Vector4(0,0,0,-1)});
+  const world=new T.Matrix4(),instance=new T.Matrix4(),v=new T.Vector3();
+  const foot=tree.source?.form!==undefined?timberWood(tree.source)?.culmFeet:null;
+  for(const mesh of extracted.children){
+    const g=mesh.geometry,p=g.attributes.position,mark=g.attributes.bambooCulm;
+    const gbox=g.boundingBox??(g.computeBoundingBox(),g.boundingBox),box=new T.Box3();
+    for(let n=0;n<(mesh.isInstancedMesh?mesh.count:1);n++){
+      if(mesh.isInstancedMesh){mesh.getMatrixAt(n,instance);world.multiplyMatrices(mesh.matrix,instance);}else world.copy(mesh.matrix);
+      box.copy(gbox).applyMatrix4(world);
+      if(box.min.y>.02 && !mark)continue;
+      const y=new Float32Array(p.count);
+      for(let i=0;i<p.count;i++){
+        v.fromBufferAttribute(p,i).applyMatrix4(world);y[i]=v.y;
+        // On a hillside the five planted corners are lowered in the shader.
+        if(mark?.getX(i)>0 && foot)y[i]=-Infinity;
+      }
+      const ranges=[],end=g.index?.count??p.count;
+      for(let i=0;i<end;i+=3){
+        const a=g.index?g.index.getX(i):i,b=g.index?g.index.getX(i+1):i+1,c=g.index?g.index.getX(i+2):i+2;
+        if(Math.min(y[a],y[b],y[c])>.006)continue;
+        if(ranges.at(-1)?.[1]===i)ranges.at(-1)[1]+=3;else ranges.push([i,i+3]);
+      }
+      if(!ranges.length)continue;
+      const section=woodSection(g,ranges);owned.push(section);
+      for(const [key,attribute] of Object.entries(g.attributes))if(attribute.isInstancedBufferAttribute)section.setAttribute(key,attribute.clone());
+      const clone=mesh.isInstancedMesh?new T.InstancedMesh(section,mesh.material,1):new T.Mesh(section,mesh.material);
+      clone.matrix.copy(mesh.matrix);clone.matrixAutoUpdate=false;clone.frustumCulled=false;
+      clone.customDepthMaterial=mesh.customDepthMaterial;
+      if(mesh.isInstancedMesh){
+        clone.setMatrixAt(0,instance);
+        if(mesh.instanceColor){const tint=new T.Color();mesh.getColorAt(n,tint);clone.setColorAt(0,tint);}
+        owned.push(clone);
+      }
+      clone.castShadow=clone.receiveShadow=true;root.add(clone);
+    }
+  }
+  // Release the full crown and its instancing buffers immediately. Keep
+  // only the rooted triangles and the original colour/shadow programmes.
+  const keep=new Set(root.children.flatMap(node=>[node.material,node.customDepthMaterial]));
+  for(const resource of saved){if(keep.has(resource))owned.push(resource);else resource.dispose();}
+  if(!root.children.length)return null;
+  root.position.copy(hinge);
+  for(const stem of cut.culms??[cut]){
+    const face=stumpFace(root,stem,tree);
+    face.position.set(stem.x-cut.x,0,stem.z-cut.z);root.add(face);owned.push(face.geometry);
+  }
+  root.userData.releaseStump=()=>{for(const res of owned)res.dispose();};
+  return root;
+}
 export function fallingTimber(scene,tree,player,clear=()=>true){
-  const cut=timberCut(tree),hinge=new T.Vector3(cut.x,cut.y,cut.z),group=new T.Group(),fade={value:1},disposable=[];
+  const cut=timberCut(tree),hinge=new T.Vector3(cut.x,cut.y,cut.z),group=new T.Group(),fade={value:1,height:Math.max(1,tree.h)},disposable=[];
+  const stem=tree.stem??cut.culms?.[0]??cut,bearing=Math.atan2(player.x-stem.x,player.z-stem.z);
+  const incision={value:new T.Vector4(0,0,stem.radius*2.5,1)};
   const stalks=new Map(),ends=[];
+  let mouth,flat;
   function cap(spec,parent){
-    const mesh=cutFace(spec,hinge);parent.add(mesh);ends.push(mesh);disposable.push(mesh.geometry);
+    const mesh=cutFace(spec,hinge);mesh.userData.cutCap=true;parent.add(mesh);ends.push(mesh);
+    if(!stalks.size || stalks.get(stem.culm)?.group===parent)flat=mesh;
+    disposable.push(mesh.geometry);
   }
   if(cut.culms?.length>1){
     // Keep each planted stalk, its rings, and its own spray of leaves on the
     // same hinge. In a wide clump one common axis would uproot the outer stems.
     for(const [i,stem] of cut.culms.entries()){
       const stalk=new T.Group(),offset=new T.Vector3(stem.x-cut.x,0,stem.z-cut.z);
-      stalks.set(stem.culm??i,{group:stalk,offset});group.add(stalk);
+      stalks.set(stem.culm??i,{group:stalk,offset,stem,rim:null,pivot:new T.Vector3()});group.add(stalk);
       cap({culms:[stem]},stalk);
     }
   }
-  copyWood(scene,tree,group,hinge,fade,disposable,stalks);
+  copyWood(scene,tree,group,hinge,fade,disposable,stalks,stem,bearing,incision);
   if(!stalks.size)cap(cut,group);
   group.name='切り口から傾く樹冠';group.position.copy(hinge);
   let limit=0,axis=null;
+  const trunkPivot=new T.Vector3();
+  // A centre hinge buries half of the freshly cut upper face in the stump.
+  // Balance the last fibres on the furthest edge in the chosen fall direction.
+  const support=(ring,r,angle)=>ring?Math.max(...ring.map(p=>p[0]*Math.sin(angle)+p[2]*Math.cos(angle))):r;
   function chooseFall(){
+    // Exposed wood is part of the same falling timber. Give both the
+    // diagonal cut and the remaining bamboo rings the bark's wash coordinates.
+    group.updateWorldMatrix(true,true);
+    const frame=new T.Matrix4().makeRotationY(-bearing).multiply(new T.Matrix4().makeTranslation(-stem.x,-stem.y,-stem.z));
+    for(const face of mouth?[...ends,mouth.mesh]:ends){
+      const plane=frame.clone().multiply(face.matrixWorld),original=face.material;
+      face.material=original.clone();
+      const raw=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking,side:original.side});
+      face.customDepthMaterial=raw.clone();
+      cutShader(face.material,original,plane,fade,incision,null);
+      cutShader(face.customDepthMaterial,raw,plane,fade,incision,null);
+      disposable.push(face.material,face.customDepthMaterial,raw);
+    }
     const away=Math.atan2(cut.x-player.x,cut.z-player.z);
     let heading=away;
     const blocks=(x,y,z,r)=>staticVolumeAt(x,z,y-r,r,2*r) || !clear(x,z,y-r,r,2*r);
@@ -177,12 +284,14 @@ export function fallingTimber(scene,tree,player,clear=()=>true){
     // grove let it lean and dissolve before touching another solid.
     for(const offset of [0,.45,-.45,.9,-.9,1.36,-1.36]){
       const a=away+offset,s=Math.sin(a),c=Math.cos(a);
+      const foot=support(mouth?.rim,cut.radius,a-bearing);
+      for(const stalk of stalks.values())stalk.reach=support(stalk.rim,stalk.stem.radius,stalk.active?a-bearing:a);
       let stop=0;
       for(let angle=.08;angle<=1.53;angle+=.08){
         let blocked=false;
         for(const h of [.19,.38,.60,.82,.96]){
-          const span=Math.max(.65,tree.h-.42)*h,reach=span*Math.sin(angle);
-          const x=cut.x+s*reach,z=cut.z+c*reach,y=cut.y+span*Math.cos(angle);
+          const span=Math.max(.65,tree.h-.42)*h,reach=span*Math.sin(angle)+foot*(1-Math.cos(angle));
+          const x=cut.x+s*reach,z=cut.z+c*reach,y=cut.y+span*Math.cos(angle)+foot*Math.sin(angle);
           const pad=Math.min(.7,Math.max(.09,tree.h*(h>.58?.072:.031)));
           if(y-pad<terrainContactHeight(x,z) || staticVolumeAt(x,z,y-pad,pad,2*pad) || !clear(x,z,y-pad,pad,2*pad)){
             blocked=true;break;
@@ -192,7 +301,7 @@ export function fallingTimber(scene,tree,player,clear=()=>true){
           const cos=Math.cos(angle),sin=Math.sin(angle);
           // In coordinates parallel to the fall, rotation is a 2D hinge.
           for(const p of probes){
-            const along=(p.x-(p.origin?.x??0))*s+(p.z-(p.origin?.z??0))*c,shift=p.y*sin+along*(cos-1);
+            const along=(p.x-(p.stalk?.offset.x??0))*s+(p.z-(p.stalk?.offset.z??0))*c-(p.stalk?.reach??foot),shift=p.y*sin+along*(cos-1);
             const y=cut.y+p.y*cos-along*sin;
             if(blocks(cut.x+p.x+s*shift,y,cut.z+p.z+c*shift,p.r)){blocked=true;break;}
           }
@@ -204,18 +313,46 @@ export function fallingTimber(scene,tree,player,clear=()=>true){
       if(stop>1.42)break;
     }
     axis=new T.Vector3(Math.cos(heading),0,-Math.sin(heading));
+    const dir=new T.Vector3(Math.sin(heading),0,Math.cos(heading));
+    trunkPivot.copy(dir).multiplyScalar(support(mouth?.rim,cut.radius,heading-bearing));
+    for(const stalk of stalks.values()){
+      const radius=support(stalk.rim,stalk.stem.radius,stalk.active?heading-bearing:heading);
+      stalk.pivot.copy(stalk.offset).addScaledVector(dir,radius);
+    }
   }
   const inverse=new T.Quaternion();
   group.visible=false;scene.add(group);
-  return {group,update(progress){
+  return {group,beginCut(){
+    const parent=stalks.get(stem.culm)?.group??group;
+    mouth=axeMouth(parent,stem,bearing,tree,!!cut.culms);
+    mouth.mesh.position.set(stem.x-cut.x,stem.y-cut.y,stem.z-cut.z);parent.add(mouth.mesh);
+    for(const stalk of stalks.values()){
+      if(stalk.group===parent){stalk.rim=mouth.rim;stalk.active=true;continue;}
+      const face=stumpFace(stalk.group,stalk.stem,tree),old=stalk.group.children.find(m=>m.userData.cutCap);
+      old.geometry=face.geometry;old.position.copy(stalk.offset);disposable.push(face.geometry);stalk.rim=face.userData.rim;
+    }
+    incision.value.w=0;
+    group.visible=true;for(const end of ends)end.visible=false;
+    showTimberCut(tree.source);
+    return {front:mouth.front,edges:mouth.edges};
+  },bite(amount){
+    if(!mouth || amount<=0)return;
+    const {edge,slope}=mouth.update(amount,false);incision.value.x=edge;incision.value.y=slope;
+  },update(progress){
+    if(mouth && !incision.value.w){
+      const {edge,slope}=mouth.update(3,true);
+      incision.value.x=edge;incision.value.y=slope;incision.value.w=1;
+    }
     if(!axis)chooseFall();
     group.visible=true;const t=Math.min(1,Math.max(0,progress));
     group.quaternion.setFromAxisAngle(axis,limit*t*t*(3-2*t));
     inverse.copy(group.quaternion).invert();
     for(const stalk of stalks.values()){
-      stalk.group.position.copy(stalk.offset).applyQuaternion(inverse).sub(stalk.offset);
+      stalk.group.position.copy(stalk.pivot).applyQuaternion(inverse).sub(stalk.pivot);
     }
+    if(!stalks.size)group.position.copy(trunkPivot).applyQuaternion(group.quaternion).negate().add(trunkPivot).add(hinge);
     const mist=Math.min(1,Math.max(0,(t-.30)/.70));fade.value=1-mist*mist*(3-2*mist);
-    for(const end of ends)end.visible=fade.value>.34;
-  },dispose(){group.removeFromParent();for(const o of disposable)o.dispose();}};
+    for(const end of ends)end.visible=fade.value>0 && !(mouth && end===flat);
+    if(mouth)mouth.mesh.visible=fade.value>0;
+  },dispose(){if(mouth){showTimberCut(null);mouth.dispose();}group.removeFromParent();for(const o of disposable)o.dispose();}};
 }

@@ -498,8 +498,9 @@ export function poseRice(r,p,t,dt,mood,bath,carryGohei=true) {
   r.step+=dt*(2.4+Math.min(14,speed*1.34));
   const step=Math.sin(r.step), plant=Math.cos(r.step*2);
   const impact=p.impact||0, landing=p.landing||0;
-  const goal=landing>.15 ? -.17-.17*impact : landing>.045 ? .12*impact :
+  const locomotion=landing>.15 ? -.17-.17*impact : landing>.045 ? .12*impact :
     (grounded ? 0 : clamp((p.vy||0)*.009,-.05,.12)) + stride*plant*.042;
+  const goal=locomotion+(p.workStrain??0);
   const frame=Math.min(.12,Math.max(0,dt)), steps=Math.ceil(frame/.009);
   for(let i=0;i<steps;i++){
     const h=frame/steps;
@@ -519,7 +520,7 @@ export function poseRice(r,p,t,dt,mood,bath,carryGohei=true) {
   const bathFace=seated && !p.emote && (bath.action==='steam' || bath.action==='seat')?'Warm':name;
   const cell=playGesture(r,bath?'Float':name,dt,bathFace,p.gestureSample);
   const melt=bath?.melt || 0, recline=bath?.recline || 0;
-  r.smile=T.MathUtils.damp(r.smile,joy?1:0,42,dt);
+  r.smile=p.gestureSample?.smile??T.MathUtils.damp(r.smile,joy?1:0,42,dt);
   r.body.morphTargetInfluences[0]=r.smile;
   r.body.morphTargetInfluences[1]=pull;
   r.body.morphTargetInfluences[2]=dip;

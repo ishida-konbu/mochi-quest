@@ -1,3 +1,4 @@
+import { MALLET_HANDLE_END } from './living-layout.js';
 // Cooking implements are measured at their contact surfaces. One atlas and
 // one mesh per moving implement keep the seams and patina attached to it.
 import * as T from './vendor/three.module.min.js';
@@ -70,7 +71,8 @@ export function makeMallet() {
       [.067,.145],[.061,.159]],origin,'#c8a16e','wood',rotation,52);
     turn(f,[[.061,.159],[.048,.163],[.001,.165]],origin,'#c4a277','end',rotation,52);
     turn(f,[[.001,-.073],[.025,-.073],[.028,.056],[.030,.097],[.027,.175],
-      [.021,.33],[.024,.48],[.022,.60],[.026,.648],[.023,.669],[.001,.672]],
+      [.023,.37],[.024,.51],[.023,.63],[.021,.75],[.024,.86],
+      [.026,.893],[.023,.915],[.001,MALLET_HANDLE_END]],
       [0,-.013,0],'#d5b588','wood',[Math.PI/2,0,0],32);
     f.stroke([[0,-.030,-.066],[.003,-.015,-.075],[-.001,.005,-.070]],
       [.003,.004,.001],'#765844','end',5,8);

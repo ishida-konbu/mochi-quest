@@ -1,4 +1,4 @@
-import { isTimberFelled,timberRevision } from './living-build-trees.js';
+import { isTimberHidden,timberRevision } from './living-build-trees.js';
 import {peachStrokes} from './pilgrimage-trees.js';
 import * as T from './vendor/three.module.min.js';
 import { PEACH_TREES } from './pilgrimage-layout.js';
@@ -147,7 +147,7 @@ export function createPeachOrchard(scene) {
       if(!frustum.intersectsSphere(bounds))continue;
       for(const tree of stand.trees){
         const dx=wrapDelta(tree.x-x),dz=wrapDelta(tree.z-z),dist=Math.hypot(dx,dz,y-tree.y-CROWN_MID*tree.size);
-        if(dist>range || isTimberFelled(tree))continue;
+        if(dist>range || isTimberHidden(tree))continue;
         colour.set(tints[tree.seed%tints.length]);
         if(dist<(60+tree.size*8)){
           bounds.center.set(x+dx,tree.y+CROWN_MID*tree.size,z+dz);bounds.radius=CROWN_SPAN*.58*tree.size;

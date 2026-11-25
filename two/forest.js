@@ -1,4 +1,4 @@
-import { isTimberFelled, timberRevision } from './living-build-trees.js';
+import { isTimberHidden, timberRevision } from './living-build-trees.js';
 import * as THREE from './vendor/three.module.min.js';
 import { kyoRidgeHeight } from './higashiyama.js';
 import { kaedeTrees } from './kaede-grove.js';
@@ -332,7 +332,7 @@ export function* prepareForest(scene, clock, boughs) {
         const {tree,ground,rotation,wash,dye,bambooWash,detailStart,reach,tint:brightness}=record;
         const dx=wrapDelta(tree.x-eye.x), dz=wrapDelta(tree.z-eye.z);
         const d2=dx*dx+dz*dz+(ground-eye.y)**2;
-        if(d2>rangeSq || isTimberFelled(tree)) continue;
+        if(d2>rangeSq || isTimberHidden(tree)) continue;
         const x=eye.x+dx,z=eye.z+dz;
         crown.center.set(x,ground+.58*tree.h,z);
         // Include the whole baked crown, a camera stride, and the permitted

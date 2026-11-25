@@ -148,7 +148,7 @@ let travelCameraEnabled = travelCameraPreference(savedSettings) ?? true;
 audio.setVolumes(volumes);
 let yaw = Number.isFinite(savedSettings.yaw) ? savedSettings.yaw : 0;
 const travelCamera = createTravelCamera();
-let chopOrbit = null;
+let chopOrbit = null, watchCut=false, cutWeight=0;
 let pitch = 0.23,
   distance = 6.55,
   priorCamera = null,
@@ -295,6 +295,7 @@ function dispatchEvents() {
         const stem=e.tree.stem??e.tree;
         const axis=Math.atan2(wrapDelta(p.x-stem.x),wrapDelta(p.z-stem.z));
         chopOrbit=chopCameraArc(yaw,axis,chopCameraClearance);
+        watchCut=true;
       }
     }
     if (e.type === 'living') {
@@ -508,7 +509,7 @@ const chopping=createExplorationFelling({
 });
 const sleepingViewer=Object.create(p,{worldMinute:{value:0,writable:true}});
 const sleepingWorld=Object.create(state,{player:{value:sleepingViewer}});
-const sleeping=createCampSleepView({scene,camera,player:p,dialog,canStand:outdoorWork.canStand,
+const sleeping=createCampSleepView({scene,camera,player:p,dialog,getRoof:bed=>world.getBedRoof(bed),canStand:outdoorWork.canStand,
   enter(bed){clearInput();actors.hero.visible=false;world.setOccupiedBed(bed.id);},
   draw(visualMinute,dt=0){
     sleepingViewer.worldMinute=visualMinute;
@@ -750,7 +751,7 @@ function moveCamera(dx, dy) {
     return;
   }
   if (dx || dy) {
-    chopOrbit=null;
+    chopOrbit=null;watchCut=false;
     travelCamera.manualLook(turn);
   }
   yaw += turn;
@@ -776,6 +777,7 @@ canvas.onlostpointercapture = (e) => {
 };
 canvas.onwheel = (e) => {
   e.preventDefault();
+  if(chopping.active){watchCut=false;chopOrbit=null;}
   if(!speech.active)conversationShot=null;
   if (speech.active && conversationShot) {
     conversationShot.distance = clamp(conversationShot.distance * Math.exp(clamp(e.deltaY,-200,200)*.0015), 2.1, 9);
@@ -1010,6 +1012,16 @@ function updateCamera(dt, snap = false) {
   // berth sweeps the camera arm across low rims and roof posts during a soak.
   if (photoMode && bath) heroAt.set(bath.x, THREE.MathUtils.lerp(standingEye,bathEye,settle), bath.z);
   else heroAt.set(p.x, standingEye, p.z);
+  // Ease in beside the working edge for the three bites. Keep the normal
+  // camera's collision checks; the automatic framing releases on manual look.
+  const cut=chopping.cut;
+  cutWeight=THREE.MathUtils.damp(cutWeight,cut && watchCut && !framed && !photoMode?chopping.atTrunk:0,11,dt);
+  const nearCut=cut?cutWeight:0;
+  if(nearCut>0){
+    heroAt.x+=wrapDelta(cut.x-heroAt.x)*.55*nearCut;
+    heroAt.z+=wrapDelta(cut.z-heroAt.z)*.55*nearCut;
+    heroAt.y=THREE.MathUtils.lerp(heroAt.y,cut.y+.44*full,nearCut);
+  }
   if (framed) {
     const shot=conversationShot;
     const subject=shot.wide && speech.active && storyWorld.actionFocus;
@@ -1033,10 +1045,11 @@ function updateCamera(dt, snap = false) {
     sz = Math.cos(azimuth),
     scenery = photoMode ? 0 : scrollCoverage(p.x,p.z),
     travelDistance=distance*(full > 1 && photoMode ? 1.18 : 1)*(1+.14*scenery),
-    d = framed ? conversationShot.distance : travelDistance;
+    d = framed ? conversationShot.distance : THREE.MathUtils.lerp(travelDistance,
+      Math.min(travelDistance,(camera.aspect<.82?4.6:3.60)*Math.sqrt(full)),nearCut);
   // At the horizon, hold the eye above ground and tilt up to follow an animal overhead.
-  const orbitPitch = framed ? conversationShot.pitch : photoMode ? pitch : Math.max(0,pitch);
-  const shoulder = framed ? 0 : scenery*Math.min(1,camera.aspect)*Math.min(1,d/5);
+  const orbitPitch = framed ? conversationShot.pitch : photoMode ? pitch : THREE.MathUtils.lerp(Math.max(0,pitch),clamp(pitch,.12,.37),nearCut);
+  const shoulder = framed ? 0 : scenery*Math.min(1,camera.aspect)*Math.min(1,d/5)*(1-nearCut);
   const dx = sx * Math.cos(orbitPitch) * d + sz*1.58*shoulder,
     dz = sz * Math.cos(orbitPitch) * d - sx*1.58*shoulder;
   let dy = Math.sin(orbitPitch) * d + (photoMode ? 0.1 : 0.62);
@@ -1099,13 +1112,13 @@ function updateCamera(dt, snap = false) {
     }
     // Give the page to the animal directly ahead. An off-centre mochi keeps
     // the letter trajectory visible between the hero and its recipient.
-    const lookAhead = 1.65 + .82*scenery + 1.9*travelCamera.lead*fraction;
+    const lookAhead = (1.65 + .82*scenery + 1.9*travelCamera.lead*fraction)*(1-nearCut);
     aim.x += (sz*.4*shoulder-sx*lookAhead)*(1-settle);
     aim.z -= (sx*.4*shoulder+sz*lookAhead)*(1-settle);
-    aim.y += (.53+.25*scenery)*(1-settle)+(camera.aspect<.83 ? .27*settle : 0);
+    aim.y += (.53+.25*scenery)*(1-settle)*(1-nearCut)+(camera.aspect<.83 ? .27*settle : 0);
   } else if (photoMode) aim.y -= .13;
   camera.lookAt(aim);
-  if (!photoMode && !framed && pitch < 0) camera.rotateX(-pitch*(1-settle));
+  if (!photoMode && !framed && pitch < 0) camera.rotateX(-pitch*(1-settle)*(1-nearCut));
   camera.updateMatrixWorld();
 }
 const fullScore = new Intl.NumberFormat('ja-JP');
@@ -1484,7 +1497,7 @@ function frame(now) {
   const orbit = (Number(keys.has('KeyQ')) - Number(keys.has('KeyR'))) * delta * 1.65;
   if (orbit && speech.active && conversationShot) conversationShot.yaw += orbit;
   else if (orbit) {
-    chopOrbit=null;
+    chopOrbit=null;watchCut=false;
     travelCamera.manualLook(orbit);
     yaw += orbit;
   }

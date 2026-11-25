@@ -4,6 +4,8 @@ import { createLivingWorld, readLivingWorld, validLivingWorld } from '../two/liv
 import { constructionSite, finishConstruction, getMoveRoots, HEIGHT_STEP, MAX_HEIGHT_STEPS, moveStructureGroup,
   nearBuildStructure, placeStructure, removeStructureGroup, surveyMoveGroup, surveyRemoveGroup,
   surveySite, transferStorage, validBuildLand, withBuildTerrain } from '../two/living-build.js';
+import { campMattress, matEdges } from '../two/camp-bedding.js';
+import { buildContacts } from '../two/living-build-contacts.js';
 import { entryFlight } from '../two/homestead-foundation.js';
 import { canOccupy, groundHeight, terrainContactHeight } from '../two/terrain.js';
 
@@ -143,4 +145,43 @@ test('an occupied stair is rerouted before construction, and the paid flight is 
   assert.ok(validBuildLand(readLivingWorld(14,JSON.parse(JSON.stringify(w)))));
   const lid={x:recorded.x,z:recorded.z,y:recorded.y+.88,grounded:true};
   assert.equal(removeStructureGroup(w,[recorded.id],{state:{player:lid}}).ok,false);
+});
+
+
+test('old hillside stairs meet the expanded cot along either side without the bamboo deck covering a tread',()=>{
+  const p=check(constructionSite(purse(),'camp',pose(116,115,.30)));
+  for(const bay of [0,22]){
+    const site={...p,kind:'camp',entryBay:bay},m=campMattress(site),flight=entryFlight('camp',site);
+    assert.equal(flight.bay,bay);
+    assert.ok(m.width>1.5);
+    for(const t of flight.treads){
+      const [left,right]=matEdges(m,t.z);
+      if(flight.normal[0]>0)assert.ok(right<=t.x-t.w/2+1e-9);
+      else assert.ok(left>=t.x+t.w/2-1e-9);
+    }
+    for(let z=-.775;z<-.665;z+=.005)assert.ok(matEdges(m,z)[0]>-.725,'staff socket intersects slats');
+  }
+});
+
+test('the bed on a furnished floor clears its wall, door posts and chest and supports the player on both sides',()=>{
+  const {w,camp,floor}=yard();
+  check(moveStructureGroup(w,[camp.id],{dx:floor.x-camp.x,dz:floor.z-camp.z}));
+  const restored=readLivingWorld(14,structuredClone(w));
+  const bed=restored.structures.find(s=>s.id===camp.id),m=campMattress(bed);
+  const furniture=restored.structures.filter(s=>['chest','posts','wall'].includes(s.kind));
+  const solid=buildContacts(furniture).filter(p=>p.bottom<bed.y+.40 && p.top>bed.y+.015);
+  const supports=buildContacts([bed]).filter(part=>part.kind==='floor' && part.support);
+  assert.equal(supports.length,10);
+  assert.ok(m.foot-m.head>2.3 && m.width>1.5);
+  for(let z=m.head;z<m.foot;z+=.009){
+    const [left,right]=matEdges(m,z);
+    for(const part of solid){
+      if(Math.abs(bed.z+z-part.z)>=part.d/2)continue;
+      assert.ok(bed.x+right<part.x-part.w/2 || bed.x+left>part.x+part.w/2,'bedding intersects '+part.kind);
+    }
+    for(const x of [left+.055,right-.055]){
+      const support=supports.find(p=>Math.abs(bed.x+x-p.x)<p.w/2 && Math.abs(bed.z+z-p.z)<=p.d/2+1e-8);
+      assert.ok(support,'missing contact below mat at '+[x,z]);close(support.top,bed.y+.13);
+    }
+  }
 });

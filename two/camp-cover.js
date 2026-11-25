@@ -1,9 +1,9 @@
 // A sewn envelope folds down at the foot of the cot, and opens over the
 // sleeping actor. Top and underside meet at a hem with a visible thickness.
 import * as T from './vendor/three.module.min.js';
-import {BEDDING_NAMES} from './camp-bedding.js';
+import {BEDDING_NAMES,campMattress,matEdges} from './camp-bedding.js';
 
-const NX=38,NZ=42,sheet=(NX+1)*(NZ+1),materials=[],folded=[];
+const NX=38,NZ=42,sheet=(NX+1)*(NZ+1),materials=[],folded=new Map();
 const tau=Math.PI*2,clamp=x=>Math.max(0,Math.min(1,x));
 function pigment(grade){
   if(materials[grade])return materials[grade];
@@ -58,32 +58,61 @@ function textile(){
   g.setAttribute('position',new T.Float32BufferAttribute(new Float32Array(sheet*2*3),3));
   return g;
 }
-export function drapeCover(g,grade,open,arch,bodyHeight){
-  const a=g.attributes.position,thickness=[.016,.011,.037,.082][grade];
+const pad=[.016,.011,.037,.082];
+// The two pinches carry the hem; the centre of the free selvedge hangs
+// below them. At rest the same length of fabric lies pleated at the feet.
+export function coverEdge(m,open,chin){
+  return T.MathUtils.lerp(m.foot-.42,chin,open);
+}
+export function drapeCover(g,grade,open,arch,bodyHeight,edge,grips){
+  const m=g.userData.mattress??campMattress(),a=g.attributes.position,thickness=pad[grade];
+  const hem=edge??coverEdge(m,open,.03),foot=m.foot-.025;
   for(let j=0;j<=NZ;j++)for(let i=0;i<=NX;i++){
-    const u=i/NX,v=j/NZ,across=2*u-1,edge=Math.min(u,1-u,v,1-v);
-    // The cover unrolls from the foot toward the chest. One side is
-    // pulled slightly ahead of the other before the two selvages settle.
-    const x=across*(.555+.065*open)+.004*Math.sin(2.4*Math.PI*v+1.2*across);
-    const z=.952-v*(.34+.47*open)+.028*across*Math.sin(Math.PI*open)*v;
-    const ridge=Math.sin(v*Math.PI*5.5+.24*Math.sin(u*tau))* (.021*(1-open)+.005);
+    const u=i/NX,v=j/NZ,across=2*u-1,border=Math.min(u,1-u,v,1-v);
+    let z=foot+v*(hem-foot)+.095*(1-across*across/.3481)*Math.exp(-across*across*4)*v*open;
+    const [left,right]=matEdges(m,z);
+    // Keep the loose corners clear of the pennant and door posts, just as
+    // the bamboo slats below are scribed away at these points.
+    const sewnHalf=m.width*.5-.028+open*.086;
+    let x=m.x+across*sewnHalf;
+    const borderBias=Math.abs(across)**3;
+    x+=borderBias*(across<0?left-m.x+.5*m.width:right-m.x-.5*m.width);
+    if(across<0){
+      const notch=T.MathUtils.smoothstep(left-(m.x-m.width*.5),.065,.14);
+      x+=borderBias*notch*Math.max(0,sewnHalf-m.width*.5+.008);
+    }
+    const fold=1-open,pleat=Math.sin(v*Math.PI*6+.18*Math.sin(u*tau));
+    z+=.035*fold*Math.sin(tau*3*v)*Math.sin(Math.PI*v);
     const tuck=grade===3 ? Math.abs(Math.sin(Math.PI*(3*u+2*v))*Math.sin(Math.PI*(3*u-2*v))) :
       Math.pow(Math.sin(u*Math.PI*4)*Math.sin(v*Math.PI*4),2);
-    const loft=(grade>1?thickness*(.4+.45*tuck):.006)*clamp(edge*15);
-    const rest=.153+thickness+.018*(1-open)+ridge+loft;
-    const lift=arch*.18*Math.sin(Math.PI*v)*Math.cos(across*1.20);
-    const edgeDrop=clamp((Math.abs(x)-.502)/.118)*open;
-    const body=bodyHeight?.(x,z)??0;
-    // The belly supports the lining. Keep wadding between that surface
-    // and the upper cloth, even where the body stands above the flat mat.
-    const supported=Math.max(rest,body+(grade>1?thickness*.48+loft:0));
-    const y=supported+(rest-supported)*edgeDrop*edgeDrop*(3-2*edgeDrop)+lift+.004;
-    const k=j*(NX+1)+i;a.setXYZ(k,x,y,z);a.setXYZ(k+sheet,x,y-thickness*(.55+.45*clamp(edge*12)),z);
+    const loft=(grade>1?thickness*(.36+.55*tuck):.006)*clamp(border*15);
+    const base=.144+thickness+loft+fold*(.021+.022*pleat);
+    const surface=bodyHeight?.(x,z)??0;
+    let y=Math.max(base,surface+.008+thickness+loft);
+    if(grips){
+      const w=Math.pow(v,2.2);
+      // Pinch in from the corners. The woven neighbours follow a short way
+      // behind the hand; the bottom of the quilt stays on the bamboo mat.
+      for(const [k,hand] of grips.entries()){
+        const pin=(k?.59:-.59);
+        const share=w*Math.exp(-(((across-pin)/.33)**2))*hand.weight;
+        const nominal=m.x+pin*sewnHalf;
+        x+=share*(hand.x-nominal);z+=share*(hand.z-hem);
+        y+=share*(hand.y-y);
+      }
+      y=Math.max(y,(bodyHeight?.(x,z)??0)+.009);
+    }
+    y+=arch*.045*Math.sin(Math.PI*v)*(1-Math.abs(across)*.6);
+    const k=j*(NX+1)+i;
+    a.setXYZ(k,x,y,z);a.setXYZ(k+sheet,x,y-thickness*(.60+.40*clamp(border*12)),z);
   }
   a.needsUpdate=true;g.computeVertexNormals();g.computeBoundingSphere();g.computeBoundingBox();
 }
-export function campCover(grade=0,moving=false){
-  const g=moving?textile():folded[grade]??=textile();
+export function campCover(grade=0,moving=false,bed=false){
+  const mat=bed?.width?bed:campMattress(bed);
+  if(!folded.has(mat))folded.set(mat,[]);
+  const cache=folded.get(mat),g=moving?textile():cache[grade]??=textile();
+  g.userData.mattress=mat;
   if(!g.boundingSphere)drapeCover(g,grade,0,0);
   const mesh=new T.Mesh(g,pigment(grade));
   mesh.name=BEDDING_NAMES[grade];mesh.castShadow=true;mesh.receiveShadow=true;return mesh;

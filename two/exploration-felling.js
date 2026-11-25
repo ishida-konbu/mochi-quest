@@ -4,6 +4,7 @@ import { createCookingPerformer } from './cooking-performer.js';
 import { groundHeight, canOccupy } from './terrain.js';
 import { InkForm, surface } from './ryugu-ink.js';
 import { cookingAtlas } from './cooking-atlases.js';
+import {axeEdges} from './timber-axe-mouth.js';
 import { fallingTimber } from './falling-timber.js';
 
 const pi=Math.PI,tau=2*pi,clamp=n=>Math.min(1,Math.max(0,n));
@@ -45,32 +46,37 @@ function handAxe(){
   return tool;
 }
 function bladeChips(parent,plan){
-  const shards=new T.Group(),material=new T.MeshLambertMaterial({color:'#cfab77',side:T.DoubleSide});
-  const chip=surface([-.038,0,.003,.032,-.008,0,.016,.014,.008,-.018,.006,.01,0,.001,-.009],
-    [0,1,2,0,2,3,0,4,1,2,1,4,3,2,4,0,3,4],[0,0,1,0,.7,1,.1,.85,.5,.5]);
-  for(let i=0;i<6;i++)shards.add(new T.Mesh(chip,material));
-  const scar=surface([-.09,-.008,0,.086,-.004,0,.069,.024,.002,-.071,.018,.003],[0,1,2,0,2,3],
-    [0,0,1,0,1,1,0,1]);
-  const notch=new T.Mesh(scar,material);
-  notch.position.set(0,0,plan.stem.radius+.007);
-  shards.visible=notch.visible=false;
-  parent.add(shards,notch);
+  const shards=new T.Group(),material=new T.MeshLambertMaterial({vertexColors:true,side:T.DoubleSide});
+  const grain=new T.Color(),parts=[];
+  for(let i=0;i<5;i++){
+    const wide=i===1?.055:.016+i*.003,long=.034+.009*(i%3);
+    // A shaving has a feathered leading edge and a blunt, torn end.
+    const g=surface([-wide,-.002,-long,wide*.72,0,-long*.84,wide*.61,.006,long*.57,
+      -wide*.83,.009,long,0,.020,.63*long], [0,1,2,0,2,3,0,3,4,3,2,4,2,1,4,1,0,4], [0,0,1,0,.88,.74,0,1,.43,.70]);
+    const colors=['#ae855c','#c79864','#dbb07b','#edc595','#856548'].flatMap(c=>grain.set(c).toArray());
+    g.setAttribute('color',new T.Float32BufferAttribute(colors,3));
+    const piece=new T.Mesh(g,material);parts.push(piece);shards.add(piece);
+  }
+  shards.visible=false;parent.add(shards);
   return {update(time,count){
     if(!count)return;
-    const age=time-plan.impactTimes[count-1],size=Math.min(1,plan.stem.radius/.17);
-    notch.visible=count<3;
-    notch.scale.set(size*(.45+.24*count),.55+.38*count,1);
-    shards.visible=age<.48 && age>=0;
+    const age=time-plan.impactTimes[count-1],size=Math.min(1.2,plan.stem.radius/.19);
+    shards.visible=age<.45 && age>=0;
     if(!shards.visible)return;
-    for(const [i,m] of shards.children.entries()){
-      const side=i%2?1:-1,speed=.49+.19*i;
-      m.position.set(side*age*speed,age*(.72+.11*i)-3.6*age*age,plan.stem.radius+age*(.21+.08*(i%3)));
-      m.rotation.set(age*(1+i),side*age*8,i*.7+age*4);
-      m.scale.setScalar((.65+.13*(i%3))*size*(1-ease((age-.31)/.17)));
+    const at=plan.edges[count-1],length=(plan.front-at)*.24;
+    for(const [i,m] of parts.entries()){
+      m.visible=i<2+count;
+      if(!m.visible)continue;
+      const side=i%2?1:-1,spread=(i*.37)%1,travel=.58+.15*i;
+      m.position.set(side*(.032*size+age*(.31+.18*i)),length*(.35+.36*spread)+age*(.65+.16*i)-3.8*age*age,
+        plan.front-length*(.25+.55*spread)+age*travel);
+      m.rotation.set(.3*i+age*(3+i),side*age*5,i*1.1+age*4);
+      m.scale.setScalar((.48+.18*count)*size*(1-ease((age-.34)/.11)));
     }
-  },dispose(){chip.dispose();scar.dispose();material.dispose();}};
+  },dispose(){for(const piece of parts)piece.geometry.dispose();material.dispose();}};
+
 }
-export function fellingMotion(tree,player,canStand=()=>true){
+export function fellingMotion(tree,player,canStand=()=>true,mouth){
   const cut=timberCut(tree),stem=tree.stem??cut;
   const bearing=Math.atan2(player.x-stem.x,player.z-stem.z),c=Math.cos(bearing),s=Math.sin(bearing);
   const giant=player.buffs?.full>0?1.28:1,dist=Math.hypot(player.x-stem.x,player.z-stem.z);
@@ -92,15 +98,16 @@ export function fellingMotion(tree,player,canStand=()=>true){
     stance=q;
   }
   const stride=Math.hypot(stance[0],stance[1]-dist);
-  const approach=.54+stride/.98,beat=.85,bite=.66,cutAt=approach+2*beat+bite;
+  const approach=.54+stride/.98,beat=.99,bite=.68,cutAt=approach+2*beat+bite;
   const impactTimes=[0,1,2].map(i=>approach+i*beat+bite),duration=cutAt+2.55;
   const toolYaw=.20;
   function onHandle(pos,pitch,u,y,v){
     const h=y*Math.cos(pitch)-v*Math.sin(pitch),d=y*Math.sin(pitch)+v*Math.cos(pitch);
     return [pos[0]+u*Math.cos(toolYaw)+d*Math.sin(toolYaw),pos[1]+h,pos[2]-u*Math.sin(toolYaw)+d*Math.cos(toolYaw)];
   }
-  const contact=onHandle([0,0,0],-1.05,0,.51,-.215);
-  const at=[0,-.006,stem.radius-.008],working=at.map((n,i)=>n-contact[i]);
+  const bitePitch=-1.31,contact=onHandle([0,0,0],bitePitch,0,.51,-.215);
+  const front=mouth?.front??stem.radius,edges=mouth?.edges??axeEdges(front,-stem.radius);
+  const targets=edges.map(z=>[0,.006,z]);
   function sample(time){
     const t=Math.max(0,Math.min(duration,time));
     const fit=ease(t/approach),retreat=ease((t-cutAt-.48)/1.06);
@@ -117,22 +124,28 @@ export function fellingMotion(tree,player,canStand=()=>true){
     });
     const hy=fixed?reference-stem.y+saddle:(feet[0][1]+feet[1][1])/2,hero=[u,hy,v];
     const phase=Math.max(0,(t-approach)),cycle=Math.min(2,Math.floor(phase/beat)),within=Math.min(beat,phase-cycle*beat);
+    const at=targets[cycle],working=at.map((n,i)=>n-contact[i]);
     const raised=[u-.46*giant,hy+1.27*giant,v-.46*giant];
     const ready=[u-.48*giant,hy+.78*giant,v-.64*giant];
-    const wind=ease(within/.36),hit=ease((within-.39)/(bite-.39)),release=ease((within-bite-.065)/(beat-bite-.065));
+    const wind=ease(within/.33),hit=ease((within-.35)/(bite-.35)),release=ease((within-bite-.065)/(beat-bite-.065));
     // First two recoveries start the next upswing from the same ready grip.
     const releaseLast=cycle===2?ease((t-cutAt-.10)/.48):release;
     const swing=blend(blend(blend(ready,raised,wind),working,hit),ready,releaseLast);
-    const swingPitch=mix(mix(mix(-.18,.40,wind),-1.05,hit),-.18,releaseLast);
+    const swingPitch=mix(mix(mix(-.18,.40,wind),bitePitch,hit),-.18,releaseLast);
     const take=ease((t-.14)/.32),sheathe=ease((t-cutAt-.53)/.48),grips=take*(1-sheathe);
     const tool=blend([u-.13*giant,hy+.36*giant,v+.12*giant],swing,grips),pitch=mix(.63,swingPitch,grips);
     const right=onHandle(tool,pitch,.024,.095,.012),left=onHandle(tool,pitch,-.025,.235,.008);
     const idle=side=>[u+side*.76*giant*Math.cos(heading)+.42*giant*Math.sin(heading),hy+.67*giant,v-side*.76*giant*Math.sin(heading)+.42*giant*Math.cos(heading)];
-    return {time:t,hero,heading,feet,hands:[blend(idle(-1),right,grips),blend(idle(1),left,grips)],phase:'chop',
+    const blade=onHandle(tool,pitch,0,.51,-.215);
+    const from=cycle?edges[cycle-1]:front;
+    const biteDepth=cycle+(within>=bite?1:hit>.35?clamp((from-blade[2])/(from-at[2])):0);
+    const restHands=[idle(-1),idle(1)];
+    return {time:t,hero,heading,feet,biteDepth,restHands,handWork:[grips,grips],
+      hands:[blend(restHands[0],right,grips),blend(restHands[1],left,grips)],phase:'chop',
       focus:at,lean:(.09+.14*hit*(1-releaseLast))*grips,lift:-.11*hit*(1-releaseLast)*grips,effort:(.21+.62*hit)*(1-releaseLast)*grips,
       tool,pitch,toolYaw,draw:grips,cutAt,at};
   }
-  return {bearing,stem,sample,duration,impactTimes,cutAt,landingY};
+  return {bearing,stem,sample,duration,impactTimes,cutAt,landingY,front,edges};
 }
 export function createExplorationFelling({scene,player,hero,commit,impact,done,canStand}){
   let run=null;
@@ -145,11 +158,12 @@ export function createExplorationFelling({scene,player,hero,commit,impact,done,c
   }
   function start(tree){
     if(run || !tree)return false;
-    const plan=fellingMotion(tree,player,canStand);
+    const top=fallingTimber(scene,tree,player,canStand);
+    const plan=fellingMotion(tree,player,canStand,top.beginCut());
     const group=new T.Group();group.name='探索中の木こり';
     group.position.set(plan.stem.x,plan.stem.y,plan.stem.z);group.rotation.y=plan.bearing;
     scene.add(group);group.updateMatrixWorld(true);
-    const performer=createCookingPerformer(group,player),axe=handAxe(),top=fallingTimber(scene,tree,player,canStand);
+    const performer=createCookingPerformer(group,player),axe=handAxe();
     const chips=bladeChips(group,plan);group.add(axe);
     const actor=hero(),travelBody=player.mount?(actor.getObjectByName('mochi')??actor):actor;
     run={group,performer,axe,chips,top,plan,tree,time:0,next:0,travelBody,wasVisible:travelBody.visible,result:null};
@@ -164,14 +178,21 @@ export function createExplorationFelling({scene,player,hero,commit,impact,done,c
     while(r.next<3 && r.time>=r.plan.impactTimes[r.next]){
       impact?.(r.next+1);r.next++;
     }
+    if(!r.result)r.top.bite(f.biteDepth);
     r.chips.update(r.time,r.next);
     if(r.next===3 && !r.result)r.result=commit(r.tree);
-    if(r.result?.ok)r.top.update((r.time-r.plan.cutAt)/2.20);
+    else if(r.result?.ok)r.top.update((r.time-r.plan.cutAt)/2.20);
     if(r.time>=r.plan.duration){
       if(!player.mount && !player.skiff)player.heading=Math.atan2(-Math.sin(r.plan.bearing),-Math.cos(r.plan.bearing));
       if(r.plan.landingY!==null)Object.assign(player,{y:r.plan.landingY,grounded:true,h:0,vy:0});
       finish();
     }
   }
-  return {start,update,close:finish,get active(){return !!run;}};
+  return {start,update,close:finish,get active(){return !!run;},
+    get cut(){return run?.plan.stem;},
+    get atTrunk(){
+      if(!run)return 0;
+      return ease(run.time/.95)*(1-ease((run.time-run.plan.cutAt-.08)/1.55));
+    }};
+
 }

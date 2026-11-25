@@ -1,5 +1,7 @@
 import { foundationMembers, addFoundationContacts } from './homestead-foundation.js';
 
+import {campMattress,matEdges,campPennon,campStaff} from './camp-bedding.js';
+
 export function buildContacts(structures) {
   const parts=[];
   for(const s of structures) {
@@ -10,11 +12,32 @@ export function buildContacts(structures) {
     };
     for(const member of foundationMembers(s.kind,s))addFoundationContacts(add,member);
     switch(s.kind) {
-      case 'camp':
-        if(!s.parentId)add(-.78,-.72,.11,.11,-.2,1.79,'oval');
-        add(0,.11,1.13,1.72,.018,.13,'floor',true);
-        add(0,-.54,1.0,.26,.12,.396);
+      case 'camp': {
+        const m=campMattress(s),bands=10,slice=(m.foot-m.head)/bands;
+        if(!s.parentId){
+          for(const [a,b,r] of campStaff){
+            // Clip the diagonal knee into short spans instead of blocking
+            // the entire wedge above the old socket beside the mattress.
+            const slices=a[1]<0?4:1;
+            for(let k=0;k<slices;k++){
+              const t=(k+.5)/slices;
+              const x=a[0]+(b[0]-a[0])*t,z=a[2]+(b[2]-a[2])*t;
+              add(x,z,2*r+Math.abs(b[0]-a[0])/slices,2*r+Math.abs(b[2]-a[2])/slices,
+                a[1]+(b[1]-a[1])*k/slices-r,a[1]+(b[1]-a[1])*(k+1)/slices+r);
+            }
+          }
+          for(let k=0;k<3;k++){
+            const a=campPennon(k/3,1),b=campPennon((k+1)/3,0);
+            add((a[0]+b[0])/2,-.964,b[0]-a[0],.047,a[1],1.87);
+          }
+        }
+        for(let i=0;i<bands;i++){
+          const z=m.head+(i+.5)*slice,[left,right]=matEdges(m,z);
+          add((left+right)/2,z,right-left,slice,.018,.13,'floor',true);
+        }
+        add(m.x,m.pillowZ,m.pillowWidth,.26,.13,.396);
         break;
+      }
       case 'floor':
         add(0,0,3.2,2.8,-.02,.18,'floor',true);
         break;

@@ -21,10 +21,10 @@ const mortarPaddle=still([-.39,.773,.36],[0,-1.25,0]);
 const rightLid=grip('lid',[.042,.028,0]);
 const bowlHands=[grip('bowl',[.145,.072,.035]),grip('bowl',[-.145,.072,.035])];
 const clothHands=[grip('cloth',[.145,.16,.035]),grip('cloth',[-.145,.16,.035])];
-const malletHands=[grip('mallet',[.012,0,.49]),grip('mallet',[-.012,0,.24])];
+const malletHands=[grip('mallet',[.012,0,.87]),grip('mallet',[-.012,0,.61])];
 const paddleGrip=grip('paddle',[0,.01,.18]);
 const lidPark=still([.815,1.035,-.19],[0,.04,1.45]);
-const malletRack=still(MALLET_RACK,[0,PI/2,0]);
+const malletRack=still(MALLET_RACK);
 const receivingBowl=still([-.22,.763,-.28]);
 const spentCloth=still([receivingBowl.position[0],.789,receivingBowl.position[2]]);
 const board=[-.045,.798,.29], well=[-.68,1.187,.01];
@@ -181,29 +181,35 @@ export function createCookingScore(draft,layout={},entry={}) {
   beat(.28,{hands:[rest,rest],food:{steam:.32,gather:0},lean:.09});
 
   phase('pound',draft.technique==='half'?'杵で軽くつき、米粒を残す':'杵で米をつぶし、粘りが出るまでつく');
-  beat(.46,{stance:stance(-1.04),hands:malletHands,focus:malletRack.position,lean:.21});
-  beat(.38,{tools:moveTool('mallet',[-1.31,1.49,-.396],[0,PI/2,0]),lean:.11});
-  beat(.61,{stance:stance(-1.12,1.16,PI-.12),tools:moveTool('mallet',[-.68,1.55,.01],[-.12,0,-1.48]),focus:well,lean:.08});
+  // Leave space on the steps for the belly and both rounded mitts while the
+  // long handle sweeps back. A full traveller works from the lower tread.
+  const stepBack=entry.full ? .29 : 0;
+  const atRack=stance(-.70,1.34+stepBack);
+  const aboveRack=still([MALLET_RACK[0],1.65,MALLET_RACK[2]]);
+  const atMortar=stance(-1.27,1.34+stepBack,PI-.13);
+  beat(.46,{stance:atRack,hands:malletHands,focus:malletRack.position,lean:.21});
+  beat(.38,{tools:{mallet:aboveRack},lean:.11});
+  beat(.61,{stance:atMortar,tools:moveTool('mallet',[-.68,1.55,.01],[-.12,.36,-1.48]),focus:well,lean:.08});
   // Press the grains first. A long downstroke before they cohere scatters rice.
   for(let i=0;i<2;i++){
-    beat(.31,{tools:moveTool('mallet',[-.70+i*.045,1.287,.005],[-.49,.025,-1.50]),lean:.20,effort:.55,
+    beat(.31,{tools:moveTool('mallet',[-.70+i*.045,1.287,.005],[-.49,.36,-1.50]),lean:.20,effort:.55,
       food:{compression:.45,smooth:.055+.06*i}});
-    beat(.27,{tools:moveTool('mallet',[-.66,1.46,.048],[-.16,0,-1.49]),lean:.12,effort:.12,food:{compression:0}});
+    beat(.27,{tools:moveTool('mallet',[-.66,1.46,.048],[-.16,.36,-1.49]),lean:.12,effort:.12,food:{compression:0}});
   }
   const strikes=draft.technique==='half'?3:5;
   const finalSmooth=draft.technique==='half'?.57:1;
   for(let i=0;i<strikes;i++){
     const force=.84+.16*Math.sin((i+1)*1.7), sway=.025*Math.cos(i*1.6);
-    beat(.48,{tools:moveTool('mallet',[-.66+sway,1.98+.08*force,.245],[.97,-.035,-1.33]),lean:-.035,lift:.065,effort:.45,food:{compression:0}});
-    beat(.12,{tools:moveTool('mallet',[-.68+sway,2.04,.26],[1.09,-.035,-1.36]),lift:.068});
-    beat(.26,{tools:moveTool('mallet',[-.68+sway,1.308,.0],[-.35,.025,-1.51]),lean:.23,lift:-.035,effort:1,
+    beat(.48,{tools:moveTool('mallet',[-.66+sway,1.98+.08*force,.245],[.97,.36,-1.33]),lean:-.035,lift:.065,effort:.45,food:{compression:0}});
+    beat(.12,{tools:moveTool('mallet',[-.68+sway,2.04,.26],[1.09,.36,-1.36]),lift:.068});
+    beat(.26,{tools:moveTool('mallet',[-.68+sway,1.308,.0],[-.35,.36,-1.51]),lean:.23,lift:-.035,effort:1,
       food:{compression:1,smooth:.12+(finalSmooth-.12)*(i+1)/strikes}},'fall');sound('pound');
-    beat(.17,{tools:moveTool('mallet',[-.67+sway,1.397,.018],[-.30,.01,-1.50]),lean:.18,lift:-.014,effort:.52,food:{compression:.36,stretch:.7}});
-    beat(.19,{tools:moveTool('mallet',[-.67,1.49,.044],[-.17,0,-1.49]),lean:.11,lift:0,effort:.19,food:{compression:0,stretch:0}});
+    beat(.17,{tools:moveTool('mallet',[-.67+sway,1.397,.018],[-.30,.36,-1.50]),lean:.18,lift:-.014,effort:.52,food:{compression:.36,stretch:.7}});
+    beat(.19,{tools:moveTool('mallet',[-.67,1.49,.044],[-.17,.36,-1.49]),lean:.11,lift:0,effort:.19,food:{compression:0,stretch:0}});
   }
-  beat(.39,{tools:moveTool('mallet',[-.68,1.48,-.17],[-.05,0,0]),lean:.12});
-  // Set it on the rear of the bench, clear of the mortar while folding.
-  beat(.58,{tools:moveTool('mallet',[-1.31,1.49,-.396],[0,PI/2,0]),stance:stance(-1.04),focus:malletRack.position,lean:.10});
+  beat(.39,{tools:moveTool('mallet',[-.71,1.66,.05],[-.08,.36,-.64]),lean:.12});
+  // Lift clear of the rim and rotate the handle forward onto its cleat.
+  beat(.58,{tools:{mallet:aboveRack},stance:atRack,focus:malletRack.position,lean:.10});
   beat(.35,{tools:{mallet:malletRack},lean:.21});
   beat(.28,{hands:[rest,rest],lean:.075,effort:0});
 
@@ -446,13 +452,15 @@ export function createCookingScore(draft,layout={},entry={}) {
       const dx=side*.75,dz=.54+flight;
       return [x+dx*Math.cos(heading)+dz*Math.sin(heading),footCentre+.70+bounce,z-dx*Math.sin(heading)+dz*Math.cos(heading)];
     }
-    const hands=a.hands.map((v,i)=>blend(palm(v,i),palm(b.hands[i],i),f));
+    const restHands=[palm(rest,0),palm(rest,1)];
+    const handWork=a.hands.map((v,i)=>mix(Number(v!==rest),Number(b.hands[i]!==rest),f));
+    const hands=a.hands.map((v,i)=>blend(v?palm(v,i):restHands[i],b.hands[i]?palm(b.hands[i],i):restHands[i],f));
     const food={};
     for(const k of Object.keys(a.food))food[k]=(k==='prepIndex'||k==='pinchIndex')?b.food[k]:mix(a.food[k],b.food[k],f);
     const ch=s.chapter;
     return {time:t,phase:ch.id,label:ch.label,progress:(t-ch.start)/(ch.end-ch.start),hero:[x,footCentre+bounce,z],heading,
       focus:blend(a.focus,b.focus,f),lean:mix(a.lean,b.lean,f),lift:mix(a.lift,b.lift,f),effort:mix(a.effort,b.effort,f),
-      feet,hands,tools,piece,food};
+      feet,hands,restHands,handWork,tools,piece,food};
   }
   return {duration:end,chapters,cues,sample};
 }

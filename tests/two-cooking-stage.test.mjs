@@ -5,24 +5,28 @@ import * as THREE from '../two/vendor/three.module.min.js';
 import { GLTFLoader } from '../two/vendor/GLTFLoader.min.js';
 import { loadRiceModel, makeRiceModel, poseRice } from '../two/mochi-model.js';
 import { createCookingPerformer } from '../two/cooking-performer.js';
-import { createCookingStage } from '../two/cooking-stage.js';
+import { cookingLayout, createCookingStage } from '../two/cooking-stage.js';
 import { createCookingScore } from '../two/cooking-motion.js';
 import { createCookingProps } from '../two/cooking-props.js';
 import { BASIC_RECIPE, CRAFT_OPTIONS, STARTER_RECIPES, craftRecipe, evaluateRecipe } from '../two/living-craft.js';
 import { createGame } from '../two/game.js';
 import { LIVING_SITES, nearLivingSite } from '../two/living-sites.js';
-import { marketCookCanopy, worktopPoint } from '../two/living-layout.js';
+import { MALLET_HANDLE_END, marketCookCanopy, worktopPoint } from '../two/living-layout.js';
 import { canOccupy, groundHeight } from '../two/terrain.js';
 
 const workshops=LIVING_SITES.filter(site=>site.kind==='workshop');
 
-test('the kagami cook uses its hands for tools while the traveller keeps both gohei',async t=>{
+async function loadTraveller(t){
   t.mock.method(THREE.TextureLoader.prototype,'loadAsync',async()=>new THREE.Texture());
   t.mock.method(GLTFLoader.prototype,'loadAsync',async function(url){
     const bytes=await readFile(new URL(url));
     return this.parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.length),'');
   });
   await loadRiceModel();
+}
+
+test('the kagami cook uses its hands for tools while the traveller keeps both gohei',async t=>{
+  await loadTraveller(t);
   const scene=new THREE.Group(),travel=makeRiceModel(scene),player={mode:'kagami',grounded:true,buffs:{}};
   poseRice(travel,player,0,1/60,'curious');
   const actor=createCookingPerformer(scene,player),score=createCookingScore(BASIC_RECIPE);
@@ -38,6 +42,29 @@ test('the kagami cook uses its hands for tools while the traveller keeps both go
     assert.ok(wand.group.position.toArray().every(Number.isFinite));
     assert.ok(Math.abs(wand.group.position.x)>.1);
   }
+});
+
+test('the working body yields to a planted tool, holds on pause and recovers its travelling volume',async t=>{
+  await loadTraveller(t);
+  const actor=createCookingPerformer(new THREE.Group(),{mode:'normal',grounded:true,buffs:{}});
+  t.after(()=>actor.dispose());
+  const score=createCookingScore(BASIC_RECIPE),stroke=score.sample(score.chapters.find(c=>c.id==='pound').start);
+  const pose=actor.group.getObjectByName('mochi');
+  function at(time,effort){
+    actor.update({...stroke,time,effort,lift:0});
+    assert.ok(Math.abs(pose.scale.x*pose.scale.y*pose.scale.z-1)<1e-7);
+    return pose.scale.y-.006*Math.sin(time*2.24);
+  }
+  const rest=at(0,0),first=at(1/60,1);
+  assert.ok(first<rest && first>rest-.014);
+  for(let i=2;i<14;i++)at(i/60,1);
+  const loaded=at(14/60,1);
+  assert.ok(loaded<rest-.065);
+  assert.equal(at(14/60,1),loaded);
+  const release=at(15/60,0);assert.ok(release<rest-.05);
+  for(let i=16;i<68;i++)at(i/60,0);
+  assert.ok(Math.abs(at(68/60,0)-rest)<.004);
+  assert.equal(at(0,0),rest);
 });
 
 test('a cooking stage replaces only the local parked tools and restores their original visibility',()=>{
@@ -324,5 +351,38 @@ test('the underside of each grilled shape rests against the wooden blade in tran
       if(wood && rice) closest=Math.min(closest,rice.point.y-wood.point.y);
     }
     assert.ok(Math.abs(closest)<.002,shape+' blade contact gap '+closest);
+  }
+});
+
+test('rounded working mitts clear the mortar and counter, and the mallet butt clears the cook on the actual steps',async t=>{
+  await loadTraveller(t);
+  const v=new THREE.Vector3(),rotation=new THREE.Euler(),line=new THREE.Raycaster();
+  for(const [site,full] of [['market-mortar',false],['river-mortar',true]]){
+    const root=new THREE.Group(),actor=createCookingPerformer(root,{mode:'normal',grounded:true,buffs:{full:Number(full)}});
+    const score=createCookingScore(BASIC_RECIPE,cookingLayout(workshops.find(w=>w.id===site)),{full});
+    const pound=score.chapters.find(c=>c.id==='pound');
+    const hands=['右の餅の手','左の餅の手'].map(id=>actor.group.getObjectByName(id));
+    const bodies=actor.group.getObjectsByProperty('isSkinnedMesh',true);
+    for(let t=pound.start;t<pound.end;t+=1/20){
+      const frame=score.sample(t);actor.update(frame);root.updateMatrixWorld(true);
+      for(const m of hands){
+        const positions=m.geometry.attributes.position;
+        for(let i=0;i<positions.count;i++){
+          v.fromBufferAttribute(positions,i).applyMatrix4(m.matrixWorld);
+          if(v.y>1.305)continue;
+          assert.ok(Math.hypot(v.x+.68,v.z)>.362,'hand inside the mortar at '+t);
+          assert.ok(v.y>=.759 || Math.abs(v.z)>.51 || Math.abs(v.x)>1.36,'hand through the counter at '+t);
+        }
+      }
+      const tool=frame.tools.mallet;rotation.set(...tool.rotation);
+      line.ray.direction.set(0,0,1).applyEuler(rotation);
+      line.far=MALLET_HANDLE_END;line.near=.01;
+      for(const offset of [-.024,.024]){
+        line.ray.origin.set(offset,-.013,0).applyEuler(rotation).add(v.fromArray(tool.position));
+        for(const body of bodies)if(body.visible)
+          assert.equal(line.intersectObject(body,false).length,0,'shaft through travelling skin at '+t);
+      }
+    }
+    actor.dispose();
   }
 });

@@ -1,12 +1,12 @@
-import { isTimberFelled } from './living-build-trees.js';
+import { isTimberHidden } from './living-build-trees.js';
 
 // The landmark painter batches many trees and nearby fittings in one mesh.
 // Preserve that draw call, masking only the recorded index or matrix spans.
 export function timberBatchMask(attribute,spans,clear) {
   const hidden=new Map();
-  return ()=>{
+  const update=()=>{
     for(const [tree,ranges] of spans){
-      const cut=isTimberFelled(tree);
+      const cut=isTimberHidden(tree);
       if(cut===hidden.has(tree))continue;
       if(cut) {
         const saved=[];
@@ -27,6 +27,8 @@ export function timberBatchMask(attribute,spans,clear) {
       attribute.needsUpdate=true;
     }
   };
+  update.savedRanges=tree=>hidden.get(tree);
+  return update;
 }
 export function recordTreeSpan(spans,tree,start,end) {
   if(start===end)return;
