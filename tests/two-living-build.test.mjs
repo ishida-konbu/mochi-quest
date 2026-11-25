@@ -65,24 +65,25 @@ test('a surveyed tree is felled once; near and far render state and contact shar
   const world=owned(),tree=timberTree(birch),standing=footing(tree.x-1.7,tree.z);
   const living=TREES.find(t=>timberId(t)===birch),cut=timberCut(tree);
   assert.equal(nearestTimberTree(world,standing)?.id,birch);
-  assert.equal(fellTree(world,birch,footing(0,62)).ok,false);
-  assert.equal(fellTree(world,timberId(TREES[0]),standing).ok,false);
+  assert.equal(fellTree(world,'oak:123:123:123').ok,false);
   const blocked=()=>staticVolumeAt(cut.x,cut.z,cut.y+.04,.22,.85);
   assert.equal(blocked(),true);
   withBuildTerrain(world,()=>{
     const revision=timberRevision();
-    safe(fellTree(world,birch,standing));
+    safe(fellTree(world,birch,{...footing(0,62),mount:'bike',inWater:true,grounded:false}));
     assert.equal(world.wood,46);assert.equal(isTimberFelled(living),true);assert.ok(timberRevision()>revision);
     assert.equal(blocked(),false);
     assert.equal(groundHeight(cut.x,cut.z,cut.y+.1),cut.y);
     assert.equal(fellTree(world,birch,standing).ok,false);
-    assert.equal(nearestTimberTree(world,standing),null);
+    assert.notEqual(nearestTimberTree(world,standing)?.id,birch);
   });
   assert.equal(blocked(),true);
   const restored=JSON.parse(JSON.stringify(world));
   assert.equal(validLivingWorld(restored),true);assert.equal(validBuildLand(restored),true);
   withBuildTerrain(restored,()=>assert.equal(blocked(),false));
   restored.felledTrees=[timberId(TREES[0])];
+  assert.equal(validBuildLand(restored),true);
+  restored.felledTrees=['oak:123:123:123'];
   assert.equal(validBuildLand(restored),false);
 });
 

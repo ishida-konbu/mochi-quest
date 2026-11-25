@@ -1,5 +1,5 @@
 // The identity follows the planted bole across cell streaming and LOD changes.
-const identities = new WeakMap(), perches = new WeakSet();
+const identities = new WeakMap();
 let removed = new Set(), revision = 0;
 export function timberId(tree) {
   let id = identities.get(tree);
@@ -9,8 +9,6 @@ export function timberId(tree) {
   }
   return id;
 }
-export function reserveTimberPerch(tree) { perches.add(tree); }
-export function isTimberPerch(tree) { return perches.has(tree); }
 export function isTimberFelled(tree) { return removed.size > 0 && removed.has(timberId(tree)); }
 export function timberRevision() { return revision; }
 export function bindFelledTrees(ids) {

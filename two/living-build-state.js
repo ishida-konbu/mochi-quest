@@ -14,7 +14,7 @@ export const BUILD_MODULES = Object.freeze({
   chest: module('道具櫃',2,4,1.12,.70),
   stand: module('無人の餅売り棚',2,6,1.78,1.08),
 });
-export const CAMP_RADIUS = 24, MAX_STRUCTURES = 48, MAX_CAMPS = 3, MAX_WOOD = 999;
+export const CAMP_RADIUS = 24, MAX_STRUCTURES = 48, MAX_CAMPS = 3, MAX_WOOD = Number.MAX_SAFE_INTEGER;
 export const MARKET_REGIONS = ['river','terraces','market'];
 export const CAMP_REGIONS = [...MARKET_REGIONS,'coast','spring','snow','moon','autumn','dawn','shrine'];
 export const ATTACHMENTS = ['posts','wall','roof'];
@@ -40,7 +40,7 @@ function validChest(s,world) {
 export function validBuildState(world) {
   if (!world || !amount(world.wood,0,MAX_WOOD) || !amount(world.nextStructureId,1,Number.MAX_SAFE_INTEGER) ||
       !Array.isArray(world.structures) || world.structures.length>MAX_STRUCTURES ||
-      !Array.isArray(world.felledTrees) || world.felledTrees.length>4096 ||
+      !Array.isArray(world.felledTrees) ||
       world.felledTrees.some(id=>typeof id!=='string' || !/^[a-zA-Z-]+:\d{1,10}:-?\d{1,6}:-?\d{1,6}$/.test(id)) ||
       new Set(world.felledTrees).size!==world.felledTrees.length) return false;
   const byId=new Map(), occupied=new Set();
@@ -52,6 +52,8 @@ export function validBuildState(world) {
         ![s.x,s.y,s.z,s.yaw].every(Number.isFinite) || Math.abs(s.x)>=WORLD_BOUND || Math.abs(s.z)>=WORLD_BOUND ||
         Math.abs(s.y)>1000 || Math.abs(s.yaw)>Math.PI*2 || !['plain','slope','bank','snow'].includes(s.terrain) ||
         !(s.kind==='stand'?MARKET_REGIONS:CAMP_REGIONS).includes(s.regionId)) return false;
+    if (s.entryBay!==undefined && (!['floor','camp'].includes(s.kind) || s.foundationWood===undefined || !amount(s.entryBay,0,35)))return false;
+    if (s.foundationWood!==undefined && (s.parentId || !amount(s.foundationWood,0,MAX_WOOD))) return false;
     if (s.kind==='chest' && !validChest(s,world)) return false;
     if (s.kind==='camp') camps++;
     byId.set(s.id,s);

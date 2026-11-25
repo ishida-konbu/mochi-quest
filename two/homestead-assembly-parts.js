@@ -4,6 +4,8 @@ import { Vector3, Triangle } from './vendor/three.module.min.js';
 import { hokoraCarpentry } from './kaede-hokora-mesh.js';
 import { drawHomesteadModule, HUT_MODULES } from './homestead-carpentry.js';
 
+import { foundationMembers, foundationJoint, drawFoundationMember } from './homestead-foundation.js';
+
 const fore=[0,1], rear=[0,-1], left=[-1,0], right=[1,0];
 const step=(id,label,method,grip,normal,pivot)=>({id,label,method,grip,normal,pivot});
 function joints(kind,terrain){
@@ -92,6 +94,12 @@ function handContacts(spec,geometry){
   return [a.toArray(),b.toArray()];
 }
 
+function measuredPart(id,spec,geometry){
+  geometry.computeBoundingBox();
+  const {min,max}=geometry.boundingBox;
+  return {...spec,id,bounds:{min:min.toArray(),max:max.toArray()},handholds:handContacts(spec,geometry),geometry};
+}
+
 const cached=new Map();
 function moduleParts(kind,terrain){
   const key=kind+(kind==='roof' && terrain==='snow'?'-snow':'');
@@ -100,21 +108,34 @@ function moduleParts(kind,terrain){
   const writers=new Map(specs.map(s=>[s.id,hokoraCarpentry()]));
   drawHomesteadModule(kind,terrain,id=>writers.get(id));
   const parts=specs.map(spec=>{
-    const geometry=writers.get(spec.id).finish();
-    geometry.computeBoundingBox();
-    const {min,max}=geometry.boundingBox;
-    return {...spec,id:kind+'.'+spec.id,bounds:{min:min.toArray(),max:max.toArray()},handholds:handContacts(spec,geometry),geometry};
+    return measuredPart(kind+'.'+spec.id,spec,writers.get(spec.id).finish());
   });
   cached.set(key,parts);
   return parts;
 }
 
-export function assemblyParts(kind,terrain='plain'){
-  if(kind!=='hut')return moduleParts(kind,terrain);
-  const key=terrain==='snow'?'hut-snow':'hut';
-  if(!cached.has(key))cached.set(key,HUT_MODULES.flatMap(k=>moduleParts(k,terrain)));
-  return cached.get(key);
+export function assemblyParts(kind,terrain='plain',site){
+  let parts;
+  if(kind==='hut'){
+    const key=terrain==='snow'?'hut-snow':'hut';
+    if(!cached.has(key))cached.set(key,HUT_MODULES.flatMap(k=>moduleParts(k,terrain)));
+    parts=cached.get(key);
+  }else parts=moduleParts(kind,terrain);
+  const foundation=foundationMembers(kind,site);
+  if(!foundation.length)return parts;
+  const cut=foundation.map(member=>{
+    const b=hokoraCarpentry();
+    drawFoundationMember(b,member);
+    return measuredPart('foundation.'+member.id,{...foundationJoint(member),siteGeometry:true},b.finish());
+  });
+  const bearings=cut.filter(s=>s.id.includes('.pier-')||s.id.endsWith('.sill')||s.id.endsWith('-girder'));
+  const braces=cut.filter(s=>s.id.includes('brace'));
+  const entry=cut.filter(s=>s.id.endsWith('.entry-treads'));
+  // Shoulders and braces need something to pin to. Once the load-bearing
+  // sills are seated, fit the braces before closing up the floor above them.
+  const afterSill=kind==='floor'||kind==='hut'?3:kind==='camp'||kind==='chest'?1:0;
+  return [...bearings,...parts.slice(0,afterSill),...braces,...entry,...parts.slice(afterSill)];
 }
 // Uses the same measured bounds for motion-only planners and the WebGL view.
-// Geometry is immutable and shared; callers own only their scene objects.
+// Only members cut specifically for this plot have scene-owned geometry.
 export const assemblySteps=assemblyParts;

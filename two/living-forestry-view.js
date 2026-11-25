@@ -4,7 +4,7 @@ export function createForestryView({scene,camera,player,dialog,canStand,enter,dr
   let work=null;
   const overlay=document.createElement('section');
   overlay.className='cook-view';
-  overlay.innerHTML='<div class="cook-strip"><h2 id="forest-work-title">用材木を挽く</h2><p role="status"></p><div class="cook-controls"><button type="button" data-back>手を止める</button><button type="button" data-finish>仕上げまで進める</button></div></div>';
+  overlay.innerHTML='<div class="cook-strip"><h2 id="forest-work-title">木を挽く</h2><p role="status"></p><div class="cook-controls"><button type="button" data-back>手を止める</button><button type="button" data-finish>仕上げまで進める</button></div></div>';
   const sheet=document.createElement('div');
   sheet.className='forestry-paper';sheet.setAttribute('aria-hidden','true');
   overlay.prepend(sheet);
@@ -25,7 +25,6 @@ export function createForestryView({scene,camera,player,dialog,canStand,enter,dr
   }
   function start(tree,commit,done) {
     const shot=createSawingScene(scene,camera,player,tree,canStand);
-    if (!shot) {done({ok:false,reason:'足場を変えてみましょう。木の幹に向かって、両足を置ける平らなところに立ってください。'});return;}
     work={shot,commit,done,time:0,last:null,result:null};
     delete dialog.dataset.living;dialog.dataset.performance='';
     dialog.setAttribute('aria-labelledby','forest-work-title');
@@ -33,7 +32,7 @@ export function createForestryView({scene,camera,player,dialog,canStand,enter,dr
     status.textContent='足場を決め、幹に鋸を当てます。';
     sheet.style.opacity='0';
     finish.disabled=back.disabled=false;
-    dialog.append(overlay);enter();shot.update(0);draw();back.focus({preventScroll:true});
+    dialog.append(overlay);enter();shot.update(0);draw(shot.scene);back.focus({preventScroll:true});
   }
   function frame(now) {
     if(!work)return;
@@ -49,6 +48,7 @@ export function createForestryView({scene,camera,player,dialog,canStand,enter,dr
       else if(work.time/work.shot.duration>.28) status.textContent='両手で鋸を引いて、幹を挽いています。';
       if(after>=.46) {
         work.result=work.commit();
+        if(work.result.ok)work.shot.felled?.();
         // Turn the paper over while the off-screen timber is cleared. The
         // revealed stump and received lumber belong to the same transaction.
         status.textContent=work.result.message || work.result.reason;
@@ -59,7 +59,7 @@ export function createForestryView({scene,camera,player,dialog,canStand,enter,dr
       const reveal=work.time-work.shot.duration-.48;
       sheet.style.opacity=String(reduced.matches ? Number(reveal<0) : Math.max(0,1-Math.max(0,reveal)/.36));
     }
-    draw();
+    draw(work.shot.scene);
     if(work.time>=work.shot.duration+1.5)end(true);
   }
   back.onclick=()=>end(true);

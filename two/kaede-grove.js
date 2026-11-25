@@ -1,3 +1,4 @@
+import { isTimberFelled,timberRevision } from './living-build-trees.js';
 import * as THREE from './vendor/three.module.min.js';
 import { REGIONS, ROADS, TREES, regionAt, seasonAt, hasAutumnLeaves, treeGround,
   seeded, terrainContactHeight, waterSurfaceAt, nearRoad } from './terrain.js';
@@ -206,15 +207,16 @@ export function createKaedeLeafFall(scene,boughs) {
     flights.set(tree,slots);
     return slots;
   }
-  let near=[],lastX=Infinity,lastZ=Infinity,radius=REACH;
+  let near=[],lastX=Infinity,lastZ=Infinity,radius=REACH,lastTimber;
   return (time,player)=>{
-    if((player.x-lastX)**2+(player.z-lastZ)**2>3**2) {
+    if((player.x-lastX)**2+(player.z-lastZ)**2>3**2 || lastTimber!==timberRevision()) {
+      lastTimber=timberRevision();
       lastX=player.x;lastZ=player.z;
       near=[];
       if(Math.abs(lastX-district.x)<175 && Math.abs(lastZ-district.z)<200) {
         for(const tree of kaedeTrees) {
           const distance=hypot(tree.x-lastX,tree.z-lastZ);
-          if(distance<REACH+3)near.push({tree,distance});
+          if(distance<REACH+3 && !isTimberFelled(tree))near.push({tree,distance});
         }
         near.sort((a,b)=>a.distance-b.distance);
       }

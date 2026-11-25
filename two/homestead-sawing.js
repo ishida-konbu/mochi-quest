@@ -3,6 +3,7 @@ import { createCookingPerformer } from './cooking-performer.js';
 import { cookingAtlas } from './cooking-atlases.js';
 import { InkForm, surface } from './ryugu-ink.js';
 import { staticVolumeAt, terrainContactHeight, waterSurfaceAt } from './terrain.js';
+import { forestryCloseup } from './forestry-closeup.js';
 import { timberCut } from './homestead-timber-section.js';
 
 const pi = Math.PI, tau = 2*pi;
@@ -70,24 +71,28 @@ function makePullSaw(length) {
   return mesh;
 }
 
-export function planSawing(player,tree,aspect=1,canStand=()=>true) {
-  if (!tree || !Number.isFinite(tree.ground) || !Number.isInteger(tree.form) || !Number.isFinite(tree.seed) ||
-      !Number.isFinite(aspect) || aspect<=0 || !player.grounded || player.activity || player.mount || player.vessel ||
-      player.skiff || player.inWater || player.h>.12 || player.diveDepth>0) return null;
-  const cut=timberCut(tree), r=cut.radius;
-  const dx=player.x-cut.x, dz=player.z-cut.z, distance=Math.hypot(dx,dz);
+export function planSawing(player,tree,aspect=1,canStand=()=>true,detail=false) {
+  if(!tree || !Number.isFinite(tree.ground) || !Number.isFinite(tree.seed) || !Number.isFinite(aspect) || aspect<=0)return null;
+  if(!detail && (!player.grounded || player.activity || player.mount || player.vessel ||
+      player.skiff || player.inWater || player.h>.12 || player.diveDepth>0))return null;
+  const section=timberCut(tree);
+  // A bamboo stand is several hollow stems. Keep the detailed stroke on
+  // one real culm; clearing and the individual stumps use the whole clump.
+  if(!detail && section.culms)return null;
+  const stem=section.culms?.[0]??section;
+  const cut=detail?{x:0,z:0,y:.42,radius:stem.radius}:section,r=cut.radius;
   const size=player.buffs?.full>0?1.28:1;
-  if(distance>3.16 || distance<r+.78*size || Math.abs(player.y-terrainContactHeight(player.x,player.z))>.27)return null;
-  // The player and tree determine the radial approach. The visible performer
-  // starts and ends at the real traveller's feet, also if the action is skipped.
-  const yaw=Math.atan2(dx,dz), localHeading=player.heading-yaw;
-  const floor=(x,z)=>terrainContactHeight(...yawPoint(cut.x,cut.z,yaw,x,z))-tree.ground;
+  const dx=player.x-cut.x,dz=player.z-cut.z,distance=detail?r+1.78*size:Math.hypot(dx,dz);
+  if(!detail && (distance>3.16 || distance<r+.78*size || Math.abs(player.y-terrainContactHeight(player.x,player.z))>.27))return null;
+  const yaw=detail?0:Math.atan2(dx,dz),localHeading=detail?pi:player.heading-yaw;
+  const floor=detail?()=>0:(x,z)=>terrainContactHeight(...yawPoint(cut.x,cut.z,yaw,x,z))-tree.ground;
   const start=[0,distance], work=[-.19*size,r+1.72*size], span=Math.hypot(work[0],work[1]-distance);
   function clear(u,v,y,pad,height) {
+    if(detail)return true;
     const [x,z]=yawPoint(cut.x,cut.z,yaw,u,v);
     return !staticVolumeAt(x,z,tree.ground+y,pad,height) && canStand(x,z,tree.ground+y,pad,height);
   }
-  for(let i=0;i<=12;i++) {
+  for(let i=0;!detail && i<=12;i++) {
     const [x,z]=blend(start,work,i/12), y=floor(x,z);
     const [wx,wz]=yawPoint(cut.x,cut.z,yaw,x,z);
     if(tree.ground+y-waterSurfaceAt(wx,wz)<.19 || !clear(x,z,y+.035,.77*size,1.53*size) ||
@@ -137,7 +142,7 @@ export function planSawing(player,tree,aspect=1,canStand=()=>true) {
   const extent=Math.max(distance,work[1]), focus=new T.Vector3(0,.84*size,extent*.54);
   function cameraFrame(ratio) {
     const tan=Math.tan(41*pi/360);
-    for(const forward of [-.92,-.66,-.45]) for(const mirror of [1,-1]) for(const tilt of [.34,.53]) {
+    for(const forward of (detail?[-.34]:[-.92,-.66,-.45])) for(const mirror of [1,-1]) for(const tilt of (detail?[.58]:[.34,.53])) {
       const dir=new T.Vector3(mirror,tilt,forward).normalize();
       const right=new T.Vector3(dir.z,0,-dir.x).normalize(), up=dir.clone().cross(right);
       let fit=2.75;
@@ -149,7 +154,7 @@ export function planSawing(player,tree,aspect=1,canStand=()=>true) {
       const targets=[[dir.x*(r+.055),.42,dir.z*(r+.055)],
         [work[0],1.10*size,work[1]-.72*size],[-.29*size,.13,work[1]],[0,1.08*size,distance]];
       for(let t=begin;t<=end;t+=.28)targets.push(...sample(t).hands);
-      const sight=targets.every(([x,y,z])=>{
+      const sight=detail || targets.every(([x,y,z])=>{
         const steps=Math.ceil(Math.hypot(eye.x-x,eye.y-y,eye.z-z)/.12);
         for(let i=1;i<=steps;i++){
           const f=i/steps;
@@ -163,7 +168,7 @@ export function planSawing(player,tree,aspect=1,canStand=()=>true) {
   }
   // Check the entire arm/tool sweep against branches, houses and neighbours.
   // Only the thin working plane inside the selected bole may touch solid wood.
-  for(let time=0;time<=duration;time+=.10) {
+  for(let time=0;!detail && time<=duration;time+=.10) {
     const f=sample(time);
     for(const palm of f.hands) if(!clear(palm[0],palm[2],palm[1]-.035,.045,.07))return null;
     for(let v=.48;v>=-bladeLength;v-=.072) {
@@ -178,20 +183,21 @@ export function planSawing(player,tree,aspect=1,canStand=()=>true) {
 }
 
 export function createSawingScene(scene,camera,player,tree,canStand) {
-  const plan=planSawing(player,tree,camera.aspect,canStand);
-  if(!plan)return null;
+  const local=planSawing(player,tree,camera.aspect,canStand);
+  const plan=local??planSawing(player,tree,camera.aspect,canStand,true);
+  const detail=local?null:forestryCloseup(tree,plan.cut);
   const group=new T.Group();
-  group.name='用材木を挽く配達人';
-  group.position.set(plan.cut.x,tree.ground,plan.cut.z);group.rotation.y=plan.yaw;
+  group.name='木を挽く配達人';
+  group.position.set(plan.cut.x,detail?0:tree.ground,plan.cut.z);group.rotation.y=plan.yaw;
   const saw=makePullSaw(plan.bladeLength);
   const performer=createCookingPerformer(group,player);
-  group.add(saw);scene.add(group);group.updateMatrixWorld(true);
+  group.add(saw);(detail?.scene??scene).add(group);group.updateMatrixWorld(true);
   const startEye=camera.position.clone(),startAim=camera.quaternion.clone(),startFov=camera.fov;
   let lens=plan.lens,aspect=camera.aspect,disposed=false;
   function update(t) {
     if(disposed)return;
     const frame=plan.sample(t);
-    performer.update(frame);
+    performer.update(frame);detail?.update(frame);
     saw.position.fromArray(frame.tool);
     saw.rotation.order='YXZ';saw.rotation.set(frame.pitch,frame.toolYaw,0,'YXZ');
     if(camera.aspect!==aspect) {
@@ -202,10 +208,10 @@ export function createSawingScene(scene,camera,player,tree,canStand) {
     camera.position.copy(group.localToWorld(lens.eye.clone()));
     camera.lookAt(group.localToWorld(lens.focus.clone()));camera.updateMatrixWorld();
   }
-  return {duration:plan.duration,update,dispose(){
+  return {duration:plan.duration,update,scene:detail?.scene,felled:detail?.felled,dispose(){
     if(disposed)return;
     disposed=true;
-    performer.dispose();group.removeFromParent();saw.geometry.dispose();saw.material.dispose();
+    detail?.dispose();performer.dispose();group.removeFromParent();saw.geometry.dispose();saw.material.dispose();
     camera.position.copy(startEye);camera.quaternion.copy(startAim);camera.fov=startFov;
     camera.updateProjectionMatrix();camera.updateMatrixWorld();
   }};

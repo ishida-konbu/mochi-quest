@@ -1,3 +1,5 @@
+import { foundationMembers, addFoundationContacts } from './homestead-foundation.js';
+
 export function buildContacts(structures) {
   const parts=[];
   for(const s of structures) {
@@ -6,14 +8,15 @@ export function buildContacts(structures) {
       parts.push({x:s.x+u*c+v*sn,z:s.z-u*sn+v*c,yaw:s.yaw,w,d,
         bottom:s.y+bottom,top:s.y+top,kind,support,rise});
     };
+    for(const member of foundationMembers(s.kind,s))addFoundationContacts(add,member);
     switch(s.kind) {
       case 'camp':
         add(-.78,-.72,.11,.11,-.2,1.79,'oval');
-        add(0,.11,1.13,1.72,-.50,.13,'floor',true);
+        add(0,.11,1.13,1.72,.018,.13,'floor',true);
         add(0,-.54,1.0,.26,.12,.396);
         break;
       case 'floor':
-        add(0,0,3.2,2.8,-.55,.18,'floor',true);
+        add(0,0,3.2,2.8,-.02,.18,'floor',true);
         break;
       case 'posts':
         for(const u of [-1.44,1.44])for(const v of [-1.23,1.23])add(u,v,.13,.13,.18,2.30);

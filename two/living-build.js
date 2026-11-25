@@ -6,9 +6,9 @@ import { bindFelledTrees } from './living-build-trees.js';
 import { clearHandReach } from './living-sites.js';
 import { RESOURCES } from './living-resources.js';
 import { forgetMarketStand, marketRemovalReason, settleMarket } from './living-market.js';
-import { replaceBuildContacts, terrainContactHeight, wrapDelta } from './terrain.js';
+import { replaceBuildContacts, wrapDelta } from './terrain.js';
 export { BUILD_MODULES, buildState, validBuildState } from './living-build-state.js';
-export { surveySite, nearestTimberTree, timberTree } from './living-build-land.js';
+export { surveySite, closestTimberTrees, nearestTimberTree, timberTree } from './living-build-land.js';
 
 let active=null;
 export function syncBuildTerrain(world) {
@@ -19,8 +19,8 @@ export function syncBuildTerrain(world) {
   for(const tree of cleared) {
     if(stumpCovered(world,tree))continue;
     const cut=timberCut(tree);
-    contacts.push({x:cut.x,z:cut.z,yaw:0,w:2*cut.radius,d:2*cut.radius,
-      bottom:tree.ground-.15,top:cut.y,kind:'oval',support:true});
+    for(const stem of cut.culms??[cut]) contacts.push({x:stem.x,z:stem.z,yaw:0,w:2*stem.radius,d:2*stem.radius,
+      bottom:tree.ground-.15,top:stem.y,kind:'oval',support:true});
   }
   replaceBuildContacts(contacts);
 }
@@ -40,7 +40,11 @@ export function validBuildLand(world,state) {
     return world.structures.every(s=>{
       if(s.parentId)return true;
       const site=surveySite(world,s.kind,s,{excludeId:s.id,state:surveyState});
-      return site.ok && Math.abs(site.y-s.y)<.025 && site.regionId===s.regionId && site.terrain===s.terrain;
+      if(!site.ok || site.regionId!==s.regionId)return false;
+      // Before paid piers existed, every accepted ground plot fit within
+      // 52 cm and used the envelope survey alone for its finished level.
+      return (site.legacyFoundation ? site.relief<=.52 : s.foundationWood===site.foundationWood) &&
+        Math.abs(site.y-s.y)<.025 && site.terrain===s.terrain;
     });
   });
 }
@@ -62,7 +66,9 @@ export function constructionSite(world,kind,pose,options={}) {
   if(world.structures.length+count>MAX_STRUCTURES || world.nextStructureId>Number.MAX_SAFE_INTEGER-count)
     return fail('建てられる部材は全部で'+MAX_STRUCTURES+'点です。使わない部材を片付けてください。');
   if(kind==='camp' && world.structures.filter(s=>s.kind==='camp').length>=MAX_CAMPS)return fail('野営地は三か所までです。使わない野営地を片付けてください。');
-  if(world.wood<def.wood || world.wallet<def.coins)return fail(def.name+'には'+costText(def.wood,def.coins)+'が要ります。');
+  const wood=def.wood+site.foundationWood;
+  if(world.wood<wood || world.wallet<def.coins)
+    return fail(def.name+'には'+costText(wood,def.coins)+'が要ります。'+(site.foundationWood?'うち基礎に木材'+site.foundationWood+'本を使います。':''));
   return site;
 }
 
@@ -73,11 +79,13 @@ export function placeStructure(world,kind,pose,options={}) {
   const floorId='build-'+world.nextStructureId;
   const structures=parts.map((part,i)=>({
     id:'build-'+(world.nextStructureId+i),kind:part,...transform(site),
+    ...(!site.parentId && !ATTACHMENTS.includes(part)?{foundationWood:site.foundationWood}:{}),
+    ...(i===0 && site.entryBay!==undefined?{entryBay:site.entryBay}:{}),
     ...(site.campId?{campId:site.campId}:{}),
     ...(site.parentId || ATTACHMENTS.includes(part)?{parentId:site.parentId??floorId}:{}),
     ...(part==='chest'?{inventory:{},costs:{},batches:[]}:{}),
   }));
-  world.wood-=def.wood;world.wallet-=def.coins;
+  world.wood-=def.wood+site.foundationWood;world.wallet-=def.coins;
   world.nextStructureId+=parts.length;
   world.structures=[...world.structures,...structures];
   changed(world);
@@ -89,7 +97,7 @@ export function placeStructure(world,kind,pose,options={}) {
 export function finishConstruction(world,kind,pose,state,exit) {
   if (!onFoot(state?.player) || !exit || ![exit.x,exit.y,exit.z,exit.heading].every(Number.isFinite))
     return fail('作業を終える足場を確かめて、もう一度建ててください。');
-  const arrival={x:exit.x,y:exit.y,z:exit.z,heading:exit.heading,h:0,
+  const arrival={x:exit.x,y:exit.y,z:exit.z,heading:Math.atan2(Math.sin(exit.heading),Math.cos(exit.heading)),h:0,
     vx:0,vy:0,vz:0,speed:0,grounded:true,idleTime:0};
   const result=placeStructure(world,kind,pose,{state:{...state,player:{...state.player,...arrival}}});
   if (result.ok) Object.assign(state.player,arrival);
@@ -104,9 +112,15 @@ export function moveStructure(world,id,pose,options={}) {
   if(!next.ok)return next;
   if(source.kind==='camp' && world.structures.some(s=>s.campId===id && !s.parentId && buildDistance(s,next)>CAMP_RADIUS))
     return fail('この野営地の設備が遠くなりすぎます。先に設備を移すか片付けてください。');
+  const delta=next.foundationWoodDelta;
+  if(world.wood<delta)return fail('移設先の基礎には、追加で木材'+delta+'本が要ります。');
+  if(world.wood-delta>MAX_WOOD)return fail('基礎から戻る木材'+(-delta)+'本を受け取る空きを用意してください。');
+  if(next.legacyFoundation)
+    return {...ok('同じ場所に据えたままにしました。'),structure:source};
   if(source.kind==='stand')settleMarket(world);
-  const {parentId:oldParent,...detached}=source;
-  const moved={...detached,...transform(next),...(next.campId?{campId:next.campId}:{}),...(next.parentId?{parentId:next.parentId}:{})};
+  const {parentId:oldParent,foundationWood:oldFoundation,entryBay:oldBay,...detached}=source;
+  const moved={...detached,...transform(next),...(next.entryBay!==undefined?{entryBay:next.entryBay}:{}),...(!next.parentId?{foundationWood:next.foundationWood}:{}),...(next.campId?{campId:next.campId}:{}),...(next.parentId?{parentId:next.parentId}:{})};
+  world.wood-=delta;
   world.structures=world.structures.map(s=>{
     if(s.id===id)return moved;
     if(s.parentId!==id)return s;
@@ -128,12 +142,13 @@ export function removeStructure(world,id) {
     if(reason)return fail(reason);
   }
   const d=BUILD_MODULES[source.kind];
-  if(world.wood+d.wood>MAX_WOOD || !Number.isSafeInteger(world.wallet+d.coins))return fail('木材か銭を受け取る空きが足りません。');
+  const wood=d.wood+(source.foundationWood??0);
+  if(world.wood+wood>MAX_WOOD || !Number.isSafeInteger(world.wallet+d.coins))return fail('木材か銭を受け取る空きが足りません。');
   if(source.kind==='stand')forgetMarketStand(world,id);
-  world.wood+=d.wood;world.wallet+=d.coins;
+  world.wood+=wood;world.wallet+=d.coins;
   world.structures=world.structures.filter(s=>s.id!==id);
   changed(world);
-  return ok(d.name+'を片付け、'+costText(d.wood,d.coins)+'を回収しました。');
+  return ok(d.name+'を片付け、'+costText(wood,d.coins)+'を回収しました。');
 }
 // Check sight up to the near side of the object. Probing its centre would test
 // the closed lid or the counter itself as a wall between the visitor and it.
@@ -163,15 +178,12 @@ export function buyTimber(world,site) {
   world.wood+=4;world.wallet-=6;
   return ok('木材四本を六文で買いました。');
 }
-export function fellTree(world,id,player) {
-  const tree=timberTree(id);
-  if(!tree || world.felledTrees.includes(id))return fail('この木からは木材を取れません。');
-  if(!onFoot(player) || buildDistance(player,tree)>3 || Math.abs(player.y-terrainContactHeight(tree.x,tree.z))>1.2 ||
-      !visibleEdge(player,{...tree,y:terrainContactHeight(tree.x,tree.z)},1.05))return fail('地面に降りて、幹の見えるところまで近づいてください。');
-  if(world.wood+6>MAX_WOOD || world.felledTrees.length>=4096)return fail('これ以上木材を受け取れません。');
+export function fellTree(world,id) {
+  if(!timberTree(id) || world.felledTrees.includes(id))return fail('この木はすでに伐り終えています。');
+  if(!Number.isSafeInteger(world.wood+6))return fail('これ以上の木材は記録できません。');
   world.felledTrees=[...world.felledTrees,id];world.wood+=6;
   changed(world);
-  return ok('用材木を一本伐り、木材六本を取りました。');
+  return ok('木を伐り、木材を六本取りました。');
 }
 export function transferStorage(world,chestId,id,grams,deposit) {
   const chest=world.structures.find(s=>s.id===chestId && s.kind==='chest');

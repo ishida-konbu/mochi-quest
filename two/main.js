@@ -483,7 +483,10 @@ const outdoorWork={
     meadow(state.time,p,camera);if(!contextLost)drawScene();
   },
 };
-const forestry=createForestryView(outdoorWork);
+const forestry=createForestryView({...outdoorWork,draw(detail){
+  if(detail)ink.draw(detail,0,0,state.time);
+  else outdoorWork.draw();
+}});
 const construction=createConstructionView({...outdoorWork,
   canStand(x,z,y,radius,height) {
     return game.storyCollisions.penetration(x,z,y,height,radius)<=0 &&

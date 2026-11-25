@@ -154,6 +154,8 @@ function alongPass(x,z,knots,radius) {
 const peachPass=TRADE_ROADS.find(r=>r.id==='peach-pass').knots;
 const inariApproach=TRADE_ROADS.find(r=>r.id==='inari-road').knots;
 export const MOON_GATE={x:PEACH.x-15,z:PEACH.z};
+export const GATE_PEACH={kind:'peach',seed:426,x:MOON_GATE.x-.82,z:MOON_GATE.z-5.65,h:7.4,radius:.72,
+  size:1.58,turn:Math.PI/2};
 // The same local stand index keeps planted trunks apart, clears the wild
 // woodland crew's sites, and finds the flowering canopy above a traveller.
 const peachCells=new Map(),peachCell=16;
@@ -290,7 +292,7 @@ export function pilgrimageSolids(height, putSolid) {
       putSolid(x+dx*cos(yaw),z-dx*sin(yaw),.17,.17,0,height(x,z)+h,'oval',false);
     }
   }
-  putSolid(MOON_GATE.x-.82,MOON_GATE.z-5.65,.60,.63,0,height(MOON_GATE.x,MOON_GATE.z)+4.83,'oval',false);
+  putSolid(GATE_PEACH.x,GATE_PEACH.z,.60,.63,0,height(MOON_GATE.x,MOON_GATE.z)+4.83,'oval',false).plant=GATE_PEACH;
   for(const side of [-1,1]) putSolid(MOON_GATE.x,MOON_GATE.z+side*3.23,.31,1.42,0,
     height(MOON_GATE.x,MOON_GATE.z)+4.8,'wall',false);
   putSolid(MOON_GATE.x,MOON_GATE.z,5.085,.685,PI/2,height(MOON_GATE.x,MOON_GATE.z)+4.63,'roof',true,.72).form='hip';

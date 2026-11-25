@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { Box3,Euler,Ray,Triangle,Vector3 } from '../two/vendor/three.module.min.js';
 import { terrainContactHeight } from '../two/terrain.js';
 import { assemblyParts } from '../two/homestead-assembly-parts.js';
+import { placeStructure,surveySite } from '../two/living-build.js';
+import { createLivingWorld } from '../two/living-save.js';
 import { planAssembly } from '../two/homestead-assembly-motion.js';
 
 const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
@@ -99,4 +101,33 @@ test('loaded ridge, roof trusses and full wall panels clear the earlier three-di
       }
     }
   }
+});
+
+test('a steep hut keeps hand contacts during sling work and covers any discontinuous station change',()=>{
+  const world={...createLivingWorld(),wood:100};
+  assert.ok(placeStructure(world,'camp',{x:151,z:128,yaw:0}).ok);
+  const site={...surveySite(world,'hut',{x:140,z:132,yaw:.3}),kind:'hut',structures:world.structures};
+  assert.ok(site.ok && site.relief>2.4);
+  const x=site.x+3.7*Math.sin(site.yaw),z=site.z+3.7*Math.cos(site.yaw);
+  const player={x,z,y:terrainContactHeight(x,z),grounded:true,heading:Math.PI};
+  const parts=assemblyParts('hut',site.terrain,site),plan=planAssembly(player,site,parts);
+  assert.ok(plan?.compact);
+  for(const action of plan.actions){
+    if(action.cut){
+      assert.equal(plan.sample((action.start+action.end)/2).cutOpacity,1);
+      continue;
+    }
+    if(action.type==='carry'){
+      const f=plan.sample((action.start+action.end)/2);
+      parts[action.index].handholds.forEach((v,i)=>{
+        assert.ok(distance(v.map((n,k)=>n+f.offset[k]),f.hands[i])<.001);
+      });
+    }
+    if(action.start){
+      const a=plan.sample(action.start-.00001),b=plan.sample(action.start+.00001);
+      for(const [i,v] of a.feet.entries())assert.ok(distance(v,b.feet[i])<.034);
+    }
+  }
+  assert.equal(plan.sample(plan.duration).installedCount,parts.length);
+  for(const part of parts.filter(s=>s.siteGeometry))part.geometry.dispose();
 });

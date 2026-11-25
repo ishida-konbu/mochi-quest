@@ -40,8 +40,8 @@ function panel(b,finish,color,nx,ny,point,scales=[1,1]) {
   }
 }
 function foot(b,x,z,w=.21) {
-  // Deep split posts remain seated on the downhill side of a permitted site.
-  plank(b,x,-.29,z,w,.78,w,dark,'y',.012);
+  // Short tenons seat in earth on level plots or in the heads of fitted hillside piers.
+  plank(b,x,-.055,z,w,.31,w,dark,'y',.010);
 }
 function floor(part) {
   for(const z of [-1.23,1.23]){
@@ -137,7 +137,7 @@ function roof(part,terrain) {
 function chest(part) {
   let b=part('base');
   for(let j=0;j<4;j++)plank(b,0,.068,(j-1.5)*.149,1.01,.04,.149,dark);
-  for(const x of [-.40,.40])plank(b,x,-.235,0,.14,.62,.56,dark,'z');
+  for(const x of [-.40,.40])plank(b,x,-.066,0,.14,.282,.56,dark,'z');
   b=part('case');
   for(let i=0;i<4;i++){
     const y=.14+i*.151;
@@ -284,7 +284,7 @@ function stand(part) {
 }
 function camp(part) {
   let b=part('bed');
-  for(const x of [-.44,.44])plank(b,x,-.18,.06,.127,.46,1.83,dark,'z');
+  for(const x of [-.44,.44])plank(b,x,-.08,.06,.127,.26,1.83,dark,'z');
   // The split-bamboo sleeping platform drains through its interstices.
   for(let i=0;i<18;i++)spindle(b,[-.567,.071,-.75+i*.098],[.567,.071,-.75+i*.098],.047,.045,wood);
   b=part('mat');
@@ -320,7 +320,7 @@ function camp(part) {
   for(const start of [.14,.80])panel(b,'paper','#827e65',5,36,(u,v)=>roll(start+u*.052,v,1.025));
   b=part('staff');
   const x=-.78,z=-.72;
-  spindle(b,[x,-.57,z],[x,1.79,z],.038,.025,wood);
+  spindle(b,[x,-.21,z],[x,1.79,z],.038,.025,wood);
   spindle(b,[x-.032,1.63,z],[x+.493,1.63,z],.016,.012,wood);
   const pennon=(u,v)=>[x+.041+.39*u,1.63-v*(.48-.16*u)-.012*Math.sin(u*Math.PI),
     z+.020+.054*Math.sin(1.7*Math.PI*u+.9*v)*u];
@@ -337,7 +337,7 @@ function fence(part) {
     const end=r>.03,side=x<0?'left':'right';
     let b=part(end?side+'-stake':'lattice');
     const z=end?0:.034;
-    spindle(b,[x,-.59,z],[x,h,z],r,r*.82,bamboo);
+    spindle(b,[x,-.21,z],[x,h,z],r,r*.82,bamboo);
     for(let j=0;j<4;j++){
       const y=.11+j*.261+.028*Math.sin(x*19);
       if(y>=h)break;
@@ -367,17 +367,47 @@ function fence(part) {
     }
   }
 }
+// Match the upper bole to the rooted section at the saw line, including
+// the angular wrap, so bark fissures run through the cut until it opens.
+export function timberBarkTint(species) {
+  if(['moso','bamboo','shrine-bamboo'].includes(species))return '#8b976c';
+  return TREE_FAMILIES.find(f=>f[0]===species)?.[7] ?? '#897861';
+}
+export const timberBarkUV=(height,turn)=>[(height+.13)*(.23/.55),turn*2.6];
+
 function stump(b,terrain,species) {
-  const bark=TREE_FAMILIES.find(family=>family[0]===species)?.[7] ?? '#897861';
+  if(['moso','bamboo','shrine-bamboo'].includes(species)){
+    // The cut lip surrounds a hollow internode. Leave its darker diaphragm
+    // below the rim, with a slightly swollen joint on the outer culm.
+    const n=20, profile=[[-.12,.30],[.19,.29],[.205,.317],[.22,.302],[.23,.285],[.42,.28],[.42,.225],[.25,.216]];
+    for(let i=0;i<n;i++){
+      const ring=(k,j)=>{
+        const [y,r]=profile[j],a=tau*k/n;
+        return [Math.cos(a)*r,y+.004*Math.sin(3*a),Math.sin(a)*r];
+      };
+      for(let j=0;j<profile.length-1;j++){
+        const tint=j===5?'#e5d4a2':j===6?'#817d58':j===1?'#aaa677':timberBarkTint(species);
+        const corners=[[i,j],[i,j+1],[i+1,j+1],[i+1,j]];
+        const points=corners.map(([k,level])=>ring(k,level));
+        const uvs=j===5?points.map(p=>[.5+p[0]/.6,.5+p[2]/.6]):
+          corners.map(([k,level])=>timberBarkUV(profile[level][0],k/n));
+        b.face(j===5?'culmCut':'culmSkin',tint,points,{uvs});
+      }
+      const diaphragm=[[0,.247,0],ring(i+1,7),ring(i,7)];
+      b.face('culmCut','#8b805a',diaphragm,{uvs:diaphragm.map(p=>[.5+p[0]/.6,.5+p[2]/.6])});
+    }
+    return;
+  }
+  const bark=timberBarkTint(species);
   const n=18;
   const point=(a,v,rad=1)=>{
     const r=rad*(1+.087*Math.sin(3*a+.17)+.037*Math.cos(7*a))*(.31+.13*(1-v)**3);
     return [Math.cos(a)*r,-.13+v*.55+v*(.010*Math.cos(a)+.005*Math.sin(5*a)),Math.sin(a)*r];
   };
   for(let i=0;i<n;i++)for(let j=0;j<4;j++){
-    const ring=[[i,j],[i+1,j],[i+1,j+1],[i,j+1]];
+    const ring=[[i,j],[i,j+1],[i+1,j+1],[i+1,j]];
     b.face('stumpBark',bark,ring.map(([u,v])=>point(tau*u/n,v/4)),
-      {uvs:ring.map(([u,v])=>[v*.23,u*2.6/n])});
+      {uvs:ring.map(([u,v])=>timberBarkUV(-.13+v*.55/4,u/n))});
   }
   for(let i=0;i<n;i++){
     const rim=point(tau*i/n,1),next=point(tau*(i+1)/n,1);

@@ -1,3 +1,4 @@
+import { isTimberFelled } from './living-build-trees.js';
 import { blossomGeometry, peachMaterials, createPeachOrchard } from './flowering-peaches.js';
 import { DISTRICTS } from './geography.js';
 import { summitJoinery, orchardCarving } from './pilgrimage-carving.js';
@@ -9,7 +10,7 @@ import { createInariRain } from './inari-rain.js';
 import { brushWash, surfaceGrain } from './scroll-sculpt.js';
 import * as T from './vendor/three.module.min.js';
 import { terrainHeight, terrainMeshHeight, seeded, wrapDelta } from './terrain.js';
-import { DAIBUTSU, PEACH_TREES, nearbyPeaches, WEDDING_SITES, weddingPoint, MOON_GATE, INARI_GATES, INARI_SANCTUARY, TEMPLE_COLUMNS } from './pilgrimage-layout.js';
+import { DAIBUTSU, PEACH_TREES, GATE_PEACH, nearbyPeaches, WEDDING_SITES, weddingPoint, MOON_GATE, INARI_GATES, INARI_SANCTUARY, TEMPLE_COLUMNS } from './pilgrimage-layout.js';
 
 const { sin,cos,PI,abs,min } = Math, TAU=PI*2;
 const vec=(...v)=>new T.Vector3(...v);
@@ -227,7 +228,7 @@ function gateBlossoms(scene){
   return camera=>{
     if(!camera)return;
     const dx=wrapDelta(x-camera.position.x),dz=wrapDelta(z-camera.position.z);
-    root.visible=dx*dx+dz*dz<166**2;
+    root.visible=!isTimberFelled(GATE_PEACH) && dx*dx+dz*dz<166**2;
     if(root.visible)root.position.set(camera.position.x+dx,root.position.y,camera.position.z+dz);
   };
 }
@@ -387,8 +388,8 @@ function fallingPetals(scene) {
   petals.frustumCulled=false;petals.instanceMatrix.setUsage(T.DynamicDrawUsage);scene.add(petals);
   return (time,player)=>{
     let count=0;
-    nearbyPeaches(player.x,player.z,26,tree=>{
-      if(count===capacity)return;
+    function scatter(tree){
+      if(count===capacity || isTimberFelled(tree))return;
       if(!soil.has(tree))soil.set(tree,terrainMeshHeight(tree.x,tree.z));
       const y=soil.get(tree),height=tree.size*4.6;
       if(Math.abs(player.y-y-height*.6)>22)return;
@@ -404,7 +405,9 @@ function fallingPetals(scene) {
         obj.scale.setScalar((.085+seed*.056)*min(1,phase*9,(1-phase)*10));
         obj.updateMatrix();petals.setMatrixAt(count++,obj.matrix);
       }
-    });
+    }
+    nearbyPeaches(player.x,player.z,26,scatter);
+    if(Math.hypot(player.x-GATE_PEACH.x,player.z-GATE_PEACH.z)<26)scatter(GATE_PEACH);
     petals.visible=count>0;petals.count=count;
     if(count)petals.instanceMatrix.needsUpdate=true;
   };

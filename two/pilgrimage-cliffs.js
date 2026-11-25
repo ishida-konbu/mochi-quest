@@ -95,6 +95,9 @@ export function* paintPeachCliffs(p,map){
   }
   const bark=brushWash(new T.MeshLambertMaterial({vertexColors:true}),.34);
   for(let i=0;i<3;i++) p.shapes['cliffPine'+i]=pine(i);
-  for(const t of CLIFF_PINES) p.part('cliffPine'+t.type,t.x,terrainMeshHeight(t.x,t.z),t.z,
-    t.scale,t.scale,t.scale,'#fff',t.yaw,0,0,bark,true,true);
+  for(const t of CLIFF_PINES){
+    p.treeSource=t;
+    p.part('cliffPine'+t.type,t.x,terrainMeshHeight(t.x,t.z),t.z,t.scale,t.scale,t.scale,'#fff',t.yaw,0,0,bark,true,true);
+  }
+  p.treeSource=null;
 }

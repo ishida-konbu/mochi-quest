@@ -9,8 +9,8 @@ import { predatorRange, patrolAt } from './predator-trails.js';
 const tau=Math.PI*2, stepSize=16;
 const cellKey=(x,z)=>Math.floor(x/stepSize)*128+Math.floor(z/stepSize);
 const fixtures=new Map(), crowns=new Map();
-function indexDisc(index,x,z,radius,top=0) {
-  const disc={x,z,radius,top}, reach=radius+6.8;
+function indexDisc(index,x,z,radius,top=0,source) {
+  const disc={x,z,radius,top,source}, reach=radius+6.8;
   for(let i=Math.floor((x-reach)/stepSize);i<=Math.floor((x+reach)/stepSize);i++)
     for(let j=Math.floor((z-reach)/stepSize);j<=Math.floor((z+reach)/stepSize);j++) {
       const key=i*128+j;
@@ -30,7 +30,7 @@ for(const tree of TREES) {
   indexDisc(crowns,x,z,crown,treeGround(tree)+h,tree);
 }
 for(const t of SHRINE_BAMBOO) {
-  indexDisc(crowns,t.x+t.sx,t.z+t.sz,1.5,terrainHeight(t.x,t.z)+t.height);
+  indexDisc(crowns,t.x+t.sx,t.z+t.sz,1.5,terrainHeight(t.x,t.z)+t.height,t);
 }
 for(const g of GATES) for(const side of [-1,1]) {
   if(g.lamps) {

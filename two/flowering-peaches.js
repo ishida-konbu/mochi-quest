@@ -1,3 +1,4 @@
+import { isTimberFelled,timberRevision } from './living-build-trees.js';
 import {peachStrokes} from './pilgrimage-trees.js';
 import * as T from './vendor/three.module.min.js';
 import { PEACH_TREES } from './pilgrimage-layout.js';
@@ -123,12 +124,13 @@ export function createPeachOrchard(scene) {
   const distant=batch(plane,mat,N,false),dummy=new T.Object3D(),colour=new T.Color(),up=new T.Vector3();
   const tints=['#ffffff','#fff3f3','#ffe5eb','#fff3e0','#f7d5e4','#fff8f2'];
   const frustum=new T.Frustum(),projection=new T.Matrix4(),lastProjection=new T.Matrix4(),lastRotation=new T.Quaternion(),bounds=new T.Sphere();
-  let lastX=Infinity,lastZ=Infinity,lastY=Infinity,lastRange=0;
+  let lastX=Infinity,lastZ=Infinity,lastY=Infinity,lastRange=0,lastTimber;
   return (camera,profile=SCENERY_PROFILES[DEFAULT_SCENERY_QUALITY])=>{
     if(!camera)return;
     const {x,y,z}=camera.position,range=profile.treeRange;
     if(Math.hypot(x-lastX,y-lastY,z-lastZ)<.38 && Math.abs(lastRotation.dot(camera.quaternion))>.99995 &&
-      lastProjection.equals(camera.projectionMatrix) && range===lastRange)return;
+      lastProjection.equals(camera.projectionMatrix) && range===lastRange && lastTimber===timberRevision())return;
+    lastTimber=timberRevision();
     lastRange=range;
     lastX=x;lastY=y;lastZ=z;lastRotation.copy(camera.quaternion);lastProjection.copy(camera.projectionMatrix);
     camera.updateWorldMatrix(true,false);
@@ -142,7 +144,7 @@ export function createPeachOrchard(scene) {
       if(!frustum.intersectsSphere(bounds))continue;
       for(const tree of stand.trees){
         const dx=wrapDelta(tree.x-x),dz=wrapDelta(tree.z-z),dist=Math.hypot(dx,dz,y-tree.y-CROWN_MID*tree.size);
-        if(dist>range)continue;
+        if(dist>range || isTimberFelled(tree))continue;
         colour.set(tints[tree.seed%tints.length]);
         if(dist<(60+tree.size*8)){
           bounds.center.set(x+dx,tree.y+CROWN_MID*tree.size,z+dz);bounds.radius=CROWN_SPAN*.58*tree.size;

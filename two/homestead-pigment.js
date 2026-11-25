@@ -49,6 +49,21 @@ export function homesteadFinish() {
         if (craftFinish < 3.5) {
           vec3 woodOrStone = joinerySheet(map,vMapUv).rgb;
           diffuseColor.rgb *= mix(woodOrStone,vec3(dot(woodOrStone,vec3(.26,.55,.19))),.16);
+        } else if (craftFinish>11.5) {
+          // Waxed culm skin has a soft longitudinal sheen and narrow fibres.
+          float rib=vMapUv.y*85.+.13*sin(vMapUv.x*11.);
+          float fibre=dot(fibreTile(vMapUv*vec2(.46,1.3),vec2(2.,0.)),vec3(.27,.55,.18));
+          float stria=cos(6.283*rib)*(1.-smoothstep(.22,.70,fwidth(rib)));
+          diffuseColor.rgb*=(.77+.32*fibre)*(1.+.055*stria);
+        } else if (craftFinish>10.5) {
+          // Bundles appear as fine pores on a cut culm wall; its node below
+          // the hollow is a sheet of pith with scattered short fibres.
+          vec2 p=vMapUv*43.;
+          vec2 cell=floor(p),jitter=fract(sin(vec2(dot(cell,vec2(13.3,7.9)),dot(cell,vec2(6.1,12.7))))*2513.);
+          float pore=1.-smoothstep(.057,.19,length(fract(p)-(.21+.58*jitter)));
+          float visible=1.-smoothstep(.21,.86,max(fwidth(p.x),fwidth(p.y)));
+          float fibre=dot(fibreTile(vMapUv,vec2(2.,0.)),vec3(.27,.55,.18));
+          diffuseColor.rgb*=(.72+.34*fibre)*(1.-.32*mix(.04,pore,visible));
         } else if (craftFinish>9.5) {
           // Standing trunks carry the wood's family dye. The bark atlas supplies
           // its fissures here without staining a pale birch cedar-brown.
@@ -94,7 +109,7 @@ export function homesteadFinish() {
         }
       `)
       .replace('#include <normal_fragment_maps>', `
-        if (craftFinish < 3.5 || craftFinish>9.5) {
+        if (craftFinish < 3.5 || (craftFinish>9.5 && craftFinish<10.5)) {
           vec3 relief = joinerySheet(normalMap,vNormalMapUv).xyz*2.-1.;
           relief.xy *= .72;
           normal = normalize(tbn*relief);
@@ -102,6 +117,7 @@ export function homesteadFinish() {
       `)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         if (craftFinish > 2.5 && craftFinish < 3.5) roughnessFactor = .60;
+        if (craftFinish > 11.5) roughnessFactor = .60;
       `)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
         if (craftFinish > 2.5 && craftFinish < 3.5) metalnessFactor = .25;

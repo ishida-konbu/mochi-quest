@@ -1,11 +1,14 @@
+import { entryFlight,outsideTreads } from './homestead-foundation.js';
 import { BUILD_MODULES } from './living-build-state.js';
 
 // A stand or floor clears its own patch of brush. Retain every plant's base
 // height so moving a module restores exactly the original planting pattern.
 export function plantedFootprints(structures) {
-  return structures.filter(s=>!s.parentId).map(s=>{
+  return structures.filter(s=>!s.parentId).flatMap(s=>{
     const d=BUILD_MODULES[s.kind];
-    return {x:s.x,z:s.z,w:d.width*.5,d:d.depth*.5,c:Math.cos(s.yaw),s:Math.sin(s.yaw)};
+    const axes={c:Math.cos(s.yaw),s:Math.sin(s.yaw)};
+    return [{x:s.x,z:s.z,w:d.width*.5,d:d.depth*.5,...axes},
+      ...outsideTreads(s,entryFlight(s.kind,s)).map(t=>({x:t.x,z:t.z,w:t.w*.5,d:t.d*.5,...axes}))];
   });
 }
 export function prunePlantBatch(attr,offset,x0,z0,previous,plots,pad) {

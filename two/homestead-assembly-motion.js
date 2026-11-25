@@ -227,7 +227,7 @@ function makePlatforms(steps,ground,size,variant) {
     const t=[n[1],-n[0]],side=xy[0]*t[0]+xy[1]*t[1];
     if(!p){
       const out=xy[0]*n[0]+xy[1]*n[1];
-      p={normal:n,center:[...base,0],depth:1.10,run:.34,top,out,lo:side,hi:side};platforms.push(p);
+      p={normal:n,footGround:ground,center:[...base,0],depth:1.10,run:.34,top,out,lo:side,hi:side};platforms.push(p);
     }
     p.lo=Math.min(p.lo,side);p.hi=Math.max(p.hi,side);
     const middle=(p.lo+p.hi)/2;
@@ -251,17 +251,18 @@ export function planAssembly(player,site,steps,canStand=()=>true){
     const plan=makeJob(player,site,steps,canStand,variant);
     if(plan)return plan;
   }
-  return null;
+  return makeJob(player,site,steps,canStand,3);
 }
 function makeJob(player,site,steps,canStand,variant) {
+  const compact=variant===3;
   if(!player || !site || ![player.x,player.y,player.z,site.x,site.y,site.z,site.yaw].every(Number.isFinite) ||
      !steps?.length || player.grounded===false || player.mount || player.skiff || player.vessel || player.activity || player.inWater)return null;
   const size=player.buffs?.full>0?1.28:1,field=heightField(site,size,canStand);
   const start=turn([wrapDelta(player.x-site.x),wrapDelta(player.z-site.z)],-site.yaw);
   if(Math.hypot(...start)>13 || Math.abs(field.land(start)+site.y-player.y)>.34)return null;
   const facing=(player.heading||0)-site.yaw;
-  const platforms=makePlatforms(steps,field.land,size,variant);
-  const siteFloor=(p)=>Math.max(field.land(p),...platforms.map(b=>onPlatform(p,b)));
+  const platforms=compact ? [] : makePlatforms(steps,field.land,size,variant);
+  const siteFloor=(p)=>compact ? field.land(p) : Math.max(field.land(p),...platforms.map(b=>onPlatform(p,b)));
   const completedGround=index=>{
     const deck=steps.slice(0,index).filter(s=>s.id.startsWith('floor.deck-'));
     return p=>{
@@ -297,7 +298,7 @@ function makeJob(player,site,steps,canStand,variant) {
       portals.push(add(add(center,t,(b.stairOffset||0)+side*((b.stairWidth??b.width)/2-.23)),n,out));
     }
   }
-  const staging=planAssemblyStock(steps,{kind:site.kind,variant,size,land:field.land,free:field.free,platforms,start});
+  const staging=compact ? [] : planAssemblyStock(steps,{kind:site.kind,variant,size,land:field.land,free:field.free,platforms,start});
   if(!staging)return null;
   for(const pile of staging){
     const {min,max}=pile.bounds;
@@ -318,12 +319,80 @@ function makeJob(player,site,steps,canStand,variant) {
     const pose=routeSampler([current,current],heading,heading,size,ground);
     actions.push({index,type,start:clock,end:clock+duration,pose});clock+=duration;
   }
+  // In a narrow bay, bring one member to its joint in a lifting sling. An
+  // edit between work stations keeps the journey on surveyed, dry footing
+  // even when there is no safe continuous walk around the outside of the hut.
+  function changeBay(from,to,fromYaw,toYaw,fromGround,toGround,index) {
+    const nearby=platforms.filter(b=>b.index===index || b.index===index-1);
+    const earth=completedGround(index),surface=p=>Math.max(earth(p),...nearby.map(b=>onPlatform(p,b)));
+    const obstacles=steps.slice(0,index);
+    const clear=(p,y)=>bodyClear(p,y) && !obstacles.some(s=>hitsPiece(s,p,y,size));
+    // Carry the empty hands to the next bay whenever a continuous path is
+    // available. A staged cut is only needed across an inaccessible ledge.
+    const matchingFeet=(p,yaw,stance)=>{
+      const pose=f=>routeSampler([p,p],yaw,yaw,size,f)(0).feet;
+      const expected=pose(stance);
+      return pose(surface).every((v,i)=>Math.hypot(...v.map((x,k)=>x-expected[i][k]))<.025);
+    };
+    if(matchingFeet(from,fromYaw,fromGround) && matchingFeet(to,toYaw,toGround)){
+      const path=findPath(from,to,surface,clear,portals);
+      if(path){
+        ground=surface;walk(path,toYaw,index);return;
+      }
+    }
+    const depart=routeSampler([from,from],fromYaw,fromYaw,size,fromGround);
+    const arrive=routeSampler([to,to],toYaw,toYaw,size,toGround);
+    const duration=1.18;
+    actions.push({index,type:'walk',start:clock,end:clock+duration,cut:true,
+      pose:q=>q<.5 ? depart(0) : arrive(0)});
+    clock+=duration;current=to;heading=toYaw;
+  }
+  let priorFooting=field.land;
   function bodyClear(p,y) {return field.free(p,y);}
   function ways(a,b,clear) {return findPath(a,b,ground,clear,portals);}
   for(let index=0;index<steps.length;index++){
     ground=completedGround(index);
     const s=steps[index],g=s.grip,goal=horizontal(g);
-    const fitted=steps.slice(0,index), pile=staging[index];
+    const fitted=steps.slice(0,index);
+    if(compact){
+      const natural=ground;
+      let best=null;
+      for(const radius of [1.12,.96,1.30,1.49])for(let j=0;j<24;j++){
+        const a=(j%2?-1:1)*Math.ceil(j/2)*pi/12;
+        const n=turn(s.normal,a),station=add(goal,n,radius*size);
+        const side=[n[1],-n[0]];
+        const feet=[-1,1].map(k=>natural(add(station,side,k*.30*size)));
+        const low=natural(station),high=Math.max(low,...feet);
+        const y=Math.max(high,g[1]-1.20*size);
+        if(y>g[1]+.36*size || !field.free(station,y) || hitsPiece(s,station,y,size) ||
+           fitted.some(part=>hitsPiece(part,station,y,size)))continue;
+        const gap=g[1]-y,score=Math.abs(a)*.36+Math.abs(radius-1.12)+Math.max(0,y-low)*.18+
+          Math.max(0,.24*size-gap)*2+.05*distance(current,station);
+        if(!best || score<best.score)best={score,n,station,low,y,gap};
+      }
+      if(!best)return null;
+      const {n,station,low,y}=best,yaw=Math.atan2(-n[0],-n[1]);
+      // Short cross planks support both feet when the hillside falls away.
+      // Only the current work bay is dressed between these close shots.
+      const cross=[n[1],-n[0]];
+      const pads=[-1,1].map(k=>natural(add(station,cross,k*.35*size)));
+      const raised=y-Math.min(low,...pads)>.10;
+      const level=raised ? Math.max(y,Math.max(low,...pads)+.075) : low;
+      if(raised)platforms.push({index,center:[station[0],Math.min(low,...pads)-.09,station[1]],normal:n,
+        height:level-Math.min(low,...pads)+.09,width:1.03*size,depth:.80*size,
+        run:.29,count:Math.max(1,Math.ceil((level-low)/.20)),footGround:natural});
+      const flat=raised ? ()=>level : natural;
+      const stock=[g[0]+n[0]*.18,g[1]+.20,g[2]+n[1]*.18];
+      staging.push({grip:stock,offset:stock.map((v,i)=>v-g[i]),rotation:zero,normal:n});
+      operations.push({n,g,station,pick:station,stock,rotation:zero,fixedYaw:yaw,pickYaw:yaw,
+        pickY:level,standY:level,step:s});
+      changeBay(current,station,heading,yaw,priorFooting,flat,index);
+      ground=flat;pause(index,'grasp',.65);pause(index,'carry',.70);
+      pause(index,'seat',.88);pause(index,'fasten',pinsJoint(s)?1.94:1.02);pause(index,'release',.42);
+      priorFooting=flat;
+      continue;
+    }
+    const pile=staging[index];
     const future=staging.slice(index+1);
     const stockFree=(p,y)=>!future.some(({bounds:b})=>b.max[1]>y+.12 &&
       Math.hypot(Math.max(b.min[0]-p[0],p[0]-b.max[0],0),Math.max(b.min[2]-p[1],p[1]-b.max[2],0))<.43*size);
@@ -407,7 +476,7 @@ function makeJob(player,site,steps,canStand,variant) {
   };
   const {width,depth}=BUILD_MODULES[site.kind];
   const endCandidates=[];
-  for(const radius of [.35,.82,1.35,2,2.8])for(let j=0;j<20;j++){
+  for(const radius of compact?[]:[.35,.82,1.35,2,2.8])for(let j=0;j<20;j++){
     const a=j*pi/10,p=add(current,[Math.sin(a),Math.cos(a)],radius);
     if(Math.abs(p[0])<width/2+.58*size && Math.abs(p[1])<depth/2+.58*size)continue;
     if(platforms.some(b=>onPlatform(p,b)>field.land(p)+.025))continue;
@@ -415,16 +484,18 @@ function makeJob(player,site,steps,canStand,variant) {
     endCandidates.push(p);
   }
   let home;
-  for(const p of [...endCandidates,start]){
+  for(const p of compact?[]:[...endCandidates,start]){
     const route=ways(current,p,returnClear);
     if(route && route.slice(1).reduce((d,p,i)=>d+distance(p,route[i]),0)<(home?.length??Infinity)){
       home={path:route,length:route.slice(1).reduce((d,p,i)=>d+distance(p,route[i]),0)};
       if(home.length<1.40)break;
     }
   }
-  if(!home)return null;
-  const finish=home.path.at(-1),endYaw=Math.atan2(-finish[0],-finish[1]);
-  walk(home.path,endYaw,steps.length);const duration=clock;
+  if(!compact && !home)return null;
+  const finish=compact?start:home.path.at(-1),endYaw=Math.atan2(-finish[0],-finish[1]);
+  if(compact)changeBay(current,finish,heading,endYaw,priorFooting,field.land,steps.length);
+  else walk(home.path,endYaw,steps.length);
+  const duration=clock;
   const [endX,endZ]=field.toWorld(finish);
   const endPose={x:endX,y:site.y+field.land(finish),z:endZ,heading:site.yaw+endYaw};
   function sample(t) {
@@ -471,6 +542,14 @@ function makeJob(player,site,steps,canStand,variant) {
     }else if(action==='fasten' || action==='release' || finished){
       work=1;grip=g;rot=zero;engage=finished?0:action==='release'?1-e:1;
     }
+    if(compact && !finished){
+      // The sling bears the weight while the worker draws the joint square.
+      // Hands meet the actual member before it moves and leave after fastening.
+      const lower=action==='carry' ? .30*ease(q) : action==='seat' ? .30+.70*ease(q) :
+        action==='fasten' || action==='release' ? 1 : 0;
+      grip=blend(op.stock,g,lower);rot=zero;
+      if(action==='grasp')engage=ease(q/.72);
+    }
     const tangent=[-n[1],n[0]];
     const hands=[-1,1].map((side,i)=>{
       const w=.14*size;
@@ -504,12 +583,15 @@ function makeJob(player,site,steps,canStand,variant) {
       }else if(q>=.46 && q<.69)cue=s.method==='lash'?'lash':s.method==='spread'?'spread':'seat';
     }
     const crouch=clamp((.72*size-(grip[1]-hy))/(.72*size))*engage;
-    return {...f,hands,focus:engage>0?grip:bodyPoint(f.hero,f.heading,0,1.0*size,1.2),
+    return {...f,hands,bay:compact?(act.cut && q<.5 ? act.index-1 : act.index):undefined,
+      previousBay:compact && act.type==='walk' && !act.cut ? act.index-1 : undefined,
+      cutOpacity:act.cut ? ease((.37-Math.abs(q-.5))/.22):0,focus:engage>0?grip:bodyPoint(f.hero,f.heading,0,1.0*size,1.2),
       lean:engage*(.09+.19*crouch),lift:-.35*crouch,effort:engage*(.26+.17*crouch),
       action,phase:finished?'finish':'build',time,index,installedCount:finished?steps.length:index,
       method:s.method,label:finished?'道具を収めて足場を離れる':s.label,work,cue,mallet,
       offset:finished?identity.offset:grip.map((v,i)=>v-g[i]),rotation:rot};
   }
+  if(compact)return {duration,sample,platforms,staging,actions,endPose,compact:true,land:field.land};
   // Sample the carried surface against the stacked kit and earlier joinery
   // before playback. Start lifting ahead of an obstruction and ease the load
   // down past it, instead of snapping a board upward at a single frame.

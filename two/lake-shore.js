@@ -1,3 +1,4 @@
+import { isTimberFelled } from './living-build-trees.js';
 import { buildLakeHokora } from './lake-hokora.js';
 import * as T from './vendor/three.module.min.js';
 import { animateNPC, makeNPC } from './actors.js';
@@ -368,7 +369,7 @@ export function createLakeShore(scene,art){
     wood.castShadow=wood.receiveShadow=true;
     // Projection changes the reflected crown's bounds with the camera angle.
     shadow.frustumCulled=false;shadow.renderOrder=2;
-    shore.add(wood,shadow);reflections.push(shadow);
+    shore.add(wood,shadow);reflections.push({wood,shadow});
   }
   const cast=LAKE_ANIMALS[0];
   let action;
@@ -383,7 +384,9 @@ export function createLakeShore(scene,art){
     actors.visible=rangeSq<54**2;
     if(actors.visible){action??=stoneSkipping(actors);action(time);}
     for(const [i,tree] of LAKE_WILLOWS.entries()){
-      reflections[i].visible=wrapDelta(player.x-tree.x)**2+wrapDelta(player.z-tree.z)**2<145**2;
+      const {wood,shadow}=reflections[i];
+      wood.visible=!isTimberFelled(tree);
+      shadow.visible=wood.visible && wrapDelta(player.x-tree.x)**2+wrapDelta(player.z-tree.z)**2<145**2;
     }
   };
 }

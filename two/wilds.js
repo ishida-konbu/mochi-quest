@@ -1,3 +1,4 @@
+import { timberBatchMask,recordTreeSpan } from './timber-batches.js';
 import {inkTree} from './landmark-tree.js';
 import { inMountainStreamClearing } from './mountain-streams.js';
 import { inHutYard } from './wayside-hut-layout.js';
@@ -47,10 +48,11 @@ class BarkBrush {
       key = Math.floor(root.x / 76) + ',' + Math.floor(root.z / 76);
     let batch = this.buffers.get(key);
     if (!batch) {
-      batch = { p: [], uv: [], ink: [], ix: [], distant: [] };
+      batch = { p: [], uv: [], ink: [], ix: [], distant: [], nearTrees:new Map(),farTrees:new Map() };
       this.buffers.set(key, batch);
     }
     const { p, uv, ink, ix } = batch;
+    const start=ix.length,farStart=batch.distant.length;
     const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal'),
       count = points.length;
     const offset = p.length / 3;
@@ -106,6 +108,8 @@ class BarkBrush {
         batch.distant.push(a+k0,a+k1,b+k0,a+k1,b+k1,b+k0);
       }
     }
+    recordTreeSpan(batch.nearTrees,this.tree,start,ix.length);
+    recordTreeSpan(batch.farTrees,this.tree,farStart,batch.distant.length);
   }
   finish() {
     for (const b of this.buffers.values()) {
@@ -129,6 +133,9 @@ class BarkBrush {
       }
       distant.setIndex(b.distant.map(original=>compact.get(original)));
       distant.boundingSphere=geo.boundingSphere;
+      const erase=(indices,start,end)=>indices.fill(0,start,end);
+      const nearMask=timberBatchMask(geo.index,b.nearTrees,erase),farMask=timberBatchMask(distant.index,b.farTrees,erase);
+      tree.userData.updateTimber=()=>{nearMask();farMask();};
       tree.userData.nearGeometry=geo;
       tree.userData.farGeometry=distant;
       tree.castShadow = true;
@@ -142,7 +149,9 @@ export function* plantInkTrees(p, art, boughs) {
   for (const tree of LANDMARK_TREES) {
     const elder=tree===TREES[0];
     const near=elder || REGIONS.some(q=>(q.x-tree.x)**2+(q.z-tree.z)**2<38**2);
+    p.treeSource=brush.tree=tree;
     if(tree.kind!=='bamboo')inkTree(brush,p,tree,seeded(tree.seed),h,elder,near,tree.kind==='maple' && hasAutumnLeaves(tree),boughs?.get(tree));
+    p.treeSource=null;
     yield;
   }
   brush.finish();

@@ -4,22 +4,27 @@ import { homesteadFinish } from './homestead-pigment.js';
 
 // A portable joiner's trestle with broad treads, not invisible standing
 // points in midair. Motion samples use these same tread heights and nosings.
-export function makeWorkTrestle({center, normal, height, width, depth, run, count, stairWidth=width, stairOffset=0}) {
+export function makeWorkTrestle({center, normal, height, width, depth, run, count, stairWidth=width, stairOffset=0,footGround}) {
   const timber=hokoraCarpentry();
   const dark='#ae9472', clear='#dfc89b', grain='#cbb58d';
   const plank=(x,y,z,w,h,d,seed)=>timber.box('wood',seed%2?grain:clear,[x,y,z],[w,h,d],
     {grain:'x',bevel:.009,seed});
   const beam=(from,to,w,d)=>timber.beam('wood',dark,from,to,w,d,{bevel:.005,seed:to[2]});
+  function toe(x,z) {
+    if(!footGround)return -.06;
+    const u=center[0]+normal[1]*x+normal[0]*z,v=center[2]-normal[0]*x+normal[1]*z;
+    return footGround([u,v])-center[1]-.065;
+  }
   const legs=width/2-.10;
   const outer=depth/2+(count-1)*run;
   for(const x of [-legs,legs]){
-    for(const z of [-depth/2+.07,depth/2-.07]) beam([x*1.08,-.06,z*1.10],[x,height-.056,z],.085,.10);
+    for(const z of [-depth/2+.07,depth/2-.07]) beam([x*1.08,toe(x*1.08,z*1.10),z*1.10],[x,height-.056,z],.085,.10);
     beam([x,height-.10,-depth/2],[x,height-.10,depth/2],.088,.093);
     if(height>.5) beam([x,.12,-depth/2+.07],[x,height-.17,depth/2-.07],.047,.061);
   }
   if(count>1)for(const side of [-1,1]){
     const x=stairOffset+side*(stairWidth/2-.07);
-    beam([x,-.025,outer-.04],[x,height-.11,depth/2-.07],.064,.10);
+    beam([x,toe(x,outer-.04),outer-.04],[x,height-.11,depth/2-.07],.064,.10);
   }
   beam([-legs,.16,-depth/2],[legs,.16,-depth/2],.068,.075);
   const boards=Math.max(2,Math.round(depth/.23));

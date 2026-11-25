@@ -1,7 +1,7 @@
 // Stable additions to the delivery scroll. The location of each ensemble is
 // relative to its landmark, including when a journey moves to a larger map.
 import { TREES, REGIONS, BUILDINGS, regionAt, terrainHeight, treeGround, groundHeight, solidHeightAt, nearRoad, WATER_Y } from './terrain.js';
-import { reserveTimberPerch } from './living-build-trees.js';
+import { isTimberFelled } from './living-build-trees.js';
 import { DAIBUTSU } from './pilgrimage-layout.js';
 import { RYUGU, PALACE_BED, PALACE_LEVELS, PALACE_POOL, boardingHeightAt, palacePoint } from './ryugu-layout.js';
 import { animalRadius, openGround, canopyHeight, walkCircuit } from './village-paths.js';
@@ -69,7 +69,6 @@ function hawkRoute(index) {
       const d=(tree.x-x)**2+(tree.z-z)**2;
       if(d<score && !stops.some(s=>hypot(s.tree.x-tree.x,s.tree.z-tree.z)<32) && reachableBough(tree)) {score=d;best=tree;}
     }
-    reserveTimberPerch(best);
     stops.push(reachableBough(best));
   }
   return stops.map((a,i)=>{
@@ -178,7 +177,12 @@ export function moveScrollFauna(n,time) {
       if(turn<leg.rest+leg.flight)break;
       turn-=leg.rest+leg.flight;
     }
-    n.perched=turn<leg.rest;n.speed=0;
+    const missing=isTimberFelled(leg.a.tree);
+    // If a bird was resting when the tree was cut, begin its existing
+    // departure arc at its feet on the first simulation tick after the cut.
+    if(missing && n.perched && turn<leg.rest)n.departure={leg,time,turn};
+    if(n.departure && (n.departure.leg!==leg || time<n.departure.time || time-n.departure.time>=n.cycle || turn<n.departure.turn))delete n.departure;
+    n.perched=!missing && turn<leg.rest;n.speed=0;
     if(n.perched){
       const previous=n.route[(n.route.indexOf(leg)+n.route.length-1)%n.route.length].points;
       const tip=previous.at(-1),before=previous.at(-2),after=leg.points[1];
@@ -192,14 +196,16 @@ export function moveScrollFauna(n,time) {
       n.heading=from+Math.atan2(sin(to-from),cos(to-from))*f*f*(3-2*f);
     }
     else {
-      const t=Math.min(1,Math.max(0,(turn-leg.rest)/leg.flight)),u=t*t*(3-2*t);
+      const takeoff=missing?(n.departure?.turn??0):leg.rest;
+      const t=Math.min(1,Math.max(0,(turn-takeoff)/(leg.rest+leg.flight-takeoff))),u=t*t*(3-2*t);
       const distance=u*leg.lengths.at(-1);
       let lo=0,hi=leg.points.length-1;
       while(hi-lo>1){const mid=(lo+hi)>>1;if(leg.lengths[mid]<distance)lo=mid;else hi=mid;}
       const p=leg.points[lo],q=leg.points[hi],mix=(distance-leg.lengths[lo])/(leg.lengths[hi]-leg.lengths[lo]);
       n.x=p.x+(q.x-p.x)*mix;n.y=p.y+(q.y-p.y)*mix;n.z=p.z+(q.z-p.z)*mix;
       n.heading=Math.atan2(q.x-p.x,q.z-p.z);
-      n.spread=Math.min(1,t*10,(1-t)*9);n.speed=n.spread*8;
+      n.spread=Math.min(1,missing?.38+t*10:t*10,isTimberFelled(leg.b.tree)?.38+(1-t)*9:(1-t)*9);
+      n.speed=n.spread*8;
     }
     n.altitude=n.y-terrainHeight(n.x,n.z);
     n.bank=sin(time*6.2+n.phase)*(.42+.30*sin(time*.77+n.phase));

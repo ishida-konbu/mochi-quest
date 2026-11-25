@@ -30,7 +30,7 @@ import { springGroundSurvey } from './spring-ground-survey.js';
 import { COURT, RETREATS, sitePoint, courtTerrain, bathTerrain, bathRadius, nearbyRetreat, reservedScenery, civicAndBathSolids } from './retreat-layout.js';
 import { KYO_BUILDINGS, KYO_ROADS, KYO_FOOD, KYO_SCREENS, screenFold, inCapitalWard, wardFloorPlan, gateSolids, gateStoneRise, RASHOMON } from './kyo-layout.js';
 import { FERRY_CURTAIN, ferryCurtainPoint } from './festival.js';
-import { CEDAR_GROVES, CLIFF_PINES, PEACH_TREES, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
+import { CEDAR_GROVES, CLIFF_PINES, PEACH_TREES, GATE_PEACH, INARI_ROUTE, nearPeachTrunk, pilgrimageHeight, pilgrimageSolids } from './pilgrimage-layout.js';
 import { TRADE_ROADS, freightRoadEarthwork } from './trade-routes.js';
 import { STREET_BEATS } from './street-watch-layout.js';
 import { forestForm, TREE_FAMILIES, TREE_FORMS_PER_FAMILY } from './forest-forms.js';
@@ -1345,7 +1345,7 @@ export const SHRINE_BAMBOO=[];
     const height=5.2+random()*3.8, sx=(random()-.5)*.94, sz=(random()-.5)*.86, radius=.063+random()*.04;
     const sprays=Array.from({length:3},()=>({angle:random()*2*Math.PI,width:1.68+random()*.71,
       height:1.03+random()*.53,tilt:(random()-.5)*.72}));
-    SHRINE_BAMBOO.push({x,z,height,sx,sz,radius,sprays,tint:i%3?'#9ba575':'#b7bd86'});
+    SHRINE_BAMBOO.push({kind:'shrine-bamboo',seed:SHRINE_BAMBOO.length,h:height,x,z,height,sx,sz,radius,sprays,tint:i%3?'#9ba575':'#b7bd86'});
   }
 }
 // Individual stones leave real bathing entrances on the avenue, at the
@@ -1573,8 +1573,11 @@ for(const {x,z,yaw} of KYO_FOOD) {
 }
 putSolid(-161.7,-90.6,1.84,.44,1.18,terrainHeight(-161.7,-90.6)+2.08,'roof',true,.44);
 putSolid(-161.7, -90.6, 1.65, 0.24, 1.18, terrainHeight(-161.7, -90.6) + 1.93, 'box', false);
-for(const {x,z,radius,height} of [...LAKE_WILLOWS,...LAKE_ANIMALS])
-  putSolid(x,z,radius,radius,0,terrainMeshHeight(x,z)+height,'oval',false);
+for(const fixture of [...LAKE_WILLOWS,...LAKE_ANIMALS]) {
+  const {x,z,radius,height}=fixture;
+  const solid=putSolid(x,z,radius,radius,0,terrainMeshHeight(x,z)+height,'oval',false);
+  if(fixture.kind==='lake-willow') solid.plant=fixture;
+}
 for (const r of ROCKS) {
   for (const part of rockParts(r,terrainHeight(r.x,r.z))) mountRockContact(part,putSolid);
 }
@@ -1619,6 +1622,9 @@ export function registerScannedStones(id,shapes,placements) {
 }
 
 
+const plantedWood = new WeakMap();
+export const timberWood = tree => plantedWood.get(tree);
+export const TIMBER_TREES = [...TREES,...PEACH_TREES,GATE_PEACH,...CLIFF_PINES,...SHRINE_BAMBOO,...LAKE_WILLOWS];
 function plantWood(tree,base,scale,yaw,wood,surveyRadius,surveyTop) {
   // Thousands of grove instances share the same branch records. The spatial
   // index holds just one enclosing footprint per real tree.
@@ -1627,6 +1633,7 @@ function plantWood(tree,base,scale,yaw,wood,surveyRadius,surveyTop) {
   const bottom=min(wood.bottom,culmFeet?.bottom??Infinity)*scale+base;
   const solid=putSolid(tree.x,tree.z,reach,reach,yaw,base+wood.top*scale,'wood',false,0,bottom);
   Object.assign(solid,{tree,base,scale,wood,culmFeet,surveyRadius,surveyTop});
+  plantedWood.set(tree,solid);
 }
 for(const tree of TREES){
   const grove=tree.form!==undefined,scale=grove?tree.h:1;
@@ -1637,10 +1644,12 @@ for(const tree of TREES){
     grove?tree.h*.027:tree.kind==='bamboo'?.3:.37,base+tree.h*.68);
 }
 for(const t of PEACH_TREES){
+  Object.assign(t,{kind:'peach',h:4.5*t.size});
   plantWood(t,terrainMeshHeight(t.x,t.z),t.size,t.turn,pilgrimageWood('peach',t.form??t.seed%5,seeded),
     .25*t.size,terrainHeight(t.x,t.z)+2.6*t.size);
 }
-for(const t of CLIFF_PINES){
+for(const [index,t] of CLIFF_PINES.entries()){
+  Object.assign(t,{kind:'cliff-pine',h:5*t.scale,seed:index});
   plantWood(t,terrainMeshHeight(t.x,t.z),t.scale,t.yaw,pilgrimageWood('pine',t.type,seeded),
     .21*t.scale,terrainHeight(t.x,t.z)+4.8*t.scale);
 }
@@ -1648,7 +1657,7 @@ for(const t of SHRINE_BAMBOO) {
   // One low and one high span approximate the lean without a thick invisible wall.
   for(let k=0;k<2;k++) {
     const f=(k+.5)/2, radius=t.radius+Math.hypot(t.sx,t.sz)*.25, y=terrainHeight(t.x,t.z);
-    putSolid(t.x+t.sx*f,t.z+t.sz*f,radius,radius,0,y+t.height*(k+1)/2,'oval',false,0,y+t.height*k/2-.1);
+    putSolid(t.x+t.sx*f,t.z+t.sz*f,radius,radius,0,y+t.height*(k+1)/2,'oval',false,0,y+t.height*k/2-.1).plant=t;
   }
 }
 function lampSolid(x,z,scale,base=terrainHeight(x,z)) {
@@ -1689,6 +1698,7 @@ for (const b of BRIDGES) for (const sign of [-1,1]) {
 }
 
 function surfaceHeight(s, x, z, pad) {
+  if(s.plant && isTimberFelled(s.plant))return -Infinity;
   const dx = x - s.x,
     dz = z - s.z,
     a = dx * s.c - dz * s.s,

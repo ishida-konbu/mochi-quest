@@ -4,6 +4,8 @@ import { timberTree, stumpCovered } from './living-build-land.js';
 import { BUILD_MODULES } from './living-build-state.js';
 import { timberCut } from './homestead-timber-section.js';
 import { homesteadGeometry } from './homestead-carpentry.js';
+import { hokoraCarpentry } from './kaede-hokora-mesh.js';
+import { foundationMembers, drawFoundationMember } from './homestead-foundation.js';
 import { plantedFootprints } from './homestead-groundcover.js';
 import { makePriceTag } from './homestead-price-tags.js';
 import { homesteadFinish } from './homestead-pigment.js';
@@ -50,6 +52,27 @@ function surveyFrame(kind,ok,terrain) {
   const ink=new T.LineBasicMaterial({color:ok?0x243731:0x762619});
   return new T.LineSegments(g,ink);
 }
+function fitFoundation(mesh,kind,site){
+  if(mesh.userData.foundationSite===site)return;
+  mesh.userData.foundationSite=site;
+  const key=[kind,site.parentId,site.x,site.y,site.z,site.yaw,site.foundationWood].join('/');
+  if(mesh.userData.foundationKey===key)return;
+  removeFoundation(mesh);
+  mesh.userData.foundationKey=key;
+  const members=foundationMembers(kind,site);
+  if(!members.length)return;
+  const b=hokoraCarpentry();
+  for(const member of members)drawFoundationMember(b,member);
+  const frame=new T.Mesh(b.finish(),mesh.material);
+  frame.name='地形に合わせた束基礎';frame.castShadow=mesh.castShadow;frame.receiveShadow=mesh.receiveShadow;
+  frame.renderOrder=mesh.renderOrder;
+  mesh.userData.foundation=frame;
+  mesh.add(frame);
+}
+function removeFoundation(mesh){
+  const base=mesh.userData.foundation;
+  if(base){base.geometry.dispose();base.removeFromParent();delete mesh.userData.foundation;}
+}
 function displayedStock(stock) {
   if(!stock?.length)return [];
   const first=stock[0];
@@ -58,6 +81,7 @@ function displayedStock(stock) {
 }
 function removeGoods(mesh) {
   for(const group of [...mesh.children]){
+    if(group===mesh.userData.foundation)continue;
     group.traverse(part=>part.geometry?.dispose());
     group.removeFromParent();
   }
@@ -110,12 +134,13 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
 
   function clearResident() {
     for(const child of resident.values()){
-      removeGoods(child);child.removeFromParent();
+      removeFoundation(child);removeGoods(child);child.removeFromParent();if(child.isInstancedMesh)child.dispose();
     }
     resident.clear();
   }
   function clearPreview() {
     if(!preview)return;
+    removeFoundation(preview);
     const frame=preview.children[0];
     frame.geometry.dispose();frame.material.dispose();preview.removeFromParent();
     preview=null;
@@ -128,7 +153,8 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     preview=new T.Mesh(geometry(p.kind,p.terrain),previewInk[Number(Boolean(p.ok))]);
     preview.name='仮置き・'+BUILD_MODULES[p.kind].name;
     preview.position.set(p.x,p.y,p.z);preview.rotation.y=p.yaw||0;
-    preview.add(surveyFrame(p.kind,p.ok,p.terrain));preview.renderOrder=2;group.add(preview);
+    preview.add(surveyFrame(p.kind,p.ok,p.terrain));preview.renderOrder=2;
+    fitFoundation(preview,p.kind,p);group.add(preview);
   }
   function readCuts(showBurst) {
     const ids=world?.felledTrees || [];
@@ -178,18 +204,28 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     visible.add(s.id);
     let mesh=resident.get(s.id);
     if(!mesh){
-      mesh=new T.Mesh(geometry(kind,s.terrain,stump?s.kind:undefined),homesteadFinish());
+      const stock=geometry(kind,s.terrain,stump?s.kind:undefined);
+      if(stump && s.cut.culms){
+        mesh=new T.InstancedMesh(stock,homesteadFinish(),s.cut.culms.length);
+        const stem=new T.Object3D();
+        s.cut.culms.forEach((ring,i)=>{
+          stem.position.set(ring.x-s.cut.x,0,ring.z-s.cut.z);
+          stem.scale.set(ring.radius/.28,1,ring.radius/.28);
+          stem.updateMatrix();mesh.setMatrixAt(i,stem.matrix);
+        });
+        mesh.computeBoundingSphere();
+      } else mesh=new T.Mesh(stock,homesteadFinish());
       mesh.castShadow=mesh.receiveShadow=true;
       mesh.name=stump?'木口の残る切り株':BUILD_MODULES[kind].name;
       group.add(mesh);resident.set(s.id,mesh);
       if(stump){
-        const scale=s.cut.radius/.31;
+        const scale=s.cut.culms?1:s.cut.radius/.31;
         mesh.position.y=s.cut.y-.42;
         mesh.scale.set(scale,1,scale);
       }
     } else if(!stump) mesh.geometry=geometry(kind,s.terrain);
     mesh.position.x=viewer.x+dx;mesh.position.z=viewer.z+dz;
-    if(!stump){mesh.position.y=s.y;mesh.rotation.y=s.yaw;}
+    if(!stump){mesh.position.y=s.y;mesh.rotation.y=s.yaw;fitFoundation(mesh,kind,s);}
     if(kind==='stand')putGoods(mesh,world,world.market?.stands[s.id]?.stock,d2<ranges.food**2);
   }
   function update(time,eye) {
@@ -225,7 +261,7 @@ export function createHomesteadWorld(scene,refreshCanopy,pruneUnderstory) {
     }
     for(const [id,mesh] of resident){
       if(visible.has(id))continue;
-      removeGoods(mesh);mesh.removeFromParent();resident.delete(id);
+      removeFoundation(mesh);removeGoods(mesh);mesh.removeFromParent();if(mesh.isInstancedMesh)mesh.dispose();resident.delete(id);
     }
   }
   return {setLivingWorld,setBuildingPreview,setConstructionSite,update};

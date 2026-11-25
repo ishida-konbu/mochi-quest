@@ -554,7 +554,9 @@ function emaRack(p, a) {
   }
 }
 function grove(p, a) {
-  for(const {x,z,height,sx,sz,radius,tint,sprays} of SHRINE_BAMBOO) {
+  for(const tree of SHRINE_BAMBOO) {
+    const {x,z,height,sx,sz,radius,tint,sprays}=tree;
+    p.treeSource=tree;
     const ground=terrainHeight(x,z);
     p.link(v(x,ground-.1,z),v(x+sx,ground+height,z+sz),radius,tint,false,true,true,a.bamboo);
     for(const [k,spray] of sprays.entries()) {
@@ -565,6 +567,7 @@ function grove(p, a) {
         spray.tilt,p.sprays.bamboo,false,true);
     }
   }
+  p.treeSource=null;
   // Pairs of low votive lanterns draw the eye up the rising approach.
   for (const [x, z] of [
     [-155.8, -74],

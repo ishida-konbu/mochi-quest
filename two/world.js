@@ -1,4 +1,6 @@
+import { timberBatchMask,recordTreeSpan } from './timber-batches.js';
 import { createHomesteadWorld } from './homestead-world.js';
+import { dressRiceBeds } from './rice-field-beds.js';
 import { isTimberFelled, timberRevision } from './living-build-trees.js';
 import { createKaedeLeafFall, kaedeBoughs, kaedeTrees } from './kaede-grove.js';
 import {landmarkCulms} from './landmark-tree.js';
@@ -890,6 +892,10 @@ class Painter {
     b.extent = Math.max(b.extent, matrix.getMaxScaleOnAxis());
     // Store the exact floats the renderer consumes, instead of retaining two
     // JS objects per roof tile, leaf or beam until the island is finished.
+    if(this.treeSource){
+      b.treeSources??=new Map();
+      b.treeSources.set(b.count,this.treeSource);
+    }
     const offset=b.count*19;
     if(offset===b.instances.length) {
       const grown=new Float32Array(b.instances.length*2);
@@ -941,13 +947,20 @@ class Painter {
       const {shape,geo,mat,instances,count,shadow,extent,skyline}=batch;
       const m = new THREE.InstancedMesh(geo, mat, count);
       let index=0;
+      const treeSlots=new Map();
       // Interleave sprays so a distant batch can draw two in every five
       // without dropping the last trees in its grove.
       const stride=sprays.has(mat)?5:1;
       for(let pass=0;pass<stride;pass++) for(let i=pass;i<count;i+=stride) {
+        const source=batch.treeSources?.get(i);
+        if(source)recordTreeSpan(treeSlots,source,index*16,(index+1)*16);
         m.setMatrixAt(index, this.dummy.matrix.fromArray(instances,i*19));
         m.setColorAt(index++, this.color.fromArray(instances,i*19+16));
       }
+      if(treeSlots.size) m.userData.updateTimber=timberBatchMask(m.instanceMatrix,treeSlots,(matrices,start,end)=>{
+        // Collapse the basis while retaining translation and homogeneous w.
+        for(let index=start;index<end;index+=16)matrices.fill(0,index,index+12);
+      });
       if(stride>1) m.userData.foliageCount=count;
       if(mat.userData.landmarkStem)m.userData.landmarkStem=true;
       m.matrixAutoUpdate=false;
@@ -971,6 +984,7 @@ function* woodland(p, art, boughs) {
   for (const tree of LANDMARK_TREES) {
     const {x,z,kind}=tree, y=h(x,z)-.02;
     if(kind==='bamboo') {
+      p.treeSource=tree;
       const {angle:a,stems}=landmarkCulms(tree,seeded(tree.seed));
       for(const {x:bx,z:bz,high,lean} of stems){
         p.link(V(bx, y, bz), V(bx + lean, y + high, bz + 0.12), 0.075, '#788458', false, true, true,bambooStems);
@@ -1012,7 +1026,7 @@ function* woodland(p, art, boughs) {
           );
         }
       }
-      continue;
+      p.treeSource=null;
     }
   }
 }
@@ -1578,42 +1592,6 @@ function building(p, b, index) {
     }
   }
 }
-function paddies(p) {
-  const r = seeded(352);
-  for (let i = 0; i < 24; i++) {
-    const col = i % 6,
-      row = Math.floor(i / 6),
-      x = 105 + col * 16.2 + sin(row) * 4,
-      z = 123 + row * 12.8;
-    if (BUILDINGS.some((b) => Math.hypot(x - b.x, z - b.z) < 12) || nearRoad(x, z, 3)) continue;
-    const y = h(x, z),
-      sx = 13.6,
-      sz = 10.8;
-    p.part('box', x, y - 0.22, z, sx, 0.8, sz, '#a29e64');
-    p.part('box', x, y + 0.205, z, sx - 0.68, 0.07, sz - 0.68, row % 2 ? '#b4ac6a' : '#9cae83');
-    for (let j = 0; j < 6; j++)
-      for (let k = 0; k < 7; k++) {
-        const xx = x + (k - 3) * 1.58 + (r() - 0.5) * 0.28,
-          zz = z + (j - 2.5) * 1.52;
-        p.part(
-          'leaf',
-          xx,
-          y + 0.19,
-          zz,
-          0.75,
-          0.5 + r() * 0.32,
-          0.64,
-          row % 3 ? '#9b9b4c' : '#839259',
-          r() * 3,
-          0,
-          0.12,
-          p.stems,
-          false,
-          true,
-        );
-      }
-  }
-}
 function details(p) {
   const r = seeded(27158);
   dressOutcrops(p,ROCKS,h);
@@ -1936,7 +1914,7 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
     yield;
   }
   painter.cityShell=false;
-  paddies(painter);
+  const pruneRice=dressRiceBeds(painter);
   hillsideStairs(painter);
   roadsideInscriptions(painter);
   stampStations(painter);
@@ -2002,6 +1980,8 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
         if(treeFade>0. && treeFade>fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715)))))discard;`);
     };
   }
+  const timberMasks=batches.map(b=>b.mesh.userData.updateTimber).filter(Boolean);
+  let lastTimber;
   function setBatchRanges() {
     treeHorizon.value=profile.treeRange;
     for(const b of batches) {
@@ -2020,7 +2000,9 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
   water.uniforms.climate=atmosphere.climate;
   water.uniforms.sunWest=atmosphere.sunWest;
   const leaves = driftingLeaves(scene,boughs);
-  const homestead = createHomesteadWorld(scene,terrain.refreshCanopy,pruneUnderstory);
+  const homestead = createHomesteadWorld(scene,terrain.refreshCanopy,plots=>{
+    pruneUnderstory(plots);pruneRice(plots);
+  });
   return {
     setLivingWorld:homestead.setLivingWorld,
     setConstructionSite:homestead.setConstructionSite,
@@ -2033,6 +2015,10 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
       setBatchRanges();
     },
     update(time, player, camera, voyageTime=time, bellStrike=null, inariWeather=null) {
+      if(lastTimber!==timberRevision()){
+        lastTimber=timberRevision();
+        for(const mask of timberMasks)mask();
+      }
       water.update(time,player,voyageTime);
       painter.sway.value = time;
       if (camera) {
