@@ -1,6 +1,6 @@
 # 設計Wiki索引
 
-設計版 v0.1.0 / 2026-11-25 JST。全18設計ページ。最新の建築操作と検証は[「建てる」モードの検版記録](../raw/2026-11-25-interactive-building.md)を参照。これまでの実装状況は[フェーズ1・2の検版記録](../raw/2026-11-25-phase-1-2-verification.md)、[工房の調理動線と実演](../raw/2026-11-25-cooking-tool-route.md)、[交易・拠点の実装と検版](../raw/2026-11-25-phase-3-4-verification.md)、[主人公の建築実演](../raw/2026-11-25-construction-performance.md)を参照。
+設計版 v0.1.0 / 2026-11-26 JST。全18設計ページ。最新の実装は[探索での伐採・普請・野営の検版](../raw/2026-11-26-work-and-rest.md)、建築画面の操作は[「建てる」モードの検版記録](../raw/2026-11-25-interactive-building.md)を参照。これまでの実装状況は[フェーズ1・2の検版記録](../raw/2026-11-25-phase-1-2-verification.md)、[工房の調理動線と実演](../raw/2026-11-25-cooking-tool-route.md)、[交易・拠点の実装と検版](../raw/2026-11-25-phase-3-4-verification.md)、[主人公の建築実演](../raw/2026-11-25-construction-performance.md)を参照。
 
 最新のユーザー要件は[決定記録](decisions.md)と[原指示](../raw/2026-11-25-user-direction.md)。メインストーリー詳細は保留。実装時はまず[AGENTS.md](../AGENTS.md)と[SCHEMA.md](../SCHEMA.md)を読み、対象ページ・依存先・受け入れ条件だけを開く。
 

@@ -2,8 +2,9 @@
 id: save-and-migration
 type: technical
 status: active
-updated: 2026-11-25
+updated: 2026-11-26
 sources:
+  - ../raw/2026-11-26-work-and-rest.md
   - ../raw/2026-11-25-interactive-building.md
   - ../raw/2026-11-25-open-forestry-level-foundations.md
   - ../raw/2026-11-25-user-direction.md
@@ -96,6 +97,8 @@ sources:
 読込時は部材の形式のほか、元の土地・樹木、手元・棚・櫃を通算したロット数を検証する。他の記録を読み込み候補として検査する間は、表示中の旅の地形へ復帰できるようにする。
 
 [交易・拠点の実装と検版](../raw/2026-11-25-phase-3-4-verification.md)
+
+同じ版14に、伐った木が次に生えられる世界時刻（`treeReadyAt`）と、寝床ごとの寝具（`beddingGrade`、0〜3）を追加した。以前の切り株には保存していた世界時刻から丸一日を与える。寝具の記録がない寝床は藁の掛けむしろで復元する。小屋に載った寝床の `parentId` は物理的な支持床を表し、自分の敷地の所属関係とは別に検証する。回転した床では機種による三角関数の丸め差を許容し、材種・地域・支持元と実際の位置ずれは検証する。睡眠の途中映像や倒木の角度は保存しない。
 
 ## 関連ページ
 
