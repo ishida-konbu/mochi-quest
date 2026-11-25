@@ -21,30 +21,39 @@
       });
     </script>
     <link rel="icon" href="../assets/ui/seal.svg" />
-    <link rel="stylesheet" href="./game.css?v=homestead-1" />
+    <link rel="stylesheet" href="./game.css?v=build-mode-1" />
     <script type="importmap">
       {
         "imports": {
+          "./build-craft-scene.js": "./build-craft-scene.js?v=build-mode-1",
+          "./build-editor-panel.js": "./build-editor-panel.js?v=build-mode-1",
+          "./build-craft-motion.js": "./build-craft-motion.js?v=build-mode-1",
+          "./build-editor-viewport.js": "./build-editor-viewport.js?v=build-mode-1",
+          "./build-editor.js": "./build-editor.js?v=build-mode-1",
+          "./build-craft-art.js": "./build-craft-art.js?v=build-mode-1",
+          "./living-market-book.js": "./living-market-book.js?v=build-mode-1",
+          "./living-foundation.js": "./living-foundation.js?v=build-mode-1",
+          "./homestead-foundation.js": "./homestead-foundation.js?v=build-mode-1",
           "./homestead-assembly-camera.js": "./homestead-assembly-camera.js?v=hillside-1",
           "./homestead-assembly-motion.js": "./homestead-assembly-motion.js?v=hillside-1",
           "./homestead-assembly-parts.js": "./homestead-assembly-parts.js?v=hillside-1",
           "./homestead-pigment.js": "./homestead-pigment.js?v=hillside-1",
-          "./homestead-sawing.js": "./homestead-sawing.js?v=hillside-1",
+          "./homestead-sawing.js": "./homestead-sawing.js?v=build-mode-1",
           "./homestead-timber-section.js": "./homestead-timber-section.js?v=hillside-1",
           "./homestead-work-trestle.js": "./homestead-work-trestle.js?v=hillside-1",
           "./living-build-contacts.js": "./living-build-contacts.js?v=hillside-1",
-          "./living-build-state.js": "./living-build-state.js?v=hillside-1",
+          "./living-build-state.js": "./living-build-state.js?v=build-mode-1",
           "./living-build-trees.js": "./living-build-trees.js?v=hillside-1",
-          "./living-construction-view.js": "./living-construction-view.js?v=hillside-1",
+          "./living-construction-view.js": "./living-construction-view.js?v=build-mode-1",
           "./living-forestry-view.js": "./living-forestry-view.js?v=hillside-1",
           "./living-save.js": "./living-save.js?v=homestead-1",
-          "./living-build.js": "./living-build.js?v=hillside-1",
-          "./living-build-land.js": "./living-build-land.js?v=hillside-1",
-          "./living-homestead-book.js": "./living-homestead-book.js?v=hillside-1",
-          "./homestead-world.js": "./homestead-world.js?v=hillside-1",
+          "./living-build.js": "./living-build.js?v=build-mode-1",
+          "./living-build-land.js": "./living-build-land.js?v=build-mode-1",
+          "./living-homestead-book.js": "./living-homestead-book.js?v=build-mode-1",
+          "./homestead-world.js": "./homestead-world.js?v=build-mode-1",
           "./homestead-carpentry.js": "./homestead-carpentry.js?v=hillside-1",
           "./living-resources.js": "./living-resources.js?v=homestead-1",
-          "./living-book.js": "./living-book.js?v=construction-1",
+          "./living-book.js": "./living-book.js?v=build-mode-1",
           "./atlas-destinations.js": "./atlas-destinations.js?v=homestead-1",
           "./scenery-quality.js": "./scenery-quality.js?v=island-horizon-2",
           "./travel-camera.js": "./travel-camera.js?v=travel-camera-1",
@@ -113,7 +122,7 @@
           "./kyo-bath-layout.js": "./kyo-bath-layout.js?v=suzuri-roji-1",
           "./kyo-bath-art.js": "./kyo-bath-art.js?v=suzuri-roji-1",
           "./goemon-windbreak.js": "./goemon-windbreak.js?v=yuya-emaki-1",
-          "../sound.js": "../sound.js?v=construction-1",
+          "../sound.js": "../sound.js?v=build-mode-1",
           "./kiyomizu-layout.js": "./kiyomizu-layout.js?v=emaki-funatabi-1",
           "./kiyomizu.js": "./kiyomizu.js?v=emaki-funatabi-1",
           "./kiyomizu-bell.js": "./kiyomizu-bell.js?v=journey-music-1",
@@ -278,7 +287,7 @@
           "./scroll-fauna.js": "./scroll-fauna.js?v=hillside-1",
           "./wayside-baths.js": "./wayside-baths.js?v=handscroll-arrival-1",
           "./costume-distance.js": "./costume-distance.js?v=5.0",
-          "./world.js": "./world.js?v=hillside-1",
+          "./world.js": "./world.js?v=build-mode-1",
           "./court-patrol.js": "./court-patrol.js?v=living-world-1",
           "./court-watch.js": "./court-watch.js?v=living-world-1",
           "./flowering-peaches.js": "./flowering-peaches.js?v=hillside-1",
@@ -344,7 +353,7 @@
     </script>
     <link rel="modulepreload" href="./vendor/three.core.min.js" />
     <link rel="modulepreload" href="./vendor/three.module.min.js" />
-    <link rel="modulepreload" href="./main.js?v=hillside-1" />
+    <link rel="modulepreload" href="./main.js?v=build-mode-1" />
     <link rel="preload" as="fetch" crossorigin href="./assets/actors/nikkori/nikkori.glb?v=onsen-float" />
   </head>
   <body>
@@ -439,6 +448,7 @@
           <button id="journal" title="配達帳を開く"><span>配達帳</span><strong id="delivered-count">0 / 876</strong></button>
           <button id="parcel-bag" type="button" aria-haspopup="dialog" title="風呂敷の所持アイテムを見る（I）"><span>風呂敷</span><strong id="parcel-count">0品</strong></button>
           <button id="living-book" type="button" aria-label="暮らし帖" aria-haspopup="dialog" title="暮らし帖を開く（L）"><span>暮らし帖</span><strong id="living-wallet">24文</strong></button>
+          <button id="build-mode" type="button" aria-haspopup="dialog" title="建てるモード（B）">建てる</button>
           <button id="save-notice" hidden></button>
         </div>
         <div id="effects" aria-live="polite"></div>
@@ -602,7 +612,7 @@
         if (window.pendingMochiJourney) history.replaceState(history.state, '', window.pendingMochiJourney);
         location.reload();
       };
-      import('./main.js?v=hillside-1').catch(error => {
+      import('./main.js?v=build-mode-1').catch(error => {
         console.error('Mochi Quest 2', error);
         document.getElementById('loading-copy').textContent = error.name === 'WebGLUnavailableError'
           ? 'WebGL 2 を開始できませんでした。ブラウザのグラフィック設定を確認して、読み込み直してください。'

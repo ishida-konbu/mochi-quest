@@ -24,7 +24,7 @@ export function renderMarket({ area, world, game, route, choose, save, el, butto
   }
   if (!stands.length) {
     const intro = section('餅の無人販売', area);
-    intro.append(el('p', '桜川の渡し、月見の棚田、蔵町の市で、自分の餅を売れます。「家づくり」で空いた土地に販売棚を置き、餅を持って棚のそばでこの頁を開いてください。'),
+    intro.append(el('p', '桜川の渡し、月見の棚田、蔵町の市で、自分の餅を売れます。「建てる」モードで空いた土地に販売棚を置き、餅を持って棚のそばでこの頁を開いてください。'),
       button('販売棚を建てる', () => choose('build', '', 'stand'), 'jump-link'));
   }
   if (local) {

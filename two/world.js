@@ -2007,6 +2007,9 @@ export function* prepareWorld(scene, initialCamera, initialQuality = DEFAULT_SCE
     setLivingWorld:homestead.setLivingWorld,
     setConstructionSite:homestead.setConstructionSite,
     setBuildingPreview:homestead.setBuildingPreview,
+    setBuildingPreviews:homestead.setBuildingPreviews,
+    getBuildEditorObjects:homestead.getBuildEditorObjects,
+    setBuildEditorHidden:homestead.setBuildEditorHidden,
     textures: [...Object.values(art), atmosphere.panorama, atmosphere.winterWash],
     setSceneryQuality(value) {
       const next=SCENERY_PROFILES[sceneryQualityPreference(value) ?? DEFAULT_SCENERY_QUALITY];

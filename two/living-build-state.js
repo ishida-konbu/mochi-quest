@@ -14,6 +14,7 @@ export const BUILD_MODULES = Object.freeze({
   chest: module('道具櫃',2,4,1.12,.70),
   stand: module('無人の餅売り棚',2,6,1.78,1.08),
 });
+export const HEIGHT_STEP=.2, MAX_HEIGHT_STEPS=12;
 export const CAMP_RADIUS = 24, MAX_STRUCTURES = 48, MAX_CAMPS = 3, MAX_WOOD = Number.MAX_SAFE_INTEGER;
 export const MARKET_REGIONS = ['river','terraces','market'];
 export const CAMP_REGIONS = [...MARKET_REGIONS,'coast','spring','snow','moon','autumn','dawn','shrine'];
@@ -52,7 +53,12 @@ export function validBuildState(world) {
         ![s.x,s.y,s.z,s.yaw].every(Number.isFinite) || Math.abs(s.x)>=WORLD_BOUND || Math.abs(s.z)>=WORLD_BOUND ||
         Math.abs(s.y)>1000 || Math.abs(s.yaw)>Math.PI*2 || !['plain','slope','bank','snow'].includes(s.terrain) ||
         !(s.kind==='stand'?MARKET_REGIONS:CAMP_REGIONS).includes(s.regionId)) return false;
-    if (s.entryBay!==undefined && (!['floor','camp'].includes(s.kind) || s.foundationWood===undefined || !amount(s.entryBay,0,35)))return false;
+    if (s.heightSteps!==undefined && (s.parentId || s.foundationWood===undefined || !amount(s.heightSteps,0,MAX_HEIGHT_STEPS)))return false;
+    if (s.entryBay!==undefined) {
+      const kinds=s.heightSteps?['floor','camp','stand','chest']:['floor','camp'];
+      if(s.parentId || s.foundationWood===undefined || !kinds.includes(s.kind) ||
+          !amount(s.entryBay,s.heightSteps?36:0,s.heightSteps?47:35))return false;
+    }
     if (s.foundationWood!==undefined && (s.parentId || !amount(s.foundationWood,0,MAX_WOOD))) return false;
     if (s.kind==='chest' && !validChest(s,world)) return false;
     if (s.kind==='camp') camps++;

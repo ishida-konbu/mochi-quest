@@ -3,6 +3,8 @@ import { createForestryView } from './living-forestry-view.js';
 import { createConstructionView } from './living-construction-view.js';
 import { syncBuildTerrain } from './living-build.js';
 import { routeBlocked } from './living-build-land.js';
+import { createBuildEditor } from './build-editor.js';
+import { createBuildEditorViewport } from './build-editor-viewport.js';
 import { createLivingBook } from './living-book.js';
 import { LIVING_SITES } from './living-sites.js';
 import { worldClockLabel } from './world-clock.js';
@@ -287,7 +289,7 @@ function dispatchEvents() {
     if (e.type === 'livingChanged') save();
     if (e.type === 'living') {
       const site = LIVING_SITES.find(s => s.id === e.siteId);
-      if (e.section) openDialog('living',e.section);
+      if (e.section) openDialog('living',e.section==='build'?'materials':e.section);
       else if (site) openDialog('living',site.kind === 'workshop' ? 'craft' : 'supplies');
     }
     if (e.type === 'say') {
@@ -493,7 +495,8 @@ const construction=createConstructionView({...outdoorWork,
       !routeBlocked({npcs:state.nearbyNpcs}, {x,z}, radius);
   },
   enter(site){ world.setConstructionSite(site);outdoorWork.enter();unlock();audio.setPaused(false); },
-  draw(dt){
+  draw(dt,detailScene){
+    if(detailScene){ink.draw(detailScene,0,0,state.time);return;}
     game.stepCookingScenery(dt);
     actors.update(state,dt,camera);storyWorld.update(state.time,p);
     outdoorWork.draw();
@@ -505,9 +508,12 @@ const construction=createConstructionView({...outdoorWork,
   },
   playSound(name){audio.handle({type:'sound',name:'build-'+name});},
 });
-const livingBook = createLivingBook({
-  dialog, body:$('dialog-content'), heading:$('dialog-title'), game, save,
-  cook:cooking.start, saw:forestry.start, preview:showLandSurvey, bearing:()=>yaw,
+const makeBuildViewport=()=>createBuildEditorViewport({scene,camera,canvas,world,draw(){
+  world.update(state.time,p,camera,state.time,state.bellStrike,state.inariWeather);
+  meadow(state.time,p,camera);if(!contextLost)drawScene();
+}});
+const editor=createBuildEditor({dialog,game,makeViewport:makeBuildViewport,bearing:()=>yaw,save,saw:forestry.start,
+  openMaterials(){livingBook.open('materials');},
   construct(site,commit,done) {
     return construction.start(site,exit=>{
       dissolveView();
@@ -519,9 +525,10 @@ const livingBook = createLivingBook({
       return result;
     },done);
   },
-  returnToSite(text) {
-    lastFocus=canvas;dialog.close();message(text,6);updateHUD();
-  },
+});
+const livingBook = createLivingBook({
+  dialog, body:$('dialog-content'), heading:$('dialog-title'), game, save, editor,
+  cook:cooking.start, saw:forestry.start,
   guide(site) {
     const destination = mapDestinations.find(d => d.id === site.id) ?? {...mapPoint(site.x,site.z),name:site.name};
     if (!destination) return;
@@ -531,47 +538,6 @@ const livingBook = createLivingBook({
     message(site.name + 'に道しるべを付けました。');
   },
 });
-// The traveller stays put while measuring. Keep the same viewing side when the
-// plan turns, and lift the survey eye above existing roofs or wooded slopes.
-let surveyPose=null, lastSurvey=null;
-function showLandSurvey(candidate) {
-  lastSurvey=candidate;
-  world.setBuildingPreview(candidate);
-  if (!candidate) {
-    surveyPose=null;
-    camera.clearViewOffset();
-    updateCamera(0,true);
-  } else {
-    const x=candidate.x, z=candidate.z, y=candidate.y;
-    const w=canvas.clientWidth, h=canvas.clientHeight;
-    const visibleHeight=Math.max(h*.35,dialog.getBoundingClientRect().top-canvas.getBoundingClientRect().top);
-    const range=Math.max(7,5.6/camera.aspect,3.9*h/visibleHeight);
-    // Evaluate the previous side first. A nudge normally keeps the camera
-    // level and facing the same way, even after turning the building.
-    const preferred=surveyPose?.a ?? yaw;
-    let best=-1;
-    for (const offset of [0,.7,-.7,1.5,-1.5,Math.PI]) {
-      const a=preferred+offset, dx=Math.sin(a)*range, dz=Math.cos(a)*range;
-      const top=Math.max(y+range*.9,groundHeight(x+dx,z+dz,y+range*.9)+.5);
-      const aimY=y+.85, rise=top-aimY, steps=Math.ceil(Math.hypot(range,rise)/.22);
-      let clear=1;
-      for(let i=1;i<=steps;i++) {
-        const t=i/steps, px=x+dx*t, pz=z+dz*t, py=aimY+rise*t;
-        if (landscapeFloor(px,pz)>py-.18 || staticVolumeAt(px,pz,py-.18,.18,.36)) {clear=(i-1)/steps;break;}
-      }
-      const score=clear-.018*Math.abs(offset);
-      if(score>best) {best=score;surveyPose={a};camera.position.set(x+dx,top,z+dz);}
-      if(score===1) break;
-    }
-    camera.lookAt(x,y+.85,z);
-    camera.setViewOffset(w,h,0,(h-visibleHeight)/2,w,h);
-  }
-  camera.updateMatrixWorld();
-  world.update(state.time,p,camera,state.time,state.bellStrike,state.inariWeather);
-  meadow(state.time,p,camera);
-  if (!contextLost) drawScene();
-  return surveyPose?.a;
-}
 function action(name) {
   if (dialog.open || photoMode) return;
   unlock();
@@ -841,6 +807,7 @@ const bindings = new Set([
   'KeyP',
   'Escape',
   'Space',
+  'KeyB',
   'Digit0',
   'Digit1',
   'Digit2',
@@ -855,6 +822,7 @@ document.addEventListener('keydown', (e) => {
   if (!bindings.has(e.code)) return;
   if (dialog.open) {
     if (cooking.active || forestry.active || construction.active) return;
+    if(editor.active && e.code==='KeyB' && !e.repeat){e.preventDefault();dialog.close();return;}
     if (dialogKind === 'living' && e.code === 'KeyL' && !e.repeat && !e.target.closest('input,textarea,select')) {
       e.preventDefault();
       dialog.close();
@@ -890,6 +858,7 @@ document.addEventListener('keydown', (e) => {
     togglePhoto();
     return;
   }
+  if (e.code === 'KeyB' && !photoMode) { openDialog('living','build'); return; }
   if (e.code === 'KeyL' && !photoMode) { openDialog('living'); return; }
   if (e.code === 'KeyI' && !photoMode) { openDialog('inventory'); return; }
   if (e.code === 'KeyJ' && !photoMode) { openDialog('story'); return; }
@@ -1186,7 +1155,7 @@ function redrawMiniMap(targetSite) {
   drawMap(miniMap.canvas, state, yaw, region, false, pin, tracked, '', miniMap.projection(tracked || goal));
 }
 function openDialog(kind, section) {
-  if (!renderer || dialog.open) return;
+  if (!playable || dialog.open) return;
   speech.stop();
   const folio = kind === 'story' || kind === 'inventory';
   if (folio || kind === 'living') unlock();
@@ -1345,6 +1314,7 @@ function fileDialog() {
 $('save-notice').onclick = () => { openDialog('guide'); fileDialog(); };
 $('map').onclick = $('mini-button').onclick = () => openDialog('map');
 $('journal').onclick = () => openDialog('journal');
+$('build-mode').onclick = () => openDialog('living','build');
 $('living-book').onclick = () => openDialog('living');
 $('parcel-bag').onclick = () => openDialog('inventory');
 $('guide').onclick = () => openDialog('guide');
@@ -1388,7 +1358,7 @@ function resize(force = false) {
   camera.updateProjectionMatrix();
   ink?.resize();
   if (construction.active) construction.resize();
-  if (lastSurvey) requestAnimationFrame(()=>{if(lastSurvey)showLandSurvey(lastSurvey);});
+  if (editor.active) editor.resize();
 }
 function settingsForLighting() {
   scene.add(hemisphere);

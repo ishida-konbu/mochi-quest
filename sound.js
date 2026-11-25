@@ -238,6 +238,10 @@ export function createAudio(makeWorldAudio) {
       rustle(now, strike ? 2200 : 1150, 360, strike ? .046 : .09, .10);
       tone(now, strike ? 406 : 171, strike ? 290 : 95, .09, .075, 'triangle');
       tone(now, strike ? 685 : 330, strike ? 592 : 246, .052, .033);
+    } else if (name === 'build-saw' || name === 'build-plane') {
+      const saw = name === 'build-saw';
+      rustle(now, saw ? 2400 : 1600, saw ? 780 : 520, saw ? .21 : .30, .072);
+      if (saw) rustle(now+.085, 2160, 710, .090, .038);
     } else if (name === 'build-lash' || name === 'build-spread') {
       const rope = name === 'build-lash';
       rustle(now, rope ? 1350 : 880, rope ? 660 : 1930, rope ? .15 : .23, .065);

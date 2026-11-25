@@ -1,4 +1,4 @@
-import { BUILD_MODULES, ATTACHMENTS, CAMP_RADIUS, MAX_CAMPS, MAX_STRUCTURES, MAX_WOOD, chestOnFloor } from './living-build-state.js';
+import { BUILD_MODULES, ATTACHMENTS, CAMP_RADIUS, MAX_CAMPS, MAX_STRUCTURES, MAX_WOOD, HEIGHT_STEP, chestOnFloor } from './living-build-state.js';
 import { buildDistance, surveySite, stumpCovered, timberTree } from './living-build-land.js';
 import { timberCut } from './homestead-timber-section.js';
 import { buildContacts } from './living-build-contacts.js';
@@ -6,7 +6,8 @@ import { bindFelledTrees } from './living-build-trees.js';
 import { clearHandReach } from './living-sites.js';
 import { RESOURCES } from './living-resources.js';
 import { forgetMarketStand, marketRemovalReason, settleMarket } from './living-market.js';
-import { replaceBuildContacts, wrapDelta } from './terrain.js';
+import { replaceBuildContacts, terrainContactHeight, wrapDelta } from './terrain.js';
+export { HEIGHT_STEP, MAX_HEIGHT_STEPS } from './living-build-state.js';
 export { BUILD_MODULES, buildState, validBuildState } from './living-build-state.js';
 export { surveySite, closestTimberTrees, nearestTimberTree, timberTree } from './living-build-land.js';
 
@@ -40,7 +41,7 @@ export function validBuildLand(world,state) {
     return world.structures.every(s=>{
       if(s.parentId)return true;
       const site=surveySite(world,s.kind,s,{excludeId:s.id,state:surveyState});
-      if(!site.ok || site.regionId!==s.regionId)return false;
+      if(!site.ok || site.regionId!==s.regionId || site.entryBay!==s.entryBay)return false;
       // Before paid piers existed, every accepted ground plot fit within
       // 52 cm and used the envelope survey alone for its finished level.
       return (site.legacyFoundation ? site.relief<=.52 : s.foundationWood===site.foundationWood) &&
@@ -79,7 +80,7 @@ export function placeStructure(world,kind,pose,options={}) {
   const floorId='build-'+world.nextStructureId;
   const structures=parts.map((part,i)=>({
     id:'build-'+(world.nextStructureId+i),kind:part,...transform(site),
-    ...(!site.parentId && !ATTACHMENTS.includes(part)?{foundationWood:site.foundationWood}:{}),
+    ...(!site.parentId && !ATTACHMENTS.includes(part)?foundationRecord(site):{}),
     ...(i===0 && site.entryBay!==undefined?{entryBay:site.entryBay}:{}),
     ...(site.campId?{campId:site.campId}:{}),
     ...(site.parentId || ATTACHMENTS.includes(part)?{parentId:site.parentId??floorId}:{}),
@@ -104,51 +105,157 @@ export function finishConstruction(world,kind,pose,state,exit) {
   return result;
 }
 
-export function moveStructure(world,id,pose,options={}) {
-  const source=world.structures.find(s=>s.id===id);
-  if(!source)return fail('移す設備を選んでください。');
-  if(source.parentId && source.kind!=='chest')return fail('取り付けた部材は板床と一緒に移せます。');
-  const next=surveySite(world,source.kind,pose,{...options,excludeId:id});
-  if(!next.ok)return next;
-  if(source.kind==='camp' && world.structures.some(s=>s.campId===id && !s.parentId && buildDistance(s,next)>CAMP_RADIUS))
-    return fail('この野営地の設備が遠くなりすぎます。先に設備を移すか片付けてください。');
-  const delta=next.foundationWoodDelta;
-  if(world.wood<delta)return fail('移設先の基礎には、追加で木材'+delta+'本が要ります。');
-  if(world.wood-delta>MAX_WOOD)return fail('基礎から戻る木材'+(-delta)+'本を受け取る空きを用意してください。');
-  if(next.legacyFoundation)
-    return {...ok('同じ場所に据えたままにしました。'),structure:source};
-  if(source.kind==='stand')settleMarket(world);
-  const {parentId:oldParent,foundationWood:oldFoundation,entryBay:oldBay,...detached}=source;
-  const moved={...detached,...transform(next),...(next.entryBay!==undefined?{entryBay:next.entryBay}:{}),...(!next.parentId?{foundationWood:next.foundationWood}:{}),...(next.campId?{campId:next.campId}:{}),...(next.parentId?{parentId:next.parentId}:{})};
-  world.wood-=delta;
-  world.structures=world.structures.map(s=>{
-    if(s.id===id)return moved;
-    if(s.parentId!==id)return s;
-    return s.kind==='chest'?{...s,...chestOnFloor(moved)}:{...s,...transform(next),campId:next.campId};
-  });
-  changed(world);
-  return {...ok(BUILD_MODULES[source.kind].name+'を移しました。'),structure:world.structures.find(s=>s.id===id)};
+function foundationRecord(site){
+  return {foundationWood:site.foundationWood,...(site.heightSteps?{heightSteps:site.heightSteps}:{})};
 }
-export function removeStructure(world,id) {
-  const source=world.structures.find(s=>s.id===id);
-  if(!source)return fail('片付ける設備を選んでください。');
-  if(source.kind==='camp' && world.structures.some(s=>s.campId===id))return fail('この野営地に設備が残っています。先に設備を片付けてください。');
-  if(world.structures.some(s=>s.parentId===id) ||
-    (source.kind==='posts' && world.structures.some(s=>s.parentId===source.parentId && ['wall','roof'].includes(s.kind))))
-    return fail('この部材がほかの部材を支えています。屋根、壁、柱、板床の順で外してください。');
-  if(source.kind==='chest' && hasStock(source))return fail('道具櫃の品をすべて取り出してから片付けてください。');
-  if(source.kind==='stand') {
-    const reason=marketRemovalReason(world,id);
-    if(reason)return fail(reason);
+
+function movedStructure(source,site){
+  if(site.legacyFoundation)return source;
+  const {parentId,foundationWood,heightSteps,entryBay,campId,...record}=source;
+  return {...record,...transform(site),...(site.parentId?{parentId:site.parentId}:foundationRecord(site)),
+    ...(site.campId?{campId:site.campId}:{}),...(site.entryBay!==undefined?{entryBay:site.entryBay}:{})};
+}
+
+// A wall or post moves with its supporting deck. An attached chest can also
+// be picked up separately. Only roots count toward the centre of rotation.
+export function getMoveRoots(world,ids){
+  const selected=new Set(ids);
+  for(const s of world.structures)if(selected.has(s.id) && ATTACHMENTS.includes(s.kind))selected.add(s.parentId);
+  return world.structures.filter(s=>selected.has(s.id) && !selected.has(s.parentId));
+}
+
+function onSelectedSupport(structures,player){
+  if(!player?.grounded || !Number.isFinite(player.y))return false;
+  const nearby=structures.filter(s=>buildDistance(s,player)<(s.heightSteps?14:4));
+  return buildContacts(nearby).some(part=>{
+    const dx=wrapDelta(player.x-part.x),dz=wrapDelta(player.z-part.z),c=Math.cos(part.yaw),sn=Math.sin(part.yaw);
+    const u=Math.abs(dx*c-dz*sn),v=Math.abs(dx*sn+dz*c);
+    const top=part.kind==='roof'?part.top+part.rise*Math.max(0,1-v/(part.d/2)):part.top;
+    return u<=part.w/2+.08 && v<=part.d/2+.08 && Math.abs(player.y-top)<.055 &&
+      player.y>terrainContactHeight(player.x,player.z)+.06;
+  });
+}
+
+function checkedSelection(world,ids){
+  return Array.isArray(ids) && ids.length && ids.every(id=>world.structures.some(s=>s.id===id));
+}
+function familyPose(source,floor){
+  return {...source,...(source.kind==='chest'?chestOnFloor(floor):transform(floor)),campId:floor.campId};
+}
+function groupTargets(world,roots,delta){
+  const {dx=0,dz=0,yaw=0,heightSteps=0,pivot}=delta;
+  if(![dx,dz,yaw].every(Number.isFinite) || !Number.isSafeInteger(heightSteps) ||
+      pivot && ![pivot.x,pivot.z].every(Number.isFinite))return null;
+  const cx=pivot?.x??roots.reduce((n,s)=>n+s.x,0)/roots.length;
+  const cz=pivot?.z??roots.reduce((n,s)=>n+s.z,0)/roots.length;
+  const c=Math.cos(yaw),sn=Math.sin(yaw);
+  const targets=new Map();
+  for(const s of roots){
+    const u=s.x-cx,v=s.z-cz,x=cx+dx+u*c+v*sn,z=cz+dz-u*sn+v*c;
+    const y=s.y+terrainContactHeight(x,z)-terrainContactHeight(s.x,s.z)+heightSteps*HEIGHT_STEP;
+    const heading=s.yaw+yaw;
+    targets.set(s.id,{...s,x,y,z,yaw:Math.atan2(Math.sin(heading),Math.cos(heading)),heightSteps:(s.heightSteps??0)+heightSteps});
   }
-  const d=BUILD_MODULES[source.kind];
-  const wood=d.wood+(source.foundationWood??0);
-  if(world.wood+wood>MAX_WOOD || !Number.isSafeInteger(world.wallet+d.coins))return fail('木材か銭を受け取る空きが足りません。');
-  if(source.kind==='stand')forgetMarketStand(world,id);
-  world.wood+=wood;world.wallet+=d.coins;
-  world.structures=world.structures.filter(s=>s.id!==id);
+  for(const s of world.structures)if(targets.has(s.parentId))targets.set(s.id,familyPose(s,targets.get(s.parentId)));
+  return targets;
+}
+function moveRank(s){return s.kind==='camp'?0:s.kind==='floor'?1:2;}
+
+export function surveyMoveGroup(world,ids,delta={},options={}){
+  if(!checkedSelection(world,ids))return fail('移す建物を選んでください。');
+  const roots=getMoveRoots(world,ids),targets=groupTargets(world,roots,delta);
+  if(!targets)return fail('場所と高さを確かめてください。');
+  const proposed=()=>world.structures.filter(s=>targets.has(s.id)).map(s=>targets.get(s.id));
+  const blocked=reason=>({...fail(reason),structures:proposed(),woodDelta:0,coinsDelta:0});
+  const before=world.structures.filter(s=>targets.has(s.id));
+  if(onSelectedSupport(before,options.state?.player))return blocked('建物から地面に降りてから移してください。');
+  const draft={...world,structures:world.structures.filter(s=>!targets.has(s.id))};
+  let woodDelta=0;
+  const ordered=roots.slice().sort((a,b)=>moveRank(a)-moveRank(b));
+  for(const [i,s] of ordered.entries()){
+    const pose=targets.get(s.id);
+    const future=ordered.slice(i+1).map(r=>targets.get(r.id));
+    const snapChest=roots.length===1 || (s.kind==='chest' && draft.structures.some(f=>
+      f.kind==='floor' && buildDistance(chestOnFloor(f),pose)<1e-6 && Math.abs(Math.sin((f.yaw-pose.yaw)/2))<1e-7));
+    const site=surveySite(draft,s.kind,pose,{state:options.state,sourceRecord:s,reservedRoots:future,snapChest});
+    if(!site.ok)return {...blocked(site.reason),...(site.treeId?{treeId:site.treeId}:{})};
+    const moved=movedStructure(s,site);
+    woodDelta+=site.foundationWoodDelta;
+    draft.structures.push(moved);targets.set(s.id,moved);
+    for(const child of before.filter(v=>v.parentId===s.id)){
+      const linked=familyPose(child,moved);
+      draft.structures.push(linked);targets.set(child.id,linked);
+    }
+  }
+  for(const s of draft.structures){
+    if(!s.campId || s.parentId)continue;
+    const camp=draft.structures.find(c=>c.id===s.campId);
+    if(!camp || buildDistance(camp,s)>CAMP_RADIUS)return blocked('野営地と設備が離れすぎます。設備も一緒に選ぶか、近くに移してください。');
+  }
+  const result={structures:proposed(),woodDelta,coinsDelta:0};
+  if(world.wood<woodDelta)return {...fail('移設先の基礎には、追加で木材'+woodDelta+'本が要ります。'),...result};
+  if(!Number.isSafeInteger(world.wood-woodDelta))return {...fail('戻る木材を受け取る空きが足りません。'),...result};
+  return {ok:true,...result};
+}
+
+export function moveStructureGroup(world,ids,delta,options){
+  const result=surveyMoveGroup(world,ids,delta,options);
+  if(!result.ok)return result;
+  if(result.structures.some(s=>s.kind==='stand'))settleMarket(world);
+  const moved=new Map(result.structures.map(s=>[s.id,s]));
+  world.structures=world.structures.map(s=>moved.get(s.id)??s);
+  world.wood-=result.woodDelta;
   changed(world);
-  return ok(d.name+'を片付け、'+costText(wood,d.coins)+'を回収しました。');
+  return {...result,message:'選んだ建物を移しました。'};
+}
+
+export function moveStructure(world,id,pose,options={}){
+  const s=world.structures.find(s=>s.id===id);
+  if(!s || !pose)return fail('移す設備を選んでください。');
+  if(ATTACHMENTS.includes(s.kind))return fail('取り付けた部材は板床と一緒に移せます。');
+  const result=moveStructureGroup(world,[id],{dx:pose.x-s.x,dz:pose.z-s.z,yaw:(pose.yaw??0)-s.yaw,
+    heightSteps:(pose.heightSteps??s.heightSteps??0)-(s.heightSteps??0)},options);
+  return result.ok?{...result,structure:result.structures.find(v=>v.id===id)}:result;
+}
+
+export function surveyRemoveGroup(world,ids,options={}){
+  if(!checkedSelection(world,ids))return fail('片付ける建物を選んでください。');
+  const chosen=new Set(ids);
+  const structures=world.structures.filter(s=>chosen.has(s.id) || chosen.has(s.parentId));
+  const removed=new Set(structures.map(s=>s.id));
+  const remaining=world.structures.filter(s=>!removed.has(s.id));
+  const wood=structures.reduce((n,s)=>n+BUILD_MODULES[s.kind].wood+(s.foundationWood??0),0);
+  const coins=structures.reduce((n,s)=>n+BUILD_MODULES[s.kind].coins,0);
+  const receipt={structures,woodDelta:-wood,coinsDelta:-coins};
+  const blocked=reason=>({...fail(reason),...receipt});
+  if(onSelectedSupport(structures,options.state?.player))return blocked('建物から地面に降りてから片付けてください。');
+  for(const s of structures){
+    if(s.kind==='camp' && remaining.some(v=>v.campId===s.id))return blocked('この野営地に設備が残っています。一緒に選ぶか、先に移してください。');
+    if(s.kind==='posts' && remaining.some(v=>v.parentId===s.parentId && ['wall','roof'].includes(v.kind)))return blocked('柱が支えている壁と屋根も選んでください。');
+    if(s.kind==='chest' && hasStock(s))return blocked('道具櫃の品をすべて取り出してから片付けてください。');
+    if(s.kind==='stand'){
+      const reason=marketRemovalReason(world,s.id);
+      if(reason)return blocked(reason);
+    }
+  }
+  if(!Number.isSafeInteger(world.wood+wood) || !Number.isSafeInteger(world.wallet+coins))return blocked('木材か銭を受け取る空きが足りません。');
+  return {ok:true,...receipt};
+}
+
+export function removeStructureGroup(world,ids,options={}){
+  const result=surveyRemoveGroup(world,ids,options);
+  if(!result.ok)return result;
+  const gone=new Set(result.structures.map(s=>s.id));
+  for(const s of result.structures)if(s.kind==='stand')forgetMarketStand(world,s.id);
+  world.structures=world.structures.filter(s=>!gone.has(s.id));
+  world.wood-=result.woodDelta;world.wallet-=result.coinsDelta;
+  changed(world);
+  return {...result,message:'選んだ建物を片付け、'+costText(-result.woodDelta,-result.coinsDelta)+'を回収しました。'};
+}
+
+export function removeStructure(world,id){
+  if(world.structures.some(s=>s.parentId===id))return fail('この部材がほかの部材を支えています。屋根、壁、柱、板床の順で外してください。');
+  return removeStructureGroup(world,[id]);
 }
 // Check sight up to the near side of the object. Probing its centre would test
 // the closed lid or the counter itself as a wall between the visitor and it.

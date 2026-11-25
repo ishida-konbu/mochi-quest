@@ -1,5 +1,5 @@
 import { BOUND, REGIONS, TIMBER_TREES, timberWood, BUILDINGS, nearRoad, terrainContactHeight, waterSurfaceAt, staticVolumeAt, terrainMeshHeight, treeGround, regionAt, wrapDelta } from './terrain.js';
-import { BUILD_MODULES, CAMP_REGIONS, MARKET_REGIONS, CAMP_RADIUS, ATTACHMENTS, chestOnFloor } from './living-build-state.js';
+import { BUILD_MODULES, CAMP_REGIONS, MARKET_REGIONS, CAMP_RADIUS, ATTACHMENTS, HEIGHT_STEP, MAX_HEIGHT_STEPS, chestOnFloor } from './living-build-state.js';
 import { LIVING_SITES } from './living-sites.js';
 import { STORY_SITES } from './story-sites.js';
 import { WAYSIDE_SITES } from './wayside-hut-layout.js';
@@ -66,7 +66,7 @@ function inRectangle(p,q,w,d,pad=0) {
 }
 export function stumpCovered(world,tree) {
   return world.structures.some(s=>{
-    if(s.parentId || buildDistance(tree,s)>4)return false;
+    if(s.parentId || buildDistance(tree,s)>(s.heightSteps?14:4))return false;
     if(inRectangle(tree,s,BUILD_MODULES[s.kind].width,BUILD_MODULES[s.kind].depth,.08))return true;
     return outsideTreads(s,entryFlight(s.kind,s)).some(r=>inRectangle(tree,r,r.w,r.d,.08));
   });
@@ -96,6 +96,22 @@ export function routeBlocked(state,p,r) {
   }
   return false;
 }
+function protectedPlot(p,r,region){
+  return STORY_SITES.some(s=>buildDistance(p,s)<10+r) || WAYSIDE_SITES.some(s=>buildDistance(p,s)<8+r) ||
+    LIVING_SITES.some(s=>buildDistance(p,s)<4+r) || buildDistance(region,p)<12+r ||
+    (region.id==='shrine' && buildDistance(region,p)<35+r) ||
+    (region.id==='autumn' && inRectangle(p,{x:279,z:-123},32,15,r)) ||
+    BUILDINGS.some(b=>inRectangle(p,b,b.w,b.d,2+r)) || inRectangle(p,paddies,paddies.w,paddies.d,r);
+}
+function clearRaisedTread(world,site,t,state){
+  const p=localPoint(site,t.x,t.z),r=Math.hypot(t.w,t.d)/2,region=REGIONS[regionAt(p.x,p.z)];
+  if(Math.abs(p.x)+r>=BOUND || Math.abs(p.z)+r>=BOUND || nearRoad(p.x,p.z,r+3.5) ||
+     !CAMP_REGIONS.includes(region.id) || protectedPlot(p,r,region) || portReserved(p.x,p.z) ||
+     reservedScenery(p.x,p.z) || routeBlocked(state,p,r))return false;
+  const y=terrainContactHeight(p.x,p.z);
+  return y-waterSurfaceAt(p.x,p.z)>=.30 && !staticVolumeAt(p.x,p.z,y+.03,r,site.y+t.top-y+1.7,true) &&
+    !nearbyTrees(p,r+2).some(t=>buildDistance(p,t)<=r+Math.min(2,t.h*.19) && !world.felledTrees.includes(timberId(t)));
+}
 function groundSurvey(world,kind,p,state,legacyFoundation) {
   const def=BUILD_MODULES[kind==='floor'?'hut':kind], r=.5*Math.hypot(def.width,def.depth);
   const region=REGIONS[regionAt(p.x,p.z)];
@@ -103,12 +119,7 @@ function groundSurvey(world,kind,p,state,legacyFoundation) {
   if(kind==='stand' && !MARKET_REGIONS.includes(region.id))return failure('餅の売り棚は桜川・棚田・蔵町に立てられます。');
   if(Math.abs(p.x)+r>=BOUND || Math.abs(p.z)+r>=BOUND)return failure('ここは海図の境です。島の内側を選んでください。');
   if(nearRoad(p.x,p.z,r+3.5))return failure('ここは街道と荷車の通り道です。道端からもう少し離れてください。');
-  if(STORY_SITES.some(s=>buildDistance(p,s)<10+r) || WAYSIDE_SITES.some(s=>buildDistance(p,s)<8+r) ||
-      LIVING_SITES.some(s=>buildDistance(p,s)<4+r) || buildDistance(region,p)<12+r ||
-      (region.id==='shrine' && buildDistance(region,p)<35+r) ||
-      (region.id==='autumn' && inRectangle(p,{x:279,z:-123},32,15,r)) ||
-      BUILDINGS.some(b=>inRectangle(p,b,b.w,b.d,2+r)) ||
-      inRectangle(p,paddies,paddies.w,paddies.d,r))
+  if(protectedPlot(p,r,region))
     return failure('ここは村の仕事場や旅人の立ち寄る場所です。外の空き地を探してください。');
   if(routeBlocked(state,p,r))return failure('住人や動物が使う場所です。歩く道を空けてください。');
   for(const tree of nearbyTrees(p,r+3)) {
@@ -135,22 +146,24 @@ function groundSurvey(world,kind,p,state,legacyFoundation) {
   for(const pier of legacyFoundation?[]:foundationPiers(kind,p)) {
     lo=Math.min(lo,pier.groundY);hi=Math.max(hi,pier.groundY);
   }
-  const relief=hi-lo, y=hi+(bank?.09:.015);
-  if(samples.some(q=>staticVolumeAt(q.x,q.z,q.y+.05,.38,3.7+(legacyFoundation?0:hi-q.y),true)))
+  const relief=hi-lo, lift=(p.heightSteps??0)*HEIGHT_STEP, y=hi+(bank?.09:.015)+lift;
+  if(samples.some(q=>staticVolumeAt(q.x,q.z,q.y+.05,.38,3.7+lift+(legacyFoundation?0:hi-q.y),true)))
     return failure('岩や建物、木の枝がかかっています。何もない地面を探してください。');
   const terrain=region.id==='snow'?'snow':bank?'bank':relief>.18?'slope':'plain';
   return {ok:true,...p,y,regionId:region.id,terrain,relief,
-    foundationWood:legacyFoundation?0:foundationWood(kind,relief),...(legacyFoundation?{legacyFoundation:true}:{})};
+    foundationWood:legacyFoundation?0:foundationWood(kind,relief,p.heightSteps),...(legacyFoundation?{legacyFoundation:true}:{})};
 }
-export function surveySite(world,kind,pose,{excludeId,state}={}) {
+export function surveySite(world,kind,pose,{excludeId,state,sourceRecord,snapChest=true,reservedRoots=[]}={}) {
   if(!Object.hasOwn(BUILD_MODULES,kind) || !pose || ![pose.x,pose.z,pose.yaw??0].every(Number.isFinite))return failure('地面を選んでください。');
-  const p={x:pose.x,z:pose.z,yaw:Math.atan2(Math.sin(pose.yaw||0),Math.cos(pose.yaw||0))};
+  const source=sourceRecord ?? (excludeId && world.structures.find(s=>s.id===excludeId));
+  const heightSteps=pose.heightSteps??source?.heightSteps??0;
+  if(!Number.isSafeInteger(heightSteps) || heightSteps<0 || heightSteps>MAX_HEIGHT_STEPS)return failure('基礎の高さは地面から0〜2.4 mで調整できます。');
+  const p={...(heightSteps?{heightSteps}:{}),x:pose.x,z:pose.z,yaw:Math.atan2(Math.sin(pose.yaw||0),Math.cos(pose.yaw||0))};
   const existing=world.structures.filter(s=>s.id!==excludeId && (!excludeId || s.parentId!==excludeId));
-  const source=excludeId && world.structures.find(s=>s.id===excludeId);
   const quote=site=>({...site,foundationWoodDelta:site.foundationWood-(source?.foundationWood??0)});
-  const legacyFoundation=source && !source.parentId && source.foundationWood===undefined &&
+  const legacyFoundation=source && !source.parentId && source.foundationWood===undefined && !heightSteps &&
     buildDistance(source,p)<1e-7 && Math.abs(Math.sin((source.yaw-p.yaw)*.5))<1e-9;
-  if(kind==='chest') {
+  if(kind==='chest' && snapChest) {
     const floor=nearest(existing.filter(s=>s.kind==='floor'),p,1.7);
     if(floor) {
       if(existing.some(s=>s.parentId===floor.id && s.kind==='chest'))return failure('この板床にはすでに道具櫃があります。');
@@ -173,24 +186,31 @@ export function surveySite(world,kind,pose,{excludeId,state}={}) {
   if(!site.ok)return site;
   const camp=nearest(existing.filter(s=>s.kind==='camp'),p,CAMP_RADIUS);
   if(kind!=='camp' && kind!=='stand' && !camp)return failure('近くに野営地がありません。先に野営地を設け、その周り24 m以内を選んでください。');
-  const root=footprint(site,kind), neighbours=[];
+  const root=footprint(site,kind), neighbours=reservedRoots.map(s=>footprint(s,s.kind));
   for(const s of existing){
-    if(s.parentId || buildDistance(s,site)>7)continue;
+    if(s.parentId || buildDistance(s,site)>22)continue;
     const other=footprint(s,s.kind);
     const flight=entryFlight(s.kind,s);
     neighbours.push(other,...outsideTreads(s,flight));
   }
   if(neighbours.some(rect=>overlap(root,rect)))return failure('別の設備と重なります。少し離して置いてください。');
   const flights=entryFlights(kind,site);
+  if(heightSteps && kind!=='fence' && !flights.length)return failure('踏み段が地面に届きません。高さを下げるか、場所を少し動かしてください。');
   const same=source && buildDistance(source,site)<1e-7 && Math.abs(Math.sin((source.yaw-site.yaw)*.5))<1e-9;
-  const wanted=same?source.entryBay:undefined;
+  const wanted=source?(same && (source.heightSteps??0)===heightSteps?source.entryBay:undefined):pose.entryBay;
   if(flights.length || wanted!==undefined){
-    const flight=flights.find(f=>(wanted===undefined || wanted===f.bay) &&
-      !outsideTreads(site,f).some(t=>neighbours.some(other=>overlap(t,other))));
-    if(!flight)return failure('踏み段がほかの設備にかかります。少し離すか、向きを変えてください。');
-    if(flight!==flights[0] || wanted!==undefined)site.entryBay=flight.bay;
-    if(state?.player && outsideTreads(site,flight).some(r=>inRectangle(state.player,r,r.w,r.d,.26)))
-      return failure('踏み段を掛けるところから少し離れてください。');
+    let obstructsPlayer=false;
+    const flight=flights.find(f=>{
+      if(wanted!==undefined && wanted!==f.bay)return false;
+      const treads=outsideTreads(site,f);
+      if(treads.some(t=>neighbours.some(other=>overlap(t,other))))return false;
+      if(state?.player && treads.some(t=>inRectangle(state.player,t,t.w,t.d,.26))){
+        obstructsPlayer=true;return false;
+      }
+      return !heightSteps || f.treads.every(t=>clearRaisedTread(world,site,t,state));
+    });
+    if(!flight)return failure(obstructsPlayer?'踏み段を掛けるところから少し離れてください。':'踏み段を掛ける場所が空いていません。少し離すか、向きを変えてください。');
+    if(heightSteps || flight!==flights[0] || wanted!==undefined)site.entryBay=flight.bay;
   }
   if(state?.player && inRectangle(state.player,p,BUILD_MODULES[kind].width,BUILD_MODULES[kind].depth,.43))
     return failure('自分の足元にかかります。少し先を選んでください。');

@@ -9,7 +9,7 @@ import { ATTRIBUTE_NAMES, BASIC_RECIPE, CRAFT_OPTIONS, STARTER_RECIPES, craftRec
 import { renderCraftPreview, disposeCraftPreview } from './living-craft-preview.js';
 import { REGIONS, wrapDelta } from './terrain.js';
 
-const tabs = { supplies:'素材袋', craft:'餅作り', book:'餅図鑑', market:'商い', build:'家づくり', rest:'ひと休み' };
+const tabs = { supplies:'素材袋', craft:'餅作り', book:'餅図鑑', market:'商い', build:'建てる', rest:'ひと休み' };
 const regionName = id => REGIONS.find(r => r.id === id)?.name ?? '';
 const firstMochi = { ...BASIC_RECIPE, fillings:[{id:'sakura', amount:4, placement:'top'}], shape:'flat' };
 const el = (tag, text, cls) => {
@@ -75,7 +75,7 @@ function attributes(parent, values, keys = Object.keys(ATTRIBUTE_NAMES)) {
   parent.append(dl);
 }
 
-export function createLivingBook({ dialog, body, heading, game, save, guide, cook, saw, construct, returnToSite, preview, bearing }) {
+export function createLivingBook({ dialog, body, heading, game, save, guide, cook, saw, editor }) {
   const world = game.state.livingWorld, player = game.state.player;
   let tab = 'supplies', recipeId, draft, preset, customName, customDescription, area, receipt;
   const near = kind => LIVING_SITES.find(site => site.kind === kind && nearLivingSite(player,site));
@@ -85,18 +85,19 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
     return button(text || (site.name + 'へ　' + Math.round(distance(site)) + ' m'), () => guide(site), 'living-route');
   }
   const shared = {world,game,save,el,button,section,field,details,select,number,route,choose};
-  const homestead = createHomesteadBook({...shared,dialog,body,heading,preview,bearing,saw,construct,returnToSite});
+  const homestead = createHomesteadBook({...shared,saw});
   function updateReceipt(result) {
     receipt.textContent = result.message || result.reason;
     if (result.ok) save();
   }
   function choose(next, message = '', buildKind) {
-    homestead.clearPreview();
+    editor.close();
     tab = next;
     // Keep the same renderer and orbit while comparing pages of the book.
     if (next !== 'craft' && next !== 'book') disposeCraftPreview();
     body.replaceChildren();
-    heading.textContent = '暮らし帖';
+    if(next==='build'){editor.open(buildKind);return;}
+    heading.textContent = next==='materials'?'木材・収納':'暮らし帖';
     dialog.dataset.living = '';
     const meta = el('div',undefined,'living-meta');
     meta.append(el('span',regionName(game.state.regionId)),el('span', worldClockLabel(world.worldMinute)),el('strong','持ち銭　' + world.wallet + '文'));
@@ -104,18 +105,19 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
     nav.setAttribute('aria-label','暮らし帖の見出し');
     for (const [key,text] of Object.entries(tabs)) {
       const b = button(text, () => choose(key));
-      b.setAttribute('aria-pressed',String(key === tab));
+      b.setAttribute('aria-pressed',String(key === tab || tab==='materials' && key==='supplies'));
       nav.append(b);
     }
     receipt = el('p',message,'living-receipt');
     receipt.setAttribute('role','status');
     area = el('div',undefined,'living-area');
     body.append(meta,nav,receipt,area);
-    ({supplies, craft, book, market:()=>renderMarket({...shared,area}), build:()=>homestead.render(area,buildKind), rest}[tab])();
+    ({supplies, craft, book, market:()=>renderMarket({...shared,area}), materials:()=>homestead.render(area), rest}[tab])();
     dialog.scrollTop = 0;
   }
   function supplies() {
     const shop = near('shop');
+    area.append(button('木材・収納を開く',()=>choose('materials'),'living-route'));
     const stock = section('手持ちの食材', area);
     const list = el('dl',undefined,'living-stock');
     for (const {id,name} of Object.values(RESOURCES)) {
@@ -376,6 +378,6 @@ export function createLivingBook({ dialog, body, heading, game, save, guide, coo
       if (section === 'craft' && !draft) resetDraft(firstMochi,'blossom');
       choose(section);
     },
-    close() { homestead.clearPreview();disposeCraftPreview();delete dialog.dataset.living; },
+    close() { editor.close();disposeCraftPreview();delete dialog.dataset.living; },
   };
 }

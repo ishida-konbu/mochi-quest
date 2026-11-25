@@ -1,5 +1,6 @@
 import { terrainContactHeight } from './terrain.js';
 
+
 const corners = (xs,zs) => xs.flatMap(x=>zs.map(z=>[x,z]));
 const floor = corners([-1.44,1.44],[-1.23,1.23]);
 const bearings = {
@@ -20,8 +21,13 @@ export function foundationPiers(kind,site) {
   }));
 }
 
-export function foundationWood(kind,relief) {
+export function foundationWood(kind,relief,heightSteps=0) {
   // Each base kit already covers a handspan of uneven ground. Reserve the
   // longest required cut for each bearing from 2.4 m timber stock.
-  return Math.ceil(Math.max(0,relief-.18)*(bearings[kind]?.length??0)/2.4);
+  const posts=bearings[kind]?.length??0;
+  const base=Math.max(0,relief-.18)*posts;
+  // Two stringers and the extra post length share the same timber stock.
+  const stockSteps=12; // Twelve 20 cm lifts use one 2.4 m timber.
+  const raised=heightSteps*(posts+(kind==='fence'?0:2))/stockSteps;
+  return Math.ceil(base/2.4+raised);
 }

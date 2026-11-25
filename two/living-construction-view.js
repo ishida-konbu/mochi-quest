@@ -1,117 +1,7 @@
-import { Group, Mesh } from './vendor/three.module.min.js';
-import { createCookingPerformer } from './cooking-performer.js';
-import { assemblyParts } from './homestead-assembly-parts.js';
-import { planAssembly } from './homestead-assembly-motion.js';
-import { makeAssemblyCamera } from './homestead-assembly-camera.js';
-import { homesteadFinish } from './homestead-pigment.js';
-import { makeJoinersMallet, makeMalletLoop, makeWorkTrestle } from './homestead-work-trestle.js';
-import { makeLiftingSling,slingSurface } from './homestead-lifting-sling.js';
-import { makeAssemblyTextile } from './homestead-assembly-textile.js';
+import { makeCraftScene } from './build-craft-scene.js';
 import { BUILD_MODULES } from './living-build-state.js';
 
-const zero=[0,0,0];
-const stopped=()=>({ok:false,reason:'手を止めて材料を戻しました。場所を選び直せます。'});
-
-function makeAssemblyScene(scene,camera,player,site,canStand) {
-  const steps=assemblyParts(site.kind,site.terrain,site);
-  const owned=steps.filter(s=>s.siteGeometry).map(s=>s.geometry);
-  const plan=planAssembly(player,site,steps,canStand);
-  if(!plan){for(const geometry of owned)geometry.dispose();return null;}
-  const group=new Group();group.name='配達人の普請場';
-  group.position.set(site.x,site.y,site.z);group.rotation.y=site.yaw;
-  const parts=steps.map(step=>{
-    const textile=step.unfurl?makeAssemblyTextile(step):null;
-    if(textile)owned.push(textile.geometry);
-    const pivot=new Group(), mesh=new Mesh(textile?.geometry ?? step.geometry,homesteadFinish());
-    pivot.name=step.label;mesh.name=step.id;
-    mesh.position.fromArray(step.grip).multiplyScalar(-1);
-    mesh.castShadow=mesh.receiveShadow=true;
-    pivot.add(mesh);group.add(pivot);
-    return {step,pivot,mesh,textile};
-  });
-  const trestles=[];
-  for(const platform of plan.platforms){
-    const trestle=makeWorkTrestle(platform);
-    group.add(trestle);owned.push(trestle.geometry);trestles.push(trestle);
-  }
-  const slings=[];
-  if(plan.compact){
-    const fitted=[],c=Math.cos(site.yaw),sn=Math.sin(site.yaw);
-    for(const existing of site.structures??[]){
-      const dx=existing.x-site.x,dz=existing.z-site.z;
-      if(Math.hypot(dx,dz)>8)continue;
-      for(const piece of assemblyParts(existing.kind,existing.terrain,existing)){
-        if(piece.siteGeometry)owned.push(piece.geometry);
-        fitted.push(slingSurface(piece.geometry,dx*c-dz*sn,existing.y-site.y,dx*sn+dz*c,existing.yaw-site.yaw));
-      }
-    }
-    const fastening=plan.actions.filter(a=>a.type==='fasten');
-    steps.forEach((step,i)=>{
-      const [x,y,z]=plan.sample(fastening[i].start+.15).hero;
-      const sling=makeLiftingSling(step,plan.staging[i],plan.land,fitted,{x,y,z,size:player.buffs?.full>0?1.28:1});
-      group.add(sling.group);owned.push(...sling.geometries);slings.push(sling);
-      fitted.push(slingSurface(step.geometry));
-    });
-  }
-  const mallet=makeJoinersMallet(), belt=makeMalletLoop(player.buffs?.full>0?1.28:1);
-  group.add(mallet,belt);owned.push(mallet.geometry,belt.geometry);
-  const original={position:camera.position.clone(),quaternion:camera.quaternion.clone(),fov:camera.fov,
-    view:camera.view?.enabled?{...camera.view}:null};
-  let performer, lens, framing, closed=false;
-  function setPieces(frame) {
-    for(let i=0;i<parts.length;i++){
-      const {step,pivot,textile}=parts[i];
-      pivot.visible=!plan.compact || i<frame.installedCount || i===frame.bay;
-      if(slings[i]){
-        slings[i].group.visible=i===frame.bay;
-        if(slings[i].group.visible)slings[i].update(i===frame.index?frame.offset:zero);
-      }
-      const pose=i<frame.installedCount ? null : i===frame.index ? frame : plan.staging[i];
-      const offset=pose?.offset ?? zero, rotation=pose?.rotation ?? zero;
-      pivot.position.set(step.grip[0]+offset[0],step.grip[1]+offset[1],step.grip[2]+offset[2]);
-      pivot.rotation.set(...rotation);
-      if(textile)textile.unroll(i<frame.installedCount?1:i===frame.index?frame.work:0);
-    }
-    if(plan.compact)trestles.forEach((mesh,i)=>{mesh.visible=plan.platforms[i].index===frame.bay || plan.platforms[i].index===frame.previousBay;});
-  }
-  function dispose() {
-    if(closed)return;
-    closed=true;
-    performer?.dispose();
-    group.removeFromParent();
-    for(const geometry of owned)geometry.dispose();
-    camera.position.copy(original.position);camera.quaternion.copy(original.quaternion);camera.fov=original.fov;
-    if(original.view){
-      const v=original.view;
-      camera.setViewOffset(v.fullWidth,v.fullHeight,v.offsetX,v.offsetY,v.width,v.height);
-    }else camera.clearViewOffset();
-    camera.updateProjectionMatrix();camera.updateMatrixWorld();
-  }
-  try {
-    scene.add(group);group.updateMatrixWorld(true);
-    framing=makeAssemblyCamera(group,parts,plan,player.buffs?.full>0?1.28:1,setPieces,[...trestles,...slings.map(s=>s.group)]);
-    performer=createCookingPerformer(group,player);
-    performer.group.name='普請をするお餅の配達人';
-  } catch(error){dispose();throw error;}
-  return {
-    duration:plan.duration,
-    endPose:plan.endPose,
-    layout(width,height,visibleHeight){lens=framing.fit(width,height,visibleHeight);},
-    update(time){
-      const frame=plan.sample(time);
-      setPieces(frame);performer.update(frame);
-      belt.position.fromArray(frame.hero);belt.rotation.y=frame.heading;
-      mallet.visible=Boolean(frame.mallet);
-      if(frame.mallet){
-        mallet.position.fromArray(frame.mallet.position);
-        mallet.rotation.set(...frame.mallet.rotation,'YXZ');
-      }
-      if(lens)framing.apply(camera,lens,frame);
-      return frame;
-    },
-    dispose,
-  };
-}
+const stopped=()=>({ok:false,reason:'手を止めて材料を戻しました。'});
 
 export function createConstructionView({scene,camera,player,dialog,canStand,enter,draw,leave,playSound}) {
   const overlay=document.createElement('section');
@@ -138,7 +28,7 @@ export function createConstructionView({scene,camera,player,dialog,canStand,ente
       if(outcome==='complete')result=r.commit(r.shot.endPose);
     } catch(error) {
       console.error('普請の結果を確定できませんでした。',error);
-      result={ok:false,reason:'建物を仕上げられませんでした。家づくりの頁で材料と場所を確かめてください。'};
+      result={ok:false,reason:'建物を仕上げられませんでした。材料と場所を確かめてください。'};
     } finally {
       r.shot.dispose();overlay.remove();
       delete dialog.dataset.performance;delete dialog.dataset.assembly;
@@ -163,9 +53,9 @@ export function createConstructionView({scene,camera,player,dialog,canStand,ente
     progress.style.transform='scaleX('+Math.min(1,r.time/r.shot.duration)+')';
     if(f.cue){
       const key=f.index+'-'+f.cue;
-      if(!r.heard.has(key)){r.heard.add(key);if(!mute)playSound?.(f.cue);}
+      if(!r.heard.has(key)){r.heard.add(key);if(!mute)playSound?.(f.cue.split('-')[0]);}
     }
-    draw(dt);
+    draw(dt,r.shot.detail);
   }
   function failed(error){
     console.error('普請の実演を続けられませんでした。',error);
@@ -173,12 +63,11 @@ export function createConstructionView({scene,camera,player,dialog,canStand,ente
   }
   function start(site,commit,done) {
     if(run || !dialog.open)return false;
-    let shot,broken=false;
-    try{shot=makeAssemblyScene(scene,camera,player,site,canStand);}
-    catch(error){broken=true;console.error('普請の支度ができませんでした。',error);}
-    if(!shot){
-      done(broken?{ok:false,reason:'普請の道具を用意できませんでした。家づくりの頁からもう一度お試しください。'}:
-        {ok:false,retrySite:true,reason:'作業の足場が取れません。建物の周りと自分の足元にゆとりのある場所を選んでください。'});
+    let shot;
+    try{shot=makeCraftScene(scene,camera,player,site,canStand);}
+    catch(error){
+      console.error('普請の支度ができませんでした。',error);
+      done({ok:false,reason:'普請の道具を用意できませんでした。もう一度試してください。'});
       return false;
     }
     run={shot,commit,done,time:0,last:null,aspect:0,paused:false,speed:1,entered:false,heard:new Set()};

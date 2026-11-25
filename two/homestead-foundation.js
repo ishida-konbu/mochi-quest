@@ -10,9 +10,41 @@ function earth(site,x,z){
   return terrainContactHeight(site.x+x*c+z*s,site.z-x*s+z*c)-site.y;
 }
 
+// Raised buildings need a route from the actual earth to the sill. The top
+// landing is wide enough to stand in front of a chest or counter. Each flight
+// ends as soon as the next step can be taken on natural ground.
+function raisedFlights(kind,site){
+  const floor=kind==='hut'||kind==='floor';
+  const plan=floor?[1.60,1.40,.18]:({camp:[.565,.86,.13],stand:[.89,.54,0],chest:[.56,.35,0]})[kind];
+  if(!plan)return [];
+  const [halfX,halfZ,deck]=plan,choices=[];
+  const width=.84,run=.34,landing=.75,centerZ=kind==='camp'?.11:0;
+  const normals=[[0,1],[1,0],[-1,0],...(kind==='chest'?[[0,-1]]:[])];
+  for(const [i,[nx,nz]] of normals.entries())for(const [j,offset] of [0,-.48,.48].entries()){
+    const side=offset*Math.max(0,(nx?halfZ:halfX)-width/2),edge=nx?halfX:halfZ;
+    const treads=[];
+    for(let k=0;k<30;k++){
+      const depth=k?run:landing,out=edge+(k?landing+(k-.5)*run:landing/2);
+      const x=nx*out+nz*side,z=centerZ+nz*out-nx*side,top=deck-k*.175;
+      const h=earth(site,x,z);
+      if(h>top+.035)break;
+      treads.push({x,z,top,h,w:nx?depth:width,d:nz?depth:width});
+      const toe=earth(site,x+nx*(depth/2+.18),z+nz*(depth/2+.18));
+      if(toe>top+.12)break;
+      if(top-toe<=.22){
+        choices.push({id:'entry-treads',type:'stairs',bay:36+i*3+j,
+          effort:k+.12*Math.abs(offset),treads,normal:[nx,nz]});
+        break;
+      }
+    }
+  }
+  return choices.sort((a,b)=>a.effort-b.effort);
+}
+
 // The stairs follow the deck edge. Return the shorter flights first so a
 // neighbour need only change the entrance when the preferred flight overlaps.
 export function entryFlights(kind,site){
+  if(site.heightSteps>0)return raisedFlights(kind,site);
   const camp=kind==='camp',floor=kind==='floor'||kind==='hut';
   if(!camp && !floor)return [];
   const deck=camp?.13:.18,halfX=camp?.565:1.60,halfZ=camp?.86:1.40;
@@ -122,7 +154,18 @@ export function foundationMembers(kind,site){
   if(kind==='fence' && members.length)members.push({id:'sill',type:'sill',normal:[0,1]});
   const stair=entryFlight(kind,site);
   if(stair){
-    for(const t of stair.treads){
+    if(site.heightSteps){
+      const [nx,nz]=stair.normal,high=stair.treads[0],low=stair.treads.at(-1);
+      const point=(t,along,side,drop)=>[t.x+nx*along+nz*side,t.top-drop,t.z+nz*along-nx*side];
+      stair.stringers=[];
+      for(const side of [-.34,.34]){
+        stair.stringers.push({from:point(high,-.38,side,.10),to:point(high,.36,side,.10)});
+        if(high!==low)stair.stringers.push({from:point(high,.205,side,.12),to:point(low,.14,side,.192)});
+      }
+    }
+    for(const [i,t] of stair.treads.entries()){
+      // The paired side stringers carry the intermediate treads between bents.
+      if(stair.stringers && i%4 && i!==stair.treads.length-1){t.legs=[];continue;}
       t.legs=[-1,1].map(side=>{
         const x=t.x+(t.w>t.d?side*(t.w/2-.045):0);
         const z=t.z+(t.d>=t.w?side*(t.d/2-.045):0);
@@ -174,11 +217,20 @@ export function drawFoundationMember(b,m) {
     }
   }else if(m.type==='sill'){
     b.box('wood',heart,[0,-.117,0],[1.77,.094,.12],{grain:'x',bevel:.008});
-  }else for(const [i,t] of m.treads.entries()){
-    const {x,z,top,w,d}=t;
-    b.box('wood',i%2?wood:fresh,[x,top-.028,z],[w-.005,.056,d-.005],{grain:w>d?'x':'z',bevel:.007,seed:i+1});
-    for(const leg of t.legs)b.box('wood',heart,[leg.x,(leg.bottom+leg.top)/2,leg.z],
-      [.065,leg.top-leg.bottom,.065],{grain:'y',bevel:.004,seed:i+leg.x});
+  }else{
+    for(const r of m.stringers??[])b.beam('wood',heart,r.from,r.to,.10,.13,{bevel:.005,seed:r.from[0]});
+    for(const [i,t] of m.treads.entries()){
+      const {x,z,top,w,d}=t;
+      // Three transverse boards span the deep landing at the head of a raised flight.
+      const boards=m.stringers && !i?3:1,[nx,nz]=m.normal;
+      for(let j=0;j<boards;j++){
+        const offset=((j+.5)/boards-.5)*(nx?w:d);
+        b.box('wood',(i+j)%2?wood:fresh,[x+nx*offset,top-.028,z+nz*offset],
+          [w/(nx?boards:1)-.005,.056,d/(nz?boards:1)-.005],{grain:w>d?'x':'z',bevel:.007,seed:i+j+1});
+      }
+      for(const leg of t.legs)b.box('wood',heart,[leg.x,(leg.bottom+leg.top)/2,leg.z],
+        [.065,leg.top-leg.bottom,.065],{grain:'y',bevel:.004,seed:i+leg.x});
+    }
   }
 }
 
@@ -186,16 +238,19 @@ export function addFoundationContacts(add,m){
   if(m.type==='pier')add(m.x,m.z,m.width,m.width,m.bottom,m.top);
   else if(m.type==='girder')add(m.x,0,.148,2.67,-.146,-.016);
   else if(m.type==='sill')add(0,0,1.77,.12,-.164,-.070);
-  else if(m.type==='stairs')for(const t of m.treads){
-    add(t.x,t.z,t.w,t.d,t.top-.056,t.top,'floor',true);
-    for(const leg of t.legs)add(leg.x,leg.z,.065,.065,leg.bottom,leg.top);
-  }
-  else {
-    const count=Math.max(1,Math.ceil(Math.hypot(...m.to.map((v,i)=>v-m.from[i]))/.18));
-    for(let i=0;i<count;i++){
-      const a=m.from.map((v,j)=>v+(m.to[j]-v)*i/count),b=m.from.map((v,j)=>v+(m.to[j]-v)*(i+1)/count);
-      add((a[0]+b[0])/2,(a[2]+b[2])/2,Math.abs(a[0]-b[0])+m.width,Math.abs(a[2]-b[2])+m.width,
-        Math.min(a[1],b[1])-m.width/2,Math.max(a[1],b[1])+m.width/2);
+  else if(m.type==='stairs'){
+    for(const t of m.treads){
+      add(t.x,t.z,t.w,t.d,t.top-.056,t.top,'floor',true);
+      for(const leg of t.legs)add(leg.x,leg.z,.065,.065,leg.bottom,leg.top);
     }
+    for(const r of m.stringers??[])beamContacts(add,r.from,r.to,.10,.13);
+  }else beamContacts(add,m.from,m.to,m.width,m.width);
+}
+function beamContacts(add,from,to,width,depth){
+  const count=Math.max(1,Math.ceil(Math.hypot(...to.map((v,i)=>v-from[i]))/.18));
+  for(let i=0;i<count;i++){
+    const a=from.map((v,j)=>v+(to[j]-v)*i/count),b=from.map((v,j)=>v+(to[j]-v)*(i+1)/count);
+    add((a[0]+b[0])/2,(a[2]+b[2])/2,Math.abs(a[0]-b[0])+width,Math.abs(a[2]-b[2])+width,
+      Math.min(a[1],b[1])-depth/2,Math.max(a[1],b[1])+depth/2);
   }
 }

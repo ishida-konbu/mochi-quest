@@ -24,7 +24,7 @@ function pointOnSaw(pos,pitch,yaw,u,y,v) {
 
 // Split rattan wraps the grip; the blade's offset set of teeth, neck, peened
 // rivet, dark back and rubbed cutting edge share the existing tool atlas.
-function makePullSaw(length) {
+export function makePullSaw(length) {
   const f=new InkForm({wood:0,end:6,iron:7,cloth:4},4,2);
   const w=(t)=>.05+.052*Math.sin(t*pi*.69);
   const shade=(t,face)=>face>0?(t>.77?'#b9b9a4':'#81847d'):'#6e736b';
