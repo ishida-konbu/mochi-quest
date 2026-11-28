@@ -1,11 +1,18 @@
-import { groundHeight, terrainHeight, MARKET_STALLS, wrapCoord, wrapDelta, staticVolumeAt } from './terrain.js';
-import { WORKTOPS, HERB_PATCH, RICE_BASKET, RICE_SHOP, worktopPoint } from './living-layout.js';
+import { groundHeight, terrainContactHeight, terrainHeight, MARKET_STALLS, wrapCoord, wrapDelta, staticVolumeAt } from './terrain.js';
+import { COOKING_MAT, COOKING_PIVOT, WORKTOPS, HERB_PATCH, RICE_BASKET, RICE_SHOP, marketCooktop, worktopPoint } from './living-layout.js';
 import { GATHER_NODES, SHOP_STOCK } from './living-resources.js';
 
-function site(id,region,kind,name,point,label,facing) {
+function site(id,region,kind,name,point,label,approach={}) {
   const {x,z}=point;
   return Object.freeze({id,region,kind,name,label,x,z,y:groundHeight(x,z,terrainHeight(x,z)+.29),
-    ...(facing!==undefined?{facing}:{}), ...(GATHER_NODES[id]||{}), ...(SHOP_STOCK[id]?{stock:SHOP_STOCK[id]}:{})});
+    ...approach, ...(GATHER_NODES[id]||{}), ...(SHOP_STOCK[id]?{stock:SHOP_STOCK[id]}:{})});
+}
+function workshop(id,region,name,label){
+  const kitchen=WORKTOPS[id]??marketCooktop(MARKET_STALLS[4]);
+  const [x,z]=COOKING_PIVOT,workSpot=worktopPoint(kitchen,x,z),visitor=worktopPoint(kitchen,x-.62,z+.80);
+  const facing=kitchen.yaw;
+  const matEntrance={...visitor,facing,y:groundHeight(visitor.x,visitor.z,terrainHeight(visitor.x,visitor.z)+.29)};
+  return site(id,region,'workshop',name,workSpot,label,{facing,matEntrance});
 }
 function stall(index) {
   const [x,z,yaw]=MARKET_STALLS[index];
@@ -13,14 +20,14 @@ function stall(index) {
 }
 
 export const LIVING_SITES=Object.freeze([
-  site('river-mortar','river','workshop','桜川の共同臼',worktopPoint(WORKTOPS['river-mortar'],0,1.22),'共同臼で餅を作る',WORKTOPS['river-mortar'].yaw),
+  workshop('river-mortar','river','桜川の共同臼','共同臼で餅を作る'),
   site('river-yomogi','river','gather','渡し場のよもぎ原',HERB_PATCH,'よもぎを摘む'),
-  site('terraces-mortar','terraces','workshop','棚田の共同臼',worktopPoint(WORKTOPS['terraces-mortar'],0,1.22),'共同臼で餅を作る',WORKTOPS['terraces-mortar'].yaw),
+  workshop('terraces-mortar','terraces','棚田の共同臼','共同臼で餅を作る'),
   site('terraces-farmer','terraces','shop','稲架の米売り場',{x:RICE_SHOP.x,z:RICE_SHOP.z+1.12},'棚田の米を買う'),
   site('terraces-share','terraces','gather','棚田の分け米籠',{x:RICE_BASKET.x,z:RICE_BASKET.z+1.05},'分け米をいただく'),
   site('market-grocer','market','shop','蔵町の菜の露店',stall(0),'餅の材料を買う'),
   site('market-share','market','gather','茶の露店の振る舞い豆',stall(5),'炒り大豆を分けてもらう'),
-  site('market-mortar','market','workshop','蔵町の団子屋',stall(4),'団子屋で餅を作る',MARKET_STALLS[4][2]),
+  workshop('market-mortar','market','蔵町の団子屋','団子屋で餅を作る'),
 ]);
 function onFoot(p) {
   return p.grounded && !p.activity && !p.inWater && !p.mount && !p.skiff && !p.vessel;
@@ -38,14 +45,26 @@ export function clearHandReach(from,to,storyCollisions) {
   return true;
 }
 
+export function livingSiteDistance(player,site) {
+  if (!site || !onFoot(player)) return Infinity;
+  function distanceTo(point){
+    if(Math.abs(point.y-player.y)>=.9)return Infinity;
+    const dx=wrapDelta(player.x-point.x),dz=wrapDelta(player.z-point.z);
+    // Equipment has a usable approach on the visitor side of each station.
+    if(site.kind==='workshop' && dx*Math.sin(point.facing)+dz*Math.cos(point.facing)<-.37)return Infinity;
+    const distance=Math.hypot(dx,dz);
+    if(distance>1.57)return Infinity;
+    // A traveller standing on the hearth or tabletop cannot walk across it
+    // into the kitchen. Both entrances are reached from the mat or soil.
+    if(site.kind==='workshop' && player.y>terrainContactHeight(player.x,player.z)+COOKING_MAT.thickness+.08)return Infinity;
+    return clearHandReach(player,point)?distance:Infinity;
+  }
+  const distance=distanceTo(site);
+  return site.matEntrance?Math.min(distance,distanceTo(site.matEntrance)):distance;
+}
+
 export function nearLivingSite(player,site) {
-  if (!site || !onFoot(player) || Math.abs(site.y-player.y)>=.9) return false;
-  const dx=wrapDelta(player.x-site.x), dz=wrapDelta(player.z-site.z);
-  // The public workstation operates from its standing tread. A visitor can
-  // jump onto the mortar or the rear counter, which has a clear sightline
-  // but no footing from which to pick up hot cookware.
-  if (site.kind==='workshop' && dx*Math.sin(site.facing)+dz*Math.cos(site.facing)<-.37) return false;
-  return Math.hypot(dx,dz)<=1.57 && clearHandReach(player,site);
+  return Number.isFinite(livingSiteDistance(player,site));
 }
 
 // Only local travellers who are free to stop for a bite. The short sightline

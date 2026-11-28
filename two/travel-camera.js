@@ -85,22 +85,28 @@ export function createTravelCamera() {
   return { movementYaw, manualLook, follow, reset, get lead() { return lead; } };
 }
 
-// A view along the line from the traveller to the cut hides the blade behind
-// the dough or the trunk. Ease to the nearest clear three-quarter view once.
+// The hatchet works on the +X side of the stump frame. From the other
+// flank the dough covers the handle throughout the backswing.
 export function chopCameraArc(yaw, axeLine, clearance) {
-  const relative = angleBetween(yaw, axeLine);
-  if (Math.abs(Math.sin(relative)) >= .79) return null;
-  const axis = axeLine + (Math.cos(relative) < 0 ? Math.PI : 0);
-  let chosen, best = -Infinity;
-  for (const side of [-1, 1]) {
-    const turn = angleBetween(axis + side * 1.29, yaw);
-    if (Math.abs(turn) > 1.55) continue;
-    const room = Math.min(clearance(yaw + turn / 2), clearance(yaw + turn));
-    const score = room * 1.55 - Math.abs(turn);
-    if (score > best) { best = score; chosen = turn; }
+  const flank = Math.sin(angleBetween(yaw, axeLine));
+  if (flank >= .79) return null;
+  let chosen = 0, chosenSide = 0, best = -Infinity;
+  for (const side of [1, -1]) {
+    for (const bearing of [1.74, 1.29]) {
+      const turn = angleBetween(axeLine + side * bearing, yaw);
+      let room = 1;
+      const steps = Math.max(2, Math.ceil(Math.abs(turn) / .38));
+      for (let i = 1; i <= steps; i++) {
+        room = Math.min(room, clearance(yaw + turn * i / steps));
+      }
+      // Frame the near shoulder just in front of its profile so both the
+      // face and the notch read. Room along the orbit takes precedence.
+      const score = 4 * room + (side > 0 ? .95 : 0) + (bearing > Math.PI / 2 ? .22 : 0) - .15 * Math.abs(turn);
+      if (score > best) { best = score; chosen = turn; chosenSide = side; }
+    }
   }
-  if (chosen === undefined) return null;
-  const duration = Math.max(.65, Math.abs(chosen) * 1.53);
+  if (Math.abs(chosen) < .04 || (flank <= -.79 && chosenSide < 0)) return null;
+  const duration = clamp(Math.abs(chosen) * 1.53, .65, 2.15);
   let elapsed = 0;
   return dt => {
     elapsed = Math.min(duration, elapsed + dt);

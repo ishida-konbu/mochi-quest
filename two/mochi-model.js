@@ -445,7 +445,7 @@ export function makeRiceModel(parent) {
   head.add(mouth);
   const bones=[...legs,...hands,chest,head];
   const samples=bones.map(b=>({p:b.position.clone(),q:b.quaternion.clone()}));
-  return { model,body,uniforms,mixer,actions,legs,hands,chest,head,bones,samples,
+  return { model,body,uniforms,mixer,actions,legs,hands,chest,head,bones,samples,lip,
     plainSkin:material, kagami:null, faceCues:body.userData.faceCues, clip:null,
     step:0,press:0,velocity:0,pull:0,pullV:0,smile:1 };
 }
@@ -498,9 +498,8 @@ export function poseRice(r,p,t,dt,mood,bath,carryGohei=true) {
   r.step+=dt*(2.4+Math.min(14,speed*1.34));
   const step=Math.sin(r.step), plant=Math.cos(r.step*2);
   const impact=p.impact||0, landing=p.landing||0;
-  const locomotion=landing>.15 ? -.17-.17*impact : landing>.045 ? .12*impact :
+  const goal=landing>.15 ? -.17-.17*impact : landing>.045 ? .12*impact :
     (grounded ? 0 : clamp((p.vy||0)*.009,-.05,.12)) + stride*plant*.042;
-  const goal=locomotion+(p.workStrain??0);
   const frame=Math.min(.12,Math.max(0,dt)), steps=Math.ceil(frame/.009);
   for(let i=0;i<steps;i++){
     const h=frame/steps;

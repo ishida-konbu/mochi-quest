@@ -2,6 +2,7 @@
 // out or restored at any point on the circuit without jumping across a trunk.
 import { SNOW_SPRING, BUILDINGS, BRIDGES, GATES, MARKET_STALLS, REGIONS, TREES, SHRINE_BAMBOO, gateFooting, regionAt, solidHeightAt, terrainHeight, treeGround, waterDepth, groundHeight, nearRoad } from './terrain.js';
 import { isTimberFelled } from './living-build-trees.js';
+import { LIVING_SITES } from './living-sites.js';
 import { buildingCraft, roomPlan } from './architecture.js';
 import { KADOMATSU, POUNDING } from './festival.js';
 import { predatorRange, patrolAt } from './predator-trails.js';
@@ -47,6 +48,14 @@ for(const b of BRIDGES) for(const side of [-1,1]) indexDisc(fixtures,b.x+side*(b
 for(const b of BRIDGES) for(const end of [-1,1])
   indexDisc(fixtures,b.x,b.z+end*(b.length/2+1.25),b.halfWidth+1.25);
 for(const [x,z] of MARKET_STALLS) indexDisc(fixtures,x,z,2.0);
+// Visitors can start cooking anywhere within reach of either entrance.
+// Keep the approach and the cook's turning space clear of passing animals.
+// Only the villagers' routes use these discs.
+for(const site of LIVING_SITES) {
+  if(!site.matEntrance)continue;
+  indexDisc(fixtures,site.x,site.z,2.85);
+  indexDisc(fixtures,site.matEntrance.x,site.matEntrance.z,3.20);
+}
 indexDisc(fixtures,POUNDING.x,POUNDING.z,2.2);
 for(const [x,z] of KADOMATSU) indexDisc(fixtures,x,z,.4);
 

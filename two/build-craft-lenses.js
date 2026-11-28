@@ -1,7 +1,7 @@
 // Tripods use the joiner's coordinates. The worker faces -Z at the far end
 // of the bench. Fit the subject to the part of the canvas above the controls.
 import {Vector3} from './vendor/three.module.min.js';
-import {benchPoint} from './build-craft-motion.js';
+import {benchPoint,carpenterStance,PLANING_BOARD} from './build-craft-motion.js';
 
 const up=new Vector3(0,1,0);
 const shotNames=['master','eye','low','wide','face'];
@@ -37,32 +37,55 @@ function subjectBox(lo,hi){
 // eyes stay sharp above the foreground tool. All other shots cover the work.
 export function composeCraftLens(style,bench,size,width,height,available,side,sight,stage=[],tool,stacked=false){
   const aspect=width/height,open=Math.max(.24,Math.min(1,available/height));
-  const face=stacked?v(0,.74*size,1.10*size):v(0,.90*size,.91*size);
-  const close=style==='face',wide=style==='wide' && stage.length>0;
+  const stance=carpenterStance({mode:stacked?'kagami':'normal',buffs:{full:size>1}},tool);
+  const face=v(stance.x,(stacked?.76:.89)*size,stance.z-(stacked?.45:.75)*size);
+  const hands=style==='hands',close=style==='face',wide=style==='wide' && stage.length>0;
+  const planing=tool==='plane',planeInsert=close && planing;
+  // A slightly lower angle keeps the orange above the face of the stacked cake.
+  const insertSlope=stacked?.46:.59;
   const fov=close?32:wide?43:style==='low'?49:38, tan=Math.tan(fov*Math.PI/360);
-  const toolMarks=[v(-.24,.64*size,.03),v(.31,.71*size,.03),v(0,.61*size,-.36),v(.28,.83*size,.52)];
+  const toolMarks=[v(.31,stance.height+.12,0),v(.31,stance.height+.15,.51),
+    v(PLANING_BOARD.x,stance.height+.08,PLANING_BOARD.end),v(.45,stance.height+.28,.62)];
   const eyeSpan=(stacked?.15:.23)*size;
   const faceMarks=[face.clone(),face.clone().add(v(-eyeSpan,0,0)),face.clone().add(v(eyeSpan,0,0))];
-  const targets=close?faceMarks:[...faceMarks,...toolMarks];
+  const targets=close?[...faceMarks]:[...faceMarks,...toolMarks];
+  if(planing){
+    targets.push(face.clone().add(v(0,0,PLANING_BOARD.start-PLANING_BOARD.end)),v(PLANING_BOARD.x,stance.height+.16,PLANING_BOARD.start));
+  }
   if(style==='low')for(const x of [-.65*size,.65*size])targets.push(v(x,.72*size,.67*size));
   let focus,points,minDistance;
-  if(close){
+  if(hands){
+    // A low three-quarter view puts the two pads on the skyline of the work.
+    // Set focus above the grip, keeping stock, blade, eyes and wrists sharp.
+    const x=tool==='plane'?PLANING_BOARD.x:tool==='saw'?.32:.24;
+    focus=v(x,stance.height+.42*size,.68);
+    points=[...targets,face.clone().add(v(0,.26*size,0)),v(x-.47*size,stance.height,.55),
+      v(x+.48*size,stance.height,.75),v(x,stance.height+.11,tool==='saw'?-.54:PLANING_BOARD.start)];
+    minDistance=2.50*size;
+  }else if(close){
     focus=face.clone();
     points=subjectBox(face.clone().add(v(-.55,-.36,-.16).multiplyScalar(size)),
       face.clone().add(v(.55,.42,.17).multiplyScalar(size)));
     points.push(v(0,.76*size,.24));
     minDistance=1.96*size;
+    if(planeInsert){
+      focus.z-=.22;focus.lerp(toolMarks[2],.52);
+      points.push(...targets);
+      minDistance=2.52*size;
+    }
   }else if(style==='eye'){
     // A waist-up conversation distance gives the joiner's eyes and grip
     // more of the frame than the full-body master or the low tripod.
     focus=v(0,.98*size,.72*size);
-    points=subjectBox(v(-.67*size,.49*size,.68*size),v(.67*size,1.64*size,1.65*size));
+    points=subjectBox(v(stance.x-.88*size,.34*size,.52*size),v(stance.x+.87*size,1.72*size,stance.z+.42*size));
     points.push(...toolMarks,v(.45,.67*size,.76));
+    if(planing)points.push(v(stance.x,.015,stance.z),...targets);
     minDistance=2.15*size;
   }else{
-    points=subjectBox(v(-.91*size,-.02,.78*size),v(.91*size,1.74*size,2.45*size));
+    points=subjectBox(v(stance.x-.98*size,-.02,stance.z-.68*size),v(stance.x+.98*size,1.74*size,stance.z+.85*size));
     for(const x of [-.87,.87])for(const z of [-.71,.71])points.push(v(x,.54*size,z));
     focus=v(0,.84*size,.68*size);
+    if(planing)points.push(...targets);
     minDistance=2.65*size;
     if(wide){
       const low=v(Infinity,Infinity,Infinity),high=v(-Infinity,-Infinity,-Infinity);
@@ -72,16 +95,12 @@ export function composeCraftLens(style,bench,size,width,height,available,side,si
       minDistance=4.0*size;
     }
   }
-  // With both hands on the mouth of the plane the low line of sight
-  // passes through the stretched dough for almost the entire pull.
-  // Let the planner try another style on this cut before choosing a tripod.
-  if((tool==='plane' || stacked && tool==='mallet') && (style==='low' || style==='eye'))return null;
-  const angles=style==='master'?[.48,.72,.20]:style==='eye'?(tool==='mallet'?[.91,1.03,.055]:[.055,.16,.28]):style==='low'?[.09,.18,.31]:
+  const angles=hands?(planing?[.65,.84,.49]:tool==='saw'?[.79,.63,.94]:[.46,.67,.29]):planeInsert?[.28,.43,.14]:planing?[1.23,1.04,1.40,.88]:style==='master'?[.48,.72,.20]:style==='eye'?(tool==='mallet'?[.91,1.03,.055]:[.055,.16,.28]):style==='low'?[.09,.18,.31]:
     style==='wide'?(aspect<.78?[1.94,2.18,1.48,1.19,.90]:[1.24,1.66,1.01,1.94]):[.22,.33,.10];
   // A tall viewport can arrange the workmen and the structure from foot to
   // head of the page. Climb above nearby eaves if the shallower tripod fails.
-  const pitches=wide?(aspect<.78?[.72,1.05,.41]:[.41,.72,1.05]):[style==='master'?.76:close?.48:0];
-  const sides=tool==='mallet' && style==='eye'?[side]:[side,-side];
+  const pitches=hands?(planing?[.03,.13,.21]:[.22,.13,.31]):wide?(aspect<.78?[.72,1.05,.41]:[.41,.72,1.05]):[style==='master'?(planing?.25:.76):planeInsert?insertSlope:close?.48:0];
+  const sides=hands?[side,-side]:planing?[1]:tool==='mallet' && style==='eye'?[side]:[side,-side];
   for(const slope of pitches)for(const angle of angles)for(const hand of sides){
     const bearing=angle*hand;
     // Dir.y is the slope of the sightline, not the lens height. The eye and

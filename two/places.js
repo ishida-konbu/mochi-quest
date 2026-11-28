@@ -1,5 +1,5 @@
-import { marketCookCanopy } from './living-layout.js';
-import { dressLivingSites, dressCharcoalGrill, shareBeans } from './living-site-art.js';
+import { MARKET_STOCK_TOP, MARKET_STOCK_Z, marketCookCanopy } from './living-layout.js';
+import { dressLivingSites, shareBeans } from './living-site-art.js';
 import { createSteam, steamSource } from './steam.js';
 import * as THREE from './vendor/three.module.min.js';
 import { visitMooredFittings } from './skiff-travel.js';
@@ -434,21 +434,28 @@ function marketGoods(f, a, id, r) {
     }
     pottery(f, 0.92, y, 0.29, 0.33, '#7d8475');
   } else if (id === 4) {
-    dressCharcoalGrill(f,f.painter);
-    for (const u of [-1.12,1.12]) f.post(u,-.38,.90,.060,timber,f.painter.wood,true);
-    f.part('box',0,.905,-.38,2.66,.07,.64,'#a68762',0,0,0,f.painter.wood);
+    // Stock hangs from a shelf behind the rear uprights, leaving daylight
+    // between the display trays and the cook's freestanding, lower bench.
+    const {postX}=marketCookCanopy,stock=MARKET_STOCK_Z,shelf=MARKET_STOCK_TOP;
+    f.part('box',0,shelf-.092,-.79,2*postX,.14,.08,'#836b4d',0,0,0,f.painter.wood);
+    for(const u of [-1.15,0,1.15]){
+      f.part('box',u,shelf-.205,-.79,.082,.31,.072,'#897351',0,0,0,f.painter.wood);
+      f.line([u,shelf-.34,-.79],[u,shelf-.07,stock-.24],.043,'#927a58',f.painter.wood,true);
+    }
+    f.part('box',0,shelf-.034,stock,2.66,.068,.64,'#9c8b70',0,0,0,f.painter.wood);
+    f.part('box',0,shelf+.023,stock-.315,2.66,.046,.028,'#81715a',0,0,0,f.painter.wood);
     for (let j = 0; j < 3; j++) {
       const x = -0.91 + j * 0.86;
-      boxLid(f, x, y + 0.05, -.38, 0.67, 0.53);
+      boxLid(f, x, shelf + .057, stock, 0.67, 0.53);
       for (let i = 0; i < 4; i++) {
         const xx = x - 0.2 + i * 0.124;
-        f.line([xx, y + 0.105, -.65], [xx, y + 0.12, -.11], 0.009, '#ac915a');
+        f.line([xx, shelf + .112, stock-.27], [xx, shelf + .127, stock+.27], 0.009, '#ac915a');
         for (let k = 0; k < 3; k++)
           f.part(
             'ball',
             xx,
-            y + 0.16,
-            -.49 + k * 0.105,
+            shelf + .167,
+            stock-.11 + k * .105,
             0.069,
             0.066,
             0.072,
@@ -483,8 +490,15 @@ function market(p, a) {
       rng = seeded(871 + id);
     const cook=id===4, lift=cook?marketCookCanopy.lift:0, postX=cook?marketCookCanopy.postX:1.64;
     const canopy=cook?fixture(p,x,z,yaw,terrainHeight(x,z)+lift):f;
-    for (const u of [-postX, postX])
-      for (const s of [-0.79, 1.07]) f.post(u, s, lift+(s < 0 ? 3.28 : 2.53), 0.059, '#816649');
+    const frontPost=cook?marketCookCanopy.frontPostZ:1.07, backPost=-.79;
+    for (const u of [-postX, postX]){
+      f.post(u,backPost,lift+3.28,.059,'#816649');
+      // The dango stall's projecting arms carry the front beam over an
+      // open cooking aisle. No upright crosses the cook's carrying hands.
+      const head=cook?3.23+(frontPost+.83)*(2.48-3.23)/1.93:2.53;
+      f.post(u,frontPost,lift+head,.059,'#816649');
+      if(cook)canopy.line([u,head-.74,frontPost],[u,2.46,1.05],.056,timber,p.wood,true);
+    }
     canopy.line([-postX-.08, 3.23, -0.82], [postX+.08, 3.23, -0.82], 0.06, timber, p.wood);
     canopy.line([-postX-.12, 2.48, 1.05], [postX+.12, 2.48, 1.05], 0.049, timber, p.wood);
     for (const u of [-postX, 0, postX]) canopy.line([u, 3.23, -0.83], [u, 2.48, 1.1], 0.038, '#9a8059', p.wood);
@@ -501,12 +515,13 @@ function market(p, a) {
         }
       }
     }
-    f.post(-1.23, 0.42, 0.89, 0.073, timber, p.wood, true);
-    f.post(1.23, 0.42, 0.89, 0.073, timber, p.wood, true);
-    f.part('box', 0, 0.88, 0.42, 3.14, 0.12, 0.84, '#b4986d', 0, 0, 0, p.wood);
-    f.part('box', 0, 0.68, 0.31, 2.64, 0.07, 0.56, '#8c7450', 0, 0, 0, p.wood);
-    for (const u of [-1.1, -0.3, 0.53, 1.12])
-      f.part('box', u, 0.946, 0.42, 0.008, 0.004, 0.8, '#8f7957');
+    if(!cook){
+      for(const u of [-1.23,1.23])f.post(u,.42,.89,.073,timber,p.wood,true);
+      f.part('box',0,.88,.42,3.14,.12,.84,'#b4986d',0,0,0,p.wood);
+      f.part('box',0,.68,.31,2.64,.07,.56,'#8c7450',0,0,0,p.wood);
+      for(const u of [-1.1,-.3,.53,1.12])
+        f.part('box',u,.946,.42,.008,.004,.8,'#8f7957');
+    }
     canopy.line([postX-.03, 2.57, 0.96], [postX-.07, 2.09, 1.28], 0.014, rope);
     canopy.part('box', postX-.065, 1.89, 1.28, 0.36, 0.48, 0.045, '#be9b66');
     canopy.part('plane', postX-.065, 1.89, 1.307, 0.32, 0.45, 1, '#fff', 0, 0, 0, a.sign(name), false);

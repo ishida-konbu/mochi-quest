@@ -1,5 +1,6 @@
 // The joiner prepares a small number of actual components on one portable
 // bench. Coordinates are metres in the bench frame; its near edge faces +Z.
+import { restWorkGrip } from './working-grips.js';
 import { BUILD_MODULES } from './living-build-state.js';
 import { terrainContactHeight,waterSurfaceAt,canOccupy,groundHeight,wrapDelta } from './terrain.js';
 
@@ -30,7 +31,56 @@ export function constructionCuts(site){
   return site.kind==='hut'?[foundation,...cuts.slice(1)]:[foundation,...cuts].slice(0,3);
 }
 
-export const BENCH_LEGS=[[-.69,-.47],[-.69,.47],[.69,-.47],[.69,.47]];
+export const BENCH_LEGS=[[-.69,-.47],[-.69,.16],[.69,-.47],[.69,.47]];
+// Working stock sits at the near end of a narrow shooting board. The
+// projecting board is beside the belly with a fixed stop behind its toe.
+export const PLANING_BOARD={x:.430,width:.124,far:-.125,near:.785,hookEnd:.835,start:.396,end:.756};
+export const PLANE_HALF_WIDTH=.175;
+export const JOINT={x:.467,z:.51,braceX:-.112,braceZ:.547};
+const sawX=.320;
+// Two contact points on opposite sides of the rattan, one hand just ahead
+// of the other. Both are behind the rivet, well clear of the blade.
+const sawPads=[[.030,-.004,.432],[-.037,-.003,.357]];
+
+function planeSocketTurns(player,size){
+  return [0,1].map(i=>{
+    const [x,,z]=restWorkGrip(player.mode,i,size);
+    return Math.min(.90,Math.atan2(Math.abs(x),z)-Math.asin((PLANE_HALF_WIDTH-.003)/Math.hypot(x,z)));
+  });
+}
+export function carpenterStance(player,tool='saw'){
+  const size=player.buffs?.full>0?1.28:1;
+  const height=restWorkGrip(player.mode,0,size)[1]-.16;
+  let x,z,turns,faces;
+  if(tool==='plane'){
+    turns=planeSocketTurns(player,size);
+    x=PLANING_BOARD.x;
+    z=PLANING_BOARD.end+.01+restWorkGrip(player.mode,0,size,turns[0])[2];
+    if(player.mode==='kagami')z=Math.max(z,PLANING_BOARD.hookEnd+.83*size);
+  }else if(tool==='saw'){
+    turns=[.785,.745];faces=['inside','inside'];x=sawX;
+    z=.55+.395+restWorkGrip(player.mode,0,size,turns[0],faces[0])[2];
+  }else{
+    const driveX=JOINT.x-.266*Math.sin(.78)+.015;
+    x=(driveX+JOINT.braceX)/2;faces=['bottom','bottom'];
+    // The broad travelling cake rolls each root further round its breast.
+    // Put the two pads above their own marks before the lift begins.
+    turns=[driveX,JOINT.braceX].map((mark,i)=>{
+      let low=.30,high=.95;
+      for(let j=0;j<10;j++){
+        const mid=(low+high)/2;
+        const lateral=Math.abs(restWorkGrip(player.mode,i,size,mid,faces[i])[0]);
+        if(lateral>Math.abs(mark-x))low=mid;else high=mid;
+      }
+      return (low+high)/2;
+    });
+    const depths=turns.map((angle,i)=>restWorkGrip(player.mode,i,size,angle,faces[i])[2]);
+    z=(JOINT.z+.266*Math.cos(.78)+JOINT.braceZ+depths[0]+depths[1])/2+.035;
+    if(player.mode==='kagami')z=Math.max(z,JOINT.z+.095+.84*size);
+  }
+  return {x,z,height,turns,faces,feet:[[x+.30*size,z-.05*size],[x-.30*size,z+.05*size]]};
+}
+export const benchHeight=(height,cut)=>height+(cut.tool==='plane'?.062:cut.tool==='mallet'?-.15:0);
 export function benchPoint(frame,x,z) {
   const c=Math.cos(frame.yaw),s=Math.sin(frame.yaw);
   return [frame.x+x*c+z*s,frame.z-x*s+z*c];
@@ -44,58 +94,44 @@ export function findWorkBench(site,player,canStand=()=>true) {
   const direction=Math.atan2(wrapDelta(player.x-site.x),wrapDelta(player.z-site.z));
   const clear=(x,z,y,r,h)=>canOccupy(x,z,y+.025,r,h) && canStand(x,z,y+.025,r,h);
   const legs=BENCH_LEGS;
-  const feet=[[.30*size,1.65*size-.085],[-.30*size,1.65*size+.085]];
+  const cuts=constructionCuts(site);
+  const tools=[...new Set(cuts.map(c=>c.tool))];
+  const stances=tools.map(tool=>carpenterStance(player,tool));
+  const lowBench=Math.min(...cuts.map(cut=>benchHeight(stances[0].height,cut)));
   for(const extra of [1.22,2.55,4.15])for(const angle of [0,.55,-.55,1.10,-1.10,1.65,-1.65,2.28,-2.28,pi]){
     const yaw=direction+angle;
     const frame={x:site.x+Math.sin(yaw)*(radius+extra),z:site.z+Math.cos(yaw)*(radius+extra),yaw};
     const world=p=>benchPoint(frame,...p);
     const level=p=>{const [x,z]=world(p);return groundHeight(x,z,terrainContactHeight(x,z)+.20);};
-    const pads=feet.map(level),y=(pads[0]+pads[1])*.5,legsY=legs.map(level);
-    if(Math.abs(pads[0]-pads[1])>.22 || Math.max(...legsY)>y+.54*size-.21 || Math.min(...legsY)<y-1.50)continue;
-    const stance=world([0,1.65*size]);
-    if(!clear(...stance,y,.65*size,1.65*size))continue;
-    const spots=[...legs,[0,0],[-.74,0],[.74,0],[0,.58],[0,-.58]];
-    if(spots.some(p=>{const xy=world(p),h=level(p);return h>y+.54*size-.105 || h-waterSurfaceAt(...xy)<.12 || !clear(...xy,h,.23,1.3*size);}))continue;
-    return {...frame,y,feet:pads.map(v=>v-y),legs:legsY.map(v=>v-y),detail:false};
+    const pads=stances.map(s=>s.feet.map(level)),legsY=legs.map(level);
+    const activePads=pads.flat();
+    const y=activePads.reduce((a,b)=>a+b,0)/activePads.length;
+    if(Math.max(...activePads)-Math.min(...activePads)>.22 || Math.max(...legsY)>y+lowBench-.14 || Math.min(...legsY)<y-1.50)continue;
+    if(stances.some(s=>[-.15,.12].some(dz=>!clear(...world([s.x,s.z+dz]),y,.65*size,1.65*size))))continue;
+    const spots=[...legs,[0,0],[-.74,0],[.74,0],[.57,.59],[PLANING_BOARD.x,PLANING_BOARD.near],[0,-.58]];
+    if(spots.some(p=>{const xy=world(p),h=level(p);return h>y+lowBench-.095 || h-waterSurfaceAt(...xy)<.12 || !clear(...xy,h,.23,1.3*size);}))continue;
+    const feetByTool=Object.fromEntries(tools.map((tool,i)=>[tool,pads[i].map(v=>v-y)]));
+    return {...frame,y,feet:feetByTool[tools[0]],feetByTool,legs:legsY.map(v=>v-y),detail:false};
   }
   return {x:0,y:0,z:0,yaw:0,feet:[0,0],legs:[0,0,0,0],detail:true};
 }
 
 export function craftMotion(site,player,bench) {
-  const cuts=constructionCuts(site),size=player.buffs?.full>0?1.28:1;
-  const height=.54*size,hero=[0,0,1.65*size],heading=pi;
-  const feet=[[.30*size,bench.feet[0],hero[2]-.085],[-.30*size,bench.feet[1],hero[2]+.085]];
-  const free=[[.65*size,.73*size,hero[2]-.45*size],[-.65*size,.73*size,hero[2]-.45*size]];
+  const cuts=constructionCuts(site);
+  const stances=cuts.map(c=>carpenterStance(player,c.tool)),height=stances[0].height,heading=pi;
+  const size=player.buffs?.full>0?1.28:1;
   const duration=cuts.reduce((s,c)=>s+c.duration,0);
-  // Clearance beneath the whole soft mitt, in bench coordinates. Around a
-  // board edge the clearance falls away gradually, so the hand can wrap
-  // over the edge without acquiring a sharp crease.
-  function workSurface(cut,x,z,tool,fall){
-    const top=(l,r,n,f,y)=>y-1.5*Math.hypot(Math.max(0,l-x,x-r),Math.max(0,n-z,z-f));
-    let h=top(-.88,.88,-.602,.602,height);
-    if(cut.tool==='saw'){
-      h=Math.max(top(-.88,.31,-.602,.602,height),top(.345,.88,-.602,.602,height-.059));
-      if(cut.bamboo){
-        const dz=Math.min(.0725,Math.abs(z)),crown=.0725+Math.sqrt(.0725**2-dz**2);
-        return Math.max(h,top(-.79,.318,-.0725,.0725,height+crown),top(.322,.67,-.0725,.0725,height+crown-.059*fall));
-      }
-      return Math.max(h,top(-.79,.318,-.0825,.0825,height+.142),top(.322,.67,-.0825,.0825,height+.142-.059*fall));
-    }
-    if(cut.tool==='plane'){
-      // The palm draws the toe while the other hand steadies the heel.
-      const [tx,ty,tz]=tool;
-      return Math.max(h,top(-.123,.123,-.64,.64,height+.080),top(-.127,.127,.642,.685,height+.046),
-        top(tx-.0905,tx+.0905,tz-.169,tz+.165,ty+.080));
-    }
-    return Math.max(h,top(-.58,.58,-.11,.08,height+.20),top(-.035,.155,-.32,.34,height+.20));
-  }
   function sample(time){
     time=Math.max(0,Math.min(duration,time));
     let index=0,t=time;
     while(index<cuts.length-1 && t>=cuts[index].duration){t-=cuts[index++].duration;}
-    const cut=cuts[index],q=t/cut.duration,grasp=ease((q-.025)/.14);
+    const cut=cuts[index],q=t/cut.duration;
+    const stance=stances[index],hero=[stance.x,0,stance.z];
+    const pads=bench.feetByTool?.[cut.tool]??bench.feet;
+    const feet=stance.feet.map(([x,z],i)=>[x,pads[i],z]);
+    let grasp=ease((q-.025)/.14),twist=0,planeReach=0,palms,weightShift;
     const phase=clamp((q-.17)/.65);
-    let position,rotation=[0,0,0],holds,workTop=height,effort=0,shave=0,shed=0,fall=0,pin=0,cue=null;
+    let position,rotation=[0,0,0],holds,workTop=benchHeight(height,cut),effort=0,shave=0,shed=0,fall=0,pin=0,cue=null;
     if(cut.tool==='saw'){
       workTop+=cut.bamboo?.145:.142;
       // The teeth bite on each pull. On the return the blade follows the
@@ -103,13 +139,18 @@ export function craftMotion(site,player,bench) {
       const strokes=phase*3,number=Math.floor(strokes),cycle=strokes-number;
       const wave=(1-Math.cos(cycle*2*pi))*.5;
       const cutProgress=(number+(cycle<.5?wave:1))/3;
-      const back=ease((q-.82)/.14),z=.37+wave*.31+back*.19;
+      const back=ease((q-.82)/.14),z=.342+wave*.175+back*.065;
       // Mirror on the blade puts the teeth below the back after the quarter turn.
       const along=z/.91,teeth=-.020+.05+.052*Math.sin(along*pi*.69)+.012;
-      position=[.32,workTop+teeth-.002-cutProgress*(workTop-height+.003)+back*.19,z];
+      position=[sawX,workTop+teeth-.002-cutProgress*((cut.bamboo?.145:.142)+.003)+back*.10,z];
       rotation=[0,0,pi/2];
-      holds=[[.32-.011,position[1]-.004,z+.22],[-.235,workTop+.0015,0]];
-      effort=wave;
+      holds=sawPads.map(([x,y,dz])=>[sawX+x,position[1]+y,z+dz]);
+      const draw=phase>0 && phase<1?Math.sin(2*pi*cycle):0;
+      const pull=Math.max(0,draw),backward=Math.max(0,-draw);
+      palms=[{normal:[1,0,0],curl:[0,.10*pull,.30*draw],pressure:.32+.47*pull},
+        {normal:[-1,0,0],curl:[0,-.08*pull,-.22*draw],pressure:.27+.34*pull}];
+      weightShift=[-.024*pull,.034*backward-.048*pull];
+      effort=pull;
       // At the end of the third pull the end is free. Drop it the 59 mm to
       // the receiving board while the saw travels out of the cut.
       const secondsSinceCut=Math.max(0,phase-5/6)*cut.duration*.65;
@@ -117,37 +158,93 @@ export function craftMotion(site,player,bench) {
       if(cycle<.5 && wave>.4)cue='saw-'+number;
     }else if(cut.tool==='plane'){
       workTop+=.080;
-      // Japanese planes cut on the pull towards the body. Lift the sole off
-      // the board on its single return. Leave the finished shaving at the toe.
-      const back=ease((phase-.40)/.20),second=ease((phase-.60)/.40);
-      const forward=ease(phase/.40);
-      const raised=.067*Math.sin(pi*back);
-      position=[0,workTop+raised,-.40+.74*(forward-back+second)];
-      holds=[[.087,position[1]+.0815,position[2]+.118],[-.087,position[1]+.0815,position[2]-.055]];
-      effort=(phase<.4?Math.sin(pi*forward):Math.sin(pi*second))*.8;
-      shave=phase<.4?forward:phase<.6?0:second;
-      shed=phase>=.40?ease((phase-.40)/.17):0;
-      if(shave>.25 && shave<.83)cue='plane-'+Number(phase>=.6);
+      // Take the plane at the near end. With the edge clear, send it to
+      // the far end, settle the whole sole, then pull the shaving toward
+      // the belly. A second lift frees the first curl before the return.
+      const ramp=(a,b)=>ease((q-a)/(b-a));
+      const send=ramp(.175,.305),first=ramp(.35,.515);
+      const back=ramp(.566,.688),second=ramp(.738,.91);
+      const float=ramp(.135,.175)-ramp(.305,.35)+ramp(.515,.566)-ramp(.688,.738);
+      const reach=send-first+back-second;
+      const pitch=-.19*float,cs=Math.cos(pitch),sn=Math.sin(pitch);
+      rotation=[pitch,0,0];
+      position=[PLANING_BOARD.x,workTop+.046*float,mix(PLANING_BOARD.end,PLANING_BOARD.start,reach)];
+      const onCap=(x,z)=>[position[0]+x,position[1]+.044*cs-z*sn,position[2]+.044*sn+z*cs];
+      const grip=PLANE_HALF_WIDTH-.003;
+      holds=[onCap(grip,.152),onCap(-grip,.156)];
+      const cutting=Math.sin(pi*first)+Math.sin(pi*second);
+      const strokeLoad=cutting*.87,returning=Math.sin(pi*send)+Math.sin(pi*back);
+      // Tip the toe on the unloaded return, then draw from the shoulder.
+      // Keep the pad cocked on the far end. Roll onto the pull just as the
+      // sole settles, then ease out of that grip at the end of the shaving.
+      const cock=ramp(.135,.205)-ramp(.474,.53)+ramp(.55,.62)-ramp(.872,.93);
+      const turn=ramp(.330,.380)-ramp(.465,.525)+ramp(.716,.766)-ramp(.861,.926);
+      const wristRoll=-.54*cock+.66*turn;
+      const normal=[0,cs,sn];
+      palms=[{normal,wristRoll,curl:[.06*cutting,0,.86*cutting-.84*float],pressure:.24+.64*cutting+.15*reach},
+        {normal,wristRoll:.66*wristRoll,curl:[0,0,.56*cutting-.52*float],pressure:.29+.43*cutting}];
+      // Feet stay planted as the palms reach the far end. Soften the belly
+      // briefly, then let it load the blade about a tenth of a second later.
+      const followFirst=ramp(.375,.54),followSecond=ramp(.763,.935);
+      const bodyReach=ramp(.201,.331)-followFirst+ramp(.592,.714)-followSecond;
+      planeReach=.88*reach+.12*bodyReach;
+      const check=ramp(.263,.305)-ramp(.305,.331)+ramp(.646,.688)-ramp(.688,.714);
+      const bodyPull=Math.sin(pi*followFirst)+Math.sin(pi*followSecond);
+      weightShift=[.023*(returning-cutting),.087*bodyReach-.024*check-.053*bodyPull];
+      grasp=ease((q-.018)/.103)*(1-ramp(.933,.992));
+      effort=strokeLoad;
+      shave=q<=.515?first:second;
+      shed=ramp(.515,.65);
+      if(cutting>.36)cue='plane-'+Number(q>=.738);
     }else{
       workTop+=.20;
       const strokes=Math.min(3,phase*3),number=Math.min(2,Math.floor(strokes));
       const u=strokes-number;
       const lift=u<.55?ease(u/.55):1-ease((u-.55)/.27);
-      pin=.036*(number+ease((u-.82)/.08));
-      const ready=ease((q-.169)/.095),withdraw=ease((q-.83)/.12);
-      const rest=[.51,height+.067,.32],peak=.32*lift;
-      const impact=[.06,workTop+.109-pin+.066+peak+withdraw*.16,-.015];
-      position=blend(rest,impact,ready);rotation=[-.57*lift*ready,0,0];
-      const [rx]=rotation;
-      holds=[[position[0],position[1]-.223*Math.sin(rx),position[2]+.223*Math.cos(rx)],
-        [-.24,workTop+.0015,.026]];
-      effort=.50*lift;if(phase>0 && u>=.82 && u<=1)cue='knock-'+number;
+      pin=.027*(number+ease((u-.82)/.08));
+      const ready=ease((q-.169)/.095),park=ease((q-.82)/.12);
+      const swing=lift*ready*(1-park),handle=.266;
+      // The head travels around the wrap in the palm. A short vertical
+      // follow-through seats the peg while the other pad braces the rail.
+      const rest=[JOINT.x+.06-handle*Math.sin(.78),workTop+.066,JOINT.z+.045+handle*Math.cos(.78)];
+      const working=[JOINT.x-handle*Math.sin(.78)+.021*lift,workTop+.082-pin+.066+.008*lift,JOINT.z+handle*Math.cos(.78)+.015*lift];
+      const hand=blend(blend(rest,working,ready),rest,park);
+      hand[1]+=.07*Math.sin(pi*park);
+      rotation=[1.02*swing,-.78-.38*swing,.15*swing];
+      const [rx,ry]=rotation,c=Math.cos(ry);
+      position=[hand[0]-handle*Math.sin(ry),hand[1]+handle*c*Math.sin(rx),hand[2]-handle*c*Math.cos(rx)];
+      // Sit the lower surface of the driving pad against the wrap. The
+      // handle itself stays below this point as it rolls into the strike.
+      const sz=Math.sin(rotation[2]),cz=Math.cos(rotation[2]),sx=Math.sin(rx),cx=Math.cos(rx),sy=Math.sin(ry);
+      const grip=[hand[0]-.024*c*sz,hand[1]+.024*(cx*cz-sx*sy*sz),hand[2]+.024*(sx*cz+cx*sy*sz)];
+      holds=[grip,[JOINT.braceX,workTop,JOINT.braceZ]];
+      twist=(-.085*swing+.038*(1-lift)*ready)*(1-park);
+      const strike=ease((u-.56)/.26)*(1-ease((u-.87)/.13))*ready*(1-park);
+      const follow=ease((u-.81)/.08)*(1-ease((u-.89)/.11))*ready*(1-park);
+      palms=[{normal:[0,Math.cos(rx),Math.sin(rx)],curl:[.57*swing-.68*strike,.21*swing,.15*follow],
+        pressure:.29+.31*swing+.56*strike},{normal:[0,1,0],curl:[0,0,0],pressure:.64+.18*strike}];
+      weightShift=[-.059*swing+.032*follow,.012*ready-.025*swing+.055*follow];
+      grasp*=1-ease((q-.94)/.06);
+      effort=.50*lift;if(phase>0 && u>=.82 && u<=1 && q<=.82)cue='knock-'+number;
     }
-    const hands=holds.map((h,i)=>blend(free[i],h,grasp));
+    const brace=cut.tool==='mallet'?ease((q-.008)/.114)*(1-ease((q-.955)/.045)):grasp;
+    const handWork=[grasp,brace],gripFace=stance.faces;
+    const socketTurn=stance.turns.map((turn,i)=>handWork[i]*turn);
+    const free=socketTurn.map((angle,i)=>{
+      const [x,y,z]=restWorkGrip(player.mode,i,size,angle,gripFace?.[i]);
+      return [stance.x-x,y,stance.z-z];
+    });
+    const hands=holds.map((target,i)=>blend(free[i],target,handWork[i]));
+    if(cut.tool==='mallet'){
+      hands[0][1]+=.15*Math.sin(pi*grasp);
+      hands[1][1]+=.10*Math.sin(pi*brace);
+    }
+    palms=palms.map((p,i)=>handWork[i]?p:null);
+    weightShift=weightShift.map(n=>n*grasp);
     const cutOpacity=Math.max(index>0?1-ease((t-.065)/.185):0,
       index<cuts.length-1?ease((t-cut.duration+.24)/.175):0);
-    return {hero,heading,feet,hands,restHands:free,handWork:[grasp,grasp],time,index,supportHeight:(x,z)=>workSurface(cut,x,z,position,fall),label:cut.label,tool:cut.tool,t,workTop,position,rotation,cutOpacity,cue,
-      focus:[0,workTop,0],lean:.018+grasp*(.034+.032*effort),lift:-.014*grasp,effort:grasp*(.29+.25*effort),
+    return {hero,heading,feet,hands,planeReach,restHands:free,socketTurn,handWork,gripFace,time,index,twist,palms,weightShift,label:cut.label,tool:cut.tool,t,workTop,position,rotation,cutOpacity,cue,
+      focus:[position[0],workTop,cut.tool==='saw'?0:position[2]],lean:.018+grasp*(.034+.032*effort),lift:-.014*grasp,effort:grasp*(.29+.25*effort),
       phase:q>.94?'finish':'craft',grasp,fall,shave,shed,pin,progress:phase};
   }
   return {cuts,duration,height,sample};

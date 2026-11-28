@@ -1,3 +1,4 @@
+import { COOKING_MAT, DANGO_STALL, WORKTOPS, marketCooktop, worktopPoint } from './living-layout.js';
 import { timberBatchMask,recordTreeSpan } from './timber-batches.js';
 import { createHomesteadWorld } from './homestead-world.js';
 import { dressRiceBeds } from './rice-field-beds.js';
@@ -133,24 +134,38 @@ function grain() {
   );
 }
 // Both road materials pull their surface toward the camera for intersections.
-// Cut their pigment precisely at the dressed stone, even in a grazing view.
+// Leave the dressed stone and the woven kitchen mats visible at grazing angles.
 const masonryFootprints=[
   ...GATE_PAVING.map(b=>new THREE.Vector4(RASHOMON.x+b.x,RASHOMON.z+b.z,b.w/2,b.d/2)),
   ...MAPLE_FOOTINGS.thresholds.map(s=>new THREE.Vector4(s.x,s.z,s.w/2,s.d/2)),
 ];
-function reserveMasonry(original) {
+const matHalf=new THREE.Vector2((COOKING_MAT.right-COOKING_MAT.left)/2,(COOKING_MAT.front-COOKING_MAT.back)/2);
+const kitchenMats=[...Object.values(WORKTOPS),marketCooktop(DANGO_STALL)].map(kitchen=>{
+  const center=worktopPoint(kitchen,COOKING_MAT.left+matHalf.x,COOKING_MAT.back+matHalf.y);
+  return new THREE.Vector4(center.x,center.z,Math.cos(kitchen.yaw),Math.sin(kitchen.yaw));
+});
+function reserveGroundCover(original) {
   const material=original.clone(),compile=original.onBeforeCompile,previousKey=original.customProgramCacheKey();
-  material.customProgramCacheKey=()=>previousKey+'-paved-entrances';
+  material.customProgramCacheKey=()=>previousKey+'-stone-and-mats';
   material.onBeforeCompile=function(shader,renderer){
     compile.call(this,shader,renderer);
     shader.uniforms.pavedEntrances={value:masonryFootprints};
+    shader.uniforms.kitchenMats={value:kitchenMats};
+    shader.uniforms.matHalf={value:matHalf};
     shader.vertexShader='varying vec2 roadPosition;\n'+shader.vertexShader.replace('#include <begin_vertex>',
       '#include <begin_vertex>\n roadPosition=position.xz;');
-    shader.fragmentShader=`varying vec2 roadPosition; uniform vec4 pavedEntrances[${masonryFootprints.length}];\n`+
+    shader.fragmentShader=`varying vec2 roadPosition; uniform vec4 pavedEntrances[${masonryFootprints.length}];
+      uniform vec4 kitchenMats[${kitchenMats.length}]; uniform vec2 matHalf;\n`+
       shader.fragmentShader.replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>
         for(int k=0;k<${masonryFootprints.length};k++){
           vec4 box=pavedEntrances[k];
           if(all(lessThanEqual(abs(roadPosition-box.xy),box.zw)))discard;
+        }
+        for(int k=0;k<${kitchenMats.length};k++){
+          vec4 mat=kitchenMats[k];
+          vec2 d=roadPosition-mat.xy;
+          vec2 local=vec2(dot(d,vec2(mat.z,-mat.w)),dot(d,mat.wz));
+          if(all(lessThanEqual(abs(local),matHalf)))discard;
         }`);
   };
   return material;
@@ -158,7 +173,7 @@ function reserveMasonry(original) {
 function buildRoads(scene, art) {
   const kaedePaths=[];
   const material = trailMaterial(art), paving=kyoPavingMaterial(art.rock), climate={};
-  const approach=reserveMasonry(material),avenue=reserveMasonry(paving);
+  const approach=reserveGroundCover(material),avenue=reserveGroundCover(paving);
   for (const road of [...ROADS,...TEA_FOOTPATHS]) {
     const p=[], uv=[], ix=[], snow=[];
     const end=road.points.at(-1);
@@ -187,7 +202,12 @@ function buildRoads(scene, art) {
     geo.setAttribute('snowAmount',new THREE.Float32BufferAttribute(snow,1));
     const atEntrance=road.points.some(([x,z])=>abs(x-RASHOMON.x)<25 && abs(z-RASHOMON.z)<22 ||
       MAPLE_FOOTINGS.thresholds.some(s=>abs(x-s.x)<4 && abs(z-s.z)<4));
-    const mesh=new THREE.Mesh(geo,road.paved?(atEntrance?avenue:paving):(atEntrance?approach:material));
+    geo.computeBoundingBox();
+    const bounds=geo.boundingBox,reach=matHalf.length();
+    const overMat=kitchenMats.some(m=>m.x+reach>=bounds.min.x && m.x-reach<=bounds.max.x &&
+      m.y+reach>=bounds.min.z && m.y-reach<=bounds.max.z);
+    const reserved=atEntrance || overMat;
+    const mesh=new THREE.Mesh(geo,road.paved?(reserved?avenue:paving):(reserved?approach:material));
     mesh.receiveShadow=true;mesh.renderOrder=road.paved?2:1;scene.add(mesh);
     if(road.points.some(([x,z])=>(x-285)**2+(z+115)**2<60**2))kaedePaths.push(mesh);
   }

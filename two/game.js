@@ -2,7 +2,7 @@ import { settleMarket } from './living-market.js';
 import { reachableTimberTree, regrowTimber, nearBuildStructure, withBuildTerrain, validBuildLand } from './living-build.js';
 import { createLivingWorld, readLivingWorld, JOURNEY_VERSION } from './living-save.js';
 import { SKIFFS, skiffPose, skiffDeck, skiffApproaches } from './skiff-travel.js';
-import { LIVING_SITES, nearLivingSite } from './living-sites.js';
+import { LIVING_SITES, livingSiteDistance } from './living-sites.js';
 import { deliveryReward, gatherResource } from './living-resources.js';
 import { createStoryCollisions } from './story-collisions.js';
 import { createNotebook } from './mochiyori-progress.js';
@@ -520,8 +520,8 @@ function openGame(snapshot) {
       }
     }
     for (const site of LIVING_SITES) {
-      if (!nearLivingSite(player,site)) continue;
-      const distance=gap(site);
+      const distance=livingSiteDistance(player,site);
+      if (!Number.isFinite(distance)) continue;
       if (!best || distance<best.distance) {
         const remaining = (state.livingWorld.nodeReadyAt[site.id] || 0) - Math.floor(player.worldMinute);
         const label = remaining > 0 ? site.name + '（あと' + remaining + '分）' : site.label;

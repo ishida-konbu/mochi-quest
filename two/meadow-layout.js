@@ -1,6 +1,6 @@
 import { fireTrailDistance, inFireMeadow } from './higashiyama.js';
 import { POUNDING } from './festival.js';
-import { HERB_PATCH, WORKTOPS, RICE_BASKET, RICE_SHOP } from './living-layout.js';
+import { benchFrame, HERB_PATCH, WORKTOPS, RICE_BASKET, RICE_SHOP, COOKING_MAT, marketCooktop, worktopPoint } from './living-layout.js';
 import { inMountainStreamClearing } from './mountain-streams.js';
 import { WAYSIDE_SITES,inHutYard,onTeaFootpath } from './wayside-hut-layout.js';
 import { SEAPORTS,portReserved } from './seaport-layout.js';
@@ -98,7 +98,16 @@ export function meadowExclusions(objects,residents=[]) {
     circle(foot.x,foot.z,foot.radius+.35);
   }
   for (const [x,z] of MARKET_STALLS) circle(x,z,3.1);
-  for (const table of Object.values(WORKTOPS)) circle(table.x,table.z,2.35);
+  // Keep shoots and overhanging seed heads off the ground kitchen and its aisle.
+  const mat=COOKING_MAT;
+  for(const table of [...Object.values(WORKTOPS),marketCooktop(MARKET_STALLS[4])]){
+    const bench=benchFrame(table);
+    circle(bench.x,bench.z,2.35);
+    const c=worktopPoint(table,(mat.left+mat.right)/2,(mat.back+mat.front)/2);
+    const rx=(mat.right-mat.left)/2+.65,rz=(mat.front-mat.back)/2+.65;
+    const co=cos(table.yaw),si=sin(table.yaw);
+    add(c.x,c.z,hypot(rx,rz),(x,z)=>abs((x-c.x)*co-(z-c.z)*si)<rx && abs((x-c.x)*si+(z-c.z)*co)<rz);
+  }
   for (const point of [HERB_PATCH,RICE_BASKET,RICE_SHOP]) circle(point.x,point.z,1.35);
   for (const b of ROCKS) circle(b.x,b.z,Math.max(b.rx,b.rz));
   for (const o of objects) circle(o.x,o.z,o.type==='onsen'?4.8:o.type==='port'?3.0:1.85);

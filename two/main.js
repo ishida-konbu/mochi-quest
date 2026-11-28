@@ -292,9 +292,7 @@ function dispatchEvents() {
     if(e.type==='chop' && !chopping.active){
       clearInput();
       if(chopping.start(e.tree)){
-        const stem=e.tree.stem??e.tree;
-        const axis=Math.atan2(wrapDelta(p.x-stem.x),wrapDelta(p.z-stem.z));
-        chopOrbit=chopCameraArc(yaw,axis,chopCameraClearance);
+        chopOrbit=chopCameraArc(yaw,chopping.bearing,chopCameraClearance);
         watchCut=true;
       }
     }

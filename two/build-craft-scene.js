@@ -78,16 +78,16 @@ export function makeCraftScene(scene,camera,player,site,canStand=()=>true,take=0
     view:camera.view?.enabled?{...camera.view}:null,nearFocus:camera.userData.joineryFaceDistance};
   const field=findWorkBench(site,player,canStand),size=player.buffs?.full>0?1.28:1;
   const group=new Group();group.name='配達人の普請場';
+  const face=new Vector3();
   const siteFrame=makeJoinerySite(group,site),seed=craftShotSeed(site,take);
-  let bench,motion,bays=[],performer,detail,closed=false,lenses=[],activeIndex=-1;
-  function applyLens(index){
-    if(!lenses[index])return;
-    const lens=lenses[index];
+  let bench,motion,bays=[],performer,detail,closed=false,lenses=[],activeIndex=-1,activeLens=null;
+  function applyLens(index,lens=lenses[index]){
+    if(!lens || lens===activeLens)return;
     siteFrame.advance(index,motion.cuts.length);
     camera.position.copy(lens.eye);camera.lookAt(lens.focus);camera.fov=lens.fov;
     camera.userData.joineryFaceDistance=lens.faceDistance;
     camera.setViewOffset(lens.width,lens.height,0,lens.offset,lens.width,lens.height);
-    camera.updateMatrixWorld();activeIndex=index;
+    camera.updateMatrixWorld();activeIndex=index;activeLens=lens;
   }
   function planLenses(w,h,available){
     const order=craftShotOrder(seed,motion.cuts.length),choices=[];
@@ -97,17 +97,21 @@ export function makeCraftScene(scene,camera,player,site,canStand=()=>true,take=0
     for(const [i,desired] of order.entries()){
       siteFrame.advance(i,order.length);
       const stage=siteFrame.extents(),previous=choices.at(-1)?.style;
-      const alternatives=[desired,'eye','master','low','wide','face'].filter(k=>k!==previous);
+      const tool=motion.cuts[i].tool,planing=tool==='plane';
+      const candidates=planing?['master','eye']: [desired,'eye','master','low','wide','face'];
+      const alternatives=candidates.filter(k=>k!==previous);
       let lens=null;
-      for(const style of new Set([...alternatives,previous].filter(Boolean))){
-        // Look past the bracing palm for the low/eye hammer shots; the
-        // working sleeve and raised mallet otherwise pass across both eyes.
-        const tool=motion.cuts[i].tool;
-        const gripSide=tool==='mallet'?(style==='low'?1:-1):side;
+      for(const style of new Set([...alternatives,...candidates])){
+        // The working hand and the stock are on the right wing of the bench.
+        const gripSide=(tool==='mallet' || tool==='plane')?1:side;
         lens=composeCraftLens(style,bench,size,w,h,available,gripSide,sight,stage,tool,player.mode==='kagami');
         if(lens)break;
       }
       if(!lens)return null;
+      // Establish the workbench before cutting to both pads and their tools.
+      // For the plane, stay wide until the first shaving is finished.
+      lens.insert=composeCraftLens('hands',bench,size,w,h,available,tool==='mallet'?-1:1,
+        sight,stage,tool,player.mode==='kagami');
       choices.push(lens);
     }
     return choices;
@@ -151,10 +155,15 @@ export function makeCraftScene(scene,camera,player,site,canStand=()=>true,take=0
     },
     update(t){
       const f=motion.sample(t);
-      if(f.index!==activeIndex)applyLens(f.index);
+      const main=lenses[f.index];
+      const cutToHands=motion.cuts[f.index].duration*(f.tool==='plane'?.54:.17);
+      applyLens(f.index,main?.insert && f.t>=cutToHands?main.insert:main);
       for(let i=0;i<bays.length;i++)bays[i].group.visible=i===f.index;
       bays[f.index].update(f);performer.update(f);
-      return {...f,shotStyle:lenses[f.index]?.style};
+      if(activeLens?.style==='face'){
+        camera.userData.joineryFaceDistance=-camera.worldToLocal(performer.facePoint(face)).z;
+      }
+      return {...f,shotStyle:activeLens?.style};
     },dispose,
   };
 }

@@ -1,188 +1,155 @@
-// A pulled mitt is one rounded lobe of dough. Carry the same skin all the
-// way from the walking pose to the tool, without an elbow or a separate grip.
-import {Mesh,Matrix3,Matrix4,Quaternion,Vector3} from './vendor/three.module.min.js';
-import {separateMitts} from './dough-surface.js';
+import {Euler,MathUtils,Matrix4,Object3D,Quaternion,Vector3} from './vendor/three.module.min.js';
+import {workingHandSkin} from './working-hand-skin.js';
 
-const smooth=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
-function mittMaterial(original){
-  const mat=original.clone();
-  mat.onBeforeCompile=(shader,renderer)=>{
-    original.onBeforeCompile(shader,renderer);
-    shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nattribute vec3 doughRest; attribute vec3 doughGrain;')
-      .replaceAll('vRiceRest=position;', 'vRiceRest=doughRest;').replaceAll('vRiceNormal=normal;', 'vRiceNormal=doughGrain;')
-      .replaceAll('finishPosition=position;', 'finishPosition=doughRest;').replaceAll('finishNormal=normal;', 'finishNormal=doughGrain;');
-  };
-  mat.customProgramCacheKey=()=>original.customProgramCacheKey()+'/pulled-rice';
-  return mat;
-}
-function pullMitt(hero,patch,side,materials){
-  const body=hero.rice.body,root=hero.root;
-  const {nodes,perimeter,inside,geometry,tip,samples,faces}=patch;
-  const mesh=new Mesh(geometry,body.material);mesh.name=side<0?'右の餅の手':'左の餅の手';mesh.castShadow=true;mesh.frustumCulled=false;
-  root.add(mesh);
-  const basis=new Matrix4(),skinNormal=new Matrix3(),skinMatrix=new Matrix4();
-  const skinMatrices=body.skeleton.bones.map(()=>new Matrix4());
-  const {skinIndex,skinWeight,normal:restNormal}=body.geometry.attributes;
-  const centre=new Vector3(),axis=new Vector3(),out=new Vector3(),end=new Vector3(),bindTip=new Vector3();
-  const radialX=new Vector3(),radialY=new Vector3(),lead=new Vector3(),tail=new Vector3(),inertial=new Vector3(),oldEnd=new Vector3(),lag=new Vector3();
-  const a=new Vector3(),b=new Vector3(),c=new Vector3(),d=new Vector3(),arc=new Quaternion();
-  const segments=32,spine=Array.from({length:segments+1},()=>({p:new Vector3(),q:new Quaternion()}));
-  let previousTime,previousBeat;
-  function nativeNormal(p,n){
-    skinMatrix.elements.fill(0);
-    for(let k=0;k<4;k++){
-      const w=skinWeight.getComponent(p.id,k);
-      if(w===0)continue;
-      const m=skinMatrices[skinIndex.getComponent(p.id,k)].elements;
-      for(let j=0;j<16;j++)skinMatrix.elements[j]+=w*m[j];
-    }
-    skinMatrix.premultiply(body.bindMatrixInverse).multiply(body.bindMatrix);
-    return n.fromBufferAttribute(restNormal,p.id).transformDirection(skinMatrix).applyNormalMatrix(skinNormal);
+// The contact is an actual painted vertex on the front of the artist's mitt.
+// Keep it on the original skin for the normal cake and the short kagami tier.
+function palmVertex(body,hand,plane=false){
+  const {position,skinIndex,skinWeight}=body.geometry.attributes;
+  const joint=body.skeleton.bones.indexOf(hand),side=hand.name==='Hand_R'?-1:1;
+  const mark=plane?new Vector3(side*1.010,.594,.739):new Vector3(side*1.09,.72,.73);
+  const p=new Vector3();
+  let best=Infinity,vertex;
+  for(let i=0;i<position.count;i++){
+    if(skinIndex.getX(i)!==joint || skinWeight.getX(i)<.72)continue;
+    const d=p.fromBufferAttribute(position,i).distanceToSquared(mark);
+    if(d<best){best=d;vertex=i;}
   }
-  function update(target,scale,time,beat,surface,rest,work=1){
-    if(!materials.has(body.material))materials.set(body.material,mittMaterial(body.material));
-    mesh.material=materials.get(body.material);
-    basis.copy(root.matrixWorld).invert().multiply(body.matrixWorld);
-    skinNormal.getNormalMatrix(basis);
-    for(const [i,m] of skinMatrices.entries())m.multiplyMatrices(body.skeleton.bones[i].matrixWorld,body.skeleton.boneInverses[i]);
-    centre.set(0,0,0);axis.set(0,0,0);
-    for(const p of perimeter){
-      body.getVertexPosition(p.id,p.point).applyMatrix4(basis);centre.add(p.point);
-      // Match the skinned cheek's shading at every shared boundary vertex.
-      nativeNormal(p,p.normal);
-      axis.add(p.normal);
-    }
-    centre.divideScalar(perimeter.length);axis.normalize();
-    body.getVertexPosition(tip.id,bindTip).applyMatrix4(basis);
-    // The free hand is the little mitt already modelled on the travelling
-    // body. Only the held share of a sampled reach belongs to the tool.
-    // Follow the outside of the cheek when reaching across the face.
-    if(work===0)end.copy(bindTip);
-    else {
-      end.copy(target);
-      if(work<1){
-        end.addScaledVector(a.subVectors(bindTip,rest),1-work);
-        const inward=Math.max(0,-a.subVectors(end,bindTip).dot(axis));
-        const clearance=Math.min(.27*work*scale,inward+.11*work*scale);
-        end.addScaledVector(axis,clearance*4*(1-work));
-        if(!surface)end.y+=.19*scale*4*work*(1-work);
-      }
-    }
-    const shift=end.distanceTo(bindTip)/scale,extend=smooth(.008,.22,shift);
-    const reach=centre.distanceTo(end),dt=time-previousTime;
-    const bend=smooth(.23,.85,shift);
-    if(previousTime===undefined || dt<0 || dt>.18 || previousBeat!==beat || oldEnd.distanceTo(end)>.65*scale)inertial.copy(end);
-    else inertial.lerp(end,-Math.expm1(-dt/.10));
-    oldEnd.copy(end);previousTime=time;previousBeat=beat;
-    lag.subVectors(inertial,end).clampLength(0,.085*scale);
-    // Follow the round cheek as the mitt turns forward. An outward tangent
-    // at its root leaves room for the skin to turn without doubling back.
-    lead.copy(centre).addScaledVector(axis,Math.min(.32*scale,.10*scale+.25*reach));
-    lead.z+=Math.min(.18*scale,reach*.13);
-    tail.lerpVectors(lead,end,.62);
-    tail.z+=.04*scale; tail.y-=Math.min(.055*scale,reach*.035);
-    if(surface){
-      // Carry the weight over the board. Approach the grip from above so
-      // the rounded end comes to rest on the timber before the belly does.
-      lead.y+=.075*scale*extend;
-      tail.x+=(end.x-tail.x)*.23*extend;
-      tail.z+=(end.z-tail.z)*.23*extend;
-      tail.y+=.065*scale*extend;
-      tail.y=Math.max(tail.y,end.y+.13*scale*extend);
-    }
-    let rimRadius=0;
-    radialX.set(0,0,0);radialY.set(0,0,0);
-    for(const p of perimeter){
-      a.subVectors(p.point,centre);a.addScaledVector(axis,-a.dot(axis));
-      rimRadius+=a.length();radialX.addScaledVector(a,p.cos);radialY.addScaledVector(a,p.sin);
-    }
-    rimRadius/=perimeter.length;
-    radialX.normalize();
-    radialY.addScaledVector(radialX,-radialX.dot(radialY)).normalize();
-    const restDepth=centre.distanceTo(bindTip);
-    const tipHeight=a.subVectors(bindTip,centre).dot(axis);
-    // The wide collar is cheek, not the girth of the hand. Estimate the
-    // rice available in the original nub and allow a little more to flow
-    // from the cheek. Drawing it further reduces its section continuously.
-    const drawn=Math.max(.090*scale,.80*restDepth*Math.sqrt((restDepth+.30*scale)/Math.max(.01,reach)));
-    const thin=1-Math.min(.80,drawn/rimRadius);
-    for(let k=0;k<=segments;k++){
-      const f=k/segments,u=1-f,s=spine[k];
-      s.p.copy(centre).multiplyScalar(u*u*u).addScaledVector(lead,3*f*u*u).addScaledVector(tail,3*f*f*u).addScaledVector(end,f*f*f)
-        .addScaledVector(lag,Math.sin(f*Math.PI)**2);
-      // A short pull is a shallow dome with parallel sections. Bending the
-      // whole width of a cheek at this length would fold its underside.
-      if(bend<1)s.p.lerp(a.lerpVectors(centre,end,f**1.65),1-bend);
-    }
-    for(let k=0;k<=segments;k++){
-      out.subVectors(spine[Math.min(segments,k+1)].p,spine[Math.max(0,k-1)].p).normalize();
-      out.lerp(axis,1-bend*smooth(0,.30,k/segments)).normalize();
-      spine[k].q.setFromUnitVectors(axis,out);
-    }
-    for(const p of nodes){
-      if(p.rim)p.native.copy(p.point);
-      else if(p.from)p.native.lerpVectors(p.from.native,p.to.native,.5);
-      else body.getVertexPosition(p.id,p.native).applyMatrix4(basis);
-    }
-    for(const p of inside){
-      if(p===tip){p.point.copy(end);continue;}
-      const f=1-p.r*p.r,k=Math.min(segments-1,Math.floor(f*segments)),g=f*segments-k;
-      const l=spine[k],r=spine[k+1];
-      b.copy(radialX).multiplyScalar(p.cos).addScaledVector(radialY,p.sin);
-      // Evaluate the round cap at every native vertex. Interpolating a
-      // square-root radius down to zero would turn its centre into a cone.
-      const u=p.r*p.r,cap=1-Math.min(1,u*reach/Math.max(.001,rimRadius*(1-thin)));
-      const longRadius=(1-thin*(1-u*u*u*u))*Math.sqrt(1-cap*cap);
-      const radius=rimRadius*((1-bend)*p.r+bend*longRadius);
-      arc.copy(l.q).slerp(r.q,g);b.applyQuaternion(arc).multiplyScalar(radius);
-      p.point.lerpVectors(l.p,r.p,g).add(b);
-      const polish=extend*smooth(.08,.63,f);
-      if(polish<1){
-        // Retain the moulded cheek around the attachment. The working
-        // surface leaves its original triangles gradually towards the centre.
-        c.copy(p.native);
-        const height=a.subVectors(p.native,centre).dot(axis)/tipHeight;
-        const carry=smooth(.10,.98,height)*smooth(0,.3,f);
-        c.addScaledVector(d.subVectors(end,bindTip),carry*(1-extend)/(1-polish));
-        p.point.lerp(c,1-polish);
-      }
-    }
-    if(surface && work>0){
-      // A soft pad compresses as it bears on the stock. The continuous
-      // response retains the ordering of the skin, even right at contact.
-      const cushion=.032*scale;
-      for(const p of inside){
-        if(p===tip)continue;
-        const q=p.point,floor=surface(q.x,q.z),gap=q.y-floor;
-        if(gap<cushion)q.y=floor+cushion*Math.exp((gap-cushion)/cushion);
-      }
-    }
-    for(const p of inside)p.normal.set(0,0,0);
-    for(let i=0;i<faces.length;i+=3){
-      const p=nodes[faces[i]],q=nodes[faces[i+1]],r=nodes[faces[i+2]];
-      a.subVectors(q.point,p.point).cross(b.subVectors(r.point,p.point));
-      if(!p.rim)p.normal.add(a);if(!q.rim)q.normal.add(a);if(!r.rim)r.normal.add(a);
-    }
-    const nativeLight=1-smooth(0,.16,shift);
-    for(const p of inside){
-      p.normal.normalize();
-      if(nativeLight>0){
-        p.nativeLight??=new Vector3();
-        if(p.from)p.nativeLight.lerpVectors(p.from.nativeLight??p.from.normal,p.to.nativeLight??p.to.normal,.5).normalize();
-        else nativeNormal(p,p.nativeLight);
-        p.normal.lerp(p.nativeLight,nativeLight).normalize();
-      }
-    }
-    const {position,normal}=geometry.attributes;
-    for(let i=0;i<samples.length;i++){
-      const p=nodes[samples[i]],v=p.point,n=p.normal;
-      position.setXYZ(i,v.x,v.y,v.z);normal.setXYZ(i,n.x,n.y,n.z);
-    }
-    position.needsUpdate=normal.needsUpdate=true;
-  }
-  return {update,mesh,patch};
+  return vertex;
 }
-export function makeCookingArms(hero){
-  const patches=separateMitts(hero.rice.body,hero.rice.hands),materials=new Map();
-  return patches.map((patch,i)=>pullMitt(hero,patch,i?1:-1,materials));
+
+export function makeCookingArms({root,pose,rice}){
+  const {body}=rice;
+  const working=workingHandSkin(body);
+  const result=rice.hands.map((hand,i)=>{
+    const travelVertex=palmVertex(body,hand),planeVertex=palmVertex(body,hand,true);
+    const sign=i?1:-1;
+    // Mark the inside of the painted pad as well as the ordinary forward
+    // contact. When cupping a piece, these points meet across the food.
+    const {position,normal,skinIndex,skinWeight}=working.attributes;
+    const p=new Vector3(),n=new Vector3();
+    const joint=body.skeleton.bones.indexOf(hand);
+    const socket=new Object3D();socket.name=hand.name.replace('Hand','Shoulder');
+    const collar=working.userData.wristCollars[i];
+    const socketRest=new Vector3(),socketArch=new Vector3();
+    const arch=working.morphAttributes.position.find(shape=>shape.name==='kagamiShoulder');
+    for(const id of collar){
+      socketRest.add(p.fromBufferAttribute(position,id));
+      socketArch.add(p.fromBufferAttribute(arch,id));
+    }
+    socketRest.divideScalar(collar.length);socketArch.divideScalar(collar.length);
+    hand.add(socket);
+    let inside=travelVertex,bottom=travelVertex,underside=travelVertex,score=-Infinity,underScore=-Infinity;
+    const padVertices=new Set();
+    const tangent=new Vector3(-sign*Math.cos(1.065),0,Math.sin(1.065));
+    for(const id of working.index.array.subarray(working.userData.torsoIndexCount)){
+      if(id>=body.geometry.attributes.position.count || skinIndex.getX(id)!==joint || skinWeight.getX(id)!==1)continue;
+      padVertices.add(id);
+      p.fromBufferAttribute(position,id);n.fromBufferAttribute(normal,id);
+      const d=p.dot(tangent)+.10*n.dot(tangent)-1.2*(p.y-.73)**2;
+      if(d>score){score=d;inside=id;}
+      if(p.y<position.getY(bottom))bottom=id;
+      const under=.65*p.dot(tangent)-p.y;
+      if(under>underScore){underScore=under;underside=id;}
+    }
+    let vertex=travelVertex;
+    const marks={inside,bottom,underside};
+    let faced=false,hooked=false;
+    const actual=new Vector3(),delta=new Vector3(),origin=new Vector3(),end=new Vector3(),angles=new Euler();
+    const toActor=new Matrix4(),unlean=new Matrix4(),turn=new Matrix4(),local=new Matrix4();
+    const bindToHand=new Matrix4().multiplyMatrices(body.skeleton.boneInverses[joint],body.bindMatrix);
+    const handToBind=bindToHand.clone().invert(),orthogonal=new Quaternion(),scale=new Vector3();
+    const bind=new Vector3().setFromMatrixPosition(body.skeleton.boneInverses[joint].clone().invert());
+    function turnSocket(angle,planing,face,tuck=0){
+      socket.position.copy(socketRest).addScaledVector(socketArch,Number(rice.kagami?.stack.visible===true)).applyMatrix4(bindToHand);
+      hooked=face==='tangent';
+      faced=face==='bottom' || face==='underside' || hooked;
+      vertex=planing?planeVertex:marks[face]??travelVertex;
+      // The travelling cake is slightly wider across than from front to
+      // back. Slide the intact patch along that ellipse, including its root.
+      const a=-sign*MathUtils.clamp(angle,0,.95),c=Math.cos(a),s=Math.sin(a);
+      const x=bind.x*c+bind.z*s,z=bind.z*c-bind.x*s;
+      const moved=Math.atan2(sign*x,z),home=Math.atan2(sign*bind.x,bind.z);
+      const dr=.13*(Math.sin(moved)**2-Math.sin(home)**2);
+      const f=1+dr/Math.hypot(x,z);
+      hand.position.x+=x*f-bind.x;hand.position.z+=z*f-bind.z;
+      hand.rotateY(a);
+      // Rest the spare mitt against the upper flank while the other hand
+      // reaches across hot cookware. The whole shoulder carries the mitt.
+      hand.position.y+=.34*tuck;
+      hand.position.x-=sign*.07*tuck;
+      hand.position.z-=.21*tuck;
+    }
+    function read(space,out){
+      return space.worldToLocal(body.localToWorld(body.getVertexPosition(vertex,out)));
+    }
+    function orient(amount,size,curl,wristRoll,contactNormal){
+      // Roll the intact pad around its contact point in actor space. This
+      // keeps even a flattened kagami mitt rigid as it turns on the handle.
+      const space=hand.parent;
+      toActor.copy(root.matrixWorld).invert().multiply(space.matrixWorld);
+      const pitch=(faced?0:MathUtils.clamp(curl?.z??0,-1,1)*.14)+(wristRoll??0);
+      const cant=faced?0:MathUtils.clamp(-(curl?.x??0),-1,1)*.10;
+      turn.makeRotationFromEuler(angles.set(pitch*amount,0,cant*amount));
+      if(faced || wristRoll!==undefined){
+        unlean.makeRotationFromQuaternion(pose.quaternion).transpose();
+        turn.multiply(unlean);
+      }
+      // Remove any incidental shear from breathing, or from a wrist
+      // turning under the anisotropic scale of the upper kagami cake.
+      // Reapply that costume's fixed dimensions in the mitt's own frame.
+      local.copy(toActor).multiply(hand.matrix).multiply(bindToHand);
+      orthogonal.setFromRotationMatrix(unlean.extractRotation(local)).normalize();
+      local.makeRotationFromQuaternion(orthogonal).scale(scale.copy(rice.model.scale).multiplyScalar(size));
+      turn.multiply(local).multiply(handToBind);
+      hand.matrixAutoUpdate=false;
+      hand.matrix.copy(local.copy(toActor).invert().multiply(turn)).setPosition(hand.position);
+      hand.updateWorldMatrix(false,false);
+      if(hooked && contactNormal){
+        // Find the tangent point on the painted mitt as the wrist rolls
+        // around the grip. The whole pad stays on its side of the wood.
+        const plane=n.copy(contactNormal).negate().transformDirection(
+          local.copy(toActor).multiply(hand.matrix).multiply(bindToHand).transpose());
+        let highest=-Infinity;
+        for(const id of padVertices){
+          const height=p.fromBufferAttribute(position,id).dot(plane);
+          if(height>highest){highest=height;vertex=id;}
+        }
+        read(root,actual);
+      }
+    }
+    const beforeGrip=new Matrix4();
+    function preview(root,out,work,size,palm,yaw){
+      if(!hooked || !palm)return read(root,out);
+      // Aim the shoulder at the same point on the turned mitt that will
+      // take the weight. Restore the bone before applying the torso bend.
+      const [x,y,z]=palm.normal,c=Math.cos(yaw),s=Math.sin(yaw);
+      beforeGrip.copy(hand.matrix);hand.matrixAutoUpdate=false;
+      orient(work,size,null,palm.wristRoll,n.set(x*c-z*s,y,x*s+z*c));
+      read(root,out);
+      hand.matrix.copy(beforeGrip);hand.matrixAutoUpdate=true;hand.updateWorldMatrix(false,false);
+      return out;
+    }
+    function reach(target,work,size,curl,wristRoll,contactNormal){
+      const amount=Math.max(0,Math.min(1,work));
+      read(root,actual);
+      orient(amount,size,curl,wristRoll,contactNormal);
+      // Translate the socket, not its tip. A loose prop can follow a
+      // modest residual reach; fixed work must be staged at arm's length.
+      delta.subVectors(target,actual).clampLength(0,.185*size*rice.model.scale.x/.708).multiplyScalar(amount);
+      read(root,origin);
+      end.copy(actual).add(delta);
+      hand.parent.worldToLocal(root.localToWorld(end));
+      hand.parent.worldToLocal(root.localToWorld(origin));
+      hand.matrix.setPosition(end.sub(origin).add(hand.position));
+      hand.updateWorldMatrix(false,false);
+    }
+    return {get vertex(){return vertex;},turnSocket,read,preview,reach};
+  });
+  body.geometry=working;
+  const first=body.morphTargetInfluences.length;
+  for(let i=first;i<working.morphAttributes.position.length;i++){
+    body.morphTargetDictionary[working.morphAttributes.position[i].name]=i;
+    body.morphTargetInfluences.push(0);
+  }
+  return result;
 }

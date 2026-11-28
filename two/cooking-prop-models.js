@@ -1,4 +1,4 @@
-import { MALLET_HANDLE_END } from './living-layout.js';
+import { MALLET_HANDLE_END, LID_SEAT, STEAMER_HANDLE } from './living-layout.js';
 // Cooking implements are measured at their contact surfaces. One atlas and
 // one mesh per moving implement keep the seams and patina attached to it.
 import * as T from './vendor/three.module.min.js';
@@ -71,27 +71,57 @@ export function makeMallet() {
       [.067,.145],[.061,.159]],origin,'#c8a16e','wood',rotation,52);
     turn(f,[[.061,.159],[.048,.163],[.001,.165]],origin,'#c4a277','end',rotation,52);
     turn(f,[[.001,-.073],[.025,-.073],[.028,.056],[.030,.097],[.027,.175],
-      [.023,.37],[.024,.51],[.023,.63],[.021,.75],[.024,.86],
-      [.026,.893],[.023,.915],[.001,MALLET_HANDLE_END]],
+      [.023,.37],[.024,.51],[.023,.63],[.021,.72],[.024,.78],
+      [.026,MALLET_HANDLE_END-.02],[.023,MALLET_HANDLE_END-.003],[.001,MALLET_HANDLE_END]],
       [0,-.013,0],'#d5b588','wood',[Math.PI/2,0,0],32);
     f.stroke([[0,-.030,-.066],[.003,-.015,-.075],[-.001,.005,-.070]],
       [.003,.004,.001],'#765844','end',5,8);
   });
 }
 
+// Original rounded strip and peg heads, running along the planks so the
+// narrow timber stands vertically when the lid is parked on its edge.
+export function steamerHandleGeometry(){
+  const profile=[[.001,-.090],[.012,-.089],[.021,-.082],[STEAMER_HANDLE.radius,0],
+    [.019,.080],[.014,.088],[.001,.090]];
+  const g=new T.LatheGeometry(profile.map(([r,h])=>new T.Vector2(r,h)),22);
+  const {position,uv}=g.attributes;
+  for(let i=0;i<position.count;i++){
+    const x=position.getX(i),y=position.getY(i),z=position.getZ(i);
+    uv.setXY(i,.08+.84*(y+.090)/.18,.48+.35*(.78*x+.62*z)/.021);
+  }
+  return g.rotateX(Math.PI/2).translate(0,STEAMER_HANDLE.height,0);
+}
+
 export function makeLid() {
   return implement('蒸籠の板蓋',f=>{
     turn(f,[[.0001,-.014],[.248,-.014],[.260,-.010],[.269,-.007],[.272,-.002],
-      [.272,.011],[.266,.016],[.001,.016]],origin,'#c6a271','wood',origin,44,true);
-    for(const z of [-.132,.0,.132]) {
-      const w=Math.sqrt(.263**2-z*z)-.003;
-      f.stroke([[-w,.0163,z],[-.33*w,.0163,z+.001],[w,.0163,z-.001]],
+      [.272,.011],[.266,.016],[.001,.016]],origin,'#c6a271','wood',[0,Math.PI/2,0],44,true);
+    for(const x of [-.132,0,.132]) {
+      const w=Math.sqrt(.263**2-x*x)-.003;
+      f.stroke([[x,.0163,-w],[x+.001,.0163,-.33*w],[x-.001,.0163,w]],
         [.0008,.0013,.0007],'#91764f','wood',4,6);
     }
-    // The narrow crosspiece is rounded on top where the cook pinches it.
-    turn(f,[[.001,-.090],[.012,-.089],[.021,-.082],[.019,.080],
-      [.014,.088],[.001,.090]],[0,.030,0],'#ad885b','wood',[0,0,-Math.PI/2],22);
-    for(const x of [-.061,.061]) f.oval([x,.049,0],[.005,.0013,.005],'#725a43',origin,'end');
+    const handle=steamerHandleGeometry();
+    f.draw(handle,origin,unit,'#ad885b',origin,'wood');
+    handle.dispose();
+    for(const [z,y] of STEAMER_HANDLE.pegs) f.oval([0,y,z],[.005,.0013,.005],'#725a43',origin,'end');
+  });
+}
+
+export function makeLidRest(){
+  return implement('蓋を受ける竹の二股',f=>{
+    // Two legs and a bent bamboo saddle carry the lower edge. The fore
+    // and aft tines let the lid slide vertically out of the stand.
+    const saddle=x=>LID_SEAT+.272-Math.sqrt(.272**2-x*x);
+    for(const x of [-.105,.105]){
+      f.stroke([[x,0,-.036],[x,LID_SEAT*.56,-.010],[x,saddle(x)-.014,0]],
+        [.014,.012,.010],'#a18a59','wood',8,8);
+      for(const sign of [-1,1])f.stroke([[x,saddle(x)-.014,0],[x,saddle(x)+.05,sign*.042+.009],
+        [x,saddle(x)+.114,sign*.026+.009]],[.009,.008,.005],'#aa935c','wood',7,8);
+    }
+    const x=[-.153,-.105,-.055,0,.055,.105,.153];
+    f.stroke(x.map(v=>[v,saddle(v)-.010,.012]),x.map(()=>.010),'#b59b69','wood',7,12);
   });
 }
 
@@ -104,6 +134,9 @@ export function makeBowl() {
       origin,'#b6bab1','clay');
     turn(f,[[.145,.105],[.153,.107],[.153,.111],[.148,.115],[.144,.113]],
       origin,'#867b63','clay');
+    // Small pinched ears give the round mitts purchase outside the rolled
+    // lip while the contents pour through the open side between them.
+    for(const side of [-1,1])f.oval([side*.141,.106,.075],[.023,.009,.019],'#b6bab1',origin,'clay');
     for (let i=0;i<3;i++) {
       const y=.035+i*.016,r=.103+i*.014;
       turn(f,[[r,y],[r+.0015,y+.001],[r+.001,y+.003]],origin,'#8b978e','clay');
@@ -137,8 +170,9 @@ export function makePaddle() {
 export function makeBoard() {
   return implement('俎板',f=>{
     // Parallel-grain face with clipped corners, separate sawn ends and knife traces.
-    const hw=.226,hd=.165,b=.009, corners=[
-      [-hw+b,-hd],[hw-b,-hd],[hw,-hd+b],[hw,hd-b],[hw-b,hd],[-hw+b,hd],[-hw,hd-b],[-hw,-hd+b]];
+    const hw=.226,hd=.165,b=.009,corners=[
+      [-hw+b,-hd],[hw-b,-hd],[hw,-hd+b],[hw,hd-b],
+      [hw-b,hd],[-hw+b,hd],[-hw,hd-b],[-hw,-hd+b]];
     const top=(x,z)=>.0012*Math.sin(5*x+3*z);
     for(let i=0;i<8;i++) {
       const [ax,az]=corners[i], [bx,bz]=corners[(i+1)%8];
@@ -218,16 +252,17 @@ export function ingredientStudy(id, amount, prepared) {
 export function makeSteamingCloth() {
   const pos=[], gathered=[], index=[], uv=[];
   const steps=24, sides=64;
-  // The open wet cloth lies in the round basket. Lifting two opposed
-  // corners lets the other edges sag around the rice instead of closing it.
+  // Each palm gathers one high corner. Leave a span of linen between
+  // them so the bundle hangs below as the rice is lifted and tipped.
   for(let j=0;j<=steps;j++) for(let i=0;i<=sides;i++) {
     const u=i/sides, r=j/steps, a=u*tau, c=Math.cos(a),s=Math.sin(a);
     const hem=Math.pow(r,3), pleat=(Math.sin(11*a+.9)+.28*Math.sin(19*a))*hem;
     const flatR=.217*r*(1+.035*pleat);
     pos.push(flatR*c, .001+.143*r**3+.008*pleat, flatR*s);
     const gatheredR=.165*r*(1-.24*hem*s*s)+.006*pleat;
-    gathered.push(gatheredR*c*(1-.12*hem), .158*hem*(.51+.49*Math.abs(c)**3)+.005*pleat,
-      gatheredR*s+.035*hem*c*c);
+    const corner=hem*Math.abs(c)**4;
+    gathered.push(gatheredR*c*(1-.20*corner), .216*hem*(.51+.49*Math.abs(c)**3)+.005*pleat,
+      gatheredR*s+.075*corner);
     uv.push(.5+.46*r*c,.5+.46*r*s);
     const k=j*(sides+1)+i;
     if(j<steps && i<sides) index.push(k,k+1,k+sides+1,k+1,k+sides+2,k+sides+1);

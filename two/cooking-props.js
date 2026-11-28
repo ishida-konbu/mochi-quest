@@ -2,17 +2,17 @@
 // Only the resulting recipe and tray count go into the player's pack.
 import * as T from './vendor/three.module.min.js';
 import { cookingAtlas } from './cooking-atlases.js';
-import { SERVING_POINT } from './cooking-motion.js';
+import { cookingDishPoint, FORMING_POINT, LID_REST, SERVING_POINT } from './cooking-motion.js';
+import { BENCH_YAW, benchPoint, COOKING_BENCH, groundCookware } from './living-layout.js';
 import { MORTAR_PROFILE } from './festival.js';
 import { regionalVessel } from './story-tableware.js';
 import { createStoryFood } from './story-crafts.js';
 import { makeCookingServing } from './living-craft-art.js';
 import { normalizeRecipe, traditionFor } from './living-craft.js';
 import { createSteam, steamSource } from './steam.js';
-import { makeMallet, makeLid, makeBowl, makePaddle, makeBoard, makePrepDish, ingredientStudy, makeSteamingCloth } from './cooking-prop-models.js';
+import { makeMallet, makeLid, makeLidRest, makeBowl, makePaddle, makeBoard, makePrepDish, ingredientStudy, makeSteamingCloth } from './cooking-prop-models.js';
 
 const clamp=T.MathUtils.clamp, lerp=T.MathUtils.lerp;
-const mortar=[-.68,1.097,0], board=[-.04,.797,.27];
 const tint={azuki:'#a06b64',herb:'#829960',soy:'#caa577',sakura:'#cb9298',sesame:'#988e7f'};
 const traditionalModels = new Map(), innerProfile=MORTAR_PROFILE.slice(10).reverse();
 const jig=new T.Object3D(), point=new T.Vector3(), target=new T.Vector3();
@@ -54,7 +54,7 @@ function ricePaint(brown) {
   return new T.MeshStandardMaterial({map:cookingAtlas('ingredients'),color:brown?'#d4ad7d':'#fffdf6',roughness:.40});
 }
 function cavityRadius(y) {
-  const rel=(y-.76)/.72;
+  const rel=y/.72;
   const inner=innerProfile;
   for(let i=1;i<inner.length;i++) {
     const [r0,h0]=inner[i-1],[r1,h1]=inner[i];
@@ -71,7 +71,7 @@ function makeDough(draft, radius, height, inMortar) {
     const r=radius*(1+wave);
     const profile=(scale,hp)=>{
       const span=Math.hypot(x,z)*r*scale;
-      const edge=inMortar && span>0? Math.min(1,Math.max(.008,cavityRadius(mortar[1]+hp)-.004)/span):1;
+      const edge=inMortar && span>0? Math.min(1,Math.max(.008,cavityRadius(.337+hp)-.004)/span):1;
       return [x*r*scale*edge,hp,z*r*scale*edge];
     };
     const plain=profile(1,height*h+.0018*Math.sin(9*x+5*z)*Math.sin(pi*h));
@@ -95,7 +95,7 @@ function makeDough(draft, radius, height, inMortar) {
 }
 
 // A small neck of wet rice follows the striking face before it tears free.
-function stickyNeck(recipe) {
+function stickyNeck(recipe,mortar) {
   const rows=10,sides=12,points=new Float32Array((rows+1)*(sides+1)*3),indices=[],uv=[];
   for(let j=0;j<=rows;j++)for(let i=0;i<=sides;i++){
     const k=j*(sides+1)+i;
@@ -135,8 +135,10 @@ function prepDishes(draft,group) {
     const prepared=ingredientStudy(ingredient.id,ingredient.amount,true);
     const holder=new T.Group();
     holder.add(raw,prepared);
-    const dish=makePrepDish(), home=[-.175+index*.107,.76,.045];
-    dish.position.fromArray(home);
+    const dish=makePrepDish();
+    const home=benchPoint(cookingDishPoint(index));
+    dish.position.fromArray(home);dish.rotation.y=BENCH_YAW;
+    holder.rotation.y=BENCH_YAW;
     const pinch=prepared.clone();
     pinch.name='指でつまんだ'+ingredient.id;
     group.add(holder,dish,pinch);
@@ -174,7 +176,8 @@ function servingParts(recipe) {
       liner=new T.Group();liner.add(leafLiner);
       liner.rotation.copy(canonical.rotation);liner.scale.setScalar(servingScale);
       linerBase=new T.Box3().setFromObject(liner,true).min.y;
-      liner.position.fromArray(SERVING_POINT);
+      liner.rotateOnWorldAxis(new T.Vector3(0,1,0),BENCH_YAW);
+      liner.position.fromArray(benchPoint(SERVING_POINT));
     }
     const regionalBounds=new T.Box3().setFromObject(canonical,true);
     const formingSize=new T.Box3().setFromObject(raw,true).getSize(new T.Vector3());
@@ -221,24 +224,33 @@ function pileMass(mesh,amount,shape=1) {
   }
 }
 
-export function createCookingProps(draft) {
+export function createCookingProps(draft,cookware=groundCookware()) {
   const recipe=normalizeRecipe(draft);
+  const [mx,my,mz]=cookware.mortar,[sx,sy,sz]=cookware.stove;
+  const mortar=[mx,my+.337,mz];
   if(!recipe)throw new TypeError('Invalid workshop recipe');
   const group=new T.Group(),clock={value:0};
   group.name='仕込みから盛り付けまで';
   const tools={lid:makeLid(),mallet:makeMallet(),bowl:makeBowl(),paddle:makePaddle(),cloth:makeSteamingCloth()};
   group.add(...Object.values(tools));
-  const choppingBoard=makeBoard();choppingBoard.position.fromArray(board);group.add(choppingBoard);
+  const lidRest=makeLidRest();
+  lidRest.position.set(sx+LID_REST[0],sy,sz+LID_REST[1]);
+  group.add(lidRest);
+  const choppingBoard=makeBoard();
+  choppingBoard.position.fromArray(benchPoint(FORMING_POINT));choppingBoard.rotation.y=BENCH_YAW;
+  choppingBoard.position.y-=.002;
+  group.add(choppingBoard);
   const {portion,raw,centerFilling,skin,grains,top,leaf,canonical,height,finishedScale,liner,linerBase}=servingParts(recipe);
   const tray=regionalVessel(recipe.finish==='grill'?3:5);
-  if(liner) group.add(liner);
-  // The foot rests on the shelf. The centre of the glaze or bamboo weave
+  if(liner)group.add(liner);
+  // The foot rests on the tabletop. The centre of the glaze or bamboo weave
   // meets the same serving point as the cook's hands.
-  const foot=.002, shelf=.760;
+  const foot=.002,surface=COOKING_BENCH.top;
   const well=tray.userData.floor+(recipe.finish==='grill'?.0006:.004);
-  const thickness=(SERVING_POINT[1]+linerBase-shelf)/(well-foot);
+  const thickness=(SERVING_POINT[1]+linerBase-surface)/(well-foot);
   tray.scale.set(.60,thickness,.60);
-  tray.position.set(SERVING_POINT[0],shelf-foot*thickness,SERVING_POINT[2]);group.add(tray);
+  tray.position.fromArray(benchPoint(SERVING_POINT));tray.position.y=surface-foot*thickness;
+  tray.rotation.y=BENCH_YAW;group.add(tray);
   const rawRice=grainCloud(recipe.base==='brownRice',false,630,.126,.042);
   const rawBed=makeDough(recipe,.126,.041,false);
   rawBed.material.roughness=.78;rawRice.add(rawBed);
@@ -249,18 +261,20 @@ export function createCookingProps(draft) {
   cloudBase.position.y=.002;
   steaming.position.y=.052;tools.cloth.add(steaming);
   const paste=makeDough(recipe,.187,.129,true);
+  paste.name='臼の餅生地';
   paste.position.fromArray(mortar);group.add(paste);
   const inMortar=grainCloud(recipe.base==='brownRice',true,740,.161,.119);
   inMortar.position.set(mortar[0],mortar[1]+.012,mortar[2]);group.add(inMortar);
   const rimSources=[-.55,.91,2.36,4.17].map(a=>steamSource('steamer',
-    .50+.265*Math.cos(a),1.164,.02+.265*Math.sin(a),
+    sx+.265*Math.cos(a),sy+.404,sz+.265*Math.sin(a),
     {width:.067,height:.21,count:1,rx:0,rz:0,alpha:.30,diffuse:true}));
   const rimSteam=createSteam(rimSources,clock,.84);
   const sourceSteam=createSteam([steamSource('steamer',0,0,0,{width:.148,height:.41,alpha:.38,diffuse:true})],clock,.4);
-  const mortarSteam=createSteam([steamSource('food',mortar[0],1.20,mortar[2],{height:.29,width:.13,alpha:.36,diffuse:true})],clock,1.82);
+  const mortarSteam=createSteam([steamSource('food',mx,my+.44,mz,{height:.29,width:.13,alpha:.36,diffuse:true})],clock,1.82);
   group.add(sourceSteam,rimSteam,mortarSteam);
-  const neck=stickyNeck(recipe);group.add(neck.mesh);
+  const neck=stickyNeck(recipe,mortar);group.add(neck.mesh);
   const dishes=prepDishes(recipe,group), stream=grainStream(recipe);
+  const prepCenter=benchPoint([.015,FORMING_POINT[1],.270]);
   group.add(stream,portion);
   const initial=paste.material.color.clone(), mixed=initial.clone();
   for(const f of recipe.fillings.filter(f=>f.placement==='mixed'))
@@ -311,25 +325,25 @@ export function createCookingProps(draft) {
     paste.material.color.copy(initial).lerp(mixed,f.mixed);
     paste.material.roughness=.63-.25*f.smooth;
     neck.update(frame,tools.mallet,paste);
-    const opening=clamp((Math.hypot(tools.lid.position.x-.5,tools.lid.position.y-1.166,tools.lid.position.z-.02)-.014)/.18,0,1);
+    const opening=clamp((Math.hypot(tools.lid.position.x-sx,tools.lid.position.y-sy-.416,tools.lid.position.z-sz)-.014)/.18,0,1);
     const breath=.55+.45*(.5+.5*Math.sin(time*1.62+.31*Math.sin(time*.94)));
     const rimWarmth=f.steam*(1-opening)*breath;
     rimSteam.visible=rimWarmth>.012;rimSteam.material.uniforms.warmth.value=rimWarmth;
     const exposed=f.steam*opening*(.22+.78*Math.min(1,f.steamerRice+f.clothRice));
     sourceSteam.visible=exposed>.012;sourceSteam.material.uniforms.warmth.value=exposed;
-    sourceSteam.position.set(.50,1.14,.02);
-    if(f.clothRice>.03 && tools.cloth.position.y>1.10){
+    sourceSteam.position.set(sx,sy+.38,sz);
+    if(f.clothRice>.03 && tools.cloth.position.y>sy+.34){
       sourceSteam.position.set(0,.105,0).applyMatrix4(tools.cloth.matrix);
     }
     mortarSteam.visible=f.mortarRice>.03;
     mortarSteam.material.uniforms.warmth.value=.84*f.mortarRice;
     if(f.pourRice>.002){
       point.set(0,.108,.138).applyMatrix4(tools.bowl.matrix);
-      target.set(.50,1.13,.02);
+      target.set(sx,sy+.37,sz);
       streamPose(stream,point,target,time,f.pourRice,true);
     }else if(f.tipRice>.002) {
       point.set(0,.065,.115).applyMatrix4(tools.cloth.matrix);
-      target.set(-.68,1.186,0);
+      target.set(mx,my+.426,mz);
       streamPose(stream,point,target,time,f.tipRice,false);
     }else stream.visible=false;
     const piece=frame.piece;
@@ -339,8 +353,15 @@ export function createCookingProps(draft) {
       const transport=active?f.prepCarry:0;
       const left=1-(ingredient.placement==='mixed'?f.mixed:ingredient.placement==='top'?piece.top:piece.fill);
       const p=holder.position;
-      p.set(lerp(home[0],.015,transport),lerp(.770,.798,transport)+.051*Math.sin(pi*transport),lerp(home[2],.270,transport));
-      if(ingredient.placement==='mixed' && frame.phase==='knead'){
+      p.set(lerp(home[0],prepCenter[0],transport),lerp(home[1]+.010,prepCenter[1],transport)+.051*Math.sin(pi*transport),
+        lerp(home[2],prepCenter[2],transport));
+      if(transport>0 && transport<1){
+        // Keep the ingredient on the drawn palm between the dish and board.
+        // Both endpoints stay on their support while the hand takes its weight.
+        point.fromArray(frame.hands[0]);point.y=Math.max(COOKING_BENCH.top+.008,point.y-.031);
+        p.lerp(point,Math.min(1,transport*6,(1-transport)*6));
+      }
+      if(ingredient.placement==='mixed' && (f.mixLoad>0 || f.mixed>0)){
         if(f.mixed>0){
           const top=mortar[1]+.129*(.67+.33*f.smooth)*(1-.45*f.compression);
           p.set(mortar[0]+.029*Math.cos(i*2.4),top-.003,mortar[2]+.032*Math.sin(i*2.4));
@@ -362,7 +383,7 @@ export function createCookingProps(draft) {
       prepared.position.x=.016*(1-local);
     });
     // The same serving leaves the wet paddle, lands on the board and
-    // stays between the hands as it is filled, turned and finally plated.
+    // is filled and turned there before the cook plates it.
     const amount=f.paddleDough+f.boardDough+piece.size;
     portion.visible=amount>.002;
     if(!portion.visible) return;

@@ -4,7 +4,7 @@ import { Group,Mesh } from './vendor/three.module.min.js';
 import { hokoraCarpentry } from './kaede-hokora-mesh.js';
 import { homesteadFinish } from './homestead-pigment.js';
 import { makeJoinersMallet } from './homestead-work-trestle.js';
-import { BENCH_LEGS } from './build-craft-motion.js';
+import { BENCH_LEGS,PLANING_BOARD,PLANE_HALF_WIDTH,JOINT,benchHeight } from './build-craft-motion.js';
 import { makePullSaw } from './homestead-sawing.js';
 
 function woodMesh(form,name){
@@ -20,7 +20,8 @@ function timber(b,x,y,z,w,h,d,grain,seed,tint='#d4b88a'){
       face,{grain,seed,bevel:.0006});
   }
 }
-function bench(heights,h,saw){
+function bench(heights,h,tool){
+  const saw=tool==='saw';
   const b=hokoraCarpentry();
   let i=0;
   for(const [x,z] of BENCH_LEGS){
@@ -28,19 +29,27 @@ function bench(heights,h,saw){
     b.beam('wood','#a68b64',[x,y,z],[x*.88,h-.077,z*.81],.115,.128,{bevel:.009,seed:i});
     b.box('endGrain','#897856',[x*.88,h-.145,z*.81+Math.sign(z)*.06],[.029,.025,.023],{bevel:.003});
   }
-  for(const z of [-.39,.39]){
+  for(const z of [-.39,.15]){
     b.beam('wood','#aa9068',[-.74,h-.12,z],[.74,h-.12,z],.095,.101,{bevel:.005});
   }
   for(const x of [-.61,.61]){
-    b.beam('wood','#aa936f',[x,h-.19,-.43],[x,h-.19,.43],.085,.090,{bevel:.004});
+    b.beam('wood','#aa936f',[x,h-.19,-.43],[x,h-.19,.17],.085,.090,{bevel:.004});
     b.beam('wood','#b7a37a',[x*1.07,Math.min(h-.24,Math.max(...heights)+.11),-.39],
-      [x,h-.18,.36],.055,.062,{bevel:.004});
+      [x,h-.18,.14],.055,.062,{bevel:.004});
   }
   // The end being severed lands on the lower board instead of disappearing.
   for(let j=0;j<4;j++){
     const z=-.453+j*.302,split=saw?.31:.03,drop=saw?.059:0;
+    // An open apron on the operator's side gives both the round belly and
+    // the planted soles room to approach. The right wing carries the stock.
+    if(j===3){timber(b,.631,h-.043-drop,z,.498,.086,.298,'x',12,'#c4a77d');continue;}
     timber(b,(split-.88)/2,h-.043,z,split+.88,.086,.298,'x',j+2,'#bb9d72');
     timber(b,(split+.035+.88)/2,h-.043-drop,z,.88-split-.035,.086,.298,'x',j+9,'#c4a77d');
+  }
+  if(tool==='mallet'){
+    // Continue the top under the rail where the bracing hand bears down.
+    timber(b,.102,h-.043,.467,.56,.086,.27,'x',16,'#bb9d72');
+    b.beam('wood','#aa9068',[.04,h-.16,.18],[.04,h-.078,.55],.078,.080,{bevel:.004});
   }
   return woodMesh(b,'楔締めの作業台');
 }
@@ -70,9 +79,10 @@ function planeTool(){
   const b=hokoraCarpentry();
   // The mouth runs all the way through the sole; the shaving emerges on
   // the bevelled iron between the two cheeks, as on a pulling kanna.
-  const part=(x,z,w,d)=>timber(b,x,.040,z,w,.080,d,'z',11,'#bd986c');
-  part(0,-.103,.181,.131);part(0,.093,.181,.144);
-  for(const side of [-1,1])part(side*.075,-.008,.031,.060);
+  const part=(x,z,w,d)=>timber(b,x,.040,z,w,.080,d,'z',11,'#92673f');
+  const half=PLANE_HALF_WIDTH,throat=.057;
+  part(0,-.103,2*half,.131);part(0,.093,2*half,.144);
+  for(const side of [-1,1])part(side*(half+throat)/2,-.008,half-throat,.060);
   // Forge an actual bevel down to the sole. The blade edges pass through
   // the throat between the heel and toe; the honed lip just skims the board.
   const edge=[[-.056,-.0003,.012],[.056,-.0003,.012]],high=[[-.056,.173,-.099],[.056,.173,-.099]];
@@ -98,21 +108,26 @@ function shaving(){
 }
 function pinnedJoint(b){
   const z=-.015,x=.06,w=.19,d=.19;
-  // Two half-laps, with an actual open square through the top rail for the peg.
-  timber(b,0,.05,z,1.16,.10,d,'x',6);
+  // Both halves of the lap have the same square mortise. The peg stays in
+  // the bore even when the last blow drives it below the upper member.
   for(const side of [-1,1]){
+    const left=side<0?-.58:x+.026,right=side<0?x-.026:.58;
+    timber(b,(left+right)/2,.05,z,right-left,.10,d,'x',6);
+    const back=side<0?z-d/2:z+.026,front=side<0?z-.026:z+d/2;
+    timber(b,x,.05,(back+front)/2,.052,.10,front-back,'x',6);
     const lo=side<0?-.58:x+w*.5,hi=side<0?x-w*.5:.58;
     timber(b,(lo+hi)/2,.15,z,hi-lo,.10,d,'x',6);
-    const a=side<0?-.32:z+d/2,c=side<0?z-d/2:.34;
+    const a=side<0?-.44:z+d/2,c=side<0?z-d/2:.112;
     timber(b,x,.05,(a+c)/2,w,.10,c-a,'z',12,'#bea17a');
-    timber(b,x+side*.0605,.15,.01,.069,.10,.66,'z',12,'#bea17a');
-    const m=side<0?-.32:z+.026,n=side<0?z-.026:.34;
+    timber(b,x+side*.0605,.15,-.164,.069,.10,.552,'z',12,'#bea17a');
+    const m=side<0?-.44:z+.026,n=side<0?z-.026:.112;
     timber(b,x,.15,(m+n)/2,.052,.10,n-m,'z',12,'#bea17a');
   }
 }
 export function makeCraftBay(cut,h,heights){
+  h=benchHeight(h,cut);
   const group=new Group(),b=hokoraCarpentry(),loose=hokoraCarpentry();
-  group.add(bench(heights,h,cut.tool==='saw'));
+  group.add(bench(heights,h,cut.tool));
   let tool,chip,firstShaving,offcut,pin;
   if(cut.tool==='saw'){
     const set=(form,begin,end)=>cut.bamboo?bamboo(form,begin,end,3):
@@ -123,10 +138,22 @@ export function makeCraftBay(cut,h,heights){
       for(const x of [-.55,-.25])for(const sign of [-1,1])
         b.box('wood','#b49f79',[x,.017,sign*.061],[.075,.035,.045],{rotation:[sign*.47,0,0],bevel:.003,grain:'x'});
     }
+    // Two wooden dogs and a driven wedge keep the stock from rolling
+    // or following the tooth while both palms pull the wrapped handle.
+    for(const x of [-.58,-.19]){
+      b.box('wood','#806549',[x,.036,-.102],[.079,.072,.048],{bevel:.004,grain:'y'});
+      b.box('wood','#a78a63',[x,.026,.108],[.12,.050,.058],{rotation:[0,.16,0],bevel:.003});
+    }
     tool=makePullSaw(.91);
   }else if(cut.tool==='plane'){
-    timber(b,0,.040,0,.246,.080,1.28,'z',4);
-    b.box('wood','#9b7d59',[0,.023,.663],[.253,.046,.042],{bevel:.004,grain:'x'});
+    const {x,width,far,near,hookEnd}=PLANING_BOARD;
+    // The bench hook continues underneath the overhanging stock. Its rear
+    // cleat catches the bench edge as the joiner pulls with both hands.
+    timber(b,x,-.023,(hookEnd+.602)/2,.22,.046,hookEnd-.602,'z',7,'#9f835d');
+    timber(b,x,-.054,.625,.22,.10,.045,'x',8,'#9f835d');
+    // A slim floorboard fits under the iron with clearance for the thumbs.
+    timber(b,x,.040,(near+far)/2,width,.080,near-far,'z',4);
+    b.box('wood','#9b7d59',[x,.023,near+.022],[.204,.046,.042],{bevel:.004,grain:'x'});
     tool=planeTool();chip=shaving();tool.add(chip);
     firstShaving=shaving();group.add(firstShaving);
   }else{
@@ -136,7 +163,8 @@ export function makeCraftBay(cut,h,heights){
     pin=woodMesh(loose,'継ぎ手の木栓');group.add(pin);
     tool=makeJoinersMallet();
   }
-  const stock=woodMesh(b,'加工中の部材');stock.position.y=h;group.add(stock,tool);
+  const stock=woodMesh(b,'加工中の部材');stock.position.y=h;
+  if(cut.tool==='mallet')stock.position.set(JOINT.x-.06,h,JOINT.z+.015);group.add(stock,tool);
   return {group,update(f){
     tool.position.fromArray(f.position);tool.rotation.set(...f.rotation,'XYZ');
     if(offcut)offcut.position.set(.018*f.fall,h-.059*f.fall,0);
@@ -144,10 +172,10 @@ export function makeCraftBay(cut,h,heights){
       chip.visible=f.shave>.001;chip.geometry.setDrawRange(0,Math.floor(f.shave*42)*6);
       // The first curl slides out of the iron during the return and comes
       // to rest on the bench beside the plank. The second stays in the mouth.
-      firstShaving.visible=f.progress>=.4;
-      firstShaving.position.set(.20*f.shed,f.workTop-.150*f.shed*f.shed,.34+.025*f.shed);
+      firstShaving.visible=f.shed>0;
+      firstShaving.position.set(PLANING_BOARD.x+.08*f.shed,f.workTop-.070*f.shed*f.shed,PLANING_BOARD.end+.025*f.shed);
     }
-    if(pin)pin.position.set(.06,f.workTop+.109-f.pin,-.015);
+    if(pin)pin.position.set(JOINT.x,f.workTop+.082-f.pin,JOINT.z);
   },dispose(){
     group.traverse(m=>{if(m.geometry)m.geometry.dispose();});
     if(cut.tool==='saw')tool.material.dispose();

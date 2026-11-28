@@ -1,28 +1,21 @@
 import * as THREE from './vendor/three.module.min.js';
-import { WORKTOPS, marketCooktop, worktopPoint } from './living-layout.js';
-import { MARKET_STALLS, terrainContactHeight, terrainHeight, groundHeight } from './terrain.js';
+import { COOKING_MAT, MALLET_HANDLE_END, WORKTOPS, groundCookware, marketCooktop, worktopPoint } from './living-layout.js';
+import { MARKET_STALLS, terrainContactHeight } from './terrain.js';
 
 export function cookingLayout(site) {
   const market=site.id==='market-mortar';
   const table=market ? marketCooktop(MARKET_STALLS[4]) : WORKTOPS[site.id];
   if (!table) return null;
-  const y=market ? terrainHeight(MARKET_STALLS[4][0],MARKET_STALLS[4][1])+.18 : terrainContactHeight(table.x,table.z);
-  return {
-    ...table,y,id:site.id,market,
-    floor(u,v) {
-      const {x,z}=worktopPoint(table,u,v);
-      return groundHeight(x,z,terrainContactHeight(x,z)+.22)-y;
-    },
-  };
+  const y=terrainContactHeight(table.x,table.z)+COOKING_MAT.thickness;
+  const stations=groundCookware(table,y,terrainContactHeight);
+  function floor(u,v){
+    const {left,right,front,back,thickness}=COOKING_MAT;
+    const woven=u>=left && u<=right && v>=back && v<=front;
+    const {x,z}=worktopPoint(table,u,v);
+    return terrainContactHeight(x,z)+(woven?thickness:0)-y;
+  }
+  return {...table,y,id:site.id,market,floor,groundCookware:stations};
 }
-
-// The operator stays across the worktop, looking into the cook's face and
-// hands. At the market, stay between the rear posts and below the canopy.
-const viewingDirections = {
-  'river-mortar':[.32,.46,-1],
-  'terraces-mortar':[.32,.46,-1],
-  'market-mortar':[.045,.43,-1],
-};
 
 export function createCookingStage(scene,site) {
   const layout=cookingLayout(site);
@@ -43,80 +36,168 @@ export function createCookingStage(scene,site) {
     }
   });
 
-  const out=new THREE.Vector3();
+  const out=new THREE.Vector3(),toolAngle=new THREE.Euler();
   const right=new THREE.Vector3(),up=new THREE.Vector3();
   const target=new THREE.Vector3(), action=new THREE.Vector3(), hero=new THREE.Vector3();
   const desired=new THREE.Vector3(), eye=new THREE.Vector3(), offset=new THREE.Vector3(), subject=new THREE.Vector3();
-  const {clamp,lerp,smoothstep}=THREE.MathUtils;
+  const {clamp,lerp}=THREE.MathUtils;
+  const {mortar,stove,malletRack,bowlRest}=layout.groundCookware;
+  const yard=new THREE.Box3(),yardCorners=[],workSpot=new THREE.Vector3();
+  let frontX,frontZ;
+  let yardScore,yardIncludesEntry;
+  const end=new THREE.Vector3();
   let distance=0,priorDetail=null,priorAspect=null;
+  const forecasts=new Map();
+  let forecastScore;
   function positionCamera(camera,frame,{detail=false,reducedMotion=false,dt=0,cut:snap=false}={}) {
     action.fromArray(frame.focus);
     hero.fromArray(frame.hero);
     const portrait=camera.aspect<.85;
-    // Reserve space for the whole stroke as the cook brings the mallet from
-    // its rack to the mortar. Changing chapter alone must not move the lens.
-    const lifting=frame.phase==='pound'?smoothstep(frame.tools?.mallet?.position[0]??-1.31,-1.31,-.69):0;
+    // Rest the lens on the work, then follow the raised load in the hands.
+    const pounding=frame.phase==='pound';
+    const lifting=pounding?frame.handWork[0]:0;
     const piece=frame.piece?.visible?frame.piece:null;
-    out.fromArray(viewingDirections[layout.id]);
-    if(detail)out.set(layout.market?.10:.12,layout.market?.64:.98,-1);
-    out.normalize();right.set(out.z,0,-out.x).normalize();up.crossVectors(out,right);
-    // Use the bench, not the moving mallet head, to establish the horizon.
-    // Follow a sidestep, but damp the small repetitive wrist/shoulder beats.
-    desired.set(.53*hero.x+.47*action.x,1.08+.30*hero.y,.52);
+    // Follow the visitor until it reaches the work spot.
+    desired.set(lerp(hero.x,action.x,.47),lerp(hero.y+.95,action.y+.13,.43),lerp(hero.z,action.z,.58));
     if (detail) {
-      // A fixed midpoint between the bowl and the lifted mallet keeps the
-      // close view steady through repeated strikes without zooming out.
-      const height=lerp(.88+.36*(clamp(action.y,.8,1.75)-.88),1.48,lifting);
-      desired.set(action.x,height,.12+.24*action.z);
+      // Keep the load and its destination together as the cook turns.
+      const mallet=frame.tools.mallet.position;
+      desired.set(action.x,action.y+.10,action.z+.14);
+      if(lifting){
+        const tool=frame.tools.mallet;
+        end.set(0,-.013,MALLET_HANDLE_END/2).applyEuler(toolAngle.set(...tool.rotation));
+        end.add(offset.fromArray(mallet));
+        desired.lerp(end,.62*lifting);
+      }
       if(piece) {
         // Frame both the cake and the destination as the cook carries or lowers it.
         desired.x=lerp(desired.x,piece.position[0],.5*piece.size);
         desired.y=lerp(desired.y,piece.position[1]+.08,.4*piece.size);
+        desired.z=lerp(desired.z,piece.position[2]+.10,.5*piece.size);
       }
     }
-    if (reducedMotion && !detail) desired.set(0,1.20,.46);
+    // A steady wide shot shows the hands changing stations around the same
+    // planted feet. Only the detail shot follows a bowl or cake being turned.
+    const fixedView=!detail && (reducedMotion || frame.phase!=='approach');
+    if(yardScore!==frame.sampleAt || yardIncludesEntry!==reducedMotion || yard.isEmpty()){
+      yardScore=frame.sampleAt;yardIncludesEntry=reducedMotion;
+      yard.makeEmpty();
+      yardCorners.length=0;
+      const pad=(point,rx,rz,low,high)=>{
+        const [x,y,z]=point;
+        for(const u of [x-rx,x+rx])for(const h of [y+low,y+high])for(const v of [z-rz,z+rz]){
+          yardCorners.push([u,h,v]);
+          yard.expandByPoint(offset.set(u,h,v));
+        }
+      };
+      const radius=frame.bodyRadius??.86,height=frame.bodyHeight??1.68;
+      const working=frame.sampleAt?.(Infinity).hero??frame.hero;
+      workSpot.fromArray(working);
+      // The two ends of the market kitchen are almost opposite. Bisect
+      // their working directions for this cook's reach and grip on the pestle.
+      const grill=frame.worktops[1];
+      const grillYaw=Math.atan2(grill[0]-workSpot.x,grill[2]-workSpot.z);
+      const yaw=layout.market && Number.isFinite(frame.poundHeading)
+        ? grillYaw+THREE.MathUtils.euclideanModulo(frame.poundHeading-grillYaw,2*Math.PI)/2
+        : 2.215;
+      frontX=Math.sin(yaw);frontZ=Math.cos(yaw);
+      pad(working,radius,radius,0,height+.12);
+      if(reducedMotion)pad(frame.sampleAt?.(0).hero??working,radius,radius,0,height);
+      pad(stove,.34,.32,0,.65);
+      pad(mortar,.41,.40,0,height+.62);
+      pad(malletRack,.35,.30,0,.20);
+      pad(bowlRest,.21,.21,-.33,.20);
+      for(const [i,point] of frame.worktops.entries()){
+        if(i!==1 || layout.market)pad(point,.25,.25,-.10,.18);
+      }
+    }
+    if(fixedView){
+      yard.getCenter(desired);
+      // Aim along the line through the planted feet so both side-on tasks
+      // stay visible at the same angle in portrait and landscape.
+      const depth=(desired.x-workSpot.x)*frontX+(desired.z-workSpot.z)*frontZ;
+      desired.x=workSpot.x+depth*frontX;desired.z=workSpot.z+depth*frontZ;
+    }
     const cut=snap || priorDetail!==detail || priorAspect!==camera.aspect;
     if (cut) target.copy(desired);
-    else target.lerp(desired,1-Math.exp(-Math.max(0,dt)*(detail?2.5:1.55)));
+    else target.lerp(desired,1-Math.exp(-Math.max(0,dt)*(detail?5.6:2.3)));
 
-    // Fit to the actual frustum: the footprint includes the head at the top
-    // of the strike as well as the dish. A phone uses its narrower dimension.
-    const fov=detail ? 36 : 42;
-    const tan=Math.tan(fov*Math.PI/360);
-    let fit=detail ? 1.64 : 2.36;
-    const include=(x,y,z,padding=.12)=>{
-      offset.set(x-target.x,y-target.y,z-target.z);
-      const depth=offset.dot(out);
-      fit=Math.max(fit,depth+(Math.abs(offset.dot(right))+padding)/(tan*camera.aspect*.88),
-        depth+(Math.abs(offset.dot(up))+padding)/(tan*.78));
-    };
-    if (detail) {
-      include(action.x-.39,.78,action.z-.22,.035);
-      include(action.x+.39,Math.max(1.23,action.y),action.z+.14,.035);
-      if(piece) include(...piece.position,.13*piece.size);
-      if(lifting) include(action.x,lerp(action.y,2.07,lifting),lerp(action.z,.27,lifting));
-    } else if (reducedMotion) {
-      for(const x of [-1.70,1.46]) {
-        include(x,.74,.05);include(x,2.18,.98);
+    // Look into the inside corner from across the bench and the hearth.
+    // Both working faces stay in view while the cook turns between them.
+    out.set(frontX,detail?.82:.57,frontZ);
+    const fov=detail?38:42,tan=Math.tan(fov*Math.PI/360);
+    if(cut || forecastScore!==frame.sampleAt)forecasts.clear();
+    forecastScore=frame.sampleAt;
+    if(!fixedView && forecastScore){
+      const spacing=.18,first=Math.floor(frame.time/spacing)+1,last=first+5;
+      for(const index of forecasts.keys())if(index<first || index>last)forecasts.delete(index);
+      for(let i=first;i<=last;i++)if(!forecasts.has(i))forecasts.set(i,forecastScore(i*spacing));
+    }
+    function fitView(){
+      out.normalize();right.set(out.z,0,-out.x).normalize();up.crossVectors(out,right);
+      let fit=detail?1.66:2.36,required=0;
+      const include=(x,y,z,padding=.12)=>{
+        offset.set(x-target.x,y-target.y,z-target.z);
+        const depth=offset.dot(out);
+        fit=Math.max(fit,depth+(Math.abs(offset.dot(right))+padding)/(tan*camera.aspect*.88),
+          depth+(Math.abs(offset.dot(up))+padding)/(tan*.78));
+        required=Math.max(required,depth+Math.abs(offset.dot(right))/(tan*camera.aspect*.992),
+          depth+Math.abs(offset.dot(up))/(tan*.985));
+      };
+      function includePose(pose){
+        const [x,y,z]=pose.hero,[ax,ay,az]=pose.focus;
+        if(detail){
+          include(ax,ay,az,.32);
+          include(ax,Math.max(y+.66,ay),az,.13);
+          for(const [i,held] of pose.handWork.entries()){
+            if(!held)continue;
+            const [hx,hy,hz]=pose.hands[i];
+            include(lerp(ax,hx,held),lerp(ay,hy,held),lerp(az,hz,held),.09);
+          }
+        }else{
+          const radius=pose.bodyRadius??.86;
+          include(x,y+(pose.bodyHeight??1.68),z,.17);
+          include(x-radius,y+.71,z,.14);
+          include(x+radius,y+.71,z,.14);
+          for(const hand of pose.hands)include(...hand,.105);
+          include(x,y+.02,z+.24);
+          include(ax-.31,ay,az);
+          include(ax+.31,ay,az);
+        }
+        if(pose.piece?.visible){
+          const [cx,cy,cz]=pose.piece.position;
+          include(cx-.12,cy,cz,.05);
+          include(cx+.12,cy+.06,cz,.05);
+        }
+        if(pose.phase==='pound' && pose.handWork[0]){
+          const held=pose.handWork[0],tool=pose.tools.mallet;
+          const [tx,ty,tz]=tool.position;
+          toolAngle.set(...tool.rotation);
+          // The cook rolls the head as it goes to the rack. The camber of
+          // both striking faces and the rotating butt define the full span.
+          for(const [dx,dy,dz] of [[-.167,0,0],[.165,0,0],[0,-.013,MALLET_HANDLE_END]]){
+            end.set(dx,dy,dz).applyEuler(toolAngle);
+            include(lerp(ax,tx+end.x,held),lerp(ay,ty+end.y,held),lerp(az,tz+end.z,held),.08*held);
+          }
+        }
       }
-      include(0,.25,1.12);
-    } else {
-      include(hero.x-.62,hero.y+1.65,hero.z);
-      include(hero.x+.62,hero.y+1.65,hero.z);
-      for (const hand of frame.hands||[]) include(...hand,.105);
-      include(hero.x,hero.y+.24,hero.z+.20);
-      include(action.x-.31,Math.max(.83,action.y),action.z);
-      include(action.x+.31,Math.max(.83,action.y),action.z);
-      if(lifting) include(action.x,lerp(action.y,2.07,lifting),lerp(action.z,.28,lifting));
+      if(fixedView){
+        for(const point of yardCorners)include(...point);
+      }else{
+        includePose(frame);
+        // Ease out before the next turn, using the known path of the load.
+        // Only the current scene determines the minimum visible distance.
+        const current=required;
+        for(const pose of forecasts.values())includePose(pose);
+        required=current;
+      }
+      fit=Math.max(fit,portrait && !detail ? 3.22 : 0);
+      if(cut || !distance)return fit;
+      const settle=fit>distance?3.1:1.30;
+      const travel=(fit-distance)*(1-Math.exp(-Math.max(0,dt)*settle));
+      return Math.max(required,distance+clamp(travel,-2.6*dt,4.2*dt));
     }
-    fit=Math.max(fit,portrait && !detail ? 3.22 : 0);
-    if (cut || !distance) distance=fit;
-    else {
-      // Widen smoothly as a hand reaches across the bench, then ease in
-      // more slowly when the cook settles at the next station.
-      const settle=fit>distance ? 3.1 : 1.30;
-      distance=lerp(distance,fit,1-Math.exp(-Math.max(0,dt)*settle));
-    }
+    distance=fitView();
     priorDetail=detail;priorAspect=camera.aspect;
     eye.copy(out).multiplyScalar(distance).add(target);
     group.localToWorld(eye);group.localToWorld(subject.copy(target));

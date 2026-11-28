@@ -2,6 +2,7 @@ import { Vector3 } from './vendor/three.module.min.js';
 import { createCookingStage } from './cooking-stage.js';
 import { createCookingScore } from './cooking-motion.js';
 import { createCookingPerformer } from './cooking-performer.js';
+import { fitCookingGrip } from './cooking-grip.js';
 import { createCookingProps } from './cooking-props.js';
 
 // Commit the recipe only after the cook sets down the last serving.
@@ -44,8 +45,8 @@ export function createCookingPerformance({scene, camera, dialog, player, enter, 
 
   function render(dt, cut = false) {
     const {stage, performer, props, score, elapsed, closeUp} = run;
-    const frame = score.sample(elapsed);
-    performer.update(frame);
+    const pose = score.sample(elapsed);
+    const frame = fitCookingGrip(pose,performer.update(pose));
     props.update(frame);
     stage.positionCamera(camera,frame,{detail:closeUp,reducedMotion:reduced.matches,dt,cut});
     draw(dt);
@@ -62,10 +63,10 @@ export function createCookingPerformance({scene, camera, dialog, player, enter, 
       stage.group.updateWorldMatrix(true,false);
       stage.group.worldToLocal(startPoint.set(player.x,player.y,player.z));
       run.score = createCookingScore(draft,stage.layout,{
-        start:startPoint.toArray(), heading:player.heading - stage.group.rotation.y, full:player.buffs?.full>0,
+        start:startPoint.toArray(), heading:player.heading - stage.group.rotation.y, mode:player.mode, full:player.buffs?.full>0,
       });
       run.performer = createCookingPerformer(stage.group,player);
-      run.props = createCookingProps(draft,stage.layout);
+      run.props = createCookingProps(draft,run.score.cookware);
       stage.group.add(run.props.group);
       overlay.querySelector('.cook-place').textContent = site.name;
       overlay.querySelector('#cook-title').textContent = name;

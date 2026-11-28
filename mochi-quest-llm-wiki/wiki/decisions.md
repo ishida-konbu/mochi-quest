@@ -2,8 +2,19 @@
 id: decisions
 type: governance
 status: active
-updated: 2026-11-26
+updated: 2026-11-27
 sources:
+  - ../raw/2026-11-27-corner-kitchen.md
+  - ../raw/2026-11-27-steamer-grip-and-footsteps.md
+  - ../raw/2026-11-27-continuous-work-profile.md
+  - ../raw/2026-11-27-workshop-hand-length.md
+  - ../raw/2026-11-27-planted-waist-and-kitchen-worktop.md
+  - ../raw/2026-11-27-ground-kitchen-and-planing.md
+  - ../raw/2026-11-27-working-mochi.md
+  - ../raw/2026-11-26-traveller-working-pose.md
+  - ../raw/2026-11-26-front-working-hands.md
+  - ../raw/2026-11-26-rounded-wrist-work.md
+  - ../raw/2026-11-26-body-led-reach.md
   - ../raw/2026-11-26-action-revision.md
   - ../raw/2026-11-26-work-and-rest.md
   - ../raw/2026-11-25-interactive-building.md
@@ -52,7 +63,19 @@ sources:
 | D-22 | REQ | 探索中、立木のそばで手斧を三度入れ、倒木と切り株を現地に描く。時が経ち、建築と干渉しない木は再生する | [立木](building.md) |
 | D-23 | REQ | 餅作りと普請では地域音が続き、主人公の手が弾力を保つ。普請は仕事に応じた複数の画角を組み合わせる | [工房](mochi-crafting.md)・[普請](building.md) |
 | D-24 | REQ | 小屋の板床に寝床を置き、伸び、あくび、掛け物、時の移ろい、起床を現地で描く。寝具は四段階。各地の技法による習得条件は全域への展開時に決める | [野営](building.md)・[時計](world-clock.md) |
-| D-25 | REQ | 工作では旅姿の丸い手が伸び縮みする。伐採は一打ごとに幹を深く欠き、三打目で上下に割る。就寝は温泉の伸びを生かし、元の体格を保って寝台に横たわる | [餅作り](mochi-crafting.md)・[拠点](building.md)・[就寝](world-clock.md) |
+| D-25 | REQ | 工作の丸い手はD-26で届かせ方を改訂。伐採は一打ごとに幹を深く欠き、三打目で上下に割る。就寝は温泉の伸びを生かし、元の体格を保って寝台に横たわる | [餅作り](mochi-crafting.md)・[拠点](building.md)・[就寝](world-clock.md) |
+| D-26 | REQ | 遠い作業点には、足を残して胴を伸ばし、丸い手を付け根ごと前へ運ぶ。手斧は片手で横から振る | [作業姿勢](mochi-crafting.md)・[普請と伐採](building.md) |
+| D-27 | REQ | 工房と普請では丸い短い手で握りを保ち、手首が返る。奥へ届くときの胴と肩の送りはD-26を引き継ぐ | [手と胴の動き](mochi-crafting.md)・[鉋の往復](building.md) |
+| D-28 | REQ | 工房・普請・伐採は通常状態の餅に見えることを優先する。D-26・27の肩の送りと手首の返しは、顔・胴・手の丸みと位置関係を保てる範囲で行う | [実画面での比較](../raw/2026-11-26-traveller-working-pose.md)・[作業姿勢](mochi-crafting.md) |
+| D-29 | REQ | 短い手は付け根ごと餅の球面に沿って前に回る。鉋は両手で握り、足を残して胴と肩を送り、引き始めに手首を返す。料理は作業台に正対する。手斧は三打とも刃から木に入る | [依頼と検版](../raw/2026-11-26-front-working-hands.md)・[工房](mochi-crafting.md)・[普請と伐採](building.md) |
+| D-30 | REQ | 作業の前後動は足元から伸びる餅の胴で表し、短い腕の付け根と顔が一緒に前へ出る。料理では両手を体の前で使い、伐採では片手の斧を体側から振る | [参照画と依頼](../raw/2026-11-27-working-mochi.md)・[工房](mochi-crafting.md)・[普請と伐採](building.md) |
+| D-31 | REQ | 工房では地面の筵にかまどと臼を置き、杵は両手で扱う。切る・つぶす・成形・盛り付けは調理台を使う。鉋の送りでは足元から背と腹の厚みを前方へ分散させ、作業中の表情では瞳を明瞭に保つ | [改訂の経緯](../raw/2026-11-27-ground-kitchen-and-planing.md)・[工房](mochi-crafting.md)・[鉋](building.md) |
+| D-32 | REQ | 鉋の送りは足の上で腰を支え、胴の中ほどから肩と顔を前へしならせる。3工房は地面から一枚の調理台を使い、薄いまな板と盛り皿を天板に直置きする | [依頼・実景](../raw/2026-11-27-planted-waist-and-kitchen-worktop.md)・[鉋](building.md)・[工房](mochi-crafting.md) |
+| D-33 | REQ | 餅クラフトと建てるでは手の長さを保ち、付け根を移し、温泉の餅と同様に太さをなるべく保って胴を伸縮する。鋸と鉋は両手、木槌は片手で材を押さえて打つ。肌の崩れと道具・設備の貫通を検査する | [今回の条件](../raw/2026-11-27-workshop-hand-length.md)・[工房](mochi-crafting.md)・[普請](building.md) |
+| D-34 | REQ | 作業で伸びる餅は顔の下と背中に段差を作らず、腰から頬まで滑らかにつなぐ。蒸し器の蓋を開けて横へ置くときは片手を使う | [今回の指示・比較](../raw/2026-11-27-continuous-work-profile.md)・[工房](mochi-crafting.md)・[普請](building.md) |
+| D-35 | REQ | 蒸し器は蓋の中央に取手を付け、片手でそこを握る。工房内を移るときは進行方向へ向き直り、到着してから次の作業に向く | [依頼と実演](../raw/2026-11-27-steamer-grip-and-footsteps.md)・[工房](mochi-crafting.md) |
+| D-36 | REQ | 木蓋の中央に板目に沿って元の細木を戻し、立てたときに縦長に見せる。臼とかまどの並びに対して短い作業台を直角に置き、工房内の往復を短くする | [配置の比較と検証](../raw/2026-11-27-corner-kitchen.md)・[工房](mochi-crafting.md) |
+| D-37 | REQ | 工房では一枚の正方形の筵にかまど・臼・短い卓の四脚を載せ、入場後はかまど・臼・卓・市場の焼き台を、一つの足場から向き直って使う。D-35・36の工程間の歩行を改訂する | [依頼と検証](../raw/2026-11-27-pivot-kitchen.md)・[工房](mochi-crafting.md) |
 
 ## 未確定・要検証（OPEN）
 

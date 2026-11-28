@@ -376,9 +376,10 @@ function scatteredHerbs(p, art) {
   // hold the near corners, with higher plumes against the river and hills.
   const beds = [
     [-4.4, 64.1, 1.13],
-    [8.4, 63.6, 1.13],
+    // The two east-bank beds border the rush mat of the public kitchen.
+    [13.7, 63.6, 1.13],
     [-3.57, 65.7, 0.83],
-    [8.6, 66.7, 0.88],
+    [14.0, 66.7, 0.88],
     [-6.75, 58.3, 1.25],
     [6.65, 58.9, 1.17],
     [-9.42, 51.2, 1.43],

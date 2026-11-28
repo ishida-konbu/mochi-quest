@@ -232,9 +232,9 @@ export function rootedTimber(scene,tree){
   root.userData.releaseStump=()=>{for(const res of owned)res.dispose();};
   return root;
 }
-export function fallingTimber(scene,tree,player,clear=()=>true){
+export function fallingTimber(scene,tree,player,clear=()=>true,cutBearing){
   const cut=timberCut(tree),hinge=new T.Vector3(cut.x,cut.y,cut.z),group=new T.Group(),fade={value:1,height:Math.max(1,tree.h)},disposable=[];
-  const stem=tree.stem??cut.culms?.[0]??cut,bearing=Math.atan2(player.x-stem.x,player.z-stem.z);
+  const stem=tree.stem??cut.culms?.[0]??cut,bearing=cutBearing??Math.atan2(player.x-stem.x,player.z-stem.z);
   const incision={value:new T.Vector4(0,0,stem.radius*2.5,1)};
   const stalks=new Map(),ends=[];
   let mouth,flat;

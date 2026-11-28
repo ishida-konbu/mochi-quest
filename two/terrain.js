@@ -1,5 +1,5 @@
 import { isTimberFelled } from './living-build-trees.js';
-import { addCooksPlatformSolids, addCookwareSolids, addLivingSolids, marketCookCanopy, marketCooktop } from './living-layout.js';
+import { addBenchSolids, benchFrame, addCookwareSolids, addLivingSolids, COOKING_MAT, DANGO_STALL, MARKET_GRILL_TOP, MARKET_GRILL_X, MARKET_GRILL_Z, MARKET_STOCK_TOP, MARKET_STOCK_Z, WORKTOPS, marketCookCanopy, marketCooktop, worktopPoint } from './living-layout.js';
 import { rockParts } from './rock-forms.js';
 import { mountRockContact, mountScannedContact, rockRange } from './rock-contact.js';
 import {groveWood,groundedCulms,landmarkWood,pilgrimageWood,woodContact} from './wood-contacts.js';
@@ -375,8 +375,23 @@ export function springLevel(site) {
   return springLevels.get(site);
 }
 const freightGround=freightRoadEarthwork(road);
+// A swept earthen work yard meets the surrounding riverbank, terrace and
+// market street over a short feathered shoulder. Sampling the same ground
+// vertices for painting and collision keeps the bench and the cook level.
+const cookingYards=[...Object.values(WORKTOPS),marketCooktop(DANGO_STALL)].map(table=>{
+  const c=cos(table.yaw),s=sin(table.yaw);
+  const x=table.x-1.8*c+.50*s,z=table.z+1.8*s+.50*c;
+  return {x,z,c,s,level:freightGround(x,z,groundBeforeBath(x,z))};
+});
 export function terrainHeight(x,z) {
   const native=freightGround(x,z,groundBeforeBath(x,z));
+  for(const yard of cookingYards){
+    const dx=x-yard.x,dz=z-yard.z;
+    if(abs(dx)>8.5 || abs(dz)>8.5)continue;
+    const u=abs(dx*yard.c-dz*yard.s),v=abs(dx*yard.s+dz*yard.c);
+    const edge=hypot(max(0,u-4.15),max(0,v-2.83));
+    if(edge<3.1)return yard.level+(native-yard.level)*smooth(0,3.1,edge);
+  }
   const hut=nearbyHut(x,z);
   if(hut){
     const w=clearingWeight(hut,x,z);
@@ -400,6 +415,7 @@ const falls=MOUNTAIN_STREAMS.map(({fall:{lip,toe}})=>({
   x:(lip.x+toe.x)/2,z:(lip.z+toe.z)/2,rx:Math.abs(toe.x-lip.x)/2+5,rz:Math.abs(toe.z-lip.z)/2+5,
 }));
 const approaches=[
+  ...cookingYards.map(({x,z})=>({x,z,rx:8,rz:8})),
   ...[-1,1].map(side=>({x:MAPLE_BRIDGE.x,z:MAPLE_BRIDGE.z+side*MAPLE_BRIDGE.length/2,rx:3,rz:3})),
   {x:503,z:-731,rx:3,rz:3}, // The level forecourt joins the timber stage here.
 ];
@@ -684,7 +700,7 @@ export const MARKET_STALLS = [
   [21.3, -44.5, -1.35],
   [8.7, -53, 1.63],
   [24.8, -55.3, -1.57],
-  [6, -78.2, 1.35],
+  DANGO_STALL,
   [27, -72, -1.5],
 ];
 export const GATES = [
@@ -1549,19 +1565,21 @@ putSolid(SNOW_SPRING.x,SNOW_SPRING.z-8.9,3.90,1.55,0,SNOW_SPRING.level+.61,'floo
 for (const [index,[x, z, yaw]] of MARKET_STALLS.entries()) {
   const base=terrainHeight(x,z), c=cos(yaw), s=sin(yaw);
   const cook=index===4, postX=cook?marketCookCanopy.postX:1.64, lift=cook?marketCookCanopy.lift:0;
-  for (const u of [-postX,postX]) for (const v of [-.79,1.07])
-    putSolid(x+u*c+v*s,z-u*s+v*c,.059,.059,0,base+lift+(v<0?3.28:2.53),'oval',false);
+  for (const u of [-postX,postX]) for (const v of [-.79,cook?marketCookCanopy.frontPostZ:1.07])
+    putSolid(x+u*c+v*s,z-u*s+v*c,.059,.059,0,base+lift+(v<0?3.28:cook?2.86:2.53),'oval',false);
   putSolid(x+.12*s,z+.12*c,(cook?marketCookCanopy.width:3.83)/2,1.12,yaw,base+lift+2.65,'awning',true);
-  putSolid(x + 0.42 * sin(yaw), z + 0.42 * cos(yaw), 1.57, 0.42, yaw, terrainHeight(x, z) + 0.93, 'box', true);
-  // A jumping visitor lands on the brazier or bean basket before the counter.
-  if (index===4) {
-    const counter=marketCooktop(MARKET_STALLS[index]);
-    addCookwareSolids(counter,base+.18,putSolid);
-    addCooksPlatformSolids(counter,'market-mortar',base+.18,putSolid);
-    // The dango seller's stock is on the low shelf behind the cooking surface.
-    putSolid(x-.38*s,z-.38*c,1.33,.32,yaw,base+.94,'box',true,0,base+.87);
+  if(cook){
+    const table=marketCooktop(MARKET_STALLS[index]),y=terrainContactHeight(table.x,table.z);
+    const matY=y+COOKING_MAT.thickness;
+    addBenchSolids(table,matY,putSolid);
+    addCookwareSolids(table,y,putSolid,terrainContactHeight);
+    putSolid(x+MARKET_STOCK_Z*s,z+MARKET_STOCK_Z*c,1.33,.32,yaw,base+MARKET_STOCK_TOP,'box',true,0,base+MARKET_STOCK_TOP-.068);
+    const bench=benchFrame(table),grill=worktopPoint(bench,MARKET_GRILL_X,MARKET_GRILL_Z);
+    putSolid(grill.x,grill.z,.185,.285,bench.yaw,
+      matY+MARKET_GRILL_TOP,'box',true,0,matY);
+  }else{
+    putSolid(x+.42*s,z+.42*c,1.57,.42,yaw,base+.93,'box',true);
   }
-  if (index===4) putSolid(x+1.36*c+.42*s,z-1.36*s+.42*c,.185,.285,yaw,base+1.13,'box',true,0,base+.93);
   if (index===5) putSolid(x-.91*c+.47*s,z+.91*s+.47*c,.30,.30,yaw,base+1.126,'oval',true,0,base+.93);
 }
 for(const {x,z,yaw} of KYO_FOOD) {
@@ -1744,6 +1762,7 @@ function surfaceHeight(s, x, z, pad) {
     return s.top + 1.1*(.58-.72*v-.085*sin(Math.PI*u)-.07*sin(Math.PI*v)+.021*cos(u*8*Math.PI));
   }
   if (s.kind === 'bridgeRail') return bridgeHeight(s.bridge,z) + s.top;
+  if (s.kind === 'rushMat') return terrainContactHeight(x,z)+COOKING_MAT.thickness;
   if (s.kind === 'toriiCrown') return s.top + s.roofRise*(min(1,abs(a)/s.rx)**2.8);
   return s.top;
 }
@@ -1810,6 +1829,7 @@ export function waterDepth(x,z,time=0,feet=Infinity) {
   return max(0,line-terrainContactHeight(x,z));
 }
 function lowerFace(item,top,x,z,pad) {
+  if(item.kind==='rushMat') return top-COOKING_MAT.thickness;
   if(item.stone) {
     const dx=x-item.x,dz=z-item.z;
     return rockRange(item.stone,dx*item.c-dz*item.s,dx*item.s+dz*item.c,pad).low;

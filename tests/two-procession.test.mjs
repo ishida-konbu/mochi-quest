@@ -6,6 +6,11 @@ import { BUILDINGS, ORIGINAL_REGIONS as REGIONS, regionAt, groundHeight, nearRoa
 import { animalRadius, openGround, walkCircuit } from '../two/village-paths.js';
 import { roomPlan } from '../two/architecture.js';
 import { DYES, TRADES } from '../two/procession.js';
+import { LIVING_SITES } from '../two/living-sites.js';
+import { STARTER_RECIPES } from '../two/living-craft.js';
+import { cookingLayout } from '../two/cooking-stage.js';
+import { createCookingScore } from '../two/cooking-motion.js';
+import { worktopPoint } from '../two/living-layout.js';
 
 test('restored journeys keep the village cast when local fixtures and ground move',()=>{
   const workers=createGame().state.npcs.filter(n=>n.area);
@@ -82,6 +87,34 @@ test('whole wildlife and porter circuits keep their turning clearance even after
     for(let i=0;i<120;i++) {
       walkCircuit(n,i*Math.PI/60,point);
       assert.ok(openGround(point.x,point.z,animalRadius(n)),n.id+' at turn '+i);
+    }
+  }
+});
+
+test('a passer-by on any part of its circuit clears the cook approaching and turning between the appliances',()=>{
+  const {npcs}=createGame().state;
+  for(const site of LIVING_SITES.filter(s=>s.matEntrance)){
+    const layout=cookingLayout(site),recipe=STARTER_RECIPES.find(r=>r.regionId===site.region);
+    const walkers=npcs.filter(n=>n.radius && !n.ridesDeer && !['bird','dragon','kirin'].includes(n.type) &&
+      Math.hypot(n.homeX-site.x,n.homeZ-site.z)<2*n.radius+12);
+    const marks=[];
+    for(const entry of [site,site.matEntrance]){
+      const dx=entry.x-layout.x,dz=entry.z-layout.z,c=Math.cos(layout.yaw),s=Math.sin(layout.yaw);
+      const start=[dx*c-dz*s,entry.y-layout.y,dx*s+dz*c];
+      const score=createCookingScore(recipe.draft,layout,{start,full:true});
+      for(let t=0;t<score.duration;t+=.12){
+        const {hero,bodyRadius}=score.sample(t);
+        marks.push({...worktopPoint(layout,hero[0],hero[2]),radius:bodyRadius});
+      }
+    }
+    const point={};
+    for(const n of walkers){
+      const radius=animalRadius(n);
+      for(let i=0;i<144;i++){
+        walkCircuit(n,i*Math.PI/72,point);
+        const hit=marks.some(mark=>(mark.x-point.x)**2+(mark.z-point.z)**2<(radius+mark.radius+.04)**2);
+        assert.ok(!hit,site.id+' and '+n.id+' at turn '+i);
+      }
     }
   }
 });

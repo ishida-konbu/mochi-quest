@@ -207,10 +207,20 @@ test('the axe clears the silhouette without moving a side view or crossing the c
   let yaw=line;
   for(let i=0;i<260;i++){
     const next=q(1/120);
-    assert.ok(next>=yaw && next-yaw<1/120);
+    assert.ok(next>=yaw && next-yaw<1.52/120);
     yaw=next;
   }
-  assert.ok(Math.abs(yaw-line-1.29)<.02);
+  assert.ok(Math.abs(yaw-line-1.74)<.02);
   const front=chopCameraArc(line+Math.PI,line,()=>1);
-  assert.ok(Math.abs(front(3)-line-Math.PI)<1.3);
+  assert.ok(Math.abs(front(3)-line-1.74)<.02);
+});
+
+test('a clear working flank takes priority over the nearer view of the free hand', () => {
+  const line = -.34, start = line - 1.24;
+  const recover = chopCameraArc(start,line,()=>1);
+  assert.ok(Math.sin(recover(3)-line)>.8);
+  const blocked = angle => Math.sin(angle-line)>.15 ? .12 : 1;
+  assert.equal(chopCameraArc(start,line,blocked),null);
+  const fallback = chopCameraArc(line,line,blocked);
+  assert.ok(Math.sin(fallback(3)-line)<-.8);
 });
